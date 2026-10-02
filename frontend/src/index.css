@@ -1,0 +1,177 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/sora";
+@import "@fontsource-variable/dm-sans";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: 'Sora Variable', sans-serif;
+    --font-sans: 'DM Sans Variable', sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --color-income: var(--income);
+    --color-expense: var(--expense);
+    --color-transfer: var(--transfer);
+    --color-brand-violet: var(--brand-violet);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* FINNOS light — logo palette: ink wordmark + violet donut on soft lavender-white. */
+:root {
+    --brand-violet: #5B3FE4;
+    --brand-violet-light: #8B74F0;
+    --brand-violet-deep: #4527C7;
+    --brand-ink: #10142B;
+
+    --background: #FAFAFC;
+    --foreground: #10142B;
+    --card: #FFFFFF;
+    --card-foreground: #10142B;
+    --popover: #FFFFFF;
+    --popover-foreground: #10142B;
+    --primary: #5B3FE4;
+    --primary-foreground: #FFFFFF;
+    --secondary: #F1EDFE;
+    --secondary-foreground: #3A2A8C;
+    --muted: #F3F3F7;
+    --muted-foreground: #5A5A73;
+    --accent: #F1EDFE;
+    --accent-foreground: #3A2A8C;
+    --destructive: #E11D48;
+    --border: #E7E7EF;
+    --input: #E7E7EF;
+    --ring: #5B3FE4;
+    --chart-1: #5B3FE4;
+    --chart-2: #10B981;
+    --chart-3: #F59E0B;
+    --chart-4: #8B74F0;
+    --chart-5: #06B6D4;
+    --radius: 0.875rem;
+    --sidebar: #FFFFFF;
+    --sidebar-foreground: #10142B;
+    --sidebar-primary: #5B3FE4;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #F1EDFE;
+    --sidebar-accent-foreground: #3A2A8C;
+    --sidebar-border: #E7E7EF;
+    --sidebar-ring: #5B3FE4;
+    --income: #059669;
+    --expense: #E11D48;
+    --transfer: #5B3FE4;
+}
+
+/* FINNOS dark — true neutral dark (no navy cast); violet stays the brand signal. */
+.dark {
+    --brand-violet: #8B74F0;
+    --brand-violet-light: #B9A9F8;
+    --brand-violet-deep: #6D54E0;
+    --brand-ink: #F7F7FA;
+
+    --background: #0A0A0C;
+    --foreground: #F7F7FA;
+    --card: #141417;
+    --card-foreground: #F7F7FA;
+    --popover: #16161A;
+    --popover-foreground: #F7F7FA;
+    --primary: #8B74F0;
+    --primary-foreground: #14102B;
+    --secondary: #1E1E23;
+    --secondary-foreground: #EDEAFB;
+    --muted: #1A1A1E;
+    --muted-foreground: #A1A1AD;
+    --accent: #232329;
+    --accent-foreground: #EDEAFB;
+    --destructive: #FB4A6B;
+    --border: #26262C;
+    --input: #26262C;
+    --ring: #8B74F0;
+    --chart-1: #8B74F0;
+    --chart-2: #34D399;
+    --chart-3: #FBBF24;
+    --chart-4: #B9A9F8;
+    --chart-5: #22D3EE;
+    --sidebar: #101013;
+    --sidebar-foreground: #F7F7FA;
+    --sidebar-primary: #8B74F0;
+    --sidebar-primary-foreground: #14102B;
+    --sidebar-accent: #1E1E23;
+    --sidebar-accent-foreground: #EDEAFB;
+    --sidebar-border: #26262C;
+    --sidebar-ring: #8B74F0;
+    --income: #34D399;
+    --expense: #FB4A6B;
+    --transfer: #B9A9F8;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+
+@layer utilities {
+  .animate-fade-up {
+    animation: finnos-fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes finnos-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

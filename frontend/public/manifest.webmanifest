@@ -1,0 +1,31 @@
+{
+  "name": "FINNOS",
+  "short_name": "FINNOS",
+  "description": "Sua vida financeira em um só lugar.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FAFAFC",
+  "theme_color": "#070F52",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/icons/finnos-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/finnos-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/finnos-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

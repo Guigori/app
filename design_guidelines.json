@@ -1,0 +1,235 @@
+{
+  "typography": {
+    "font_family_heading": "Sora Variable, sans-serif",
+    "font_family_body": "DM Sans Variable, sans-serif",
+    "font_family_mono": "IBM Plex Mono, monospace",
+    "font_import": "@import \"@fontsource-variable/sora\";\n@import \"@fontsource-variable/dm-sans\";\n@import \"@fontsource/ibm-plex-mono\";",
+    "scale_px": {
+      "display": 56,
+      "h1": 40,
+      "h2": 28,
+      "h3": 20,
+      "h4": 16,
+      "body": 16,
+      "caption": 14
+    },
+    "rules": {
+      "headings": "font-heading font-semibold tracking-tight text-foreground",
+      "numbers_and_currency": "font-heading font-bold tracking-tight tabular-nums",
+      "body": "font-sans text-base leading-relaxed text-foreground antialiased",
+      "labels": "font-sans text-xs uppercase tracking-[0.15em] font-semibold text-muted-foreground",
+      "subtitles": "font-sans text-sm md:text-base text-muted-foreground"
+    }
+  },
+  "colors": {
+    "brand_identity": {
+      "primary_midnight": "#070F52",
+      "primary_hover": "#0c1775",
+      "primary_light": "#1d2a8a",
+      "accent_emerald": "#10B981",
+      "accent_rose": "#F43F5E",
+      "accent_amber": "#F59E0B",
+      "accent_violet": "#8B5CF6",
+      "accent_cyan": "#06B6D4"
+    },
+    "surfaces": [
+      {
+        "name": "page",
+        "kind": "solid",
+        "bg": "#F8FAFC",
+        "on_bg": "#070F52",
+        "on_bg_muted": "#475569",
+        "roles": {
+          "link": "#070F52",
+          "error": "#BE123C",
+          "success": "#047857",
+          "warning": "#B45309"
+        }
+      },
+      {
+        "name": "panel",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#070F52",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "border": "#E2E8F0",
+          "hover_bg": "#F1F5F9",
+          "income": "#059669",
+          "expense": "#E11D48",
+          "transfer": "#4F46E5"
+        }
+      },
+      {
+        "name": "hero_balance_card",
+        "kind": "solid",
+        "bg": "#070F52",
+        "on_bg": "#FFFFFF",
+        "on_bg_muted": "#CBD5E1",
+        "roles": {
+          "link": "#93C5FD",
+          "error": "#FDA4AF",
+          "success": "#6EE7B7",
+          "subcard_bg": "#0F1C7C",
+          "subcard_border": "#1E2C9E"
+        }
+      },
+      {
+        "name": "pill_needs_50",
+        "kind": "solid",
+        "bg": "#EEF2FF",
+        "on_bg": "#3730A3",
+        "on_bg_muted": "#4338CA"
+      },
+      {
+        "name": "pill_wants_30",
+        "kind": "solid",
+        "bg": "#FDF2F8",
+        "on_bg": "#9D174D",
+        "on_bg_muted": "#BE185D"
+      },
+      {
+        "name": "pill_savings_20",
+        "kind": "solid",
+        "bg": "#ECFDF5",
+        "on_bg": "#065F46",
+        "on_bg_muted": "#047857"
+      },
+      {
+        "name": "finn_floating_panel",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#070F52",
+        "on_bg_muted": "#475569",
+        "roles": {
+          "pill_bg": "#F1F5F9",
+          "pill_text": "#070F52",
+          "pill_hover": "#E2E8F0"
+        }
+      },
+      {
+        "name": "dark_page",
+        "kind": "solid",
+        "bg": "#03071E",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "link": "#60A5FA",
+          "error": "#FB7185",
+          "success": "#34D399"
+        }
+      },
+      {
+        "name": "dark_panel",
+        "kind": "solid",
+        "bg": "#0A1138",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "border": "#1E2958",
+          "hover_bg": "#121D54",
+          "income": "#10B981",
+          "expense": "#F43F5E",
+          "transfer": "#818CF8"
+        }
+      },
+      {
+        "name": "dark_hero_balance_card",
+        "kind": "solid",
+        "bg": "#0F1A6B",
+        "on_bg": "#FFFFFF",
+        "on_bg_muted": "#CBD5E1",
+        "roles": {
+          "link": "#93C5FD",
+          "error": "#FDA4AF",
+          "success": "#6EE7B7"
+        }
+      }
+    ],
+    "accent": "#070F52",
+    "on_accent": "#FFFFFF"
+  },
+  "entry_surfaces": {
+    "/": "editorial desktop dashboard with left midnight-tinted sidebar, top month navigation bar, central hero balance card with hide-toggle, metric grid, 50/30/20 budget breakdown, interactive donut expense chart, and recent transaction list; bottom nav on mobile",
+    "/login": "split branded auth screen — left deep-midnight brand hero with Finn hamster mascot graphic, live value proposition and 50/30/20 preview; right warm clean panel with email/password form and demo-login shortcut",
+    "/register": "split branded auth screen — left deep-midnight brand hero with Finn hamster mascot graphic, live value proposition and 50/30/20 preview; right warm clean panel with registration form and demo-login shortcut"
+  },
+  "visual_enhancers": {
+    "finn_mascot": {
+      "concept": "Finn, the minimalist friendly hamster finance companion. Rendered as a crisp, lovable geometric SVG avatar with warm cream (#FFF5EA), soft ear accents (#F87171), and midnight blue (#070F52) outline.",
+      "floating_widget": "Floating action trigger on the bottom-right (z-40) with a warm badge ring 'Ajuda do Finn' and glowing beacon dot. Clicking expands a sleek side-sheet/drawer with quick prompt chips: 'Quanto gastei este mês?', 'Em qual categoria estou gastando mais?', 'Quanto ainda posso gastar?', 'Como está minha regra 50/30/20?', 'Quais contas vencem nos próximos dias?'.",
+      "empathy_states": "Finn offers celebratory micro-tips when 50/30/20 is within budget, friendly encouragement if close to limit, and clear calm guidance when empty."
+    },
+    "hero_balance_card": {
+      "style": "Deep midnight blue (#070F52) solid gradient surface with subtle radial glow (#1A2B99 at top right), white high-contrast Sora numbers, eye toggle (data-testid='toggle-visibility-btn') to disguise values as 'R$ ••••••••', quick stats for entries/exits/savings rate, and month selector navigation."
+    },
+    "budget_503020_component": {
+      "style": "Three distinct horizontal progress tracks: Necessidades (50%), Desejos (30%), Investimentos/Metas (20%). Each has current spend vs planned allocation, live percentage pill, and dynamic status badge ('Dentro do orçamento' [green], 'Próximo do limite' [amber], 'Acima do orçamento' [rose]). Non-blocking informative guidance."
+    },
+    "global_fab_plus": {
+      "style": "High-visibility primary action button (FAB on mobile, top bar + quick action menu on desktop) with modal selector for: Nova Transação (Primary), Nova Receita, Nova Despesa, Nova Transferência, Nova Conta, Nova Categoria."
+    }
+  },
+  "grids_and_layouts": {
+    "dashboard_grid": "grid grid-cols-1 lg:grid-cols-12 gap-6",
+    "hero_span": "col-span-12 lg:col-span-8",
+    "quick_metrics_span": "col-span-12 lg:col-span-4 flex flex-col gap-4",
+    "budget_503020_span": "col-span-12 lg:col-span-7",
+    "donut_chart_span": "col-span-12 lg:col-span-5",
+    "recent_transactions_span": "col-span-12",
+    "accounts_grid": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5",
+    "transactions_page_layout": "flex flex-col gap-6 w-full max-w-7xl mx-auto"
+  },
+  "motion": {
+    "transitions": "transition-colors duration-200 ease-out, transition-opacity duration-150 ease-out, transition-transform duration-200 ease-out",
+    "hover_lift": "hover:-translate-y-0.5 hover:shadow-md active:translate-y-0",
+    "spring_open": "type: 'spring', stiffness: 350, damping: 25",
+    "tab_switch": "transition: 'opacity 0.2s ease, transform 0.2s ease'",
+    "accessibility_reduced_motion": "@media (prefers-reduced-motion: reduce) { *, ::before, ::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }"
+  },
+  "accessibility": {
+    "contrast_standard": "APCA & WCAG AA minimum 4.5:1 for all text against backgrounds",
+    "keyboard_navigation": "All modal dialogs trap focus; ESC dismisses sheets and modals; Tab navigates form elements and transaction action menus",
+    "screen_readers": "Aria labels on all icon-only buttons (e.g. eye hide/show, Finn mascot trigger, delete/edit actions, month navigators)",
+    "empty_states": "Never render broken or blank tables. Display illustrated empty states with direct call-to-action buttons (e.g. 'Nenhuma transação encontrada no período. Clique abaixo para registrar.')",
+    "testing_attributes": "data-testid attributes added to all interactive buttons, inputs, tabs, filter toggles, card values and dialog actions"
+  },
+  "image_urls": {
+    "placeholders": [],
+    "note": "FINNOS uses pure high-fidelity vector iconography (Lucide React & @icons-pack/react-simple-icons for Nubank/Inter/Itaú/Bradesco bank marks) and handcrafted SVG illustrations for Finn the hamster mascot and empty states to ensure instant zero-latency loading and offline PWA reliability."
+  },
+  "component_paths": {
+    "app_shell": "frontend/src/App.tsx",
+    "layout_sidebar": "frontend/src/components/layout/Sidebar.tsx",
+    "layout_header": "frontend/src/components/layout/Header.tsx",
+    "layout_mobile_nav": "frontend/src/components/layout/MobileNav.tsx",
+    "finn_assistant": "frontend/src/components/finn/FinnPanel.tsx",
+    "finn_avatar": "frontend/src/components/finn/FinnAvatar.tsx",
+    "dashboard_page": "frontend/src/pages/Dashboard.tsx",
+    "transactions_page": "frontend/src/pages/Transactions.tsx",
+    "accounts_page": "frontend/src/pages/Accounts.tsx",
+    "categories_page": "frontend/src/pages/Categories.tsx",
+    "settings_page": "frontend/src/pages/Settings.tsx",
+    "coming_soon_page": "frontend/src/pages/ComingSoon.tsx",
+    "login_page": "frontend/src/pages/Login.tsx",
+    "register_page": "frontend/src/pages/Register.tsx",
+    "transaction_dialog": "frontend/src/components/transactions/TransactionDialog.tsx",
+    "account_dialog": "frontend/src/components/accounts/AccountDialog.tsx",
+    "category_dialog": "frontend/src/components/categories/CategoryDialog.tsx",
+    "budget_503020_card": "frontend/src/components/dashboard/Budget503020Card.tsx",
+    "donut_expenses_chart": "frontend/src/components/dashboard/ExpensesDonutChart.tsx",
+    "balance_hero_card": "frontend/src/components/dashboard/BalanceHeroCard.tsx",
+    "quick_action_fab": "frontend/src/components/layout/QuickActionFAB.tsx"
+  },
+  "instructions_to_main_agent": [
+    "Ensure language is Brazilian Portuguese (pt-BR) throughout all copy, formatters, and status chips (R$ currency, dd/MM/yyyy dates).",
+    "Primary brand color MUST strictly be #070F52. Complement it with clear slate surfaces (#F8FAFC / #FFFFFF in light mode, #03071E / #0A1138 in dark mode) and emerald (#10B981) for income and rose (#F43F5E) for expenses.",
+    "Use Sora Variable for headings, big currency metrics, card totals and account names; DM Sans Variable for body text, forms and subtitles.",
+    "Implement the 50/30/20 budget calculation dynamically based on categorized transactions (Necessidades / Desejos / Metas e Investimentos).",
+    "Implement the eye visibility toggle for total balance & sensitive numbers with localStorage persistence so users can hide balances in public.",
+    "Implement Finn the Hamster assistant as a lovable floating side-panel UI with sample interactive financial prompt buttons that offer instant answers.",
+    "Include sample seed data for demo (Nubank, Banco Inter, Itaú, Carteira Dinheiro, categorized transactions, 50/30/20 distribution) and add a 'Carregar dados demo' button in Settings.",
+    "For the first delivery scope: fully build Dashboard, Transactions (CRUD, search, filters, installment support), Accounts (CRUD, computed balances), Categories (CRUD, 50/30/20 tagging), Settings (theme toggle, demo data loader, profile), and graceful 'Em breve' pages for Cartões, Orçamento, Assinaturas, Metas, and Investimentos.",
+    "Add data-testid attributes to all key buttons, inputs, tabs, and balance elements."
+  ]
+}
