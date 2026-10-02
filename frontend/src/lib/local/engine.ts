@@ -22,7 +22,12 @@ import type {
   FlowPoint,
   CardInput,
   CreditCard,
+  Invoice,
+  InvoiceItem,
   NotificationItem,
+  PayInvoiceInput,
+  SubscriptionItem,
+  Subscriptions,
   Notifications,
   Dashboard,
   RuleItem,
@@ -787,9 +792,11 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
   }
   const used = round2(invoice + future);
   const account = accounts.find((a) => a.id === doc.payment_account_id);
+  const paidCycles = (doc as LocalCard & { paid_cycles?: Record<string, unknown> }).paid_cycles ?? {};
   return {
     ...doc,
     payment_account_name: account?.name ?? null,
+    invoice_paid: Boolean(paidCycles[closing]),
     current_invoice: round2(invoice),
     future_installments: round2(future),
     used,
@@ -878,4 +885,145 @@ export function localNotifications(windowDays = 7): Notifications {
   }
   items.sort((a, b) => a.days_left - b.days_left || a.title.localeCompare(b.title));
   return { items, count: items.length };
+}
+
+// --- Fatura detalhada / pagamento / assinaturas (modo local) ----------------
+
+function cycleItems(card: LocalCard, txs: Transaction[], start: string, closing: string, cats: Category[]): InvoiceItem[] {
+  const items: InvoiceItem[] = [];
+  for (const tx of txs) {
+    if (tx.card_id !== card.id || tx.type !== "despesa") continue;
+    const value = round2(tx.installment ? tx.installment_value ?? 0 : tx.value);
+    const category = cats.find((c) => c.id === tx.category_id);
+    let label: string | null = null;
+    if (tx.installment) {
+      const total = tx.total_installments ?? 1;
+      const offset = monthsBetween(tx.date.slice(0, 7), closing.slice(0, 7));
+      if (offset < 0 || offset >= total) continue;
+      const current = (((tx.current_installment ?? 1) - 1 + offset) % Math.max(total, 1)) + 1;
+      label = `${Math.min(current, total)}/${total}`;
+    } else if (!(tx.date >= start && tx.date <= closing)) {
+      continue;
+    }
+    items.push({
+      id: tx.id,
+      name: tx.name,
+      date: tx.date,
+      value,
+      category_name: category?.name ?? null,
+      category_color: category?.color ?? null,
+      installment_label: label,
+    });
+  }
+  return items.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export function localInvoice(cardId: string): Invoice {
+  const db = readDb();
+  const card = db.cards.find((c) => c.id === cardId);
+  if (!card) throw new Error("Cartão não encontrado.");
+  const today = todayISO();
+  const [start, closing] = cycleBounds(today, card.closing_day);
+  const items = cycleItems(card, db.transactions, start, closing, db.categories);
+  const paid = (card as LocalCard & { paid_cycles?: Record<string, { amount: number; paid_at: string }> }).paid_cycles?.[closing];
+  return {
+    card_id: cardId,
+    card_name: card.name,
+    cycle_start: start,
+    cycle_end: closing,
+    due_date: dueDate(closing, card.closing_day, card.due_day),
+    total: round2(items.reduce((s, i) => s + i.value, 0)),
+    paid: Boolean(paid),
+    paid_amount: round2(paid?.amount ?? 0),
+    paid_at: paid?.paid_at ?? null,
+    items,
+  };
+}
+
+export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice {
+  const db = readDb();
+  const card = db.cards.find((c) => c.id === cardId) as
+    | (LocalCard & { paid_cycles?: Record<string, { amount: number; paid_at: string }> })
+    | undefined;
+  if (!card) throw new Error("Cartão não encontrado.");
+  if (!db.accounts.some((a) => a.id === input.account_id)) throw new Error("Conta inválida.");
+  const today = todayISO();
+  const [start, closing] = cycleBounds(today, card.closing_day);
+  if (card.paid_cycles?.[closing]) throw new Error("Esta fatura já está marcada como paga.");
+  const items = cycleItems(card, db.transactions, start, closing, db.categories);
+  const amount = round2(input.value ?? items.reduce((s, i) => s + i.value, 0));
+  if (amount <= 0) throw new Error("Não há valor em aberto nesta fatura.");
+
+  // The debit carries no card tag, so it never re-enters a fatura.
+  db.transactions = [
+    ...db.transactions,
+    buildTransaction(db, {
+      name: `Fatura ${card.name}`,
+      value: amount,
+      type: "despesa",
+      status: "pago",
+      date: input.date,
+      account_id: input.account_id,
+      card_id: null,
+      to_account_id: null,
+      category_id: null,
+      fixed: false,
+      recurrence: null,
+      installment: false,
+      total_installments: null,
+      current_installment: null,
+      adjusted_value: null,
+      attachment: null,
+      notes: `Pagamento da fatura fechada em ${closing}.`,
+    }),
+  ];
+  card.paid_cycles = { ...(card.paid_cycles ?? {}), [closing]: { amount, paid_at: input.date } };
+  db.cards = db.cards.map((c) => (c.id === cardId ? card : c));
+  writeDb(db);
+  return localInvoice(cardId);
+}
+
+export function localSubscriptions(): Subscriptions {
+  const db = readDb();
+  const today = todayISO();
+  const seen = new Map<string, SubscriptionItem>();
+  const ordered = db.transactions
+    .filter((t) => t.type === "despesa" && t.fixed)
+    .slice()
+    .sort((a, b) => b.date.localeCompare(a.date));
+  for (const tx of ordered) {
+    const key = tx.name.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    const category = db.categories.find((c) => c.id === tx.category_id);
+    const card = db.cards.find((c) => c.id === tx.card_id);
+    const day = Number(tx.date.slice(8, 10));
+    const thisMonth = clampDay(Number(today.slice(0, 4)), Number(today.slice(5, 7)), day);
+    seen.set(key, {
+      id: tx.id,
+      name: tx.name,
+      value: round2(tx.value),
+      category_id: tx.category_id,
+      category_name: category?.name ?? null,
+      category_color: category?.color ?? null,
+      account_id: tx.account_id,
+      account_name: db.accounts.find((a) => a.id === tx.account_id)?.name ?? "",
+      card_id: tx.card_id,
+      card_name: card?.name ?? null,
+      recurrence: tx.recurrence ?? "mensal",
+      next_charge: thisMonth >= today ? thisMonth : shiftMonths(thisMonth, 1),
+      active: true,
+    });
+  }
+  const items = [...seen.values()].sort((a, b) => b.value - a.value);
+  const monthly = round2(items.reduce((s, i) => s + i.value, 0));
+  const month = today.slice(0, 7);
+  const income = round2(
+    db.transactions.filter((t) => t.type === "receita" && t.date.startsWith(month)).reduce((s, t) => s + t.value, 0),
+  );
+  return {
+    items,
+    monthly_total: monthly,
+    yearly_total: round2(monthly * 12),
+    income_percent: income ? Math.round((monthly / income) * 1000) / 10 : 0,
+  };
 }

@@ -55,7 +55,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/categorias", label: "Categorias", icon: Tags, slug: "categorias" },
       { to: "/cartoes", label: "Cartões", icon: CreditCard, slug: "cartoes" },
-      { to: "/assinaturas", label: "Assinaturas", icon: Repeat, soon: true, slug: "assinaturas" },
+      { to: "/assinaturas", label: "Assinaturas", icon: Repeat, slug: "assinaturas" },
       { to: "/investimentos", label: "Investimentos", icon: TrendingUp, soon: true, slug: "investimentos" },
     ],
   },

@@ -12,6 +12,8 @@ import Settings from "@/pages/Settings";
 import Budget from "@/pages/Budget";
 import Flow from "@/pages/Flow";
 import Cards from "@/pages/Cards";
+import CardInvoice from "@/pages/CardInvoice";
+import Subscriptions from "@/pages/Subscriptions";
 import ComingSoon from "@/pages/ComingSoon";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
@@ -29,9 +31,10 @@ export default function App() {
             <Route path="/categorias" element={<Categories />} />
             <Route path="/configuracoes" element={<Settings />} />
             <Route path="/cartoes" element={<Cards />} />
+            <Route path="/cartoes/:cardId" element={<CardInvoice />} />
             <Route path="/orcamento" element={<Budget />} />
             <Route path="/fluxo" element={<Flow />} />
-            <Route path="/assinaturas" element={<ComingSoon module="assinaturas" />} />
+            <Route path="/assinaturas" element={<Subscriptions />} />
             <Route path="/metas" element={<ComingSoon module="metas" />} />
             <Route path="/investimentos" element={<ComingSoon module="investimentos" />} />
             <Route path="*" element={<Navigate to="/" replace />} />

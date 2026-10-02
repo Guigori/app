@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { CalendarClock, CreditCard as CreditCardIcon, Pencil, Plus, Sparkles } from "lucide-react";
@@ -103,7 +104,15 @@ export default function Cards() {
                   </p>
                   <p className="mt-1 text-xs text-white/70">
                     Ciclo aberto desde {formatDate(card.cycle_start)}
+                    {card.invoice_paid ? " · fatura paga" : ""}
                   </p>
+                  <Link
+                    to={`/cartoes/${card.id}`}
+                    className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/25"
+                    data-testid={`card-invoice-link-${card.id}`}
+                  >
+                    Ver fatura detalhada
+                  </Link>
                 </div>
 
                 <div className="space-y-4 p-5">

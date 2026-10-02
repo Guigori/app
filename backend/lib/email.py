@@ -159,3 +159,34 @@ def verification_code_html(*, name: str, code: str) -> str:
         'por e-mail.</p>'
         '</td></tr></table></td></tr></table>'
     )
+
+
+def due_reminder_html(*, name: str, when: str, date_label: str, items: list[tuple[str, float]]) -> str:
+    """Server-side template for the "conta chegando no vencimento" reminder."""
+    safe_name = escape(name)
+    rows = "".join(
+        '<tr><td style="padding:8px 0;font-size:15px;color:#10142B">'
+        f"{escape(item_name)}</td>"
+        '<td style="padding:8px 0;font-size:15px;text-align:right;color:#10142B">'
+        + (f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if value else "—")
+        + "</td></tr>"
+        for item_name, value in items
+    )
+    return (
+        '<table role="presentation" width="100%" style="background:#F5F3FF;padding:32px 0">'
+        '<tr><td align="center">'
+        '<table role="presentation" width="100%" style="max-width:480px;background:#FFFFFF;'
+        'border-radius:20px;padding:32px;font-family:Arial,Helvetica,sans-serif;color:#10142B">'
+        '<tr><td>'
+        '<p style="margin:0;font-size:22px;font-weight:bold;letter-spacing:-0.5px">FINNOS</p>'
+        f'<p style="margin:24px 0 0;font-size:16px">Olá, {safe_name}!</p>'
+        '<p style="margin:12px 0 0;font-size:15px;line-height:22px;color:#4A4A63">'
+        f"Isto vence {escape(when)} ({escape(date_label)}):</p>"
+        f'<table role="presentation" width="100%" style="margin:16px 0;border-top:1px solid #EDE9FE">{rows}</table>'
+        '<p style="margin:0;font-size:14px;color:#4A4A63">Abra o FINNOS para marcar como pago '
+        'ou reagendar.</p>'
+        '<p style="margin:24px 0 0;font-size:12px;color:#8A8AA3;border-top:1px solid #EDE9FE;'
+        'padding-top:16px">Você pode desligar estes avisos em Configurações. Nunca pedimos sua '
+        'senha ou dados de cartão por e-mail.</p>'
+        '</td></tr></table></td></tr></table>'
+    )

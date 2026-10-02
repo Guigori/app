@@ -10,6 +10,7 @@ import { endSession } from "@/lib/session";
 import { clearMyData, fetchMe, loadDemoData, updateMyName } from "@/lib/data";
 import { disableLocalMode, isLocalMode } from "@/lib/mode";
 import { AiKeysCard } from "@/components/ai/AiKeysCard";
+import { NotificationsCard } from "@/components/settings/NotificationsCard";
 import type { User } from "@/types/finnos";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -170,6 +171,8 @@ export default function Settings() {
           </CardContent>
         ) : null}
       </Card>
+
+      <NotificationsCard />
 
       {local ? null : <AiKeysCard />}
 

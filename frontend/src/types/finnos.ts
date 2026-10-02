@@ -317,6 +317,7 @@ export interface CreditCard {
   payment_account_id: string | null;
   payment_account_name: string | null;
   active: boolean;
+  invoice_paid: boolean;
   current_invoice: number;
   future_installments: number;
   used: number;
@@ -346,4 +347,79 @@ export interface NotificationItem {
 export interface Notifications {
   items: NotificationItem[];
   count: number;
+}
+
+// --- Avisos / push (mirror: backend/models/notify.py NotifyPrefs) ---
+
+export interface NotifyPrefsInput {
+  push_enabled: boolean;
+  email_enabled: boolean;
+  hour: number;
+  days_before: number;
+}
+
+export interface NotifyPrefs extends NotifyPrefsInput {
+  push_devices: number;
+  push_supported: boolean;
+}
+
+export interface PushPublicKey {
+  public_key: string;
+  supported: boolean;
+}
+
+// --- Assinaturas (mirror: backend/models/notify.py SubscriptionItem) ---
+
+export interface SubscriptionItem {
+  id: string;
+  name: string;
+  value: number;
+  category_id: string | null;
+  category_name: string | null;
+  category_color: string | null;
+  account_id: string;
+  account_name: string;
+  card_id: string | null;
+  card_name: string | null;
+  recurrence: string;
+  next_charge: string;
+  active: boolean;
+}
+
+export interface Subscriptions {
+  items: SubscriptionItem[];
+  monthly_total: number;
+  yearly_total: number;
+  income_percent: number;
+}
+
+// --- Fatura (mirror: backend/models/notify.py Invoice) ---
+
+export interface InvoiceItem {
+  id: string;
+  name: string;
+  date: string;
+  value: number;
+  category_name: string | null;
+  category_color: string | null;
+  installment_label: string | null;
+}
+
+export interface Invoice {
+  card_id: string;
+  card_name: string;
+  cycle_start: string;
+  cycle_end: string;
+  due_date: string;
+  total: number;
+  paid: boolean;
+  paid_amount: number;
+  paid_at: string | null;
+  items: InvoiceItem[];
+}
+
+export interface PayInvoiceInput {
+  account_id: string;
+  date: string;
+  value: number | null;
 }

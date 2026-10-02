@@ -17,7 +17,11 @@ export function Header({ onOpenMenu }: HeaderProps) {
   const location = useLocation();
   const { resolvedTheme, setTheme } = useTheme();
   const { hidden, toggle } = useBalanceHidden();
-  const title = PAGE_TITLES[location.pathname] ?? "Início";
+  // Nested routes (/cartoes/:id) fall back to the title of their parent section.
+  const title =
+    PAGE_TITLES[location.pathname] ??
+    PAGE_TITLES[`/${location.pathname.split("/")[1] ?? ""}`] ??
+    "Início";
 
   return (
     <>

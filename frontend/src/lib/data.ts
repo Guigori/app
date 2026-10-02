@@ -31,6 +31,9 @@ import {
   localUpdateCard,
   localDeleteCard,
   localNotifications,
+  localInvoice,
+  localPayInvoice,
+  localSubscriptions,
   localCalendar,
   type LocalTxFilters,
 } from "@/lib/local/engine";
@@ -42,7 +45,12 @@ import type {
   CalendarMonth,
   CardInput,
   CreditCard,
+  Invoice,
+  NotifyPrefs,
+  NotifyPrefsInput,
   Notifications,
+  PayInvoiceInput,
+  Subscriptions,
   Category,
   CategoryInput,
   Dashboard,
@@ -231,4 +239,39 @@ export async function deleteCard(id: string): Promise<void> {
 export async function fetchNotifications(): Promise<Notifications> {
   if (isLocalMode()) return localNotifications();
   return apiGet<Notifications>("/notifications");
+}
+
+// --- Fatura / assinaturas / avisos -----------------------------------------
+
+export async function fetchInvoice(cardId: string): Promise<Invoice> {
+  if (isLocalMode()) return localInvoice(cardId);
+  return apiGet<Invoice>(`/cards/${cardId}/invoice`);
+}
+
+export async function payInvoice(cardId: string, input: PayInvoiceInput): Promise<Invoice> {
+  if (isLocalMode()) return localPayInvoice(cardId, input);
+  return apiPost<Invoice>(`/cards/${cardId}/pay`, input);
+}
+
+export async function fetchSubscriptions(): Promise<Subscriptions> {
+  if (isLocalMode()) return localSubscriptions();
+  return apiGet<Subscriptions>("/subscriptions");
+}
+
+/** Reminder settings live on the server, so local mode reports them as unavailable. */
+export async function fetchNotifyPrefs(): Promise<NotifyPrefs> {
+  if (isLocalMode()) {
+    return { push_enabled: false, email_enabled: false, hour: 9, days_before: 1, push_devices: 0, push_supported: false };
+  }
+  return apiGet<NotifyPrefs>("/push/prefs");
+}
+
+export async function saveNotifyPrefs(input: NotifyPrefsInput): Promise<NotifyPrefs> {
+  if (isLocalMode()) throw new Error("Os avisos exigem uma conta FINNOS (não funcionam no modo local).");
+  return apiPut<NotifyPrefs>("/push/prefs", input);
+}
+
+export async function sendTestPush(): Promise<{ sent: number }> {
+  if (isLocalMode()) throw new Error("Os avisos exigem uma conta FINNOS (não funcionam no modo local).");
+  return apiPost<{ sent: number }>("/push/test", {});
 }

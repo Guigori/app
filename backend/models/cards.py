@@ -33,6 +33,7 @@ class CardOut(BaseModel):
     payment_account_id: Optional[str] = None
     payment_account_name: Optional[str] = None
     active: bool
+    invoice_paid: bool = False
     # Derived, never stored:
     current_invoice: float
     future_installments: float

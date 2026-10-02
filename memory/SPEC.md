@@ -96,6 +96,26 @@ Autorização: toda query filtra por `user_id` da sessão → um usuário nunca 
 - Demo: 4 contas (Nubank, Inter, Itaú, Carteira), 2 meses de histórico, 1 parcelamento
   (MacBook 10x de R$ 600, parcela 3), despesas fixas, 1 agendada e 1 pendente.
 
+## Fatura, assinaturas e avisos (entregue)
+- `GET /api/cards/{id}/invoice` — compras do ciclo aberto (parcela rotulada n/total),
+  total, vencimento e se a fatura já foi paga. Página `/cartoes/:cardId` com busca.
+- `POST /api/cards/{id}/pay` {account_id, date, value} — marca o ciclo como pago
+  (`cards.paid_cycles[fechamento]`) e lança a despesa "Fatura <cartão>" **sem card_id**,
+  status pago, na conta escolhida — por isso não volta para nenhuma fatura.
+- `GET /api/subscriptions` — assinaturas derivadas das despesas fixas mensais (uma por
+  nome, preço da ocorrência mais recente), custo mensal, estimativa anual e % da renda.
+  Página `/assinaturas` com busca.
+- Avisos de vencimento: `backend/routers/push.py` (chave VAPID pública, subscribe,
+  prefs, teste), `lib/push.py` (pywebpush em threadpool, remove endpoint 404/410),
+  handlers `push`/`notificationclick` em `frontend/public/sw.js`, `lib/push.ts` no front
+  e card em Configurações (push, e-mail, horário 0-23, antecedência 0-7 dias).
+- Cron `.emergent/crons.yml` → `POST /api/cron/reminders` (hora em hora, America/Sao_Paulo,
+  Bearer `WEBHOOK_CRON_SECRET`): responde 2xx na hora e processa em background; dispara
+  para cada usuário cuja hora preferida bate com a hora atual, com `reminder_log` como
+  chave de idempotência. Push e/ou e-mail (`due_reminder_html`).
+- Env novos em backend/.env: `VAPID_PRIVATE_KEY_B64`, `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`,
+  `WEBHOOK_CRON_SECRET`. Trocar o par VAPID invalida as inscrições existentes.
+
 ## Cartões, notificações e calendário Calen (entregue)
 - `GET/POST/PUT/DELETE /api/cards` — CRUD; a resposta calcula sempre (nunca armazena)
   fatura atual do ciclo aberto, parcelas futuras comprometidas, limite usado/disponível,
