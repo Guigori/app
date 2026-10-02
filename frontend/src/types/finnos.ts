@@ -215,3 +215,77 @@ export interface SignupResult {
   verification_required: boolean;
   expires_in_minutes: number;
 }
+
+// --- Fluxo (mirror: backend/models/analytics.py FlowPoint/FlowCategory/FlowOut) ---
+
+export type FlowTab = "receitas" | "despesas" | "caixa" | "projecao";
+export type FlowPeriod = "3" | "6" | "12" | "custom";
+
+export interface FlowPoint {
+  month: string;
+  label: string;
+  year: string;
+  income: number;
+  expense: number;
+  net: number;
+  projected_income: number;
+  projected_expense: number;
+  projected_net: number;
+  future: boolean;
+}
+
+export interface FlowCategory {
+  category_id: string | null;
+  name: string;
+  color: string;
+  icon: string;
+  total: number;
+  percent: number;
+}
+
+export interface Flow {
+  month: string;
+  from_month: string;
+  to_month: string;
+  income: number;
+  expense: number;
+  net: number;
+  projected_income: number;
+  projected_expense: number;
+  projected_net: number;
+  total_income: number;
+  total_expense: number;
+  total_net: number;
+  series: FlowPoint[];
+  categories: FlowCategory[];
+}
+
+export interface FlowParams {
+  month?: string;
+  months?: number;
+  from_month?: string;
+  to_month?: string;
+  category_id?: string;
+}
+
+// --- Calendário (mirror: backend/models/analytics.py DayFlow/CalendarOut) ---
+
+export interface DayFlow {
+  date: string;
+  income: number;
+  expense: number;
+  projected_income: number;
+  projected_expense: number;
+  count: number;
+}
+
+export interface CalendarMonth {
+  month: string;
+  days: DayFlow[];
+  income: number;
+  expense: number;
+  net: number;
+  projected_income: number;
+  projected_expense: number;
+  projected_balance: number;
+}

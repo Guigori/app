@@ -14,6 +14,12 @@ import type {
   CategoryGroup,
   CategoryInput,
   CategorySlice,
+  CalendarMonth,
+  DayFlow,
+  Flow,
+  FlowCategory,
+  FlowParams,
+  FlowPoint,
   Dashboard,
   RuleItem,
   RuleStatus,
@@ -571,4 +577,153 @@ export function localSetName(name: string): { name: string } {
 
 export function localExport(): string {
   return JSON.stringify(readDb(), null, 2);
+}
+
+/** Cash-flow window for the /fluxo screen — mirrors backend/routers/analytics.py flow(). */
+export function localFlow(params: FlowParams): Flow {
+  const db = readDb();
+  const focus = params.month ?? currentMonth();
+  const window: string[] = [];
+  if (params.from_month && params.to_month) {
+    const [start, end] =
+      params.from_month <= params.to_month
+        ? [params.from_month, params.to_month]
+        : [params.to_month, params.from_month];
+    const span = Math.min(monthsBetween(start, end), 35);
+    for (let i = 0; i <= span; i += 1) window.push(addMonth(start, i));
+  } else {
+    const months = params.months ?? 12;
+    for (let i = months - 1; i >= 0; i -= 1) window.push(addMonth(focus, -i));
+    window.push(addMonth(focus, 1), addMonth(focus, 2));
+  }
+
+  const txs = params.category_id
+    ? db.transactions.filter((t) => t.category_id === params.category_id)
+    : db.transactions;
+  const settled = new Set(txs.map((t) => `${t.name.trim().toLowerCase()}|${t.date.slice(0, 7)}`));
+  const todayMonth = todayISO().slice(0, 7);
+
+  const amount = (t: Transaction) => round2(t.installment ? t.installment_value ?? 0 : t.value);
+  const projection = (t: Transaction, month: string): number | null => {
+    if (t.type === "transferencia") return null;
+    const txMonth = t.date.slice(0, 7);
+    if (t.status !== "pago" && txMonth === month) return amount(t);
+    if (t.fixed && (t.recurrence ?? "mensal") === "mensal") {
+      if (monthsBetween(txMonth, month) > 0 && !settled.has(`${t.name.trim().toLowerCase()}|${month}`)) {
+        return amount(t);
+      }
+    }
+    return null;
+  };
+
+  const series: FlowPoint[] = window.map((m) => {
+    let income = 0;
+    let expense = 0;
+    let pIncome = 0;
+    let pExpense = 0;
+    for (const tx of txs) {
+      const portion = monthPortion(tx, m);
+      if (portion !== null) {
+        if (tx.type === "receita") income += portion;
+        else expense += portion;
+      }
+      const projected = projection(tx, m);
+      if (projected !== null) {
+        if (tx.type === "receita") pIncome += projected;
+        else pExpense += projected;
+      }
+    }
+    return {
+      month: m,
+      label: MONTH_ABBR[Number(m.slice(5, 7)) - 1],
+      year: `'${m.slice(2, 4)}`,
+      income: round2(income),
+      expense: round2(expense),
+      net: round2(income - expense),
+      projected_income: round2(pIncome),
+      projected_expense: round2(pExpense),
+      projected_net: round2(pIncome - pExpense),
+      future: m > todayMonth,
+    };
+  });
+
+  const byCat = new Map<string | null, number>();
+  for (const tx of txs) {
+    const portion = monthPortion(tx, focus);
+    if (portion === null || tx.type === "receita") continue;
+    byCat.set(tx.category_id, (byCat.get(tx.category_id) ?? 0) + portion);
+  }
+  const focusExpense = round2([...byCat.values()].reduce((s, v) => s + v, 0));
+  const categories: FlowCategory[] = [...byCat.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, value]) => {
+      const category = key ? db.categories.find((c) => c.id === key) : undefined;
+      return {
+        category_id: key,
+        name: category?.name ?? "Sem categoria",
+        color: category?.color ?? "#94A3B8",
+        icon: category?.icon ?? "more-horizontal",
+        total: round2(value),
+        percent: focusExpense ? Math.round((value / focusExpense) * 1000) / 10 : 0,
+      };
+    });
+
+  const point = series.find((p) => p.month === focus);
+  return {
+    month: focus,
+    from_month: window[0],
+    to_month: window[window.length - 1],
+    income: point?.income ?? 0,
+    expense: point?.expense ?? 0,
+    net: point?.net ?? 0,
+    projected_income: point?.projected_income ?? 0,
+    projected_expense: point?.projected_expense ?? 0,
+    projected_net: point?.projected_net ?? 0,
+    total_income: round2(series.reduce((s, p) => s + p.income, 0)),
+    total_expense: round2(series.reduce((s, p) => s + p.expense, 0)),
+    total_net: round2(series.reduce((s, p) => s + p.net, 0)),
+    series,
+    categories,
+  };
+}
+
+/** Per-day entradas/saídas of a month — mirrors backend calendar_month(). */
+export function localCalendar(month: string): CalendarMonth {
+  const db = readDb();
+  const [start, end] = monthBounds(month);
+  const buckets = new Map<string, DayFlow>();
+  for (const tx of db.transactions) {
+    if (tx.date < start || tx.date > end) continue;
+    const day =
+      buckets.get(tx.date) ??
+      { date: tx.date, income: 0, expense: 0, projected_income: 0, projected_expense: 0, count: 0 };
+    day.count += 1;
+    if (tx.type !== "transferencia") {
+      const value = round2(tx.installment ? tx.installment_value ?? 0 : tx.value);
+      if (tx.status === "pago") {
+        if (tx.type === "receita") day.income = round2(day.income + value);
+        else day.expense = round2(day.expense + value);
+      } else if (tx.type === "receita") {
+        day.projected_income = round2(day.projected_income + value);
+      } else {
+        day.projected_expense = round2(day.projected_expense + value);
+      }
+    }
+    buckets.set(tx.date, day);
+  }
+  const days = [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const income = round2(days.reduce((s, d) => s + d.income, 0));
+  const expense = round2(days.reduce((s, d) => s + d.expense, 0));
+  const pIncome = round2(days.reduce((s, d) => s + d.projected_income, 0));
+  const pExpense = round2(days.reduce((s, d) => s + d.projected_expense, 0));
+  return {
+    month,
+    days,
+    income,
+    expense,
+    net: round2(income - expense),
+    projected_income: pIncome,
+    projected_expense: pExpense,
+    projected_balance: round2(income - expense + pIncome - pExpense),
+  };
 }

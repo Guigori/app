@@ -1,4 +1,5 @@
-"""Analytics models. Mirror: frontend/src/types/finnos.ts (MonthTrend, BudgetRow, BudgetSummary)."""
+"""Analytics models. Mirror: frontend/src/types/finnos.ts (MonthTrend, BudgetRow,
+BudgetSummary, FlowPoint, FlowOut, DayFlow, CalendarOut)."""
 
 from typing import List, Literal, Optional
 
@@ -43,3 +44,68 @@ class BudgetSummary(BaseModel):
     income: float
     unbudgeted_spent: float
     rows: List[BudgetRow]
+
+
+# --- Fluxo (cash flow screen) ----------------------------------------------
+
+
+class FlowPoint(BaseModel):
+    month: str
+    label: str
+    year: str
+    income: float
+    expense: float
+    net: float
+    projected_income: float
+    projected_expense: float
+    projected_net: float
+    future: bool
+
+
+class FlowCategory(BaseModel):
+    category_id: Optional[str]
+    name: str
+    color: str
+    icon: str
+    total: float
+    percent: float
+
+
+class FlowOut(BaseModel):
+    month: str
+    from_month: str
+    to_month: str
+    income: float
+    expense: float
+    net: float
+    projected_income: float
+    projected_expense: float
+    projected_net: float
+    total_income: float
+    total_expense: float
+    total_net: float
+    series: List[FlowPoint]
+    categories: List[FlowCategory]
+
+
+# --- Calendário de transações ----------------------------------------------
+
+
+class DayFlow(BaseModel):
+    date: str
+    income: float
+    expense: float
+    projected_income: float
+    projected_expense: float
+    count: int
+
+
+class CalendarOut(BaseModel):
+    month: str
+    days: List[DayFlow]
+    income: float
+    expense: float
+    net: float
+    projected_income: float
+    projected_expense: float
+    projected_balance: float

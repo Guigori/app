@@ -96,6 +96,22 @@ Autorização: toda query filtra por `user_id` da sessão → um usuário nunca 
 - Demo: 4 contas (Nubank, Inter, Itaú, Carteira), 2 meses de histórico, 1 parcelamento
   (MacBook 10x de R$ 600, parcela 3), despesas fixas, 1 agendada e 1 pendente.
 
+## Fluxo + calendário (entregue)
+- `GET /api/analytics/flow` — janela de meses (3/6/12 ou `from_month`+`to_month`
+  personalizado), filtro opcional por categoria; devolve realizado por mês, projeção
+  (agendados/pendentes + fixas mensais que se repetem, sem duplicar o que já existe no
+  mês) e "onde foi o dinheiro" do mês em foco.
+- `GET /api/analytics/calendar?month=YYYY-MM` — entradas/saídas por dia + previstos.
+- Página `/fluxo` (sempre tela cheia, nunca painel lateral — botão Voltar no header e
+  gesto de voltar do navegador): SOBROU/ENTROU/SAIU, gráfico do período, abas
+  Receitas | Despesas | Caixa | Projeção e lista de categorias.
+- Home: o card Saldo total e cada card de resumo abrem `/fluxo` na aba correspondente.
+  Toggle **Cards | Gráficos** no topo (ao lado do seletor de mês), salvo no aparelho
+  (`finnos:home-view`) — os cards continuam no topo, logo abaixo do saldo.
+- Transações: calendário interativo (expande/recolhe, navega mês, valores de entrada e
+  saída em cada dia), alternância **Dia | Mês**, faixas de realizado e de previsto, e os
+  filtros de busca/tipo/status/categoria/conta sobre a lista.
+
 ## Analytics + Orçamento (entregue)
 - `GET /api/analytics/trends` — últimos 6 meses (label pt-BR, income/expense/net) para os
   gráficos das folhas de detalhe.

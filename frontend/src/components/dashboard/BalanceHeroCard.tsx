@@ -9,14 +9,24 @@ interface BalanceHeroCardProps {
   total: number;
   income: number;
   expense: number;
+  /** Clicking the card opens the full /fluxo screen. */
+  onOpen: () => void;
 }
 
-export function BalanceHeroCard({ month, total, income, expense }: BalanceHeroCardProps) {
+export function BalanceHeroCard({ month, total, income, expense, onOpen }: BalanceHeroCardProps) {
   const { hidden, toggle } = useBalanceHidden();
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
 
   return (
     <Card className="relative overflow-hidden border-0 bg-[#10142B] text-white dark:bg-[#17171C]">
+      {/* Full-card hit area, under the eye toggle (which sits above it). */}
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label="Abrir o fluxo completo"
+        className="absolute inset-0 z-10 cursor-pointer rounded-[inherit] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+        data-testid="balance-open-flow"
+      />
       <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#5B3FE4]/50 blur-3xl" aria-hidden="true" />
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-4">
@@ -36,7 +46,7 @@ export function BalanceHeroCard({ month, total, income, expense }: BalanceHeroCa
             onClick={toggle}
             aria-label={hidden ? "Exibir valores" : "Ocultar valores"}
             data-testid="toggle-visibility-btn"
-            className="text-white/70 hover:bg-white/10 hover:text-white"
+            className="relative z-20 text-white/70 hover:bg-white/10 hover:text-white"
           >
             {hidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
           </Button>

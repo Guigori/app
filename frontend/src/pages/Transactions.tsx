@@ -2,20 +2,23 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, PlusCircle, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteTransaction, fetchAccounts, fetchCategories, fetchTransactions } from "@/lib/data";
+import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { useBalanceHidden } from "@/lib/balance";
 import {
   currentMonth,
+  formatBRL,
+  todayISO,
   formatDate,
   formatHiddenBRL,
   formatSignedBRL,
   TX_STATUS_LABEL,
   TX_TYPE_LABEL,
+  monthLabel,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
-import { MonthSelector } from "@/components/dashboard/MonthSelector";
+import { TransactionCalendar } from "@/components/transactions/TransactionCalendar";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -38,6 +41,9 @@ export default function Transactions() {
   const { hidden } = useBalanceHidden();
 
   const [month, setMonth] = useState(currentMonth());
+  const [selectedDate, setSelectedDate] = useState(todayISO());
+  const [scope, setScope] = useState<"dia" | "mes">("mes");
+  const [calendarExpanded, setCalendarExpanded] = useState(true);
   const [search, setSearch] = useState("");
   const [type, setType] = useState<"todos" | TxType>("todos");
   const [status, setStatus] = useState<"todos" | TxStatus>("todos");
@@ -47,7 +53,15 @@ export default function Transactions() {
 
   const deferredSearch = useDeferredValue(search);
 
+  const changeMonth = (next: string) => {
+    setMonth(next);
+    // Keep the selection inside the visible month: today when it belongs there, day 1 otherwise.
+    setSelectedDate(todayISO().slice(0, 7) === next ? todayISO() : `${next}-01`);
+  };
+
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts });
+  const calendarQuery = useQuery({ queryKey: ["calendar", month], queryFn: () => fetchCalendar(month) });
+  const calendar = calendarQuery.data;
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
   const accounts = accountsQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
@@ -66,7 +80,25 @@ export default function Transactions() {
     queryKey: ["transactions", filters],
     queryFn: () => fetchTransactions(filters),
   });
-  const transactions = transactionsQuery.data ?? [];
+  const monthTransactions = transactionsQuery.data ?? [];
+  const transactions =
+    scope === "dia" ? monthTransactions.filter((t) => t.date === selectedDate) : monthTransactions;
+  const dayFlow = calendar?.days.find((d) => d.date === selectedDate);
+  const strip =
+    scope === "dia"
+      ? {
+          income: dayFlow?.income ?? 0,
+          expense: dayFlow?.expense ?? 0,
+          projectedIncome: dayFlow?.projected_income ?? 0,
+          projectedExpense: dayFlow?.projected_expense ?? 0,
+        }
+      : {
+          income: calendar?.income ?? 0,
+          expense: calendar?.expense ?? 0,
+          projectedIncome: calendar?.projected_income ?? 0,
+          projectedExpense: calendar?.projected_expense ?? 0,
+        };
+  const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteTransaction(id),
@@ -80,6 +112,8 @@ export default function Transactions() {
         queryClient.invalidateQueries({ queryKey: ["account"] }),
         queryClient.invalidateQueries({ queryKey: ["budget"] }),
         queryClient.invalidateQueries({ queryKey: ["trends"] }),
+        queryClient.invalidateQueries({ queryKey: ["calendar"] }),
+        queryClient.invalidateQueries({ queryKey: ["flow"] }),
       ]);
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
@@ -108,6 +142,84 @@ export default function Transactions() {
         </Button>
       </div>
 
+      <TransactionCalendar
+        month={month}
+        days={calendar?.days ?? []}
+        selectedDate={selectedDate}
+        expanded={calendarExpanded}
+        onToggleExpanded={() => setCalendarExpanded((value) => !value)}
+        onMonthChange={changeMonth}
+        onSelectDate={(date) => {
+          setSelectedDate(date);
+          setScope("dia");
+        }}
+      />
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-1 rounded-full border border-border bg-muted/60 p-1" role="group" aria-label="Ver por dia ou por mês">
+          {([
+            { key: "dia" as const, label: "Dia" },
+            { key: "mes" as const, label: "Mês" },
+          ]).map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setScope(option.key)}
+              aria-pressed={scope === option.key}
+              className={cn(
+                "rounded-full px-4 py-1.5 text-sm font-medium transition-colors duration-150",
+                scope === option.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+              data-testid={`scope-${option.key}`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-sm text-muted-foreground" data-testid="scope-label">
+          {scope === "dia" ? formatDate(selectedDate) : monthLabel(month)}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-border bg-card p-4" data-testid="flow-strip-real">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Entrada</p>
+            <p className="mt-1 font-heading text-base font-bold tabular-nums text-income" data-testid="strip-income">{money(strip.income)}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Saída</p>
+            <p className="mt-1 font-heading text-base font-bold tabular-nums text-expense" data-testid="strip-expense">{money(strip.expense)}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Saldo</p>
+            <p className="mt-1 font-heading text-base font-bold tabular-nums text-foreground" data-testid="strip-net">
+              {money(strip.income - strip.expense)}
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-dashed border-border bg-card p-4" data-testid="flow-strip-projection">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Previsto entra</p>
+            <p className="mt-1 font-heading text-base font-bold tabular-nums text-income" data-testid="strip-projected-income">
+              {money(strip.projectedIncome)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Previsto sai</p>
+            <p className="mt-1 font-heading text-base font-bold tabular-nums text-expense" data-testid="strip-projected-expense">
+              {money(strip.projectedExpense)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Saldo previsto</p>
+            <p className="mt-1 font-heading text-base font-bold tabular-nums text-foreground" data-testid="strip-projected-net">
+              {money(strip.income - strip.expense + strip.projectedIncome - strip.projectedExpense)}
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
@@ -121,7 +233,6 @@ export default function Transactions() {
               data-testid="transaction-search-input"
             />
           </div>
-          <MonthSelector month={month} onChange={setMonth} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={type} onValueChange={(v) => setType(v as TxType | "todos")}>

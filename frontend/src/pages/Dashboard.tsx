@@ -1,30 +1,41 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { BarChart3, LayoutGrid } from "lucide-react";
 import { fetchAccounts, fetchDashboard, fetchMe } from "@/lib/data";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
-import type { Account, Dashboard as DashboardData, MetricKind } from "@/types/finnos";
+import { useHomeView } from "@/lib/prefs";
+import { cn } from "@/lib/utils";
+import type { MetricKind } from "@/types/finnos";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
-import { MetricDetailSheet } from "@/components/analytics/MetricDetailSheet";
 import { BalanceHeroCard } from "@/components/dashboard/BalanceHeroCard";
 import { MonthBalanceCard } from "@/components/dashboard/MonthBalanceCard";
 import { Budget503020Card } from "@/components/dashboard/Budget503020Card";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
+import { MetricCharts } from "@/components/dashboard/MetricCharts";
 import { MonthSelector } from "@/components/dashboard/MonthSelector";
 import { RecentTransactions } from "@/components/dashboard/RecentTransactions";
 import { SummaryCards } from "@/components/dashboard/SummaryCards";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
+const METRIC_TAB: Record<MetricKind, string> = {
+  income: "receitas",
+  expense: "despesas",
+  balance: "caixa",
+  invested: "projecao",
+};
+
 export default function Dashboard() {
   const dialogs = useDialogs();
+  const navigate = useNavigate();
+  const { view, setView } = useHomeView();
   const { data: user } = useQuery({
     queryKey: ["me"],
     queryFn: fetchMe,
     staleTime: 5 * 60 * 1000,
   });
   const [month, setMonth] = useState<string | null>(null);
-  const [metric, setMetric] = useState<MetricKind | null>(null);
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", month],
     queryFn: () => fetchDashboard(month),
@@ -38,6 +49,12 @@ export default function Dashboard() {
   const data = dashboardQuery.data;
   const error = dashboardQuery.error;
   const noAccounts = !accountsQuery.isPending && (accountsQuery.data ?? []).length === 0;
+  const activeMonth = data?.month ?? currentMonth();
+
+  // Every card/chart opens the full Fluxo screen (never a side panel), so the browser
+  // back gesture returns to the Home exactly where it was.
+  const openFlow = (metric: MetricKind) =>
+    navigate(`/fluxo?month=${activeMonth}&metric=${METRIC_TAB[metric]}`);
 
   return (
     <div className="space-y-6 animate-fade-up">
@@ -50,10 +67,37 @@ export default function Dashboard() {
             Olá, {user ? firstName(user.name) : "tudo bem?"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground" data-testid="dashboard-subtitle">
-            Visão geral de {data ? monthLabel(data.month) : monthLabel(currentMonth())}
+            Visão geral de {monthLabel(activeMonth)}
           </p>
         </div>
-        {data ? <MonthSelector month={data.month} onChange={setMonth} /> : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="flex gap-1 rounded-full border border-border bg-muted/60 p-1"
+            role="group"
+            aria-label="Como ver o resumo"
+          >
+            {([
+              { key: "cards" as const, label: "Cards", icon: LayoutGrid },
+              { key: "graficos" as const, label: "Gráficos", icon: BarChart3 },
+            ]).map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setView(option.key)}
+                aria-pressed={view === option.key}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-150",
+                  view === option.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+                data-testid={`home-view-${option.key}`}
+              >
+                <option.icon className="h-3.5 w-3.5" aria-hidden="true" />
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {data ? <MonthSelector month={data.month} onChange={setMonth} /> : null}
+        </div>
       </div>
 
       {error && !data ? (
@@ -92,31 +136,17 @@ export default function Dashboard() {
       ) : null}
 
       {data ? (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* left column: balance, month balance, rule, recents */}
-          <div className="flex flex-col gap-6 lg:col-span-8">
-            <BalanceHeroCard month={data.month} total={data.total_balance} income={data.income} expense={data.expense} />
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <MonthBalanceCard
-                income={data.income}
-                expense={data.expense}
-                balance={data.month_balance}
-                prevExpense={data.prev_expense}
-                onOpen={() => setMetric("balance")}
-              />
-              <ExpensesDonutChart
-                month={data.month}
-                slices={data.categories}
-                total={data.expense}
-                onOpenDetails={() => setMetric("expense")}
-              />
-            </div>
-            <Budget503020Card month={monthLabel(data.month)} income={data.income} rule={data.rule} />
-            <RecentTransactions transactions={data.recent} />
-          </div>
+        <div className="space-y-6">
+          {/* Saldo total stays at the very top; clicking it opens /fluxo. */}
+          <BalanceHeroCard
+            month={data.month}
+            total={data.total_balance}
+            income={data.income}
+            expense={data.expense}
+            onOpen={() => openFlow("balance")}
+          />
 
-          {/* right column: the clickable metric cards */}
-          <div className="lg:col-span-4">
+          {view === "cards" ? (
             <SummaryCards
               income={data.income}
               expense={data.expense}
@@ -124,9 +154,37 @@ export default function Dashboard() {
               invested={data.invested}
               prevIncome={data.prev_income}
               prevExpense={data.prev_expense}
-              onOpenMetric={setMetric}
+              onOpenMetric={openFlow}
+            />
+          ) : (
+            <MetricCharts
+              month={data.month}
+              income={data.income}
+              expense={data.expense}
+              monthBalance={data.month_balance}
+              invested={data.invested}
+              onOpenMetric={openFlow}
+            />
+          )}
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <MonthBalanceCard
+              income={data.income}
+              expense={data.expense}
+              balance={data.month_balance}
+              prevExpense={data.prev_expense}
+              onOpen={() => openFlow("balance")}
+            />
+            <ExpensesDonutChart
+              month={data.month}
+              slices={data.categories}
+              total={data.expense}
+              onOpenDetails={() => openFlow("expense")}
             />
           </div>
+
+          <Budget503020Card month={monthLabel(data.month)} income={data.income} rule={data.rule} />
+          <RecentTransactions transactions={data.recent} />
         </div>
       ) : !error ? (
         <div className="space-y-6" aria-hidden="true">
@@ -134,13 +192,6 @@ export default function Dashboard() {
           <div className="h-72 animate-pulse rounded-3xl bg-muted" />
         </div>
       ) : null}
-
-      <MetricDetailSheet
-        metric={metric}
-        month={data?.month ?? currentMonth()}
-        categories={data?.categories ?? []}
-        onClose={() => setMetric(null)}
-      />
     </div>
   );
 }

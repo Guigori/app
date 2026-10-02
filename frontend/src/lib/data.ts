@@ -25,6 +25,8 @@ import {
   localUpdateTransaction,
   localTrends,
   localBudget,
+  localFlow,
+  localCalendar,
   type LocalTxFilters,
 } from "@/lib/local/engine";
 import type {
@@ -32,9 +34,12 @@ import type {
   AccountDetail,
   AccountInput,
   BudgetSummary,
+  CalendarMonth,
   Category,
   CategoryInput,
   Dashboard,
+  Flow,
+  FlowParams,
   Transaction,
   TransactionInput,
   Trends,
@@ -88,6 +93,20 @@ export async function fetchTrends(months: number, endMonth?: string): Promise<Tr
 export async function fetchBudget(month: string): Promise<BudgetSummary> {
   if (isLocalMode()) return localBudget(month);
   return apiGet<BudgetSummary>(`/analytics/budget?month=${month}`);
+}
+
+export async function fetchFlow(params: FlowParams): Promise<Flow> {
+  if (isLocalMode()) return localFlow(params);
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) search.set(key, String(value));
+  }
+  return apiGet<Flow>(`/analytics/flow?${search.toString()}`);
+}
+
+export async function fetchCalendar(month: string): Promise<CalendarMonth> {
+  if (isLocalMode()) return localCalendar(month);
+  return apiGet<CalendarMonth>(`/analytics/calendar?month=${month}`);
 }
 
 // --- Accounts ---------------------------------------------------------------

@@ -10,6 +10,7 @@ import Accounts from "@/pages/Accounts";
 import Categories from "@/pages/Categories";
 import Settings from "@/pages/Settings";
 import Budget from "@/pages/Budget";
+import Flow from "@/pages/Flow";
 import ComingSoon from "@/pages/ComingSoon";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="/configuracoes" element={<Settings />} />
             <Route path="/cartoes" element={<ComingSoon module="cartoes" />} />
             <Route path="/orcamento" element={<Budget />} />
+            <Route path="/fluxo" element={<Flow />} />
             <Route path="/assinaturas" element={<ComingSoon module="assinaturas" />} />
             <Route path="/metas" element={<ComingSoon module="metas" />} />
             <Route path="/investimentos" element={<ComingSoon module="investimentos" />} />
