@@ -24,7 +24,7 @@ export const MAIN_NAV: NavItem[] = [
   { to: "/transacoes", label: "Transações", icon: LayoutList, slug: "transacoes" },
   { to: "/contas", label: "Contas", icon: Wallet, slug: "contas" },
   { to: "/cartoes", label: "Cartões", icon: CreditCard, soon: true, slug: "cartoes" },
-  { to: "/orcamento", label: "Orçamento", icon: PieChart, soon: true, slug: "orcamento" },
+  { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
   { to: "/assinaturas", label: "Assinaturas", icon: Repeat, soon: true, slug: "assinaturas" },
   { to: "/metas", label: "Metas", icon: PiggyBank, soon: true, slug: "metas" },
   { to: "/investimentos", label: "Investimentos", icon: TrendingUp, soon: true, slug: "investimentos" },

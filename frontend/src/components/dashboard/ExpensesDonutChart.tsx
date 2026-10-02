@@ -1,4 +1,5 @@
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useBalanceHidden } from "@/lib/balance";
@@ -9,16 +10,28 @@ interface ExpensesDonutChartProps {
   month: string;
   slices: CategorySlice[];
   total: number;
+  onOpenDetails?: () => void;
 }
 
-export function ExpensesDonutChart({ month, slices, total }: ExpensesDonutChartProps) {
+export function ExpensesDonutChart({ month, slices, total, onOpenDetails }: ExpensesDonutChartProps) {
   const { hidden } = useBalanceHidden();
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="font-heading">Para onde foi</CardTitle>
-        <CardDescription>Distribuição das despesas de {monthLabel(month)}</CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between gap-3">
+        <div>
+          <CardTitle className="font-heading">Pra onde foi o dinheiro?</CardTitle>
+          <CardDescription>
+            {slices.length > 0
+              ? `${monthLabel(month)} · ${slices.length} ${slices.length === 1 ? "categoria" : "categorias"}`
+              : `Distribuição das despesas de ${monthLabel(month)}`}
+          </CardDescription>
+        </div>
+        {slices.length > 0 && onOpenDetails ? (
+          <Button variant="ghost" size="sm" onClick={onOpenDetails} data-testid="donut-open-details-button">
+            Detalhes
+          </Button>
+        ) : null}
       </CardHeader>
       <CardContent>
         {slices.length === 0 ? (

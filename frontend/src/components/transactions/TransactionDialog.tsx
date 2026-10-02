@@ -126,6 +126,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, transaction
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["account"] }),
+        queryClient.invalidateQueries({ queryKey: ["budget"] }),
+        queryClient.invalidateQueries({ queryKey: ["trends"] }),
       ]);
       onOpenChange(false);
     },

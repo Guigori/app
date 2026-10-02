@@ -31,6 +31,7 @@ export default function Categories() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["categories"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["budget"] }),
       ]);
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),

@@ -11,6 +11,8 @@ export interface TransactionDialogInit {
 
 export interface CategoryDialogInit {
   category?: Category;
+  /** Opens the dialog for a category the caller only knows by id (budget page). */
+  categoryId?: string;
   group?: Category["group"];
 }
 
@@ -68,6 +70,7 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
         open={category.open}
         onOpenChange={(open) => setCategory((prev) => ({ ...prev, open }))}
         category={category.category}
+        categoryId={category.categoryId}
         defaultGroup={category.group}
       />
     </DialogsContext.Provider>

@@ -7,6 +7,9 @@ import type {
   Account,
   AccountDetail,
   AccountInput,
+  BudgetRow,
+  BudgetStatus,
+  BudgetSummary,
   Category,
   CategoryGroup,
   CategoryInput,
@@ -14,8 +17,10 @@ import type {
   Dashboard,
   RuleItem,
   RuleStatus,
+  MonthTrend,
   Transaction,
   TransactionInput,
+  Trends,
 } from "@/types/finnos";
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -378,6 +383,91 @@ export function localDashboard(month?: string | null): Dashboard {
     categories,
     rule,
     recent,
+  };
+}
+
+// --- Analytics --------------------------------------------------------------
+
+const MONTH_ABBR = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+export function localTrends(months: number, endMonth?: string): Trends {
+  const db = readDb();
+  const last = endMonth ?? currentMonth();
+  const window: string[] = [];
+  for (let i = months - 1; i >= 0; i -= 1) window.push(addMonth(last, -i));
+
+  const rows: MonthTrend[] = window.map((m) => {
+    let income = 0;
+    let expense = 0;
+    for (const tx of db.transactions) {
+      const portion = monthPortion(tx, m);
+      if (portion === null) continue;
+      if (tx.type === "receita") income += portion;
+      else expense += portion;
+    }
+    return {
+      month: m,
+      label: MONTH_ABBR[Number(m.slice(5, 7)) - 1],
+      income: round2(income),
+      expense: round2(expense),
+      net: round2(income - expense),
+    };
+  });
+
+  return {
+    months: rows,
+    total_income: round2(rows.reduce((s, r) => s + r.income, 0)),
+    total_expense: round2(rows.reduce((s, r) => s + r.expense, 0)),
+  };
+}
+
+export function localBudget(month: string): BudgetSummary {
+  const db = readDb();
+  const spentByCat = new Map<string | null, number>();
+  let income = 0;
+  for (const tx of db.transactions) {
+    const portion = monthPortion(tx, month);
+    if (portion === null) continue;
+    if (tx.type === "receita") income += portion;
+    else spentByCat.set(tx.category_id, (spentByCat.get(tx.category_id) ?? 0) + portion);
+  }
+
+  const rows: BudgetRow[] = [];
+  for (const cat of db.categories) {
+    const budget = round2(cat.monthly_budget);
+    const spent = round2(spentByCat.get(cat.id) ?? 0);
+    if (budget <= 0 && spent <= 0) continue;
+    const percent = budget > 0 ? Math.round((spent / budget) * 1000) / 10 : 0;
+    const status: BudgetStatus =
+      budget <= 0 ? "sem_limite" : percent <= 80 ? "dentro" : percent <= 100 ? "proximo" : "acima";
+    rows.push({
+      category_id: cat.id,
+      name: cat.name,
+      icon: cat.icon,
+      color: cat.color,
+      group: cat.group,
+      budget,
+      spent,
+      remaining: round2(budget - spent),
+      percent,
+      status,
+    });
+  }
+  rows.sort((a, b) => Number(a.budget <= 0) - Number(b.budget <= 0) || b.percent - a.percent || b.spent - a.spent);
+
+  const planned = round2(rows.reduce((s, r) => s + r.budget, 0));
+  const spentTotal = round2(rows.reduce((s, r) => s + r.spent, 0));
+  const budgetedSpent = round2(rows.filter((r) => r.budget > 0).reduce((s, r) => s + r.spent, 0));
+
+  return {
+    month,
+    planned,
+    spent: spentTotal,
+    remaining: round2(planned - budgetedSpent),
+    percent: planned ? Math.round((budgetedSpent / planned) * 1000) / 10 : 0,
+    income: round2(income),
+    unbudgeted_spent: round2(spentTotal - budgetedSpent),
+    rows,
   };
 }
 

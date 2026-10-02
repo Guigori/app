@@ -96,9 +96,21 @@ Autorização: toda query filtra por `user_id` da sessão → um usuário nunca 
 - Demo: 4 contas (Nubank, Inter, Itaú, Carteira), 2 meses de histórico, 1 parcelamento
   (MacBook 10x de R$ 600, parcela 3), despesas fixas, 1 agendada e 1 pendente.
 
+## Analytics + Orçamento (entregue)
+- `GET /api/analytics/trends` — últimos 6 meses (label pt-BR, income/expense/net) para os
+  gráficos das folhas de detalhe.
+- `GET /api/analytics/budget?month=YYYY-MM` — planejado/utilizado/restante/percentual,
+  receita do mês, gasto sem orçamento e linhas por categoria agrupadas por 50/30/20.
+- Home: os 4 cards de resumo (Receitas, Despesas, Saldo do mês, Investimentos) são
+  clicáveis e abrem `MetricDetailSheet` com barras dos 6 meses + tabela de fluxo de caixa.
+- Página `/orcamento`: resumo do mês, barras por categoria com status (uso normal /
+  próximo do limite / limite ultrapassado, com ícone+texto além da cor) e edição inline
+  do orçamento da categoria. Mutações invalidam `categories`, `dashboard`, `budget` e
+  `trends` — o resumo atualiza sem trocar de mês.
+
 ## Pendente / futuro (arquitetura preparada, nada fictício na UI)
 - **Redesenho UI/UX no padrão Calen** — aguardando fotos de referência do cliente.
-- Cartões, orçamento por categoria, assinaturas, metas, investimentos.
+- Cartões, assinaturas, metas, investimentos.
 - Recuperação de senha por e-mail (a infra de e-mail já está pronta).
 - Migrar dados da conta local para a conta completa.
 - Open Finance/OFX/CSV, múltiplas moedas, notificações.

@@ -3,9 +3,11 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchAccounts, fetchDashboard, fetchMe } from "@/lib/data";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
-import type { Account, Dashboard as DashboardData } from "@/types/finnos";
+import type { Account, Dashboard as DashboardData, MetricKind } from "@/types/finnos";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
+import { MetricDetailSheet } from "@/components/analytics/MetricDetailSheet";
 import { BalanceHeroCard } from "@/components/dashboard/BalanceHeroCard";
+import { MonthBalanceCard } from "@/components/dashboard/MonthBalanceCard";
 import { Budget503020Card } from "@/components/dashboard/Budget503020Card";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 import { MonthSelector } from "@/components/dashboard/MonthSelector";
@@ -22,6 +24,7 @@ export default function Dashboard() {
     staleTime: 5 * 60 * 1000,
   });
   const [month, setMonth] = useState<string | null>(null);
+  const [metric, setMetric] = useState<MetricKind | null>(null);
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", month],
     queryFn: () => fetchDashboard(month),
@@ -90,9 +93,29 @@ export default function Dashboard() {
 
       {data ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          <div className="lg:col-span-8">
+          {/* left column: balance, month balance, rule, recents */}
+          <div className="flex flex-col gap-6 lg:col-span-8">
             <BalanceHeroCard month={data.month} total={data.total_balance} income={data.income} expense={data.expense} />
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <MonthBalanceCard
+                income={data.income}
+                expense={data.expense}
+                balance={data.month_balance}
+                prevExpense={data.prev_expense}
+                onOpen={() => setMetric("balance")}
+              />
+              <ExpensesDonutChart
+                month={data.month}
+                slices={data.categories}
+                total={data.expense}
+                onOpenDetails={() => setMetric("expense")}
+              />
+            </div>
+            <Budget503020Card month={monthLabel(data.month)} income={data.income} rule={data.rule} />
+            <RecentTransactions transactions={data.recent} />
           </div>
+
+          {/* right column: the clickable metric cards */}
           <div className="lg:col-span-4">
             <SummaryCards
               income={data.income}
@@ -101,16 +124,8 @@ export default function Dashboard() {
               invested={data.invested}
               prevIncome={data.prev_income}
               prevExpense={data.prev_expense}
+              onOpenMetric={setMetric}
             />
-          </div>
-          <div className="lg:col-span-7">
-            <Budget503020Card month={monthLabel(data.month)} income={data.income} rule={data.rule} />
-          </div>
-          <div className="lg:col-span-5">
-            <ExpensesDonutChart month={data.month} slices={data.categories} total={data.expense} />
-          </div>
-          <div className="lg:col-span-12">
-            <RecentTransactions transactions={data.recent} />
           </div>
         </div>
       ) : !error ? (
@@ -119,6 +134,13 @@ export default function Dashboard() {
           <div className="h-72 animate-pulse rounded-3xl bg-muted" />
         </div>
       ) : null}
+
+      <MetricDetailSheet
+        metric={metric}
+        month={data?.month ?? currentMonth()}
+        categories={data?.categories ?? []}
+        onClose={() => setMetric(null)}
+      />
     </div>
   );
 }

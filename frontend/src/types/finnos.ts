@@ -140,6 +140,50 @@ export interface Dashboard {
   recent: Transaction[];
 }
 
+// --- Analytics --------------------------------------------------------------
+
+export type MetricKind = "income" | "expense" | "balance" | "invested";
+
+export interface MonthTrend {
+  month: string;
+  label: string;
+  income: number;
+  expense: number;
+  net: number;
+}
+
+export interface Trends {
+  months: MonthTrend[];
+  total_income: number;
+  total_expense: number;
+}
+
+export type BudgetStatus = "sem_limite" | "dentro" | "proximo" | "acima";
+
+export interface BudgetRow {
+  category_id: string;
+  name: string;
+  icon: string;
+  color: string;
+  group: CategoryGroup;
+  budget: number;
+  spent: number;
+  remaining: number;
+  percent: number;
+  status: BudgetStatus;
+}
+
+export interface BudgetSummary {
+  month: string;
+  planned: number;
+  spent: number;
+  remaining: number;
+  percent: number;
+  income: number;
+  unbudgeted_spent: number;
+  rows: BudgetRow[];
+}
+
 // --- FINNOS IA (user's own provider key) ------------------------------------
 
 export type AiProvider = "openai" | "anthropic" | "gemini";

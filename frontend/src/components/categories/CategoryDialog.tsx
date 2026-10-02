@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { createCategory, updateCategory } from "@/lib/data";
+import { createCategory, fetchCategories, updateCategory } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { GROUP_LABEL, parseAmount } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -27,11 +27,20 @@ interface CategoryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   category?: Category;
+  categoryId?: string;
   defaultGroup?: CategoryGroup;
 }
 
-export function CategoryDialog({ open, onOpenChange, category, defaultGroup }: CategoryDialogProps) {
+export function CategoryDialog({ open, onOpenChange, category: categoryProp, categoryId, defaultGroup }: CategoryDialogProps) {
   const queryClient = useQueryClient();
+  // The budget page opens this dialog knowing only the id — resolve it from the cache/list.
+  const listQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: fetchCategories,
+    enabled: open && !categoryProp && !!categoryId,
+    staleTime: 60_000,
+  });
+  const category = categoryProp ?? (categoryId ? listQuery.data?.find((c) => c.id === categoryId) : undefined);
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("more-horizontal");
   const [color, setColor] = useState(CATEGORY_COLORS[0]);
@@ -68,6 +77,7 @@ export function CategoryDialog({ open, onOpenChange, category, defaultGroup }: C
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["categories"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["budget"] }),
       ]);
       onOpenChange(false);
     },

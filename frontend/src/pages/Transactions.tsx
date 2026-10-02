@@ -78,6 +78,8 @@ export default function Transactions() {
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["account"] }),
+        queryClient.invalidateQueries({ queryKey: ["budget"] }),
+        queryClient.invalidateQueries({ queryKey: ["trends"] }),
       ]);
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),

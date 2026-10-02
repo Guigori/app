@@ -1,7 +1,10 @@
+import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatBRL } from "@/lib/format";
+import { useBalanceHidden } from "@/lib/balance";
+import { formatBRL, formatHiddenBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { MetricKind } from "@/types/finnos";
 
 interface SummaryCardsProps {
   income: number;
@@ -10,6 +13,8 @@ interface SummaryCardsProps {
   invested: number;
   prevIncome: number | null;
   prevExpense: number | null;
+  /** Opens the metric's charts — the cards are the entry point to the detail panel. */
+  onOpenMetric: (metric: MetricKind) => void;
 }
 
 function Trend({ current, previous, goodWhenDown }: { current: number; previous: number | null; goodWhenDown?: boolean }) {
@@ -27,61 +32,96 @@ function Trend({ current, previous, goodWhenDown }: { current: number; previous:
   );
 }
 
-export function SummaryCards({ income, expense, monthBalance, invested, prevIncome, prevExpense }: SummaryCardsProps) {
+export function SummaryCards({
+  income,
+  expense,
+  monthBalance,
+  invested,
+  prevIncome,
+  prevExpense,
+  onOpenMetric,
+}: SummaryCardsProps) {
+  const { hidden } = useBalanceHidden();
+  const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
+
+  const cards: Array<{
+    metric: MetricKind;
+    label: string;
+    value: number;
+    valueClass?: string;
+    footer: React.ReactNode;
+    badge?: boolean;
+  }> = [
+    {
+      metric: "income",
+      label: "Receitas",
+      value: income,
+      footer: <Trend current={income} previous={prevIncome} />,
+    },
+    {
+      metric: "expense",
+      label: "Despesas",
+      value: expense,
+      footer: <Trend current={expense} previous={prevExpense} goodWhenDown />,
+    },
+    {
+      metric: "balance",
+      label: "Saldo do mês",
+      value: monthBalance,
+      valueClass: monthBalance >= 0 ? "text-income" : "text-expense",
+      footer: <p className="text-xs text-muted-foreground">Receitas menos despesas</p>,
+    },
+    {
+      metric: "invested",
+      label: "Investimentos",
+      value: invested,
+      footer: <p className="text-xs text-muted-foreground">Módulo em preparação</p>,
+      badge: true,
+    },
+  ];
+
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
-      <Card className="py-4" data-testid="summary-card-income">
-        <CardContent className="px-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Receitas</p>
-          <p className="mt-1.5 font-heading text-2xl font-bold tabular-nums text-foreground" data-testid="summary-income-value">
-            {formatBRL(income)}
-          </p>
-          <div className="mt-1.5">
-            <Trend current={income} previous={prevIncome} />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="py-4" data-testid="summary-card-expense">
-        <CardContent className="px-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Despesas</p>
-          <p className="mt-1.5 font-heading text-2xl font-bold tabular-nums text-foreground" data-testid="summary-expense-value">
-            {formatBRL(expense)}
-          </p>
-          <div className="mt-1.5">
-            <Trend current={expense} previous={prevExpense} goodWhenDown />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="py-4" data-testid="summary-card-balance">
-        <CardContent className="px-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Saldo do mês</p>
-          <p
-            className={cn(
-              "mt-1.5 font-heading text-2xl font-bold tabular-nums",
-              monthBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
-            )}
-            data-testid="summary-month-balance-value"
-          >
-            {formatBRL(monthBalance)}
-          </p>
-          <p className="mt-1.5 text-xs text-muted-foreground">Receitas menos despesas</p>
-        </CardContent>
-      </Card>
-
-      <Card className="py-4" data-testid="summary-card-invested">
-        <CardContent className="px-4">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Investimentos
-            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Em breve</Badge>
-          </p>
-          <p className="mt-1.5 font-heading text-2xl font-bold tabular-nums text-foreground" data-testid="summary-invested-value">
-            {formatBRL(invested)}
-          </p>
-          <p className="mt-1.5 text-xs text-muted-foreground">Módulo em preparação</p>
-        </CardContent>
-      </Card>
+      {cards.map((card) => (
+        <Card
+          key={card.metric}
+          className="group py-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+          data-testid={`summary-card-${card.metric}`}
+        >
+          <CardContent className="p-0">
+            <button
+              type="button"
+              onClick={() => onOpenMetric(card.metric)}
+              className="w-full rounded-2xl px-4 py-4 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              aria-label={`Ver gráficos de ${card.label}`}
+              data-testid={`summary-open-${card.metric}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {card.label}
+                  {card.badge ? (
+                    <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Em breve</Badge>
+                  ) : null}
+                </p>
+                <ChevronRight
+                  className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5"
+                  aria-hidden="true"
+                />
+              </div>
+              <p
+                className={cn(
+                  "mt-1.5 font-heading text-2xl font-bold tabular-nums text-foreground",
+                  card.valueClass,
+                )}
+                data-testid={`summary-${card.metric}-value`}
+              >
+                {money(card.value)}
+              </p>
+              <div className="mt-1.5">{card.footer}</div>
+            </button>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }

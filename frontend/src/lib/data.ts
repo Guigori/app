@@ -23,17 +23,21 @@ import {
   localUpdateAccount,
   localUpdateCategory,
   localUpdateTransaction,
+  localTrends,
+  localBudget,
   type LocalTxFilters,
 } from "@/lib/local/engine";
 import type {
   Account,
   AccountDetail,
   AccountInput,
+  BudgetSummary,
   Category,
   CategoryInput,
   Dashboard,
   Transaction,
   TransactionInput,
+  Trends,
   User,
 } from "@/types/finnos";
 
@@ -70,6 +74,20 @@ async function apiPatchName(name: string): Promise<User> {
 export async function fetchDashboard(month: string | null): Promise<Dashboard> {
   if (isLocalMode()) return localDashboard(month);
   return apiGet<Dashboard>(month ? `/dashboard?month=${month}` : "/dashboard");
+}
+
+// --- Analytics --------------------------------------------------------------
+
+export async function fetchTrends(months: number, endMonth?: string): Promise<Trends> {
+  if (isLocalMode()) return localTrends(months, endMonth);
+  const params = new URLSearchParams({ months: String(months) });
+  if (endMonth) params.set("end_month", endMonth);
+  return apiGet<Trends>(`/analytics/trends?${params.toString()}`);
+}
+
+export async function fetchBudget(month: string): Promise<BudgetSummary> {
+  if (isLocalMode()) return localBudget(month);
+  return apiGet<BudgetSummary>(`/analytics/budget?month=${month}`);
 }
 
 // --- Accounts ---------------------------------------------------------------
