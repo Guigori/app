@@ -21,7 +21,7 @@ async def load_demo(user: dict = Depends(require_user)) -> dict:
 
 @router.post("/clear")
 async def clear_data(user: dict = Depends(require_user)) -> dict:
-    for collection in ("transactions", "accounts", "categories"):
+    for collection in ("transactions", "accounts", "categories", "cards"):
         await db[collection].delete_many({"user_id": user["id"]})
     await insert_default_categories(user["id"])
     return {"ok": True, "message": "Dados removidos. Sua conta está pronta para uso real."}

@@ -1,23 +1,29 @@
+import { useCallback, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { DialogsProvider } from "@/components/dialogs/DialogsProvider";
 import { BackButton } from "@/components/layout/BackButton";
 import { Header } from "@/components/layout/Header";
+import { NavDrawer } from "@/components/layout/NavDrawer";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { QuickActionFAB } from "@/components/layout/QuickActionFAB";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopTabs } from "@/components/layout/TopTabs";
+import { useEdgeSwipe } from "@/lib/useEdgeSwipe";
 
 export function AppShell() {
   const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Dragging in from the left edge opens the menu, like Calen.
+  useEdgeSwipe(useCallback(() => setMenuOpen(true), []), !menuOpen);
 
   return (
     <DialogsProvider>
       <div className="min-h-svh bg-background">
         <Sidebar />
         <div className="lg:pl-72">
-          <Header />
+          <Header onOpenMenu={() => setMenuOpen(true)} />
           <TopTabs />
           <main className="mx-auto w-full max-w-7xl px-4 py-5 pb-32 sm:px-6 lg:px-10 lg:pb-12">
             {/* Mobile keeps the back control inside the content column */}
@@ -38,6 +44,7 @@ export function AppShell() {
             </AnimatePresence>
           </main>
         </div>
+        <NavDrawer open={menuOpen} onOpenChange={setMenuOpen} />
         <MobileNav />
         <QuickActionFAB />
         <AiPanel />

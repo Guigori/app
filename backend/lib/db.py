@@ -41,6 +41,11 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("user_id", ASCENDING), ("date", DESCENDING)], name="user_date"),
         IndexModel([("user_id", ASCENDING), ("account_id", ASCENDING)], name="user_account"),
         IndexModel([("user_id", ASCENDING), ("category_id", ASCENDING)], name="user_category"),
+        IndexModel([("user_id", ASCENDING), ("card_id", ASCENDING)], name="user_card"),
+    ],
+    "cards": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("user_id", ASCENDING), ("created_at", ASCENDING)], name="user_created"),
     ],
     "ai_keys": [
         IndexModel([("user_id", ASCENDING), ("provider", ASCENDING)], name="user_provider", unique=True),

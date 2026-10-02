@@ -1,19 +1,22 @@
-import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { Eye, EyeOff, Menu, Moon, Sun } from "lucide-react";
 import { FinnosLogo } from "@/components/brand/FinnosLogo";
 import { BackButton } from "@/components/layout/BackButton";
-import { NavDrawer } from "@/components/layout/NavDrawer";
+import { NotificationsBell } from "@/components/layout/NotificationsBell";
 import { Button } from "@/components/ui/button";
 import { useBalanceHidden } from "@/lib/balance";
 import { PAGE_TITLES } from "@/components/layout/nav";
 
-export function Header() {
+interface HeaderProps {
+  /** The drawer lives in AppShell so the edge-swipe gesture can open it too. */
+  onOpenMenu: () => void;
+}
+
+export function Header({ onOpenMenu }: HeaderProps) {
   const location = useLocation();
   const { resolvedTheme, setTheme } = useTheme();
   const { hidden, toggle } = useBalanceHidden();
-  const [menuOpen, setMenuOpen] = useState(false);
   const title = PAGE_TITLES[location.pathname] ?? "Início";
 
   return (
@@ -23,7 +26,7 @@ export function Header() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setMenuOpen(true)}
+            onClick={onOpenMenu}
             aria-label="Abrir menu de navegação"
             data-testid="open-nav-drawer"
           >
@@ -36,6 +39,7 @@ export function Header() {
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          <NotificationsBell />
           <Button
             variant="ghost"
             size="icon"
@@ -56,7 +60,6 @@ export function Header() {
           </Button>
         </div>
       </header>
-      <NavDrawer open={menuOpen} onOpenChange={setMenuOpen} />
     </>
   );
 }

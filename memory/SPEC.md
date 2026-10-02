@@ -96,6 +96,21 @@ Autorização: toda query filtra por `user_id` da sessão → um usuário nunca 
 - Demo: 4 contas (Nubank, Inter, Itaú, Carteira), 2 meses de histórico, 1 parcelamento
   (MacBook 10x de R$ 600, parcela 3), despesas fixas, 1 agendada e 1 pendente.
 
+## Cartões, notificações e calendário Calen (entregue)
+- `GET/POST/PUT/DELETE /api/cards` — CRUD; a resposta calcula sempre (nunca armazena)
+  fatura atual do ciclo aberto, parcelas futuras comprometidas, limite usado/disponível,
+  próximo fechamento, próximo vencimento e melhor dia de compra (`backend/lib/cards.py`,
+  espelhado em `frontend/src/lib/local/engine.ts`).
+- Transações ganharam `card_id` opcional (só para despesas): etiquetar o cartão soma a
+  despesa à fatura dele; a conta continua sendo a de pagamento, então o saldo não muda.
+- `GET /api/notifications?window_days=7` — agendados/pendentes a vencer, atrasados e
+  faturas chegando; sino com badge no header (`NotificationsBell`).
+- Calendário de transações redesenhado: números limpos com pontos de entrada/saída, dias
+  dos meses vizinhos esmaecidos, dia selecionado em pílula, alça arrastável para expandir
+  ou recolher para a semana; barra de ferramentas com busca, Dia|Mês, ordenação e filtros.
+- O "+" global usa o dia selecionado no calendário (`lib/selectedDay.ts`, lido no clique).
+- Gesto: arrastar da borda esquerda abre o menu (`lib/useEdgeSwipe.ts`, só toque).
+
 ## Navegação estilo Calen (entregue)
 - `components/layout/nav.ts` define `NAV_GROUPS` (bloco principal + PLANEJAR / ANALISAR /
   AJUSTES), `TOP_TABS` e os pares da barra inferior.

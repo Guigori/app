@@ -26,6 +26,11 @@ import {
   localTrends,
   localBudget,
   localFlow,
+  localListCards,
+  localCreateCard,
+  localUpdateCard,
+  localDeleteCard,
+  localNotifications,
   localCalendar,
   type LocalTxFilters,
 } from "@/lib/local/engine";
@@ -35,6 +40,9 @@ import type {
   AccountInput,
   BudgetSummary,
   CalendarMonth,
+  CardInput,
+  CreditCard,
+  Notifications,
   Category,
   CategoryInput,
   Dashboard,
@@ -194,4 +202,33 @@ export async function loadDemoData(): Promise<void> {
 export async function clearMyData(): Promise<void> {
   if (isLocalMode()) return localClearData();
   await apiPost<{ ok: boolean }>("/demo/clear");
+}
+
+// --- Cartões ---------------------------------------------------------------
+
+export async function fetchCards(): Promise<CreditCard[]> {
+  if (isLocalMode()) return localListCards();
+  return apiGet<CreditCard[]>("/cards");
+}
+
+export async function createCard(input: CardInput): Promise<CreditCard> {
+  if (isLocalMode()) return localCreateCard(input);
+  return apiPost<CreditCard>("/cards", input);
+}
+
+export async function updateCard(id: string, input: CardInput): Promise<CreditCard> {
+  if (isLocalMode()) return localUpdateCard(id, input);
+  return apiPut<CreditCard>(`/cards/${id}`, input);
+}
+
+export async function deleteCard(id: string): Promise<void> {
+  if (isLocalMode()) return localDeleteCard(id);
+  return apiDelete<void>(`/cards/${id}`);
+}
+
+// --- Notificações ----------------------------------------------------------
+
+export async function fetchNotifications(): Promise<Notifications> {
+  if (isLocalMode()) return localNotifications();
+  return apiGet<Notifications>("/notifications");
 }

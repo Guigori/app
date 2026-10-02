@@ -2,7 +2,7 @@
 // the browser. Keep the two in sync — a rule change belongs in both places.
 
 import { addMonth, currentMonth, todayISO } from "@/lib/format";
-import { newId, readDb, writeDb, freshDb, wipeDb, type LocalDb } from "@/lib/local/store";
+import { newId, readDb, writeDb, freshDb, wipeDb, type LocalCard, type LocalDb } from "@/lib/local/store";
 import type {
   Account,
   AccountDetail,
@@ -20,6 +20,10 @@ import type {
   FlowCategory,
   FlowParams,
   FlowPoint,
+  CardInput,
+  CreditCard,
+  NotificationItem,
+  Notifications,
   Dashboard,
   RuleItem,
   RuleStatus,
@@ -254,6 +258,8 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
     date: input.date,
     account_id: input.account_id,
     account_name: "",
+    card_id: input.type === "despesa" ? input.card_id : null,
+    card_name: null,
     to_account_id: input.type === "transferencia" ? input.to_account_id : null,
     to_account_name: null,
     category_id: input.category_id,
@@ -543,6 +549,7 @@ export function localLoadDemo(): void {
       status: r.status ?? "pago",
       date: r.date,
       account_id: r.account_id!,
+      card_id: null,
       to_account_id: r.to_account_id ?? null,
       category_id: r.category_id ?? null,
       fixed: r.fixed ?? false,
@@ -726,4 +733,149 @@ export function localCalendar(month: string): CalendarMonth {
     projected_expense: pExpense,
     projected_balance: round2(income - expense + pIncome - pExpense),
   };
+}
+
+// --- Cartões (mirror: backend/routers/cards.py + lib/cards.py) ---------------
+
+function clampDay(year: number, month: number, day: number): string {
+  const last = new Date(year, month, 0).getDate();
+  return `${year}-${String(month).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`;
+}
+
+function shiftMonths(iso: string, months: number): string {
+  const year = Number(iso.slice(0, 4));
+  const month = Number(iso.slice(5, 7));
+  const day = Number(iso.slice(8, 10));
+  const idx = year * 12 + (month - 1) + months;
+  return clampDay(Math.floor(idx / 12), (idx % 12) + 1, day);
+}
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Open invoice window: day after the last closing through the next closing. */
+function cycleBounds(today: string, closingDay: number): [string, string] {
+  const thisClosing = clampDay(Number(today.slice(0, 4)), Number(today.slice(5, 7)), closingDay);
+  if (today <= thisClosing) return [addDays(shiftMonths(thisClosing, -1), 1), thisClosing];
+  return [addDays(thisClosing, 1), shiftMonths(thisClosing, 1)];
+}
+
+function dueDate(nextClosing: string, closingDay: number, dueDay: number): string {
+  const sameMonth = clampDay(Number(nextClosing.slice(0, 4)), Number(nextClosing.slice(5, 7)), dueDay);
+  return dueDay > closingDay ? sameMonth : shiftMonths(sameMonth, 1);
+}
+
+function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): CreditCard {
+  const today = todayISO();
+  const [start, closing] = cycleBounds(today, doc.closing_day);
+  let invoice = 0;
+  let future = 0;
+  for (const tx of txs) {
+    if (tx.card_id !== doc.id || tx.type !== "despesa") continue;
+    const value = round2(tx.installment ? tx.installment_value ?? 0 : tx.value);
+    if (tx.installment) {
+      const total = tx.total_installments ?? 1;
+      const offset = monthsBetween(tx.date.slice(0, 7), closing.slice(0, 7));
+      if (offset >= 0 && offset < total) invoice += value;
+      future += value * Math.max(total - Math.max(offset + 1, 0), 0);
+    } else if (tx.date >= start && tx.date <= closing) {
+      invoice += value;
+    }
+  }
+  const used = round2(invoice + future);
+  const account = accounts.find((a) => a.id === doc.payment_account_id);
+  return {
+    ...doc,
+    payment_account_name: account?.name ?? null,
+    current_invoice: round2(invoice),
+    future_installments: round2(future),
+    used,
+    available: round2(Math.max(doc.limit - used, 0)),
+    used_percent: doc.limit ? Math.round((used / doc.limit) * 1000) / 10 : 0,
+    cycle_start: start,
+    next_closing: closing,
+    next_due: dueDate(closing, doc.closing_day, doc.due_day),
+    best_purchase_day: addDays(closing, 1),
+  };
+}
+
+export function localListCards(): CreditCard[] {
+  const db = readDb();
+  return db.cards.map((card) => buildCard(card, db.transactions, db.accounts));
+}
+
+export function localCreateCard(input: CardInput): CreditCard {
+  const db = readDb();
+  const card: LocalCard = { ...input, id: newId(), created_at: new Date().toISOString() };
+  db.cards = [...db.cards, card];
+  writeDb(db);
+  return buildCard(card, db.transactions, db.accounts);
+}
+
+export function localUpdateCard(id: string, input: CardInput): CreditCard {
+  const db = readDb();
+  const existing = db.cards.find((c) => c.id === id);
+  if (!existing) throw new Error("Cartão não encontrado.");
+  const card: LocalCard = { ...existing, ...input };
+  db.cards = db.cards.map((c) => (c.id === id ? card : c));
+  writeDb(db);
+  return buildCard(card, db.transactions, db.accounts);
+}
+
+export function localDeleteCard(id: string): void {
+  const db = readDb();
+  db.cards = db.cards.filter((c) => c.id !== id);
+  db.transactions = db.transactions.map((t) => (t.card_id === id ? { ...t, card_id: null, card_name: null } : t));
+  writeDb(db);
+}
+
+/** Pending/scheduled money coming due, plus invoices closing in — mirrors notifications.py. */
+export function localNotifications(windowDays = 7): Notifications {
+  const db = readDb();
+  const today = todayISO();
+  const dayDiff = (iso: string) =>
+    Math.round((new Date(`${iso}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) / 86_400_000);
+
+  const items: NotificationItem[] = [];
+  for (const tx of db.transactions) {
+    if (tx.status === "pago") continue;
+    const daysLeft = dayDiff(tx.date);
+    if (daysLeft > windowDays) continue;
+    const word = tx.type === "receita" ? "Receita" : tx.type === "despesa" ? "Conta" : "Transferência";
+    items.push({
+      id: tx.id,
+      kind: daysLeft < 0 ? "atrasado" : "vencimento",
+      title: `${word}: ${tx.name}`,
+      description:
+        daysLeft < 0
+          ? `Venceu há ${Math.abs(daysLeft)} dia(s) e continua em aberto.`
+          : daysLeft === 0
+            ? "Vence hoje."
+            : `Vence em ${daysLeft} dia(s).`,
+      date: tx.date,
+      value: round2(tx.value),
+      days_left: daysLeft,
+    });
+  }
+  for (const card of db.cards) {
+    if (!card.active) continue;
+    const [, closing] = cycleBounds(today, card.closing_day);
+    const due = dueDate(closing, card.closing_day, card.due_day);
+    const daysLeft = dayDiff(due);
+    if (daysLeft > windowDays) continue;
+    items.push({
+      id: `card-${card.id}`,
+      kind: "fatura",
+      title: `Fatura ${card.name}`,
+      description: `Fecha em ${closing.slice(8, 10)}/${closing.slice(5, 7)} e vence em ${due.slice(8, 10)}/${due.slice(5, 7)}.`,
+      date: due,
+      value: 0,
+      days_left: daysLeft,
+    });
+  }
+  items.sort((a, b) => a.days_left - b.days_left || a.title.localeCompare(b.title));
+  return { items, count: items.length };
 }

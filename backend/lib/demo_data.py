@@ -75,16 +75,17 @@ def demo_transactions(now: datetime) -> list[dict]:
         tx("Aluguel", 1450.00, "despesa", "Itaú", "Moradia", m0, 5, fixed=True, recurrence="mensal"),
         tx("Internet fibra", 99.90, "despesa", "Itaú", "Moradia", m0, 8, fixed=True, recurrence="mensal"),
         tx("Mercado do mês", 212.40, "despesa", "Nubank", "Mercado", m0, 3),
-        tx("Feira da semana", 189.90, "despesa", "Nubank", "Mercado", m0, 12),
-        tx("Compras rápidas", 143.75, "despesa", "Nubank", "Mercado", m0, 21),
+        tx("Feira da semana", 189.90, "despesa", "Nubank", "Mercado", m0, 12, card_key="Nubank Ultravioleta"),
+        tx("Compras rápidas", 143.75, "despesa", "Nubank", "Mercado", m0, 21, card_key="Nubank Ultravioleta"),
         tx("Uber trabalho", 38.60, "despesa", "Nubank", "Transporte", m0, 6),
         tx("Combustível", 52.30, "despesa", "Nubank", "Transporte", m0, 24),
         tx("Academia", 89.90, "despesa", "Nubank", "Saúde", m0, 10, fixed=True, recurrence="mensal"),
-        tx("Netflix", 44.90, "despesa", "Nubank", "Assinaturas", m0, 12, fixed=True, recurrence="mensal"),
-        tx("Spotify", 21.90, "despesa", "Inter", "Assinaturas", m0, 15, fixed=True, recurrence="mensal"),
-        tx("Cinema", 55.00, "despesa", "Nubank", "Lazer", m0, 20),
+        tx("Netflix", 44.90, "despesa", "Nubank", "Assinaturas", m0, 12, fixed=True, recurrence="mensal", card_key="Nubank Ultravioleta"),
+        tx("Spotify", 21.90, "despesa", "Inter", "Assinaturas", m0, 15, fixed=True, recurrence="mensal", card_key="Inter Gold"),
+        tx("Cinema", 55.00, "despesa", "Nubank", "Lazer", m0, 20, card_key="Nubank Ultravioleta"),
         tx("MacBook", 600.00, "despesa", "Nubank", "Compras", add_months(m0, -2), 14,
-           installment=True, total_installments=10, current_installment=3, installment_value=600.00),
+           installment=True, total_installments=10, current_installment=3, installment_value=600.00,
+           card_key="Nubank Ultravioleta"),
         tx("Transferência para o Nubank", 500.00, "transferencia", "Itaú", None, m0, 7, to_account_key="Nubank"),
         tx("Conta de luz", 186.70, "despesa", "Itaú", "Moradia", m0, 25, status="agendado"),
         tx("Farmácia", 68.40, "despesa", "Carteira", "Saúde", m0, 8, status="pendente"),
@@ -99,11 +100,35 @@ def demo_transactions(now: datetime) -> list[dict]:
         tx("Uber trabalho", 71.20, "despesa", "Nubank", "Transporte", m1, 6),
         tx("Combustível", 84.70, "despesa", "Nubank", "Transporte", m1, 24),
         tx("Academia", 89.90, "despesa", "Nubank", "Saúde", m1, 10, fixed=True, recurrence="mensal"),
-        tx("Netflix", 44.90, "despesa", "Nubank", "Assinaturas", m1, 12, fixed=True, recurrence="mensal"),
-        tx("Spotify", 21.90, "despesa", "Inter", "Assinaturas", m1, 15, fixed=True, recurrence="mensal"),
-        tx("Cinema com amigos", 92.00, "despesa", "Nubank", "Lazer", m1, 20),
+        tx("Netflix", 44.90, "despesa", "Nubank", "Assinaturas", m1, 12, fixed=True, recurrence="mensal", card_key="Nubank Ultravioleta"),
+        tx("Spotify", 21.90, "despesa", "Inter", "Assinaturas", m1, 15, fixed=True, recurrence="mensal", card_key="Inter Gold"),
+        tx("Cinema com amigos", 92.00, "despesa", "Nubank", "Lazer", m1, 20, card_key="Nubank Ultravioleta"),
         tx("Curso de inglês", 249.00, "despesa", "Itaú", "Educação", m1, 9),
     ]
+
+
+DEMO_CARDS = [
+    {
+        "name": "Nubank Ultravioleta",
+        "institution": "Nubank",
+        "color": "#8B5CF6",
+        "limit": 8000.0,
+        "closing_day": 20,
+        "due_day": 27,
+        "account_name": "Nubank",
+        "active": True,
+    },
+    {
+        "name": "Inter Gold",
+        "institution": "Inter",
+        "color": "#F97316",
+        "limit": 4500.0,
+        "closing_day": 5,
+        "due_day": 12,
+        "account_name": "Inter",
+        "active": True,
+    },
+]
 
 
 async def insert_default_categories(user_id: str) -> None:
@@ -116,7 +141,7 @@ async def insert_default_categories(user_id: str) -> None:
 async def load_demo_for_user(user_id: str) -> None:
     """Replace ALL of the user's financial records with the demo dataset."""
     now = datetime.now(timezone.utc)
-    for collection in ("transactions", "accounts", "categories"):
+    for collection in ("transactions", "accounts", "categories", "cards"):
         await db[collection].delete_many({"user_id": user_id})
 
     await insert_default_categories(user_id)
@@ -127,12 +152,29 @@ async def load_demo_for_user(user_id: str) -> None:
     await db.accounts.insert_many(accounts)
     acc_by_name = {a["name"]: a["id"] for a in accounts}
 
+    cards = []
+    for c in DEMO_CARDS:
+        doc = {k: v for k, v in c.items() if k != "account_name"}
+        doc.update(
+            {
+                "id": str(uuid.uuid4()),
+                "user_id": user_id,
+                "payment_account_id": acc_by_name.get(c["account_name"]),
+                "created_at": now,
+            }
+        )
+        cards.append(doc)
+    await db.cards.insert_many(cards)
+    card_by_name = {c["name"]: c["id"] for c in cards}
+
     txs = []
     for t in demo_transactions(now):
         t["user_id"] = user_id
         t["account_id"] = acc_by_name[t.pop("account_key")]
         to_key = t.pop("to_account_key", None)
         t["to_account_id"] = acc_by_name[to_key] if to_key else None
+        card_key = t.pop("card_key", None)
+        t["card_id"] = card_by_name.get(card_key) if card_key else None
         cat_key = t.pop("category_key", None)
         t["category_id"] = cat_by_name.get(cat_key) if cat_key else None
         txs.append(t)

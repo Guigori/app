@@ -1,7 +1,7 @@
 // Persistence for local (browser-only) mode. Everything is kept under one
 // localStorage key so "apagar meus dados" is a single removeItem.
 
-import type { Account, Category, Transaction } from "@/types/finnos";
+import type { Account, CardInput, Category, Transaction } from "@/types/finnos";
 
 const KEY = "finnos:local-db";
 
@@ -9,11 +9,19 @@ export interface LocalProfile {
   name: string;
 }
 
+/** Stored shape of a card: the input fields plus identity. Invoice/limit numbers are
+ *  always derived at read time, exactly like the backend does. */
+export interface LocalCard extends CardInput {
+  id: string;
+  created_at: string;
+}
+
 export interface LocalDb {
   profile: LocalProfile;
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];
+  cards: LocalCard[];
 }
 
 export const DEFAULT_CATEGORIES: Omit<Category, "id" | "created_at">[] = [
@@ -44,6 +52,7 @@ export function freshDb(name = "Você"): LocalDb {
     profile: { name },
     accounts: [],
     transactions: [],
+    cards: [],
     categories: DEFAULT_CATEGORIES.map((c) => ({ ...c, id: newId(), created_at: now })),
   };
 }
@@ -62,6 +71,7 @@ export function readDb(): LocalDb {
       accounts: parsed.accounts ?? [],
       categories: parsed.categories ?? [],
       transactions: parsed.transactions ?? [],
+      cards: parsed.cards ?? [],
     };
   } catch {
     const db = freshDb();

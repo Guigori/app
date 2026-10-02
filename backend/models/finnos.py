@@ -84,6 +84,8 @@ class TransactionOut(BaseModel):
     date: str  # YYYY-MM-DD (plain ISO date, sortable as string)
     account_id: str
     account_name: str = ""
+    card_id: Optional[str] = None
+    card_name: Optional[str] = None
     to_account_id: Optional[str] = None
     to_account_name: Optional[str] = None
     category_id: Optional[str] = None
@@ -109,6 +111,7 @@ class TransactionIn(BaseModel):
     status: TxStatus = "pago"
     date: str = Field(pattern=DATE_PATTERN)
     account_id: str
+    card_id: Optional[str] = None
     to_account_id: Optional[str] = None
     category_id: Optional[str] = None
     fixed: bool = False

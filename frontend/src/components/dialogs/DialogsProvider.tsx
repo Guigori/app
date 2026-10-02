@@ -7,6 +7,8 @@ import { TransactionDialog } from "@/components/transactions/TransactionDialog";
 export interface TransactionDialogInit {
   type?: TxType;
   transaction?: Transaction;
+  /** Pre-fills the date — the calendar day the user has selected, for instance. */
+  date?: string;
 }
 
 export interface CategoryDialogInit {
@@ -59,6 +61,7 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
         open={tx.open}
         onOpenChange={(open) => setTx((prev) => ({ ...prev, open }))}
         initialType={tx.type}
+        initialDate={tx.date}
         transaction={tx.transaction}
       />
       <AccountDialog

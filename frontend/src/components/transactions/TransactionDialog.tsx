@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { createTransaction, fetchAccounts, fetchCategories, updateTransaction } from "@/lib/data";
+import { createTransaction, fetchAccounts, fetchCards, fetchCategories, updateTransaction } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { formatBRL, parseAmount, todayISO, TX_STATUS_LABEL, TX_TYPE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -30,10 +30,11 @@ interface TransactionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialType?: TxType;
+  initialDate?: string;
   transaction?: Transaction;
 }
 
-export function TransactionDialog({ open, onOpenChange, initialType, transaction }: TransactionDialogProps) {
+export function TransactionDialog({ open, onOpenChange, initialType, initialDate, transaction }: TransactionDialogProps) {
   const queryClient = useQueryClient();
   const [type, setType] = useState<TxType>("despesa");
   const [name, setName] = useState("");
@@ -42,6 +43,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, transaction
   const [status, setStatus] = useState<TxStatus>("pago");
   const [accountId, setAccountId] = useState("");
   const [toAccountId, setToAccountId] = useState("");
+  const [cardId, setCardId] = useState("none");
   const [categoryId, setCategoryId] = useState("none");
   const [fixed, setFixed] = useState(false);
   const [installment, setInstallment] = useState(false);
@@ -64,6 +66,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, transaction
     enabled: open,
     staleTime: 60_000,
   });
+  const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: fetchCards, enabled: open, staleTime: 60_000 });
+  const cards = (cardsQuery.data ?? []).filter((c) => c.active);
   const accounts = accountsQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
 
@@ -78,6 +82,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, transaction
       setStatus(transaction.status);
       setAccountId(transaction.account_id);
       setToAccountId(transaction.to_account_id ?? "");
+      setCardId(transaction.card_id ?? "none");
       setCategoryId(transaction.category_id ?? "none");
       setFixed(transaction.fixed);
       setInstallment(transaction.installment);
@@ -90,10 +95,11 @@ export function TransactionDialog({ open, onOpenChange, initialType, transaction
       setType(initialType ?? "despesa");
       setName("");
       setValueRaw("");
-      setDate(todayISO());
+      setDate(initialDate ?? todayISO());
       setStatus("pago");
       setAccountId("");
       setToAccountId("");
+      setCardId("none");
       setCategoryId("none");
       setFixed(false);
       setInstallment(false);
@@ -103,7 +109,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, transaction
       setAttachment("");
       setNotes("");
     }
-  }, [open, transaction, initialType]);
+  }, [open, transaction, initialType, initialDate]);
 
   // One less required tap: a new transaction defaults to the first account (still editable).
   useEffect(() => {
@@ -128,6 +134,10 @@ export function TransactionDialog({ open, onOpenChange, initialType, transaction
         queryClient.invalidateQueries({ queryKey: ["account"] }),
         queryClient.invalidateQueries({ queryKey: ["budget"] }),
         queryClient.invalidateQueries({ queryKey: ["trends"] }),
+        queryClient.invalidateQueries({ queryKey: ["calendar"] }),
+        queryClient.invalidateQueries({ queryKey: ["flow"] }),
+        queryClient.invalidateQueries({ queryKey: ["cards"] }),
+        queryClient.invalidateQueries({ queryKey: ["notifications"] }),
       ]);
       onOpenChange(false);
     },
@@ -151,6 +161,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, transaction
       status,
       date,
       account_id: accountId,
+      card_id: type === "despesa" && cardId !== "none" ? cardId : null,
       to_account_id: type === "transferencia" ? toAccountId : null,
       category_id: categoryId === "none" ? null : categoryId,
       fixed,
@@ -297,6 +308,30 @@ export function TransactionDialog({ open, onOpenChange, initialType, transaction
                 </div>
               )}
             </div>
+
+            {type === "despesa" && cards.length > 0 ? (
+              <div className="space-y-2">
+                <Label htmlFor="tx-card">Cartão usado (opcional)</Label>
+                <Select value={cardId} onValueChange={setCardId}>
+                  <SelectTrigger id="tx-card" className="w-full" aria-label="Cartão usado" data-testid="tx-card-select">
+                    <SelectValue>
+                      {cardId === "none" ? "Sem cartão" : (cards.find((c) => c.id === cardId)?.name ?? "")}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem cartão</SelectItem>
+                    {cards.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Marcar o cartão soma a despesa à fatura dele — a conta acima continua sendo a de pagamento.
+                </p>
+              </div>
+            ) : null}
 
             {type !== "transferencia" ? (
               <div className="space-y-2">

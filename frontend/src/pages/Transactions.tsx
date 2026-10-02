@@ -1,6 +1,6 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, PlusCircle, Search, Trash2 } from "lucide-react";
+import { ArrowDownUp, Filter, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -17,6 +17,7 @@ import {
   monthLabel,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { setSelectedDay } from "@/lib/selectedDay";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { TransactionCalendar } from "@/components/transactions/TransactionCalendar";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
@@ -50,8 +51,23 @@ export default function Transactions() {
   const [categoryId, setCategoryId] = useState("todas");
   const [accountId, setAccountId] = useState("todas");
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
 
   const deferredSearch = useDeferredValue(search);
+
+  // The global "+" reads this, so a new entry lands on the day being viewed.
+  useEffect(() => {
+    setSelectedDay(scope === "dia" ? selectedDate : null);
+    return () => setSelectedDay(null);
+  }, [scope, selectedDate]);
+
+  const pickDate = (date: string) => {
+    if (date.slice(0, 7) !== month) setMonth(date.slice(0, 7));
+    setSelectedDate(date);
+    setScope("dia");
+  };
 
   const changeMonth = (next: string) => {
     setMonth(next);
@@ -81,8 +97,9 @@ export default function Transactions() {
     queryFn: () => fetchTransactions(filters),
   });
   const monthTransactions = transactionsQuery.data ?? [];
-  const transactions =
-    scope === "dia" ? monthTransactions.filter((t) => t.date === selectedDate) : monthTransactions;
+  const transactions = (scope === "dia" ? monthTransactions.filter((t) => t.date === selectedDate) : monthTransactions)
+    .slice()
+    .sort((a, b) => (sortDir === "desc" ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
   const dayFlow = calendar?.days.find((d) => d.date === selectedDate);
   const strip =
     scope === "dia"
@@ -149,14 +166,22 @@ export default function Transactions() {
         expanded={calendarExpanded}
         onToggleExpanded={() => setCalendarExpanded((value) => !value)}
         onMonthChange={changeMonth}
-        onSelectDate={(date) => {
-          setSelectedDate(date);
-          setScope("dia");
-        }}
+        onSelectDate={pickDate}
       />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-1 rounded-full border border-border bg-muted/60 p-1" role="group" aria-label="Ver por dia ou por mês">
+      <div className="flex items-center gap-2">
+        <Button
+          size="icon"
+          variant={showSearch ? "default" : "outline"}
+          onClick={() => setShowSearch((v) => !v)}
+          aria-label="Buscar transações"
+          aria-expanded={showSearch}
+          data-testid="toolbar-search-toggle"
+        >
+          <Search className="h-4 w-4" aria-hidden="true" />
+        </Button>
+
+        <div className="flex flex-1 justify-center gap-1 rounded-full border border-border bg-muted/60 p-1" role="group" aria-label="Ver por dia ou por mês">
           {([
             { key: "dia" as const, label: "Dia" },
             { key: "mes" as const, label: "Mês" },
@@ -167,7 +192,7 @@ export default function Transactions() {
               onClick={() => setScope(option.key)}
               aria-pressed={scope === option.key}
               className={cn(
-                "rounded-full px-4 py-1.5 text-sm font-medium transition-colors duration-150",
+                "flex-1 rounded-full px-4 py-1.5 text-sm font-medium transition-colors duration-150",
                 scope === option.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
               )}
               data-testid={`scope-${option.key}`}
@@ -176,10 +201,58 @@ export default function Transactions() {
             </button>
           ))}
         </div>
-        <p className="text-sm text-muted-foreground" data-testid="scope-label">
-          {scope === "dia" ? formatDate(selectedDate) : monthLabel(month)}
-        </p>
+
+        <Button
+          size="icon"
+          variant="outline"
+          onClick={() => setSortDir((v) => (v === "desc" ? "asc" : "desc"))}
+          aria-label={sortDir === "desc" ? "Ordenar das mais antigas para as mais recentes" : "Ordenar das mais recentes para as mais antigas"}
+          data-testid="toolbar-sort-toggle"
+        >
+          <ArrowDownUp className="h-4 w-4" aria-hidden="true" />
+        </Button>
+        <Button
+          size="icon"
+          variant={showFilters || hasFilters ? "default" : "outline"}
+          onClick={() => setShowFilters((v) => !v)}
+          aria-label="Filtros"
+          aria-expanded={showFilters}
+          data-testid="toolbar-filter-toggle"
+        >
+          <Filter className="h-4 w-4" aria-hidden="true" />
+        </Button>
       </div>
+
+      <p className="-mt-3 text-sm text-muted-foreground" data-testid="scope-label">
+        {scope === "dia" ? formatDate(selectedDate) : monthLabel(month)} ·{" "}
+        {sortDir === "desc" ? "mais recentes primeiro" : "mais antigas primeiro"}
+      </p>
+
+      {showSearch ? (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nome…"
+            className="pl-9 pr-9"
+            autoFocus
+            aria-label="Buscar transações"
+            data-testid="transaction-search-input"
+          />
+          {search ? (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-muted"
+              aria-label="Limpar busca"
+              data-testid="clear-search-button"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="grid grid-cols-3 gap-2 rounded-2xl border border-border bg-card p-4" data-testid="flow-strip-real">
@@ -220,21 +293,8 @@ export default function Transactions() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nome…"
-              className="pl-9"
-              aria-label="Buscar transações"
-              data-testid="transaction-search-input"
-            />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      {showFilters ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card p-4" data-testid="filters-panel">
           <Select value={type} onValueChange={(v) => setType(v as TxType | "todos")}>
             <SelectTrigger size="sm" className="w-40" aria-label="Filtrar por tipo" data-testid="filter-type-select">
               <SelectValue>{type === "todos" ? "Todos os tipos" : TX_TYPE_LABEL[type]}</SelectValue>
@@ -289,7 +349,7 @@ export default function Transactions() {
             </Button>
           ) : null}
         </div>
-      </div>
+      ) : null}
 
       {transactionsQuery.isPending ? (
         <div className="h-64 animate-pulse rounded-3xl bg-muted" aria-hidden="true" />

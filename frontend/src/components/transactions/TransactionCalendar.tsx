@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addMonth, monthLabel, todayISO } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -6,8 +7,22 @@ import type { DayFlow } from "@/types/finnos";
 
 const WEEKDAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
-const compact = (value: number) =>
-  value >= 1000 ? `${Math.round(value / 100) / 10}k` : String(Math.round(value));
+interface Cell {
+  date: string;
+  outside: boolean;
+}
+
+function buildCells(month: string): Cell[] {
+  const year = Number(month.slice(0, 4));
+  const monthIndex = Number(month.slice(5, 7)) - 1;
+  const first = new Date(year, monthIndex, 1);
+  const start = new Date(year, monthIndex, 1 - first.getDay());
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return { date: iso, outside: iso.slice(0, 7) !== month };
+  });
+}
 
 interface TransactionCalendarProps {
   month: string;
@@ -19,8 +34,8 @@ interface TransactionCalendarProps {
   onSelectDate: (date: string) => void;
 }
 
-/** Interactive month calendar: each day shows what entered and left, and clicking a day
- *  drives the list below it. Collapsed it keeps only the week of the selected day. */
+/** Month calendar: clean day numbers with entrada/saída dots, a selected day pill and a
+ *  drag handle that expands or collapses the grid to the current week. */
 export function TransactionCalendar({
   month,
   days,
@@ -30,27 +45,18 @@ export function TransactionCalendar({
   onMonthChange,
   onSelectDate,
 }: TransactionCalendarProps) {
-  const year = Number(month.slice(0, 4));
-  const monthIndex = Number(month.slice(5, 7)) - 1;
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-  const firstWeekday = new Date(year, monthIndex, 1).getDay();
   const byDate = new Map(days.map((d) => [d.date, d]));
   const today = todayISO();
-
-  const cells: Array<string | null> = [
-    ...Array.from({ length: firstWeekday }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => `${month}-${String(i + 1).padStart(2, "0")}`),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  const weeks: Array<Array<string | null>> = [];
+  const cells = buildCells(month);
+  const weeks: Cell[][] = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-  const selectedWeek = weeks.find((week) => week.includes(selectedDate)) ?? weeks[0];
-  const visibleWeeks = expanded ? weeks : [selectedWeek];
+  const trimmed = weeks.filter((week) => week.some((cell) => !cell.outside));
+  const selectedWeek = trimmed.find((week) => week.some((cell) => cell.date === selectedDate)) ?? trimmed[0];
+  const visibleWeeks = expanded ? trimmed : [selectedWeek];
 
   return (
-    <div className="rounded-3xl border border-border bg-card p-4" data-testid="transaction-calendar">
-      <div className="flex items-center justify-between gap-2">
+    <section className="rounded-3xl border border-border bg-card px-3 pb-2 pt-4" data-testid="transaction-calendar">
+      <div className="flex items-center justify-center gap-2">
         <Button
           size="icon-sm"
           variant="ghost"
@@ -60,80 +66,96 @@ export function TransactionCalendar({
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </Button>
-        <p className="font-heading text-sm font-semibold text-foreground" data-testid="calendar-month-label">
+        <h2 className="min-w-44 text-center font-heading text-lg font-bold capitalize text-foreground" data-testid="calendar-month-label">
           {monthLabel(month)}
-        </p>
-        <div className="flex items-center gap-1">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            onClick={() => onMonthChange(addMonth(month, 1))}
-            aria-label="Próximo mês"
-            data-testid="calendar-next-month"
-          >
-            <ChevronRight className="h-4 w-4" aria-hidden="true" />
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            onClick={onToggleExpanded}
-            aria-label={expanded ? "Recolher calendário" : "Expandir calendário"}
-            aria-expanded={expanded}
-            data-testid="calendar-toggle-expanded"
-          >
-            {expanded ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
-          </Button>
-        </div>
+        </h2>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          onClick={() => onMonthChange(addMonth(month, 1))}
+          aria-label="Próximo mês"
+          data-testid="calendar-next-month"
+        >
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </Button>
       </div>
 
-      <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="mt-3 grid grid-cols-7 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {WEEKDAYS.map((label) => (
           <span key={label}>{label}</span>
         ))}
       </div>
 
-      <div className="mt-1 space-y-1">
-        {visibleWeeks.map((week, weekIndex) => (
-          <div key={weekIndex} className="grid grid-cols-7 gap-1">
-            {week.map((date, index) => {
-              if (!date) return <span key={`empty-${index}`} aria-hidden="true" />;
-              const flow = byDate.get(date);
-              const income = (flow?.income ?? 0) + (flow?.projected_income ?? 0);
-              const expense = (flow?.expense ?? 0) + (flow?.projected_expense ?? 0);
-              const selected = date === selectedDate;
-              return (
-                <button
-                  key={date}
-                  type="button"
-                  onClick={() => onSelectDate(date)}
-                  aria-label={`Ver transações de ${date}`}
-                  aria-current={selected ? "date" : undefined}
-                  className={cn(
-                    "flex min-h-14 flex-col items-center gap-0.5 rounded-xl px-0.5 py-1.5 transition-colors duration-150",
-                    selected ? "bg-primary text-primary-foreground" : "hover:bg-muted",
-                    !selected && date === today ? "ring-1 ring-primary/50" : undefined,
-                  )}
-                  data-testid={`calendar-day-${date}`}
-                >
-                  <span className={cn("text-sm font-semibold tabular-nums", selected ? "" : "text-foreground")}>
-                    {Number(date.slice(8, 10))}
-                  </span>
-                  {income > 0 ? (
-                    <span className={cn("text-[10px] font-medium tabular-nums", selected ? "" : "text-income")}>
-                      +{compact(income)}
+      <AnimatePresence initial={false} mode="wait">
+        <motion.div
+          key={`${month}-${expanded ? "full" : "week"}`}
+          initial={{ opacity: 0, y: expanded ? -6 : 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-1"
+        >
+          {visibleWeeks.map((week, weekIndex) => (
+            <div key={weekIndex} className="grid grid-cols-7">
+              {week.map((cell) => {
+                const flow = byDate.get(cell.date);
+                const hasIncome = (flow?.income ?? 0) + (flow?.projected_income ?? 0) > 0;
+                const hasExpense = (flow?.expense ?? 0) + (flow?.projected_expense ?? 0) > 0;
+                const selected = cell.date === selectedDate;
+                return (
+                  <button
+                    key={cell.date}
+                    type="button"
+                    onClick={() => onSelectDate(cell.date)}
+                    aria-label={`Ver lançamentos de ${cell.date}`}
+                    aria-current={selected ? "date" : undefined}
+                    className="flex flex-col items-center gap-1 py-1.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    data-testid={`calendar-day-${cell.date}`}
+                  >
+                    <span
+                      className={cn(
+                        "relative flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold tabular-nums transition-colors duration-200",
+                        selected
+                          ? "bg-primary text-primary-foreground"
+                          : cell.outside
+                            ? "text-muted-foreground/45"
+                            : "text-foreground hover:bg-muted",
+                        !selected && cell.date === today ? "ring-1 ring-primary/60" : undefined,
+                      )}
+                    >
+                      {Number(cell.date.slice(8, 10))}
                     </span>
-                  ) : null}
-                  {expense > 0 ? (
-                    <span className={cn("text-[10px] font-medium tabular-nums", selected ? "" : "text-expense")}>
-                      −{compact(expense)}
+                    <span className="flex h-1.5 items-center gap-0.5" aria-hidden="true">
+                      {hasIncome ? <span className="h-1.5 w-1.5 rounded-full bg-income" /> : null}
+                      {hasExpense ? <span className="h-1.5 w-1.5 rounded-full bg-expense" /> : null}
                     </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Drag the handle up to collapse to the week, down to show the whole month. */}
+      <motion.button
+        type="button"
+        drag="y"
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={0.25}
+        onDragEnd={(_, info) => {
+          if (info.offset.y < -18 && expanded) onToggleExpanded();
+          if (info.offset.y > 18 && !expanded) onToggleExpanded();
+        }}
+        onClick={onToggleExpanded}
+        whileTap={{ scaleX: 1.15 }}
+        className="mx-auto mt-1 flex h-7 w-full max-w-32 cursor-grab items-center justify-center active:cursor-grabbing"
+        aria-label={expanded ? "Recolher calendário para a semana" : "Expandir calendário para o mês"}
+        aria-expanded={expanded}
+        data-testid="calendar-toggle-expanded"
+      >
+        <span className="h-1.5 w-12 rounded-full bg-border" aria-hidden="true" />
+      </motion.button>
+    </section>
   );
 }

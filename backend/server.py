@@ -17,7 +17,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
 from lib.db import client, db, ensure_indexes
-from routers import accounts, ai, analytics, auth, categories, dashboard, demo, transactions
+from routers import accounts, ai, analytics, auth, categories, dashboard, demo, transactions, cards, notifications
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
@@ -70,6 +70,8 @@ api_router.include_router(dashboard.router)
 api_router.include_router(demo.router)
 api_router.include_router(ai.router)
 api_router.include_router(analytics.router)
+api_router.include_router(cards.router)
+api_router.include_router(notifications.router)
 
 # Include the router in the main app
 app.include_router(api_router)

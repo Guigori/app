@@ -71,6 +71,8 @@ export interface Transaction {
   date: string;
   account_id: string;
   account_name: string;
+  card_id: string | null;
+  card_name: string | null;
   to_account_id: string | null;
   to_account_name: string | null;
   category_id: string | null;
@@ -96,6 +98,7 @@ export interface TransactionInput {
   status: TxStatus;
   date: string;
   account_id: string;
+  card_id: string | null;
   to_account_id: string | null;
   category_id: string | null;
   fixed: boolean;
@@ -288,4 +291,59 @@ export interface CalendarMonth {
   projected_income: number;
   projected_expense: number;
   projected_balance: number;
+}
+
+// --- Cartões (mirror: backend/models/cards.py CardIn/CardOut) ---
+
+export interface CardInput {
+  name: string;
+  institution: string;
+  color: string;
+  limit: number;
+  closing_day: number;
+  due_day: number;
+  payment_account_id: string | null;
+  active: boolean;
+}
+
+export interface CreditCard {
+  id: string;
+  name: string;
+  institution: string;
+  color: string;
+  limit: number;
+  closing_day: number;
+  due_day: number;
+  payment_account_id: string | null;
+  payment_account_name: string | null;
+  active: boolean;
+  current_invoice: number;
+  future_installments: number;
+  used: number;
+  available: number;
+  used_percent: number;
+  cycle_start: string;
+  next_closing: string;
+  next_due: string;
+  best_purchase_day: string;
+  created_at: string;
+}
+
+// --- Notificações (mirror: backend/models/cards.py NotificationItem) ---
+
+export type NotificationKind = "vencimento" | "atrasado" | "fatura";
+
+export interface NotificationItem {
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  description: string;
+  date: string;
+  value: number;
+  days_left: number;
+}
+
+export interface Notifications {
+  items: NotificationItem[];
+  count: number;
 }

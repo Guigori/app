@@ -21,7 +21,14 @@ async def _ref_maps(user_id: str) -> tuple[dict, dict]:
     return {a["id"]: a for a in accounts}, {c["id"]: c for c in categories}
 
 
-def enrich_transaction(doc: dict, accounts_by_id: dict, categories_by_id: dict) -> TransactionOut:
+async def _cards_by_id(user_id: str) -> dict:
+    cards = await db.cards.find({"user_id": user_id}).to_list(200)
+    return {c["id"]: c for c in cards}
+
+
+def enrich_transaction(
+    doc: dict, accounts_by_id: dict, categories_by_id: dict, cards_by_id: dict | None = None
+) -> TransactionOut:
     account = accounts_by_id.get(doc["account_id"], {})
     to_account = accounts_by_id.get(doc.get("to_account_id") or "", {})
     category = categories_by_id.get(doc.get("category_id") or "", {})
@@ -34,6 +41,8 @@ def enrich_transaction(doc: dict, accounts_by_id: dict, categories_by_id: dict) 
         date=doc["date"],
         account_id=doc["account_id"],
         account_name=account.get("name", ""),
+        card_id=doc.get("card_id"),
+        card_name=(cards_by_id or {}).get(doc.get("card_id") or "", {}).get("name") or None,
         to_account_id=doc.get("to_account_id"),
         to_account_name=to_account.get("name") or None,
         category_id=doc.get("category_id"),
@@ -64,6 +73,10 @@ async def _validate(user_id: str, payload: TransactionIn) -> None:
             raise HTTPException(status_code=400, detail="Conta de destino inválida.")
     if payload.category_id and payload.category_id not in categories_by_id:
         raise HTTPException(status_code=400, detail="Categoria inválida.")
+    if payload.card_id:
+        card = await db.cards.find_one({"id": payload.card_id, "user_id": user_id})
+        if not card:
+            raise HTTPException(status_code=400, detail="Cartão inválido: selecione um cartão cadastrado.")
     if payload.installment:
         if payload.type != "despesa":
             raise HTTPException(status_code=400, detail="Somente despesas podem ser parceladas.")
@@ -82,6 +95,7 @@ def _document(user_id: str, payload: TransactionIn) -> dict:
         "status": payload.status,
         "date": payload.date,
         "account_id": payload.account_id,
+        "card_id": payload.card_id if payload.type == "despesa" else None,
         "to_account_id": payload.to_account_id if payload.type == "transferencia" else None,
         "category_id": payload.category_id,
         "fixed": payload.fixed,
@@ -130,7 +144,8 @@ async def list_transactions(
         .to_list(2000)
     )
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
-    return [enrich_transaction(d, accounts_by_id, categories_by_id) for d in docs]
+    cards_by_id = await _cards_by_id(user["id"])
+    return [enrich_transaction(d, accounts_by_id, categories_by_id, cards_by_id) for d in docs]
 
 
 @router.post("", response_model=TransactionOut, status_code=201)
@@ -139,7 +154,7 @@ async def create_transaction(payload: TransactionIn, user: dict = Depends(requir
     doc = _document(user["id"], payload)
     await db.transactions.insert_one(doc)
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
-    return enrich_transaction(doc, accounts_by_id, categories_by_id)
+    return enrich_transaction(doc, accounts_by_id, categories_by_id, await _cards_by_id(user["id"]))
 
 
 @router.put("/{tx_id}", response_model=TransactionOut)
@@ -153,7 +168,7 @@ async def update_transaction(tx_id: str, payload: TransactionIn, user: dict = De
     doc["created_at"] = existing.get("created_at")
     await db.transactions.replace_one({"_id": existing["_id"]}, doc)
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
-    return enrich_transaction(doc, accounts_by_id, categories_by_id)
+    return enrich_transaction(doc, accounts_by_id, categories_by_id, await _cards_by_id(user["id"]))
 
 
 @router.delete("/{tx_id}", status_code=204)
