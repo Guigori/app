@@ -1,14 +1,5 @@
-import {
-  ArrowDownCircle,
-  ArrowLeftRight,
-  ArrowUpCircle,
-  Plus,
-  Repeat,
-  Target,
-  type LucideIcon,
-} from "lucide-react";
-import { toast } from "sonner";
-import { useDialogs } from "@/components/dialogs/DialogsProvider";
+import { Plus } from "lucide-react";
+import { useQuickActions } from "@/components/layout/QuickActions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,40 +8,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-interface FabAction {
-  label: string;
-  icon: LucideIcon;
-  testid: string;
-  onClick?: () => void;
-  soon?: boolean;
-}
-
+/** Desktop-only floating "+": on mobile the central button in the bottom bar owns it. */
 export function QuickActionFAB() {
-  const dialogs = useDialogs();
-
-  // A menu (not a popover) so selecting an item closes it natively — a controlled popover
-  // re-opened when focus returned to the trigger after the dialog closed.
-  const actions: FabAction[] = [
-    { label: "Nova transação", icon: ArrowLeftRight, testid: "fab-new-transaction", onClick: () => dialogs.openTransaction() },
-    { label: "Nova receita", icon: ArrowUpCircle, testid: "fab-new-income", onClick: () => dialogs.openTransaction({ type: "receita" }) },
-    { label: "Nova despesa", icon: ArrowDownCircle, testid: "fab-new-expense", onClick: () => dialogs.openTransaction({ type: "despesa" }) },
-    { label: "Nova transferência", icon: ArrowLeftRight, testid: "fab-new-transfer", onClick: () => dialogs.openTransaction({ type: "transferencia" }) },
-    { label: "Nova assinatura", icon: Repeat, testid: "fab-new-subscription", soon: true },
-    { label: "Nova meta", icon: Target, testid: "fab-new-goal", soon: true },
-  ];
-
-  const handleAction = (action: FabAction) => {
-    if (action.soon) {
-      toast.info("Em breve — este módulo chega em uma próxima entrega do FINNOS.");
-      return;
-    }
-    action.onClick?.();
-  };
+  const { actions, run } = useQuickActions();
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/25 transition-transform duration-200 hover:scale-105 active:scale-100 lg:bottom-8 lg:right-8"
+        className="fixed bottom-8 right-8 z-40 hidden h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-xl active:scale-95 lg:flex"
         aria-label="Adicionar lançamento"
         data-testid="quick-action-fab"
       >
@@ -60,9 +25,9 @@ export function QuickActionFAB() {
         {actions.map((action) => (
           <DropdownMenuItem
             key={action.testid}
-            onClick={() => handleAction(action)}
+            onClick={() => run(action)}
             className={cn(
-              "gap-3 rounded-xl px-3 py-2.5 text-sm font-medium",
+              "gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
               action.testid === "fab-new-transaction" && "bg-primary/5 text-primary",
             )}
             data-testid={action.testid}

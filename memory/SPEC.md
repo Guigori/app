@@ -96,6 +96,18 @@ Autorização: toda query filtra por `user_id` da sessão → um usuário nunca 
 - Demo: 4 contas (Nubank, Inter, Itaú, Carteira), 2 meses de histórico, 1 parcelamento
   (MacBook 10x de R$ 600, parcela 3), despesas fixas, 1 agendada e 1 pendente.
 
+## Navegação estilo Calen (entregue)
+- `components/layout/nav.ts` define `NAV_GROUPS` (bloco principal + PLANEJAR / ANALISAR /
+  AJUSTES), `TOP_TABS` e os pares da barra inferior.
+- `NavMenu` é a lista agrupada compartilhada: tiles de ícone, legenda de seção com ponto,
+  barra animada (motion `layoutId`) no item ativo. Sidebar (desktop, 18rem) e `NavDrawer`
+  (hambúrguer, Sheet à esquerda) usam o mesmo componente — testids `nav-*` e `drawer-nav-*`.
+- `TopTabs`: abas horizontais roláveis sob o header com sublinhado que desliza.
+- `MobileNav`: barra inferior com **+ central elevado** (abre o menu de lançamentos;
+  `QuickActions` é o hook compartilhado com o FAB de desktop, que agora só aparece em lg+).
+- `AppShell` anima a troca de rota (AnimatePresence, fade/slide 280ms); `prefers-reduced-motion`
+  já zera as animações no index.css.
+
 ## Fluxo + calendário (entregue)
 - `GET /api/analytics/flow` — janela de meses (3/6/12 ou `from_month`+`to_month`
   personalizado), filtro opcional por categoria; devolve realizado por mês, projeção
