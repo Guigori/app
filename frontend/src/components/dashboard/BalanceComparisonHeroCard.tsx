@@ -10,6 +10,8 @@ interface BalanceComparisonHeroCardProps {
   income: number;
   expense: number;
   onOpen: () => void;
+  onOpenIncome: () => void;
+  onOpenExpense: () => void;
 }
 
 function percent(value: number, total: number) {
@@ -17,7 +19,7 @@ function percent(value: number, total: number) {
   return Math.round((value / total) * 100);
 }
 
-export function BalanceComparisonHeroCard({ month, total, income, expense, onOpen }: BalanceComparisonHeroCardProps) {
+export function BalanceComparisonHeroCard({ month, total, income, expense, onOpen, onOpenIncome, onOpenExpense }: BalanceComparisonHeroCardProps) {
   const { hidden, toggle } = useBalanceHidden();
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
   const moved = Math.max(income, 0) + Math.max(expense, 0);
@@ -59,17 +61,11 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
       <CardContent className="relative z-20 pt-6">
         <div className="grid gap-4 sm:grid-cols-2 sm:items-end">
           <div data-testid="comparison-month-income">
-            <p className="flex items-center gap-2 text-sm text-white/70">
-              <span className="h-2.5 w-2.5 rounded-full bg-income" aria-hidden="true" />
-              Receitas do mês
-            </p>
+            <p className="text-sm text-white/70">Receitas do mês</p>
             <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-income sm:text-3xl">{money(income)}</p>
           </div>
           <div className="sm:text-right" data-testid="comparison-month-expense">
-            <p className="flex items-center gap-2 text-sm text-white/70 sm:justify-end">
-              <span className="h-2.5 w-2.5 rounded-full bg-expense" aria-hidden="true" />
-              Despesas do mês
-            </p>
+            <p className="text-sm text-white/70">Despesas do mês</p>
             <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-expense sm:text-3xl">{money(expense)}</p>
           </div>
         </div>
@@ -83,13 +79,19 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
           >
             {hasMovement ? (
               <>
-                <div
-                  className="h-full bg-income transition-[width] duration-500 ease-out"
+                <button
+                  type="button"
+                  onClick={onOpenIncome}
+                  aria-label={`Abrir receitas de ${monthLabel(month)}`}
+                  className="relative z-30 h-full cursor-pointer bg-income transition-[width,filter] duration-500 ease-out hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
                   style={{ width: `${incomePercent}%` }}
                   data-testid="income-balance-segment"
                 />
-                <div
-                  className="h-full bg-expense transition-[width] duration-500 ease-out"
+                <button
+                  type="button"
+                  onClick={onOpenExpense}
+                  aria-label={`Abrir despesas de ${monthLabel(month)}`}
+                  className="relative z-30 h-full cursor-pointer bg-expense transition-[width,filter] duration-500 ease-out hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
                   style={{ width: `${expensePercent}%` }}
                   data-testid="expense-balance-segment"
                 />
