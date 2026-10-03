@@ -2,6 +2,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatHiddenBRL, monthLabel } from "@/lib/format";
 import type { CategorySlice } from "@/types/finnos";
@@ -13,9 +14,10 @@ interface ExpensesDonutChartProps {
   onOpenDetails?: () => void;
   selectedCategoryId?: string | null;
   onSelectCategory?: (slice: CategorySlice | null) => void;
+  onOpenCategory?: (slice: CategorySlice) => void;
 }
 
-export function ExpensesDonutChart({ month, slices, total, onOpenDetails, selectedCategoryId = null, onSelectCategory }: ExpensesDonutChartProps) {
+export function ExpensesDonutChart({ month, slices, total, onOpenDetails, selectedCategoryId = null, onSelectCategory, onOpenCategory }: ExpensesDonutChartProps) {
   const { hidden } = useBalanceHidden();
   const selected = selectedCategoryId ? slices.find((slice) => slice.category_id === selectedCategoryId) ?? null : null;
   const visibleSlices = selected ? [selected] : slices;
@@ -46,7 +48,7 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
           />
         ) : (
           <div className="flex flex-col items-center gap-6 sm:flex-row">
-            <div className="relative h-48 w-48 shrink-0" data-testid="expenses-donut-chart">
+            <div className="relative h-48 w-48 shrink-0" data-testid="expenses-donut-chart" onClick={(event) => { if (event.target === event.currentTarget) onSelectCategory?.(null); }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -86,8 +88,24 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                   onClick={() => onSelectCategory?.(selected?.category_id === slice.category_id ? null : slice)}
                   data-testid="donut-legend-item"
                 >
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{slice.name}</span>
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                    style={{ backgroundColor: slice.color + "1A", color: slice.color }}
+                    aria-hidden="true"
+                  >
+                    <CategoryIcon name={slice.icon ?? "more-horizontal"} className="h-4 w-4" />
+                  </span>
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 truncate text-left text-sm text-foreground hover:underline"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenCategory?.(slice);
+                    }}
+                    aria-label={`Abrir despesas de ${slice.name} em ${monthLabel(month)}`}
+                  >
+                    {slice.name}
+                  </button>
                   <span className="text-sm tabular-nums text-muted-foreground">{hidden ? "••••" : formatBRL(slice.total)}</span>
                   <span className="w-12 text-right text-sm font-semibold tabular-nums text-foreground">
                     {Math.round(slice.percent)}%
