@@ -160,6 +160,15 @@
   * {
     @apply border-border outline-ring/50;
     }
+  /* Pointer selection does not need the keyboard focus outline. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+  /* Keep charts accessible when navigating with Tab and arrow keys. */
+  .recharts-wrapper :focus-visible {
+    outline: 2px solid var(--finnos-violet);
+    outline-offset: 3px;
+  }
   body {
     @apply bg-background text-foreground;
     }
