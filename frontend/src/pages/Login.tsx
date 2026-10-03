@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2, Smartphone } from "lucide-react";
+import { Eye, EyeOff, Loader2, Smartphone } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { beginSession } from "@/lib/session";
 import { disableLocalMode, enableLocalMode } from "@/lib/mode";
 import type { User } from "@/types/finnos";
-import { FinnosLogo } from "@/components/brand/FinnosLogo";
+import { AuthLayout } from "@/components/layout/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,6 +26,7 @@ export default function Login() {
   });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [forgotOpen, setForgotOpen] = useState(false);
 
@@ -53,40 +54,16 @@ export default function Login() {
   };
 
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
-      <aside className="relative hidden flex-col justify-between overflow-hidden bg-[#10142B] p-10 text-white lg:flex">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-[#5B3FE4]/40 blur-3xl" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-32 -left-24 h-96 w-96 rounded-full bg-[#8B74F0]/20 blur-3xl" aria-hidden="true" />
-        <span className="relative font-heading text-2xl font-extrabold tracking-tight">FINNOS</span>
-        <div className="relative">
-          <h1 className="max-w-md font-heading text-4xl font-bold leading-tight tracking-tight">
-            Sua vida financeira em um só lugar.
-          </h1>
-          <p className="mt-4 max-w-md text-base text-white/70">
-            Receitas, despesas, contas e metas organizadas de forma simples e visual — com a regra 50/30/20
-            sempre à vista.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-2" aria-hidden="true">
-            <span className="rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold">Necessidades · 50%</span>
-            <span className="rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold">Desejos · 30%</span>
-            <span className="rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold">Metas · 20%</span>
-          </div>
-        </div>
-        <p className="relative text-sm text-white/50">Seus dados, organizados com clareza e privacidade.</p>
-      </aside>
-
-      <main className="flex items-center justify-center bg-background p-6">
-        <Card className="w-full max-w-md">
+    <>
+      <AuthLayout>
+        <Card className="w-full max-w-md rounded-3xl shadow-sm [--card-spacing:--spacing(6)] sm:[--card-spacing:--spacing(8)]">
           <CardHeader>
-            <div className="mb-2 lg:hidden">
-              <FinnosLogo />
-            </div>
-            <CardTitle className="font-heading text-2xl font-bold">Entrar</CardTitle>
-            <CardDescription>Bem-vindo de volta ao seu painel financeiro.</CardDescription>
+            <CardTitle className="font-heading text-3xl font-bold tracking-tight">Bem-vindo de volta</CardTitle>
+            <CardDescription>Entre na sua conta para acessar seu painel financeiro.</CardDescription>
           </CardHeader>
           <CardContent>
             <form
-              className="space-y-4"
+              className="space-y-5"
               onSubmit={(e) => {
                 e.preventDefault();
                 submit({ email: email.trim(), password });
@@ -97,6 +74,7 @@ export default function Login() {
                 <Label htmlFor="login-email">E-mail</Label>
                 <Input
                   id="login-email"
+                  className="h-12 rounded-xl px-4"
                   type="email"
                   autoComplete="email"
                   required
@@ -118,9 +96,11 @@ export default function Login() {
                     Esqueci minha senha
                   </button>
                 </div>
+                <div className="relative">
                 <Input
                   id="login-password"
-                  type="password"
+                  className="h-12 rounded-xl pl-4 pr-12"
+                  type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   required
                   value={password}
@@ -128,6 +108,18 @@ export default function Login() {
                   placeholder="Sua senha"
                   data-testid="login-password-input"
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1 h-10 w-10 rounded-lg text-muted-foreground"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+                </div>
               </div>
 
               {formError ? (
@@ -136,39 +128,10 @@ export default function Login() {
                 </p>
               ) : null}
 
-              <Button type="submit" className="w-full" disabled={loginMutation.isPending} data-testid="login-submit-button">
-                {loginMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : "Entrar"}
+              <Button type="submit" className="h-12 w-full rounded-xl" disabled={loginMutation.isPending} data-testid="login-submit-button">
+                {loginMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Entrando...</> : "Entrar"}
               </Button>
             </form>
-
-            <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" />
-              ou
-              <span className="h-px flex-1 bg-border" />
-            </div>
-
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => submit(DEMO_CREDENTIALS)}
-              disabled={loginMutation.isPending}
-              data-testid="demo-login-button"
-            >
-              Entrar com a conta demo
-            </Button>
-
-            <Button
-              variant="ghost"
-              className="mt-2 w-full"
-              onClick={startLocalMode}
-              data-testid="local-mode-button"
-            >
-              <Smartphone className="h-4 w-4" aria-hidden="true" />
-              Usar sem cadastro (só neste aparelho)
-            </Button>
-            <p className="mt-2 text-center text-xs text-muted-foreground">
-              Na conta local nada é enviado para servidores — e limpar os dados do navegador apaga tudo.
-            </p>
 
             <p className="mt-5 text-center text-sm text-muted-foreground">
               Não tem uma conta?{" "}
@@ -176,9 +139,39 @@ export default function Login() {
                 Criar conta
               </Link>
             </p>
+
+            <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              Conheça o FINNOS
+              <span className="h-px flex-1 bg-border" />
+            </div>
+
+            <Button
+              variant="outline"
+              className="h-11 w-full rounded-xl"
+              onClick={() => submit(DEMO_CREDENTIALS)}
+              disabled={loginMutation.isPending}
+              data-testid="demo-login-button"
+            >
+              Explorar conta de demonstração
+            </Button>
+
+            <Button
+              variant="ghost"
+              className="mt-3 h-auto min-h-11 w-full whitespace-normal rounded-xl py-3 text-sm"
+              onClick={startLocalMode}
+              data-testid="local-mode-button"
+            >
+              <Smartphone className="h-4 w-4" aria-hidden="true" />
+              Usar sem cadastro
+            </Button>
+            <p className="mt-2 text-center text-xs leading-relaxed text-muted-foreground">
+              Sem cadastro, os dados ficam apenas neste navegador.
+              Limpar os dados do navegador apaga seus registros.
+            </p>
           </CardContent>
         </Card>
-      </main>
+      </AuthLayout>
 
       <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
         <DialogContent className="max-w-sm">
@@ -194,6 +187,6 @@ export default function Login() {
           </Button>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

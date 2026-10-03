@@ -8,7 +8,7 @@ import { getApiErrorMessage } from "@/lib/errors";
 import { beginSession } from "@/lib/session";
 import { disableLocalMode } from "@/lib/mode";
 import type { SignupResult, User } from "@/types/finnos";
-import { FinnosLogo } from "@/components/brand/FinnosLogo";
+import { AuthLayout } from "@/components/layout/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -75,30 +75,9 @@ export default function Register() {
   };
 
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
-      <aside className="relative hidden flex-col justify-between overflow-hidden bg-[#10142B] p-10 text-white lg:flex">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-[#5B3FE4]/40 blur-3xl" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-32 -left-24 h-96 w-96 rounded-full bg-[#8B74F0]/20 blur-3xl" aria-hidden="true" />
-        <span className="relative font-heading text-2xl font-extrabold tracking-tight">FINNOS</span>
-        <div className="relative">
-          <h1 className="max-w-md font-heading text-4xl font-bold leading-tight tracking-tight">
-            Comece a enxergar seu dinheiro com clareza.
-          </h1>
-          <p className="mt-4 max-w-md text-base text-white/70">
-            Crie sua conta gratuita: você já sai com categorias prontas e a regra 50/30/20 configurada.
-          </p>
-        </div>
-        <p className="relative text-sm text-white/50">
-          Confirmação por e-mail para manter seus dados financeiros protegidos.
-        </p>
-      </aside>
-
-      <main className="flex items-center justify-center bg-background p-6">
-        <Card className="w-full max-w-md">
+    <AuthLayout signup>
+        <Card className="w-full max-w-md rounded-3xl shadow-sm [--card-spacing:--spacing(6)] sm:[--card-spacing:--spacing(8)]">
           <CardHeader>
-            <div className="mb-2 lg:hidden">
-              <FinnosLogo />
-            </div>
             {step === "form" ? (
               <>
                 <CardTitle className="font-heading text-2xl font-bold">Criar conta</CardTitle>
@@ -119,7 +98,7 @@ export default function Register() {
           <CardContent>
             {step === "form" ? (
               <form
-                className="space-y-4"
+                className="space-y-5"
                 onSubmit={(e) => {
                   e.preventDefault();
                   submitForm();
@@ -128,20 +107,21 @@ export default function Register() {
               >
                 <div className="space-y-2">
                   <Label htmlFor="register-name">Nome</Label>
-                  <Input id="register-name" autoComplete="name" required minLength={2} value={name} onChange={(e) => setName(e.target.value)} placeholder="Como devemos te chamar?" data-testid="register-name-input" />
+                  <Input className="h-12 rounded-xl px-4" id="register-name" autoComplete="name" required minLength={2} value={name} onChange={(e) => setName(e.target.value)} placeholder="Como devemos te chamar?" data-testid="register-name-input" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="register-email">E-mail</Label>
-                  <Input id="register-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" data-testid="register-email-input" />
+                  <Input className="h-12 rounded-xl px-4" id="register-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" data-testid="register-email-input" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="register-password">Senha</Label>
-                  <Input id="register-password" type="password" autoComplete="new-password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" data-testid="register-password-input" />
+                  <Input className="h-12 rounded-xl px-4" id="register-password" type="password" autoComplete="new-password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" data-testid="register-password-input" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="register-password-confirm">Confirmar senha</Label>
                   <Input
                     id="register-password-confirm"
+                    className="h-12 rounded-xl px-4"
                     type="password"
                     autoComplete="new-password"
                     required
@@ -162,13 +142,13 @@ export default function Register() {
                   </p>
                 ) : null}
 
-                <Button type="submit" className="w-full" disabled={signupMutation.isPending} data-testid="register-submit-button">
+                <Button type="submit" className="h-12 w-full rounded-xl" disabled={signupMutation.isPending} data-testid="register-submit-button">
                   {signupMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : "Criar minha conta"}
                 </Button>
               </form>
             ) : (
               <form
-                className="space-y-4"
+                className="space-y-5"
                 onSubmit={(e) => {
                   e.preventDefault();
                   setFormError(null);
@@ -180,6 +160,7 @@ export default function Register() {
                   <Label htmlFor="verify-code">Código de confirmação</Label>
                   <Input
                     id="verify-code"
+                    className="h-12 rounded-xl px-4 text-center font-heading text-2xl tracking-[0.5em]"
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     required
@@ -188,7 +169,7 @@ export default function Register() {
                     value={code}
                     onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     placeholder="000000"
-                    className="text-center font-heading text-2xl tracking-[0.5em]"
+                    
                     data-testid="verify-code-input"
                   />
                 </div>
@@ -199,7 +180,7 @@ export default function Register() {
                   </p>
                 ) : null}
 
-                <Button type="submit" className="w-full" disabled={verifyMutation.isPending || code.length !== 6} data-testid="verify-submit-button">
+                <Button type="submit" className="h-12 w-full rounded-xl" disabled={verifyMutation.isPending || code.length !== 6} data-testid="verify-submit-button">
                   {verifyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : "Confirmar e entrar"}
                 </Button>
                 <div className="flex items-center justify-between text-sm">
@@ -227,7 +208,6 @@ export default function Register() {
             </p>
           </CardContent>
         </Card>
-      </main>
-    </div>
+    </AuthLayout>
   );
 }
