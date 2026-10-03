@@ -68,16 +68,16 @@ export default function Login() {
   return (
     <>
       <AuthLayout>
-        <Card className="w-full max-w-xl rounded-[2rem] border-white/30 bg-white text-slate-950 shadow-2xl [--card-spacing:--spacing(6)] sm:[--card-spacing:--spacing(8)] lg:border-slate-200 lg:shadow-none">
+        <Card className="w-full max-w-[38rem] rounded-[1.75rem] border-white/30 bg-white text-slate-950 shadow-2xl [--card-spacing:--spacing(5)] sm:[--card-spacing:--spacing(6)] lg:border-0 lg:shadow-none">
           <CardHeader>
-            <CardTitle className="font-heading text-3xl font-bold tracking-tight">Bem-vindo de volta</CardTitle>
+            <CardTitle className="font-heading text-[2rem] font-bold tracking-tight xl:text-4xl">Bem-vindo de volta</CardTitle>
             <CardDescription>Entre na sua conta para acessar seu painel financeiro.</CardDescription>
           </CardHeader>
           <CardContent>
             <SocialAuthButtons onUnavailable={(provider) => setFormError(`Login com ${provider} será ativado assim que a integração OAuth for configurada.`)} />
             <div className="my-5 flex items-center gap-3 text-xs text-slate-500"><span className="h-px flex-1 bg-slate-200" />ou<span className="h-px flex-1 bg-slate-200" /></div>
             <form
-              className="space-y-5"
+              className="space-y-4"
               onSubmit={(e) => {
                 e.preventDefault();
                 submit({ email: email.trim(), password });
@@ -154,7 +154,7 @@ export default function Login() {
               </Link>
             </p>
 
-            <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+            <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
               <span className="h-px flex-1 bg-border" />
               Conheça o FINNOS
               <span className="h-px flex-1 bg-border" />
@@ -172,7 +172,7 @@ export default function Login() {
 
             <Button
               variant="ghost"
-              className="mt-3 h-auto min-h-11 w-full whitespace-normal rounded-xl py-3 text-sm"
+              className="mt-2 h-10 w-full rounded-xl text-sm"
               onClick={startLocalMode}
               disabled={loginMutation.isPending || demoMutation.isPending}
               data-testid="local-mode-button"
@@ -180,7 +180,7 @@ export default function Login() {
               <Smartphone className="h-4 w-4" aria-hidden="true" />
               Usar sem cadastro
             </Button>
-            <p className="mt-2 text-center text-xs leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-center text-[11px] leading-snug text-muted-foreground">
               Sem cadastro, os dados ficam apenas neste navegador.
               Limpar os dados do navegador apaga seus registros.
             </p>
