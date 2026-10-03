@@ -158,6 +158,8 @@ export default function Dashboard() {
               income={data.income}
               expense={data.expense}
               onOpen={() => openFlow("balance")}
+              onOpenIncome={() => openFlow("income")}
+              onOpenExpense={() => openFlow("expense")}
             />
           )}
 
