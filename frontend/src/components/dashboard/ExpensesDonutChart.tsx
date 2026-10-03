@@ -92,7 +92,13 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                   onClick={() => onSelectCategory?.(selected?.category_id === slice.category_id ? null : slice)}
                   data-testid="donut-legend-item"
                 >
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} aria-hidden="true" />
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                    style={{ backgroundColor: slice.color + "1A", color: slice.color }}
+                    aria-hidden="true"
+                  >
+                    <CategoryIcon name={slice.icon ?? "more-horizontal"} className="h-4 w-4" />
+                  </span>
                   <button
                     type="button"
                     className="min-w-0 flex-1 truncate text-left text-sm text-foreground hover:underline"
