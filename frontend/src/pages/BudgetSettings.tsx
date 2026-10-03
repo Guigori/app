@@ -50,7 +50,10 @@ export default function BudgetSettings(){
  const groupCats=(group:string)=>categories.filter(c=>c.group===group);
  const getDraft=(c:Category):AllocationDraft=>alloc[c.id]??{planned:"",priority:c.group==="necessidades"?"essencial":c.group==="metas"?"meta":"flexivel",rollover:false};
  const plannedTotal=categories.reduce((sum,c)=>sum+(Number(getDraft(c).planned)||0),0);
- const setDraft=(id:string,patch:Partial<AllocationDraft>)=>setAlloc(prev=>({...prev,[id]:{planned:"",priority:"flexivel",rollover:false,...prev[id],...patch}}));
+ const setDraft=(id:string,patch:Partial<AllocationDraft>)=>setAlloc(prev=>{
+  const current: AllocationDraft = prev[id] ?? { planned:"", priority:"flexivel", rollover:false };
+  return {...prev,[id]:{...current,...patch}};
+});
  const apply503020=()=>{if(!incomeNumber)return toast.error("Informe a renda prevista primeiro.");const nextAlloc={...alloc};(["necessidades","desejos","metas"] as const).forEach(g=>{const list=groupCats(g);const each=list.length?suggested[g]/list.length:0;list.forEach(c=>nextAlloc[c.id]={planned:each.toFixed(2),priority:g==="necessidades"?"essencial":g==="metas"?"meta":"flexivel",rollover:alloc[c.id]?.rollover??false});});setAlloc(nextAlloc);toast.success("50/30/20 distribuído entre as categorias. Você pode ajustar os valores.");};
 
  const save=useMutation({mutationFn:async()=>{if(!start||!end)throw new Error("Defina o período do ciclo.");const payload:BudgetCyclePayload={mode,period,start_date:start,end_date:end,expected_income:incomeNumber,extraordinary,notes:notes.trim()||null,allocations:categories.map(c=>{const d=getDraft(c);return{category_id:c.id,planned:Math.max(Number(d.planned)||0,0),priority:d.priority,rollover:d.rollover}}).filter(a=>a.planned>0)};return existing?updateBudgetCycle(existing.id,payload):createBudgetCycle(payload);},onSuccess:async()=>{toast.success(existing?"Orçamento atualizado.":"Orçamento criado.");await Promise.all([qc.invalidateQueries({queryKey:["budget-v2-current"]}),qc.invalidateQueries({queryKey:["budget-v2-next"]}),qc.invalidateQueries({queryKey:["budget-v2-history"]})]);},onError:e=>toast.error(e instanceof Error&&e.message.startsWith("Defina")?e.message:getApiErrorMessage(e))});
