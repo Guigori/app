@@ -1,4 +1,5 @@
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
+import type { PieLabelRenderProps } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -22,6 +23,24 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
   const selected = selectedCategoryId ? slices.find((slice) => slice.category_id === selectedCategoryId) ?? null : null;
   const visibleSlices = selected ? [selected] : slices;
   const displayTotal = selected?.total ?? total;
+
+  const renderSliceIcon = (props: PieLabelRenderProps) => {
+    const { cx, cy, midAngle, innerRadius, outerRadius, payload } = props;
+    if (typeof cx !== "number" || typeof cy !== "number" || typeof midAngle !== "number" || typeof innerRadius !== "number" || typeof outerRadius !== "number") return null;
+    const slice = payload as CategorySlice;
+    if (!slice || slice.percent < 4) return null;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
+    const angle = -midAngle * (Math.PI / 180);
+    const x = cx + radius * Math.cos(angle) - 10;
+    const y = cy + radius * Math.sin(angle) - 10;
+    return (
+      <foreignObject x={x} y={y} width={20} height={20} className="pointer-events-none overflow-visible">
+        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-background/85" style={{ color: slice.color }}>
+          <CategoryIcon name={slice.icon ?? "more-horizontal"} className="h-3.5 w-3.5" />
+        </div>
+      </foreignObject>
+    );
+  };
 
   return (
     <Card>
@@ -60,6 +79,12 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                     paddingAngle={2}
                     cornerRadius={6}
                     strokeWidth={0}
+                    label={renderSliceIcon}
+                    labelLine={false}
+                    onClick={(entry) => {
+                      const slice = entry as CategorySlice;
+                      if (slice?.name) onSelectCategory?.(selected?.category_id === slice.category_id ? null : slice);
+                    }}
                   >
                     {slices.map((slice) => (
                       <Cell
@@ -67,7 +92,6 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                         fill={slice.color}
                         opacity={selected && slice.category_id !== selected.category_id ? 0.14 : 1}
                         className={onSelectCategory ? "cursor-pointer" : undefined}
-                        onClick={() => onSelectCategory?.(selected?.category_id === slice.category_id ? null : slice)}
                       />
                     ))}
                   </Pie>
@@ -88,13 +112,7 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                   onClick={() => onSelectCategory?.(selected?.category_id === slice.category_id ? null : slice)}
                   data-testid="donut-legend-item"
                 >
-                  <span
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-                    style={{ backgroundColor: slice.color + "1A", color: slice.color }}
-                    aria-hidden="true"
-                  >
-                    <CategoryIcon name={slice.icon ?? "more-horizontal"} className="h-4 w-4" />
-                  </span>
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} aria-hidden="true" />
                   <button
                     type="button"
                     className="min-w-0 flex-1 truncate text-left text-sm text-foreground hover:underline"
