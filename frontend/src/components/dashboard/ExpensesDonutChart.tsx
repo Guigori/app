@@ -61,9 +61,9 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                     paddingAngle={2}
                     cornerRadius={6}
                     strokeWidth={0}
-                    onClick={(entry) => {
-                      const slice = entry as CategorySlice;
-                      if (slice?.name) onSelectCategory?.(selected?.category_id === slice.category_id ? null : slice);
+                    onClick={(_, index) => {
+                      const slice = slices[index];
+                      if (slice) onSelectCategory?.(selected?.category_id === slice.category_id ? null : slice);
                     }}
                   >
                     {slices.map((slice) => (
