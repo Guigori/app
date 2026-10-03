@@ -1,11 +1,9 @@
-import { useLocation } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { Eye, EyeOff, Menu, Moon, Sun } from "lucide-react";
 import { FinnosLogo } from "@/components/brand/FinnosLogo";
 import { NotificationsBell } from "@/components/layout/NotificationsBell";
 import { Button } from "@/components/ui/button";
 import { useBalanceHidden } from "@/lib/balance";
-import { PAGE_TITLES } from "@/components/layout/nav";
 
 interface HeaderProps {
   /** The drawer lives in AppShell so the edge-swipe gesture can open it too. */
@@ -13,14 +11,8 @@ interface HeaderProps {
 }
 
 export function Header({ onOpenMenu }: HeaderProps) {
-  const location = useLocation();
   const { resolvedTheme, setTheme } = useTheme();
   const { hidden, toggle } = useBalanceHidden();
-  // Nested routes (/cartoes/:id) fall back to the title of their parent section.
-  const title =
-    PAGE_TITLES[location.pathname] ??
-    PAGE_TITLES[`/${location.pathname.split("/")[1] ?? ""}`] ??
-    "Início";
 
   return (
     <>
@@ -36,7 +28,6 @@ export function Header({ onOpenMenu }: HeaderProps) {
             <Menu className="h-5 w-5" aria-hidden="true" />
           </Button>
           <FinnosLogo />
-          <span className="hidden font-heading text-base font-semibold text-muted-foreground md:block">{title}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <NotificationsBell />

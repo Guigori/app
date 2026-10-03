@@ -1,3 +1,4 @@
+import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 
 // Official assets: never redraw, crop, recolor, or filter these images.
@@ -20,15 +21,17 @@ interface FinnosLogoProps {
 }
 
 export function FinnosLogo({ className, iconOnly = false }: FinnosLogoProps) {
+  const { resolvedTheme } = useTheme();
+  const showIcon = iconOnly || resolvedTheme === "dark";
   return (
     <img
-      src={iconOnly ? "/brand/finnos-icon.png" : "/brand/finnos-logo.png"}
+      src={showIcon ? "/brand/finnos-icon.png" : "/brand/finnos-logo.png"}
       alt="FINNOS"
-      width={iconOnly ? 1254 : 2170}
-      height={iconOnly ? 1254 : 725}
+      width={showIcon ? 1254 : 2170}
+      height={showIcon ? 1254 : 725}
       className={cn(
         "block shrink-0 object-contain",
-        iconOnly ? "h-8 w-8" : "h-auto w-36",
+        showIcon ? "h-8 w-8" : "h-auto w-36",
         className,
       )}
     />
