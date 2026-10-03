@@ -20,7 +20,7 @@ interface ExpensesDonutChartProps {
 export function ExpensesDonutChart({ month, slices, total, onOpenDetails, selectedCategoryId = null, onSelectCategory, onOpenCategory }: ExpensesDonutChartProps) {
   const { hidden } = useBalanceHidden();
   const selected = selectedCategoryId ? slices.find((slice) => slice.category_id === selectedCategoryId) ?? null : null;
-  const visibleSlices = slices;
+  const visibleSlices = selected ? [selected] : slices;
   const displayTotal = selected?.total ?? total;
 
 
