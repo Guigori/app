@@ -43,6 +43,8 @@ export function SummaryCards({
 }: SummaryCardsProps) {
   const { hidden } = useBalanceHidden();
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
+  const retainedPercent = income > 0 ? Math.round((monthBalance / income) * 100) : null;
+  const expenseShare = income > 0 ? Math.round((expense / income) * 100) : null;
 
   const cards: Array<{
     metric: MetricKind;
@@ -62,14 +64,27 @@ export function SummaryCards({
       metric: "expense",
       label: "Despesas",
       value: expense,
-      footer: <Trend current={expense} previous={prevExpense} goodWhenDown />,
+      footer: (
+        <div className="space-y-0.5">
+          <Trend current={expense} previous={prevExpense} goodWhenDown />
+          {expenseShare !== null ? <p className="text-xs text-muted-foreground">{expenseShare}% da receita foi comprometida</p> : null}
+        </div>
+      ),
     },
     {
       metric: "balance",
       label: "Saldo do mês",
       value: monthBalance,
       valueClass: monthBalance >= 0 ? "text-income" : "text-expense",
-      footer: <p className="text-xs text-muted-foreground">Receitas menos despesas</p>,
+      footer: (
+        <p className="text-xs text-muted-foreground">
+          {retainedPercent !== null
+            ? monthBalance >= 0
+              ? `${Math.max(retainedPercent, 0)}% da receita permaneceu disponível`
+              : `As despesas superaram a receita em ${Math.abs(retainedPercent)}%`
+            : "Receitas menos despesas"}
+        </p>
+      ),
     },
     {
       metric: "invested",
