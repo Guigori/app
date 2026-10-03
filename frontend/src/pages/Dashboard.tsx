@@ -2,11 +2,11 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, LayoutGrid } from "lucide-react";
-import { fetchAccounts, fetchDashboard, fetchMe } from "@/lib/data";
+import { fetchAccounts, fetchDashboard, fetchMe, fetchTransactions } from "@/lib/data";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 import { useHomeView } from "@/lib/prefs";
 import { cn } from "@/lib/utils";
-import type { MetricKind } from "@/types/finnos";
+import type { CategorySlice, MetricKind } from "@/types/finnos";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { BalanceHeroCard } from "@/components/dashboard/BalanceHeroCard";
 import { BalanceComparisonHeroCard } from "@/components/dashboard/BalanceComparisonHeroCard";
@@ -38,6 +38,7 @@ export default function Dashboard() {
     staleTime: 5 * 60 * 1000,
   });
   const [month, setMonth] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<CategorySlice | null>(null);
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", month],
     queryFn: () => fetchDashboard(month),
@@ -52,6 +53,14 @@ export default function Dashboard() {
   const error = dashboardQuery.error;
   const noAccounts = !accountsQuery.isPending && (accountsQuery.data ?? []).length === 0;
   const activeMonth = data?.month ?? currentMonth();
+  const categoryTransactionsQuery = useQuery({
+    queryKey: ["dashboard-category-transactions", activeMonth, selectedCategory?.category_id],
+    queryFn: () => fetchTransactions({ month: activeMonth, type: "despesa", category_id: selectedCategory?.category_id ?? undefined }),
+    enabled: Boolean(selectedCategory?.category_id),
+  });
+  const visibleRecent = selectedCategory
+    ? (categoryTransactionsQuery.data ?? []).slice(0, 6)
+    : (data?.recent ?? []);
 
   // Every card/chart opens the full Fluxo screen (never a side panel), so the browser
   // back gesture returns to the Home exactly where it was.
@@ -197,11 +206,18 @@ export default function Dashboard() {
               slices={data.categories}
               total={data.expense}
               onOpenDetails={() => openFlow("expense")}
+              selectedCategoryId={selectedCategory?.category_id ?? null}
+              onSelectCategory={setSelectedCategory}
             />
           </div>
 
+          <RecentTransactions
+            transactions={visibleRecent}
+            categoryName={selectedCategory?.name ?? null}
+            month={data.month}
+            categoryId={selectedCategory?.category_id ?? null}
+          />
           <Budget503020Card month={monthLabel(data.month)} income={data.income} rule={data.rule} />
-          <RecentTransactions transactions={data.recent} />
         </div>
       ) : !error ? (
         <div className="space-y-6" aria-hidden="true">
