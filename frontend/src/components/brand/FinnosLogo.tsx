@@ -18,14 +18,16 @@ export function FinnosIcon({ className }: { className?: string }) {
 interface FinnosLogoProps {
   className?: string;
   iconOnly?: boolean;
+  variant?: "auto" | "light" | "dark";
 }
 
-export function FinnosLogo({ className, iconOnly = false }: FinnosLogoProps) {
+export function FinnosLogo({ className, iconOnly = false, variant = "auto" }: FinnosLogoProps) {
   const { resolvedTheme } = useTheme();
-  const showIcon = iconOnly || resolvedTheme === "dark";
+  const whiteLogo = variant === "dark" || (variant === "auto" && resolvedTheme === "dark");
+  const showIcon = iconOnly;
   return (
     <img
-      src={showIcon ? "/brand/finnos-icon.png" : "/brand/finnos-logo.png"}
+      src={showIcon ? "/brand/finnos-icon.png" : whiteLogo ? "/brand/finnos-logo-white.png" : "/brand/finnos-logo.png"}
       alt="FINNOS"
       width={showIcon ? 1254 : 2170}
       height={showIcon ? 1254 : 725}
