@@ -16,7 +16,7 @@ export function Header({ onOpenMenu }: HeaderProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-2 border-b border-border bg-background/85 px-3 backdrop-blur sm:px-6 lg:px-10">
+      <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-2 border-b border-border bg-background px-3 sm:px-6 lg:px-10">
         <div className="flex min-w-0 items-center gap-2">
           <Button
             variant="ghost"
