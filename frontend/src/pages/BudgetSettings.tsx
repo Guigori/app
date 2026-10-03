@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarRange, Save, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Save, SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { createBudgetCycle, fetchCategories, fetchCurrentBudgetCycle, fetchNextBudgetCycle, updateBudgetCycle, type BudgetCyclePayload } from "@/lib/data";
