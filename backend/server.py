@@ -22,6 +22,7 @@ from routers import (
     ai,
     analytics,
     auth,
+    budgets,
     cards,
     categories,
     cron,
@@ -77,6 +78,7 @@ async def get_status_checks():
 
 # Resource routers — every route hangs off api_router, never off app.
 api_router.include_router(auth.router)
+api_router.include_router(budgets.router)
 api_router.include_router(accounts.router)
 api_router.include_router(categories.router)
 api_router.include_router(transactions.router)
