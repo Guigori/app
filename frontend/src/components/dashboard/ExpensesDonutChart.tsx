@@ -11,10 +11,15 @@ interface ExpensesDonutChartProps {
   slices: CategorySlice[];
   total: number;
   onOpenDetails?: () => void;
+  selectedCategoryId?: string | null;
+  onSelectCategory?: (slice: CategorySlice | null) => void;
 }
 
-export function ExpensesDonutChart({ month, slices, total, onOpenDetails }: ExpensesDonutChartProps) {
+export function ExpensesDonutChart({ month, slices, total, onOpenDetails, selectedCategoryId = null, onSelectCategory }: ExpensesDonutChartProps) {
   const { hidden } = useBalanceHidden();
+  const selected = selectedCategoryId ? slices.find((slice) => slice.category_id === selectedCategoryId) ?? null : null;
+  const visibleSlices = selected ? [selected] : slices;
+  const displayTotal = selected?.total ?? total;
 
   return (
     <Card>
@@ -55,21 +60,32 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails }: Expe
                     strokeWidth={0}
                   >
                     {slices.map((slice) => (
-                      <Cell key={slice.category_id ?? slice.name} fill={slice.color} />
+                      <Cell
+                        key={slice.category_id ?? slice.name}
+                        fill={slice.color}
+                        opacity={selected && slice.category_id !== selected.category_id ? 0.14 : 1}
+                        className={onSelectCategory ? "cursor-pointer" : undefined}
+                        onClick={() => onSelectCategory?.(selected?.category_id === slice.category_id ? null : slice)}
+                      />
                     ))}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <p className="text-xs text-muted-foreground">Total gasto</p>
+                <p className="text-xs text-muted-foreground">{selected ? selected.name : "Total gasto"}</p>
                 <p className="font-heading text-xl font-bold tabular-nums text-foreground" data-testid="donut-total-value">
-                  {hidden ? formatHiddenBRL() : formatBRL(total)}
+                  {hidden ? formatHiddenBRL() : formatBRL(displayTotal)}
                 </p>
               </div>
             </div>
             <ul className="w-full space-y-2.5">
-              {slices.slice(0, 6).map((slice) => (
-                <li key={slice.category_id ?? slice.name} className="flex items-center gap-3" data-testid="donut-legend-item">
+              {visibleSlices.slice(0, 6).map((slice) => (
+                <li
+                  key={slice.category_id ?? slice.name}
+                  className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted/50"
+                  onClick={() => onSelectCategory?.(selected?.category_id === slice.category_id ? null : slice)}
+                  data-testid="donut-legend-item"
+                >
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} aria-hidden="true" />
                   <span className="min-w-0 flex-1 truncate text-sm text-foreground">{slice.name}</span>
                   <span className="text-sm tabular-nums text-muted-foreground">{hidden ? "••••" : formatBRL(slice.total)}</span>
@@ -79,6 +95,16 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails }: Expe
                 </li>
               ))}
             </ul>
+            {selected ? (
+              <button
+                type="button"
+                onClick={() => onSelectCategory?.(null)}
+                className="mt-1 text-xs font-semibold text-primary hover:underline"
+                data-testid="donut-show-all-categories"
+              >
+                Ver todas as categorias
+              </button>
+            ) : null}
           </div>
         )}
       </CardContent>
