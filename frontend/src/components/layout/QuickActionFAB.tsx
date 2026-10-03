@@ -15,7 +15,7 @@ export function QuickActionFAB() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="fixed bottom-4 right-4 dashboard:md:bottom-8 dashboard:md:right-8 z-40 hidden h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-xl active:scale-95 dashboard:flex"
+        className="fixed bottom-4 right-4 dashboard:md:bottom-8 dashboard:md:right-6 z-40 hidden h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-xl active:scale-95 dashboard:flex"
         aria-label="Adicionar lançamento"
         data-testid="quick-action-fab"
       >
