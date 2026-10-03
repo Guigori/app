@@ -46,7 +46,7 @@ export default function Flow() {
   const [period, setPeriod] = useState<FlowPeriod>("12");
   const [fromMonth, setFromMonth] = useState(addMonth(currentMonth(), -5));
   const [toMonth, setToMonth] = useState(currentMonth());
-  const [categoryId, setCategoryId] = useState("todas");
+  const [categoryId, setCategoryId] = useState(params.get("category_id") || "todas");
 
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories, staleTime: 60_000 });
   const categories = categoriesQuery.data ?? [];
