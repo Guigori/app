@@ -20,7 +20,7 @@ interface ExpensesDonutChartProps {
 export function ExpensesDonutChart({ month, slices, total, onOpenDetails, selectedCategoryId = null, onSelectCategory, onOpenCategory }: ExpensesDonutChartProps) {
   const { hidden } = useBalanceHidden();
   const selected = selectedCategoryId ? slices.find((slice) => slice.category_id === selectedCategoryId) ?? null : null;
-  const visibleSlices = selected ? [selected] : slices;
+  const visibleSlices = slices;
   const displayTotal = selected?.total ?? total;
 
 
@@ -70,27 +70,11 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                       <Cell
                         key={slice.category_id ?? slice.name}
                         fill={slice.color}
-                        opacity={selected && slice.category_id !== selected.category_id ? 0.14 : 1}
+                        opacity={selected && slice.category_id !== selected.category_id ? 0.22 : 1}
                         className={onSelectCategory ? "cursor-pointer" : undefined}
                       />
                     ))}
                   </Pie>
-                  {slices.map((slice, index) => {
-                    if (slice.percent < 4) return null;
-                    const totalValue = slices.reduce((sum, item) => sum + item.total, 0);
-                    const before = slices.slice(0, index).reduce((sum, item) => sum + item.total, 0);
-                    const mid = ((before + slice.total / 2) / totalValue) * Math.PI * 2 - Math.PI / 2;
-                    const radius = 80;
-                    const x = 96 + Math.cos(mid) * radius - 10;
-                    const y = 96 + Math.sin(mid) * radius - 10;
-                    return (
-                      <foreignObject key={`icon-${slice.category_id ?? slice.name}`} x={x} y={y} width={20} height={20} className="pointer-events-none overflow-visible">
-                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-background/90" style={{ color: slice.color }}>
-                          <CategoryIcon name={slice.icon ?? "more-horizontal"} className="h-3.5 w-3.5" />
-                        </div>
-                      </foreignObject>
-                    );
-                  })}
                 </PieChart>
               </ResponsiveContainer>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
