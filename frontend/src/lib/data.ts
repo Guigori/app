@@ -42,6 +42,8 @@ import type {
   AccountDetail,
   AccountInput,
   BudgetSummary,
+  BudgetCycle,
+  BudgetCycleProgress,
   CalendarMonth,
   CardInput,
   CreditCard,
@@ -123,6 +125,23 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
 export async function fetchCalendar(month: string): Promise<CalendarMonth> {
   if (isLocalMode()) return localCalendar(month);
   return apiGet<CalendarMonth>(`/analytics/calendar?month=${month}`);
+}
+
+
+export async function fetchCurrentBudgetCycle(): Promise<BudgetCycle | null> {
+  if (isLocalMode()) return null;
+  return apiGet<BudgetCycle | null>("/budgets/current");
+}
+export async function fetchNextBudgetCycle(): Promise<BudgetCycle | null> {
+  if (isLocalMode()) return null;
+  return apiGet<BudgetCycle | null>("/budgets/next");
+}
+export async function fetchBudgetCycles(): Promise<BudgetCycle[]> {
+  if (isLocalMode()) return [];
+  return apiGet<BudgetCycle[]>("/budgets");
+}
+export async function fetchBudgetCycleProgress(id: string): Promise<BudgetCycleProgress> {
+  return apiGet<BudgetCycleProgress>(`/budgets/${id}/progress`);
 }
 
 // --- Accounts ---------------------------------------------------------------
