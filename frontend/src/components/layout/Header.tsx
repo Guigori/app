@@ -36,9 +36,9 @@ export function Header({ onOpenMenu }: HeaderProps) {
           >
             <Menu className="h-5 w-5" aria-hidden="true" />
           </Button>
-          <FinnosLogo className="lg:hidden" />
-          <span className="hidden font-heading text-base font-semibold text-muted-foreground lg:block">{title}</span>
-          <span className="hidden lg:block">
+          <FinnosLogo />
+          <span className="hidden font-heading text-base font-semibold text-muted-foreground md:block">{title}</span>
+          <span className="hidden md:block">
             <BackButton />
           </span>
         </div>

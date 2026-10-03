@@ -24,8 +24,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || "",
-      icon: "/icons/finnos-192.png",
-      badge: "/icons/finnos-192.png",
+      icon: "/brand/finnos-icon.png",
+      badge: "/brand/finnos-icon.png",
       tag: data.tag || "finnos",
       data: { url: data.url || "/" },
     }),

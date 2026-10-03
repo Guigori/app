@@ -8,7 +8,6 @@ import { Header } from "@/components/layout/Header";
 import { NavDrawer } from "@/components/layout/NavDrawer";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { QuickActionFAB } from "@/components/layout/QuickActionFAB";
-import { Sidebar } from "@/components/layout/Sidebar";
 import { TopTabs } from "@/components/layout/TopTabs";
 import { useEdgeSwipe } from "@/lib/useEdgeSwipe";
 
@@ -21,13 +20,12 @@ export function AppShell() {
   return (
     <DialogsProvider>
       <div className="min-h-svh bg-background">
-        <Sidebar />
-        <div className="lg:pl-72">
+        <div>
           <Header onOpenMenu={() => setMenuOpen(true)} />
           <TopTabs />
-          <main className="mx-auto w-full max-w-7xl px-4 py-5 pb-32 sm:px-6 lg:px-10 lg:pb-12">
+          <main className="mx-auto w-full max-w-7xl px-4 py-5 pb-32 sm:px-6 lg:px-10 dashboard:pb-28">
             {/* Mobile keeps the back control inside the content column */}
-            <div className="mb-1 lg:hidden">
+            <div className="mb-1 md:hidden">
               <BackButton />
             </div>
             {/* Each route fades/slides in, so navigation feels continuous instead of a jump. */}

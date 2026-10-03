@@ -6,6 +6,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Tablets/desktops and landscape phones share the spacious dashboard navigation. */
+@custom-variant dashboard {
+  @media (min-width: 768px), (orientation: landscape) {
+    @slot;
+  }
+}
+
 @theme inline {
     --font-heading: 'Sora Variable', sans-serif;
     --font-sans: 'DM Sans Variable', sans-serif;

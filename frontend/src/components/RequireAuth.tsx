@@ -3,12 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import { isLocalMode } from "@/lib/mode";
 import type { User } from "@/types/finnos";
-import { FinnosDonut } from "@/components/brand/FinnosLogo";
+import { FinnosIcon } from "@/components/brand/FinnosLogo";
 
 function Splash() {
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-4 bg-background">
-      <FinnosDonut className="h-12 w-12 animate-pulse" />
+      <FinnosIcon className="h-12 w-12" />
       <p className="font-heading text-sm font-semibold tracking-wide text-muted-foreground">FINNOS</p>
     </div>
   );

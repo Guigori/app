@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { CreditCard, PieChart, PiggyBank, Repeat, TrendingUp, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { FinnosDonut } from "@/components/brand/FinnosLogo";
+import { FinnosIcon } from "@/components/brand/FinnosLogo";
 
 interface ModuleMeta {
   title: string;
@@ -57,7 +57,7 @@ export default function ComingSoon({ module }: { module: string }) {
   if (!meta) {
     return (
       <div className="py-16 text-center">
-        <FinnosDonut className="mx-auto h-12 w-12" />
+        <FinnosIcon className="mx-auto h-12 w-12" />
         <h1 className="mt-4 font-heading text-2xl font-bold">Página não encontrada</h1>
         <Link to="/" className={buttonVariants({ variant: "outline", className: "mt-6" })}>
           Voltar ao início
@@ -83,7 +83,7 @@ export default function ComingSoon({ module }: { module: string }) {
         ))}
       </div>
       <div className="mt-10 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-        <FinnosDonut className="h-4 w-4" />
+        <FinnosIcon className="h-4 w-4" />
         Este módulo chega em uma próxima entrega do FINNOS.
       </div>
     </div>
