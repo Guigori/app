@@ -200,3 +200,25 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+
+.auth-slogan-typing {
+  display: inline;
+  background: linear-gradient(90deg, #ffffff 0 0) left / 0% 100% no-repeat;
+  animation: finnos-slogan-reveal 3.2s steps(38, end) .45s forwards;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: rgba(255,255,255,.32);
+}
+
+@keyframes finnos-slogan-reveal {
+  to { background-size: 100% 100%; color: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-slogan-typing {
+    animation: none !important;
+    background-size: 100% 100%;
+    color: transparent;
+  }
+}
