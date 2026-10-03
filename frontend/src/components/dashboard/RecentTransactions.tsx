@@ -10,8 +10,18 @@ import { formatDate, formatHiddenBRL, formatSignedBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Transaction } from "@/types/finnos";
 
-function signedValue(t: Transaction): number {
-  return t.type === "receita" ? t.value : -t.value;
+function displayValue(t: Transaction): number {
+  const value = t.installment && t.installment_value ? t.installment_value : t.value;
+  return t.type === "receita" ? value : -value;
+}
+
+function installmentNumberForMonth(t: Transaction, month?: string): number | null {
+  if (!t.installment || !t.total_installments) return null;
+  if (!month) return t.current_installment ?? 1;
+  const [startYear, startMonth] = t.date.slice(0, 7).split("-").map(Number);
+  const [year, monthNumber] = month.split("-").map(Number);
+  const offset = (year - startYear) * 12 + (monthNumber - startMonth);
+  return Math.min(Math.max((t.current_installment ?? 1) + offset, 1), t.total_installments);
 }
 
 export function RecentTransactions({
@@ -61,7 +71,7 @@ export function RecentTransactions({
         ) : (
           <ul className="divide-y divide-border">
             {transactions.map((t) => (
-              <li key={t.id} className="flex items-center gap-3 py-3" data-testid="recent-transaction-item">
+              <li key={t.id} className="flex cursor-pointer items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/40" onClick={() => dialogs.openTransaction({ transaction: t })} data-testid="recent-transaction-item">
                 <span
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
                   style={{ backgroundColor: (t.category_color ?? "#64748B") + "1A", color: t.category_color ?? "#64748B" }}
@@ -85,9 +95,20 @@ export function RecentTransactions({
                     )}
                     data-testid="recent-transaction-value"
                   >
-                    {hidden ? formatHiddenBRL() : formatSignedBRL(signedValue(t))}
+                    {hidden ? formatHiddenBRL() : formatSignedBRL(displayValue(t))}
                   </p>
-                  <p className="text-xs text-muted-foreground">{formatDate(t.date)}</p>
+                  {t.installment && t.total_installments ? (
+                    <>
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {installmentNumberForMonth(t, month)}/{t.total_installments}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Total {hidden ? "••••" : formatSignedBRL(t.type === "receita" ? t.value : -t.value)}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{formatDate(t.date)}</p>
+                  )}
                 </div>
               </li>
             ))}
