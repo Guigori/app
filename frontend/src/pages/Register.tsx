@@ -111,21 +111,21 @@ export default function Register() {
               >
                 <div className="space-y-2">
                   <Label htmlFor="register-name">Nome</Label>
-                  <Input className="h-12 rounded-xl px-4" id="register-name" autoComplete="name" required minLength={2} value={name} onChange={(e) => setName(e.target.value)} placeholder="Como devemos te chamar?" data-testid="register-name-input" />
+                  <Input className="h-12 rounded-2xl border-[#D9D7E8] bg-[#F8F8FC] px-4 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15" id="register-name" autoComplete="name" required minLength={2} value={name} onChange={(e) => setName(e.target.value)} placeholder="Como devemos te chamar?" data-testid="register-name-input" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="register-email">E-mail</Label>
-                  <Input className="h-12 rounded-xl px-4" id="register-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" data-testid="register-email-input" />
+                  <Input className="h-12 rounded-2xl border-[#D9D7E8] bg-[#F8F8FC] px-4 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15" id="register-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" data-testid="register-email-input" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="register-password">Senha</Label>
-                  <Input className="h-12 rounded-xl px-4" id="register-password" type="password" autoComplete="new-password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" data-testid="register-password-input" />
+                  <Input className="h-12 rounded-2xl border-[#D9D7E8] bg-[#F8F8FC] px-4 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15" id="register-password" type="password" autoComplete="new-password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" data-testid="register-password-input" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="register-password-confirm">Confirmar senha</Label>
                   <Input
                     id="register-password-confirm"
-                    className="h-12 rounded-xl px-4"
+                    className="h-12 rounded-2xl border-[#D9D7E8] bg-[#F8F8FC] px-4 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
                     type="password"
                     autoComplete="new-password"
                     required
@@ -164,7 +164,7 @@ export default function Register() {
                   <Label htmlFor="verify-code">Código de confirmação</Label>
                   <Input
                     id="verify-code"
-                    className="h-12 rounded-xl px-4 text-center font-heading text-2xl tracking-[0.5em]"
+                    className="h-12 rounded-2xl border-[#D9D7E8] bg-[#F8F8FC] px-4 text-center font-heading text-2xl tracking-[0.5em] text-slate-950 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     required
