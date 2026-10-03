@@ -11,6 +11,7 @@ import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { BalanceHeroCard } from "@/components/dashboard/BalanceHeroCard";
 import { MonthBalanceCard } from "@/components/dashboard/MonthBalanceCard";
 import { Budget503020Card } from "@/components/dashboard/Budget503020Card";
+import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 import { MetricCharts } from "@/components/dashboard/MetricCharts";
 import { MonthSelector } from "@/components/dashboard/MonthSelector";
@@ -111,6 +112,10 @@ export default function Dashboard() {
             </Button>
           </CardContent>
         </Card>
+      ) : null}
+
+      {dashboardQuery.isPending && !data ? (
+        <FinnosPageLoading title="Carregando visão geral" description="Preparando seu resumo financeiro do mês." />
       ) : null}
 
       {noAccounts && !error ? (

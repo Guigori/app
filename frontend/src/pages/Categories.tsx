@@ -9,6 +9,7 @@ import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,7 +54,7 @@ export default function Categories() {
       </div>
 
       {categoriesQuery.isPending ? (
-        <div className="h-48 animate-pulse rounded-3xl bg-muted" aria-hidden="true" />
+        <FinnosPageLoading title="Carregando categorias" description="Organizando seus grupos da regra 50/30/20." />
       ) : categories.length === 0 ? (
         <EmptyState
           icon={<Tags className="h-5 w-5" aria-hidden="true" />}

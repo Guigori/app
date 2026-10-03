@@ -7,6 +7,7 @@ import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatDate, formatHiddenBRL } from "@/lib/format";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
@@ -32,7 +33,7 @@ export default function Subscriptions() {
       </div>
 
       {query.isPending ? (
-        <div className="h-64 animate-pulse rounded-3xl bg-muted" aria-hidden="true" />
+        <FinnosPageLoading title="Carregando assinaturas" description="Conferindo suas despesas fixas mensais." />
       ) : !data || data.items.length === 0 ? (
         <EmptyState
           icon={<Repeat className="h-5 w-5" aria-hidden="true" />}

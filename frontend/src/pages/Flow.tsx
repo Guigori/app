@@ -7,6 +7,7 @@ import { useBalanceHidden } from "@/lib/balance";
 import { addMonth, currentMonth, formatBRL, formatHiddenBRL, monthLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MonthSelector } from "@/components/dashboard/MonthSelector";
+import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -168,7 +169,7 @@ export default function Flow() {
       ) : null}
 
       {flowQuery.isPending ? (
-        <div className="h-96 animate-pulse rounded-3xl bg-muted" aria-hidden="true" />
+        <FinnosPageLoading title="Carregando fluxo" description="Montando a entrada, saída e sobra do período." />
       ) : flowQuery.error || !flow ? (
         <Card>
           <CardContent className="flex flex-col items-start justify-between gap-3 p-5 sm:flex-row sm:items-center">

@@ -60,91 +60,100 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* FINNOS light — logo palette: ink wordmark + violet donut on soft lavender-white. */
+/* FINNOS institutional palette. */
 :root {
-    --brand-violet: #5B3FE4;
-    --brand-violet-light: #8B74F0;
-    --brand-violet-deep: #4527C7;
-    --brand-ink: #10142B;
+    --finnos-app: #070F52;
+    --finnos-dark: #000000;
+    --finnos-white: #FFFFFF;
+    --finnos-shadow: #03081F;
+    --finnos-purple: #4B2CFF;
+    --finnos-purple-live: #5B35FF;
+    --finnos-violet: #8C5BFF;
+    --finnos-lilac: #A46DFF;
 
-    --background: #FAFAFC;
-    --foreground: #10142B;
-    --card: #FFFFFF;
-    --card-foreground: #10142B;
-    --popover: #FFFFFF;
-    --popover-foreground: #10142B;
-    --primary: #5B3FE4;
-    --primary-foreground: #FFFFFF;
-    --secondary: #F1EDFE;
-    --secondary-foreground: #3A2A8C;
-    --muted: #F3F3F7;
-    --muted-foreground: #5A5A73;
-    --accent: #F1EDFE;
-    --accent-foreground: #3A2A8C;
+    --brand-violet: var(--finnos-purple);
+    --brand-violet-light: var(--finnos-violet);
+    --brand-violet-deep: var(--finnos-purple-live);
+    --brand-ink: var(--finnos-app);
+
+    --background: var(--finnos-white);
+    --foreground: var(--finnos-app);
+    --card: var(--finnos-white);
+    --card-foreground: var(--finnos-app);
+    --popover: var(--finnos-white);
+    --popover-foreground: var(--finnos-app);
+    --primary: var(--finnos-purple);
+    --primary-foreground: var(--finnos-white);
+    --secondary: #F1EDFF;
+    --secondary-foreground: var(--finnos-app);
+    --muted: #F5F3FF;
+    --muted-foreground: #5B5D79;
+    --accent: #F1EDFF;
+    --accent-foreground: var(--finnos-app);
     --destructive: #E11D48;
-    --border: #E7E7EF;
-    --input: #E7E7EF;
-    --ring: #5B3FE4;
-    --chart-1: #5B3FE4;
+    --border: #E7E4FF;
+    --input: #E7E4FF;
+    --ring: var(--finnos-purple);
+    --chart-1: var(--finnos-purple);
     --chart-2: #10B981;
     --chart-3: #F59E0B;
-    --chart-4: #8B74F0;
-    --chart-5: #06B6D4;
+    --chart-4: var(--finnos-violet);
+    --chart-5: var(--finnos-lilac);
     --radius: 0.875rem;
-    --sidebar: #FFFFFF;
-    --sidebar-foreground: #10142B;
-    --sidebar-primary: #5B3FE4;
-    --sidebar-primary-foreground: #FFFFFF;
-    --sidebar-accent: #F1EDFE;
-    --sidebar-accent-foreground: #3A2A8C;
-    --sidebar-border: #E7E7EF;
-    --sidebar-ring: #5B3FE4;
-    --income: #059669;
+    --sidebar: var(--finnos-white);
+    --sidebar-foreground: var(--finnos-app);
+    --sidebar-primary: var(--finnos-purple);
+    --sidebar-primary-foreground: var(--finnos-white);
+    --sidebar-accent: #F1EDFF;
+    --sidebar-accent-foreground: var(--finnos-app);
+    --sidebar-border: #E7E4FF;
+    --sidebar-ring: var(--finnos-purple);
+    --income: #10B981;
     --expense: #E11D48;
-    --transfer: #5B3FE4;
+    --transfer: var(--finnos-purple);
 }
 
-/* FINNOS dark — true neutral dark (no navy cast); violet stays the brand signal. */
+/* FINNOS dark mode uses pure black as the app surface. */
 .dark {
-    --brand-violet: #8B74F0;
-    --brand-violet-light: #B9A9F8;
-    --brand-violet-deep: #6D54E0;
-    --brand-ink: #F7F7FA;
+    --brand-violet: var(--finnos-violet);
+    --brand-violet-light: var(--finnos-lilac);
+    --brand-violet-deep: var(--finnos-purple-live);
+    --brand-ink: var(--finnos-white);
 
-    --background: #0A0A0C;
-    --foreground: #F7F7FA;
-    --card: #141417;
-    --card-foreground: #F7F7FA;
-    --popover: #16161A;
-    --popover-foreground: #F7F7FA;
-    --primary: #8B74F0;
-    --primary-foreground: #14102B;
-    --secondary: #1E1E23;
-    --secondary-foreground: #EDEAFB;
-    --muted: #1A1A1E;
-    --muted-foreground: #A1A1AD;
-    --accent: #232329;
-    --accent-foreground: #EDEAFB;
+    --background: var(--finnos-dark);
+    --foreground: var(--finnos-white);
+    --card: #090910;
+    --card-foreground: var(--finnos-white);
+    --popover: #0D0D14;
+    --popover-foreground: var(--finnos-white);
+    --primary: var(--finnos-violet);
+    --primary-foreground: var(--finnos-white);
+    --secondary: #121225;
+    --secondary-foreground: var(--finnos-white);
+    --muted: #121225;
+    --muted-foreground: #A8A7B8;
+    --accent: #171731;
+    --accent-foreground: var(--finnos-white);
     --destructive: #FB4A6B;
-    --border: #26262C;
-    --input: #26262C;
-    --ring: #8B74F0;
-    --chart-1: #8B74F0;
+    --border: #222241;
+    --input: #222241;
+    --ring: var(--finnos-violet);
+    --chart-1: var(--finnos-violet);
     --chart-2: #34D399;
     --chart-3: #FBBF24;
-    --chart-4: #B9A9F8;
-    --chart-5: #22D3EE;
-    --sidebar: #101013;
-    --sidebar-foreground: #F7F7FA;
-    --sidebar-primary: #8B74F0;
-    --sidebar-primary-foreground: #14102B;
-    --sidebar-accent: #1E1E23;
-    --sidebar-accent-foreground: #EDEAFB;
-    --sidebar-border: #26262C;
-    --sidebar-ring: #8B74F0;
+    --chart-4: var(--finnos-lilac);
+    --chart-5: var(--finnos-purple-live);
+    --sidebar: var(--finnos-dark);
+    --sidebar-foreground: var(--finnos-white);
+    --sidebar-primary: var(--finnos-violet);
+    --sidebar-primary-foreground: var(--finnos-white);
+    --sidebar-accent: #121225;
+    --sidebar-accent-foreground: var(--finnos-white);
+    --sidebar-border: #222241;
+    --sidebar-ring: var(--finnos-violet);
     --income: #34D399;
     --expense: #FB4A6B;
-    --transfer: #B9A9F8;
+    --transfer: var(--finnos-lilac);
 }
 
 @layer base {

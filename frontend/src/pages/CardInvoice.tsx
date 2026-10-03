@@ -8,6 +8,7 @@ import { useBalanceHidden } from "@/lib/balance";
 import { getApiErrorMessage } from "@/lib/errors";
 import { formatBRL, formatDate, formatHiddenBRL, parseAmount } from "@/lib/format";
 import type { PayInvoiceInput } from "@/types/finnos";
+import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -73,7 +74,7 @@ export default function CardInvoice() {
   });
 
   if (invoiceQuery.isPending) {
-    return <div className="h-80 animate-pulse rounded-3xl bg-muted" aria-hidden="true" />;
+    return <FinnosPageLoading title="Carregando fatura" description="Atualizando compras, pagamentos e total aberto." />;
   }
   if (invoiceQuery.error || !invoice) {
     return (

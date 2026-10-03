@@ -10,6 +10,7 @@ import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { AccountDetailDialog } from "@/components/accounts/AccountDetailDialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,7 +54,7 @@ export default function Accounts() {
       </div>
 
       {accountsQuery.isPending ? (
-        <div className="h-48 animate-pulse rounded-3xl bg-muted" aria-hidden="true" />
+        <FinnosPageLoading title="Carregando contas" description="Buscando seus saldos, entradas e saídas." />
       ) : accounts.length === 0 ? (
         <EmptyState
           icon={<Wallet className="h-5 w-5" aria-hidden="true" />}

@@ -23,6 +23,7 @@ import { TransactionCalendar } from "@/components/transactions/TransactionCalend
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { StatusBadge } from "@/components/shared/Badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -352,7 +353,7 @@ export default function Transactions() {
       ) : null}
 
       {transactionsQuery.isPending ? (
-        <div className="h-64 animate-pulse rounded-3xl bg-muted" aria-hidden="true" />
+        <FinnosPageLoading title="Carregando transações" description="Buscando seus lançamentos do período." />
       ) : transactionsQuery.error ? (
         <Card>
           <CardContent className="flex flex-col items-start justify-between gap-3 p-5 sm:flex-row sm:items-center">

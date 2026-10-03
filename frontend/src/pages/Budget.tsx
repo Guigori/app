@@ -10,6 +10,7 @@ import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { MonthSelector } from "@/components/dashboard/MonthSelector";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -111,7 +112,7 @@ export default function Budget() {
       </div>
 
       {budgetQuery.isPending ? (
-        <div className="h-64 animate-pulse rounded-3xl bg-muted" aria-hidden="true" />
+        <FinnosPageLoading title="Carregando orçamento" description="Calculando limites e gastos do mês." />
       ) : !data || data.rows.length === 0 ? (
         <EmptyState
           icon={<PieChart className="h-5 w-5" aria-hidden="true" />}

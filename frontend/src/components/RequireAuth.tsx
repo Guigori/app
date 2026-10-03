@@ -3,14 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import { isLocalMode } from "@/lib/mode";
 import type { User } from "@/types/finnos";
-import { FinnosIcon } from "@/components/brand/FinnosLogo";
+import { FinnosLoading } from "@/components/brand/FinnosLoading";
 
 function Splash() {
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-4 bg-background">
-      <FinnosIcon className="h-12 w-12" />
-      <p className="font-heading text-sm font-semibold tracking-wide text-muted-foreground">FINNOS</p>
-    </div>
+    <FinnosLoading
+      fullscreen
+      title="Entrando no FINNOS"
+      description="Estamos sincronizando sua conta e preparando o painel."
+    />
   );
 }
 

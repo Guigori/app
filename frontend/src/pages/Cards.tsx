@@ -9,6 +9,7 @@ import { formatBRL, formatDate, formatHiddenBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { CreditCard } from "@/types/finnos";
 import { CardDialog } from "@/components/cards/CardDialog";
+import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -41,10 +42,7 @@ export default function Cards() {
       </div>
 
       {cardsQuery.isPending ? (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2" aria-hidden="true">
-          <div className="h-60 animate-pulse rounded-3xl bg-muted" />
-          <div className="h-60 animate-pulse rounded-3xl bg-muted" />
-        </div>
+        <FinnosPageLoading title="Carregando cartões" description="Atualizando faturas, limites e melhores dias de compra." />
       ) : cards.length === 0 ? (
         <div
           className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-border px-6 py-14 text-center"

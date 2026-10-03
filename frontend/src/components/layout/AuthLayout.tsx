@@ -4,7 +4,7 @@ import { FinnosIcon, FinnosLogo } from "@/components/brand/FinnosLogo";
 export function AuthLayout({ children, signup = false }: { children: ReactNode; signup?: boolean }) {
   return (
     <div className="min-h-svh bg-background lg:grid lg:grid-cols-[0.95fr_1.05fr]">
-      <aside className="flex flex-col justify-between border-b border-[#070F52]/10 bg-[#F4F2FC] px-6 py-7 text-[#070F52] sm:px-10 lg:min-h-svh lg:border-b-0 lg:border-r lg:p-12 xl:p-16">
+      <aside className="flex flex-col justify-between border-b border-[#070F52]/10 bg-white px-6 py-7 text-[#070F52] sm:px-10 lg:min-h-svh lg:border-b-0 lg:border-r lg:p-12 xl:p-16">
         <FinnosLogo className="w-40 sm:w-48" />
         <div className="hidden max-w-lg py-12 lg:block">
           <FinnosIcon className="mb-8 h-20 w-20" />
