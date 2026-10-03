@@ -10,6 +10,7 @@ import Accounts from "@/pages/Accounts";
 import Categories from "@/pages/Categories";
 import Settings from "@/pages/Settings";
 import Budget from "@/pages/Budget";
+import BudgetSettings from "@/pages/BudgetSettings";
 import Flow from "@/pages/Flow";
 import Cards from "@/pages/Cards";
 import CardInvoice from "@/pages/CardInvoice";
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="/cartoes" element={<Cards />} />
             <Route path="/cartoes/:cardId" element={<CardInvoice />} />
             <Route path="/orcamento" element={<Budget />} />
+            <Route path="/orcamento/configuracoes" element={<BudgetSettings />} />
             <Route path="/fluxo" element={<Flow />} />
             <Route path="/assinaturas" element={<Subscriptions />} />
             <Route path="/metas" element={<ComingSoon module="metas" />} />
