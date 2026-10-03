@@ -150,7 +150,7 @@ export default function Register() {
                   {signupMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : "Criar minha conta"}
                 </Button>
               </form>
-            </> ) : (
+            </> : (
               <form
                 className="space-y-5"
                 onSubmit={(e) => {
