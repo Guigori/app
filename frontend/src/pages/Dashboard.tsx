@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import type { MetricKind } from "@/types/finnos";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { BalanceHeroCard } from "@/components/dashboard/BalanceHeroCard";
+import { BalanceComparisonHeroCard } from "@/components/dashboard/BalanceComparisonHeroCard";
 import { MonthBalanceCard } from "@/components/dashboard/MonthBalanceCard";
 import { Budget503020Card } from "@/components/dashboard/Budget503020Card";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
@@ -142,14 +143,23 @@ export default function Dashboard() {
 
       {data ? (
         <div className="space-y-6">
-          {/* Saldo total stays at the very top; clicking it opens /fluxo. */}
-          <BalanceHeroCard
-            month={data.month}
-            total={data.total_balance}
-            income={data.income}
-            expense={data.expense}
-            onOpen={() => openFlow("balance")}
-          />
+          {view === "cards" ? (
+            <BalanceHeroCard
+              month={data.month}
+              total={data.total_balance}
+              income={data.income}
+              expense={data.expense}
+              onOpen={() => openFlow("balance")}
+            />
+          ) : (
+            <BalanceComparisonHeroCard
+              month={data.month}
+              total={data.total_balance}
+              income={data.income}
+              expense={data.expense}
+              onOpen={() => openFlow("balance")}
+            />
+          )}
 
           {view === "cards" ? (
             <SummaryCards
