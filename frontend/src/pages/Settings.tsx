@@ -135,6 +135,18 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      <Card data-testid="settings-budget-card">
+        <CardHeader>
+          <CardTitle className="font-heading">Orçamento</CardTitle>
+          <CardDescription>Modelo, periodicidade, próximo ciclo, prioridades e regras do seu planejamento.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link to="/orcamento/configuracoes" className={buttonVariants({ variant: "outline" })} data-testid="settings-budget-link">
+            Configurar orçamento
+          </Link>
+        </CardContent>
+      </Card>
+
       <Card data-testid="settings-categories-card">
         <CardHeader>
           <CardTitle className="font-heading">Categorias</CardTitle>
