@@ -28,7 +28,7 @@ export function FinnosLogo({ className, iconOnly = false }: FinnosLogoProps) {
       height={iconOnly ? 1254 : 725}
       className={cn(
         "block shrink-0 object-contain",
-        iconOnly ? "h-8 w-8" : "h-auto w-36 rounded-md dark:bg-white",
+        iconOnly ? "h-8 w-8" : "h-auto w-36",
         className,
       )}
     />
