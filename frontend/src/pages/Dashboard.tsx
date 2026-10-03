@@ -10,7 +10,6 @@ import type { CategorySlice, MetricKind } from "@/types/finnos";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { BalanceHeroCard } from "@/components/dashboard/BalanceHeroCard";
 import { BalanceComparisonHeroCard } from "@/components/dashboard/BalanceComparisonHeroCard";
-import { MonthBalanceCard } from "@/components/dashboard/MonthBalanceCard";
 import { Budget503020Card } from "@/components/dashboard/Budget503020Card";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
@@ -193,14 +192,7 @@ export default function Dashboard() {
             />
           )}
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <MonthBalanceCard
-              income={data.income}
-              expense={data.expense}
-              balance={data.month_balance}
-              prevExpense={data.prev_expense}
-              onOpen={() => openFlow("balance")}
-            />
+          <div>
             <ExpensesDonutChart
               month={data.month}
               slices={data.categories}
@@ -208,6 +200,9 @@ export default function Dashboard() {
               onOpenDetails={() => openFlow("expense")}
               selectedCategoryId={selectedCategory?.category_id ?? null}
               onSelectCategory={setSelectedCategory}
+              onOpenCategory={(slice) =>
+                navigate(`/fluxo?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)
+              }
             />
           </div>
 
