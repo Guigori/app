@@ -14,7 +14,17 @@ function signedValue(t: Transaction): number {
   return t.type === "receita" ? t.value : -t.value;
 }
 
-export function RecentTransactions({ transactions }: { transactions: Transaction[] }) {
+export function RecentTransactions({
+  transactions,
+  categoryName = null,
+  month,
+  categoryId = null,
+}: {
+  transactions: Transaction[];
+  categoryName?: string | null;
+  month?: string;
+  categoryId?: string | null;
+}) {
   const dialogs = useDialogs();
   const { hidden } = useBalanceHidden();
 
@@ -22,12 +32,12 @@ export function RecentTransactions({ transactions }: { transactions: Transaction
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle className="font-heading">Transações recentes</CardTitle>
-          <CardDescription>As últimas movimentações do mês</CardDescription>
+          <CardTitle className="font-heading">{categoryName ? `Últimas transações · ${categoryName}` : "Transações recentes"}</CardTitle>
+          <CardDescription>{categoryName ? `Movimentações de ${categoryName} no mês selecionado` : "As últimas movimentações do mês"}</CardDescription>
         </div>
         {transactions.length > 0 ? (
           <Link
-            to="/transacoes"
+            to={categoryId && month ? `/transacoes?month=${month}&category_id=${categoryId}` : "/transacoes"}
             className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
             data-testid="see-all-transactions-link"
           >
