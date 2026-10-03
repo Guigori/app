@@ -88,7 +88,7 @@ export default function Login() {
                 <Label htmlFor="login-email">E-mail</Label>
                 <Input
                   id="login-email"
-                  className="h-12 rounded-xl px-4"
+                  className="h-12 rounded-2xl border-[#D9D7E8] bg-[#F8F8FC] px-4 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
                   type="email"
                   autoComplete="email"
                   required
@@ -113,7 +113,7 @@ export default function Login() {
                 <div className="relative">
                 <Input
                   id="login-password"
-                  className="h-12 rounded-xl pl-4 pr-12"
+                  className="h-12 rounded-2xl border-[#D9D7E8] bg-[#F8F8FC] pl-4 pr-12 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   required
