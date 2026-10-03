@@ -54,11 +54,20 @@ export default function Dashboard() {
   const activeMonth = data?.month ?? currentMonth();
   const categoryTransactionsQuery = useQuery({
     queryKey: ["dashboard-category-transactions", activeMonth, selectedCategory?.category_id],
-    queryFn: () => fetchTransactions({ month: activeMonth, type: "despesa", category_id: selectedCategory?.category_id ?? undefined }),
+    queryFn: () => fetchTransactions({ type: "despesa", category_id: selectedCategory?.category_id ?? undefined }),
     enabled: Boolean(selectedCategory?.category_id),
   });
   const visibleRecent = selectedCategory
-    ? (categoryTransactionsQuery.data ?? []).slice(0, 6)
+    ? (categoryTransactionsQuery.data ?? [])
+        .filter((tx) => {
+          if (tx.status !== "pago") return false;
+          if (!tx.installment) return tx.date.slice(0, 7) === activeMonth;
+          const [startYear, startMonth] = tx.date.slice(0, 7).split("-").map(Number);
+          const [activeYear, activeMonthNumber] = activeMonth.split("-").map(Number);
+          const offset = (activeYear - startYear) * 12 + (activeMonthNumber - startMonth);
+          return offset >= 0 && offset < (tx.total_installments ?? 1);
+        })
+        .slice(0, 6)
     : (data?.recent ?? []);
 
   // Every card/chart opens the full Fluxo screen (never a side panel), so the browser
