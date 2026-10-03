@@ -12,6 +12,7 @@ type FinnosLoadingProps = {
   fullscreen?: boolean;
   video?: keyof typeof VIDEO;
   className?: string;
+  onVideoPlaying?: () => void;
 };
 
 export function FinnosLoading({
@@ -20,6 +21,7 @@ export function FinnosLoading({
   fullscreen = false,
   video = "primary",
   className,
+  onVideoPlaying,
 }: FinnosLoadingProps) {
   return (
     <div
@@ -36,6 +38,7 @@ export function FinnosLoading({
         <video
           className="h-36 w-36 object-contain sm:h-44 sm:w-44"
           src={VIDEO[video]}
+          onPlaying={onVideoPlaying}
           autoPlay
           muted
           loop

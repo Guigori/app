@@ -5,7 +5,7 @@ import { Eye, EyeOff, Loader2, Smartphone } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { beginSession } from "@/lib/session";
-import { disableLocalMode, enableLocalMode } from "@/lib/mode";
+import { disableLocalMode, enableLocalMode, enableDemoMode } from "@/lib/mode";
 import type { User } from "@/types/finnos";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const DEMO_CREDENTIALS = { email: "demo@finnos.app", password: "demo1234" };
+import { localLoadDemo, localSetName } from "@/lib/local/engine";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -38,6 +38,17 @@ export default function Login() {
       navigate("/", { replace: true });
     },
     onError: (error) => setFormError(getApiErrorMessage(error, "E-mail ou senha incorretos.")),
+  });
+
+  const demoMutation = useMutation({
+    mutationFn: async () => {
+      enableDemoMode();
+      localSetName("Demonstração");
+      localLoadDemo();
+      await beginSession();
+    },
+    onSuccess: () => navigate("/", { replace: true }),
+    onError: (error) => setFormError(getApiErrorMessage(error, "Não foi possível abrir a demonstração.")),
   });
 
   const startLocalMode = async () => {
@@ -128,7 +139,7 @@ export default function Login() {
                 </p>
               ) : null}
 
-              <Button type="submit" className="h-12 w-full rounded-xl" disabled={loginMutation.isPending} data-testid="login-submit-button">
+              <Button type="submit" className="h-12 w-full rounded-xl" disabled={loginMutation.isPending || demoMutation.isPending} data-testid="login-submit-button">
                 {loginMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Entrando...</> : "Entrar"}
               </Button>
             </form>
@@ -149,8 +160,8 @@ export default function Login() {
             <Button
               variant="outline"
               className="h-11 w-full rounded-xl"
-              onClick={() => submit(DEMO_CREDENTIALS)}
-              disabled={loginMutation.isPending}
+              onClick={() => { setFormError(null); demoMutation.mutate(); }}
+              disabled={loginMutation.isPending || demoMutation.isPending}
               data-testid="demo-login-button"
             >
               Explorar conta de demonstração
@@ -160,6 +171,7 @@ export default function Login() {
               variant="ghost"
               className="mt-3 h-auto min-h-11 w-full whitespace-normal rounded-xl py-3 text-sm"
               onClick={startLocalMode}
+              disabled={loginMutation.isPending || demoMutation.isPending}
               data-testid="local-mode-button"
             >
               <Smartphone className="h-4 w-4" aria-hidden="true" />

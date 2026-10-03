@@ -3,7 +3,11 @@
 
 import type { Account, CardInput, Category, Transaction } from "@/types/finnos";
 
-const KEY = "finnos:local-db";
+import { getMode } from "@/lib/mode";
+
+function storageKey(): string {
+  return getMode() === "demo" ? "finnos:demo-db" : "finnos:local-db";
+}
 
 export interface LocalProfile {
   name: string;
@@ -58,7 +62,7 @@ export function freshDb(name = "Você"): LocalDb {
 }
 
 export function readDb(): LocalDb {
-  const raw = window.localStorage.getItem(KEY);
+  const raw = window.localStorage.getItem(storageKey());
   if (!raw) {
     const db = freshDb();
     writeDb(db);
@@ -81,9 +85,9 @@ export function readDb(): LocalDb {
 }
 
 export function writeDb(db: LocalDb): void {
-  window.localStorage.setItem(KEY, JSON.stringify(db));
+  window.localStorage.setItem(storageKey(), JSON.stringify(db));
 }
 
 export function wipeDb(): void {
-  window.localStorage.removeItem(KEY);
+  window.localStorage.removeItem(storageKey());
 }
