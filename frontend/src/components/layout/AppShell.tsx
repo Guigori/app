@@ -24,10 +24,7 @@ export function AppShell() {
           <Header onOpenMenu={() => setMenuOpen(true)} />
           <TopTabs />
           <main className="mx-auto w-full max-w-7xl px-4 py-5 pb-32 sm:px-6 lg:px-10 dashboard:pb-28">
-            {/* Mobile keeps the back control inside the content column */}
-            <div className="mb-1 md:hidden">
-              <BackButton />
-            </div>
+            <BackButton />
             {/* Each route fades/slides in, so navigation feels continuous instead of a jump. */}
             <AnimatePresence mode="wait" initial={false}>
               <motion.div

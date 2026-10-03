@@ -2,7 +2,6 @@ import { useLocation } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { Eye, EyeOff, Menu, Moon, Sun } from "lucide-react";
 import { FinnosLogo } from "@/components/brand/FinnosLogo";
-import { BackButton } from "@/components/layout/BackButton";
 import { NotificationsBell } from "@/components/layout/NotificationsBell";
 import { Button } from "@/components/ui/button";
 import { useBalanceHidden } from "@/lib/balance";
@@ -38,9 +37,6 @@ export function Header({ onOpenMenu }: HeaderProps) {
           </Button>
           <FinnosLogo />
           <span className="hidden font-heading text-base font-semibold text-muted-foreground md:block">{title}</span>
-          <span className="hidden md:block">
-            <BackButton />
-          </span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <NotificationsBell />
