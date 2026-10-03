@@ -9,6 +9,7 @@ import { beginSession } from "@/lib/session";
 import { disableLocalMode } from "@/lib/mode";
 import type { SignupResult, User } from "@/types/finnos";
 import { AuthLayout } from "@/components/layout/AuthLayout";
+import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -76,7 +77,7 @@ export default function Register() {
 
   return (
     <AuthLayout signup>
-        <Card className="w-full max-w-md rounded-3xl shadow-sm [--card-spacing:--spacing(6)] sm:[--card-spacing:--spacing(8)]">
+        <Card className="w-full max-w-xl rounded-[2rem] border-white/30 bg-white text-slate-950 shadow-2xl [--card-spacing:--spacing(6)] sm:[--card-spacing:--spacing(8)] lg:border-slate-200 lg:shadow-none">
           <CardHeader>
             {step === "form" ? (
               <>
@@ -96,7 +97,10 @@ export default function Register() {
             )}
           </CardHeader>
           <CardContent>
-            {step === "form" ? (
+            {step === "form" ? <>
+              <SocialAuthButtons onUnavailable={(provider) => setFormError(`Cadastro com ${provider} será ativado assim que a integração OAuth for configurada.`)} />
+              <div className="my-5 flex items-center gap-3 text-xs text-slate-500"><span className="h-px flex-1 bg-slate-200" />ou<span className="h-px flex-1 bg-slate-200" /></div>
+              
               <form
                 className="space-y-5"
                 onSubmit={(e) => {
@@ -146,7 +150,7 @@ export default function Register() {
                   {signupMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : "Criar minha conta"}
                 </Button>
               </form>
-            ) : (
+            </> ) : (
               <form
                 className="space-y-5"
                 onSubmit={(e) => {
