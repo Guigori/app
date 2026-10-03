@@ -187,6 +187,33 @@ export interface BudgetSummary {
   rows: BudgetRow[];
 }
 
+// --- Budget V2 ---------------------------------------------------------------
+
+export type BudgetMode = "503020" | "personalizado";
+export type BudgetPeriod = "semanal" | "quinzenal" | "mensal" | "anual";
+export type BudgetPriority = "essencial" | "flexivel" | "meta";
+export type BudgetCycleStatus = "programado" | "ativo" | "fechado";
+
+export interface BudgetAllocationV2 {
+  category_id: string; planned: number; priority: BudgetPriority; rollover: boolean;
+  name?: string | null; icon?: string | null; color?: string | null;
+}
+export interface BudgetCycle {
+  id: string; mode: BudgetMode; period: BudgetPeriod; start_date: string; end_date: string;
+  expected_income: number; allocations: BudgetAllocationV2[]; extraordinary: boolean;
+  notes?: string | null; status: BudgetCycleStatus; created_at: string; closed_at?: string | null;
+}
+export interface BudgetAllocationProgress extends BudgetAllocationV2 {
+  spent: number; committed: number; available: number; projected_close: number; percent: number;
+}
+export interface BudgetCycleProgress {
+  cycle_id: string; start_date: string; end_date: string; planned: number; spent: number;
+  committed: number; available: number; projected_close: number; expected_income: number;
+  received_income: number; committed_income: number; safe_to_spend: number;
+  elapsed_percent: number; used_percent: number; pace: "sem_plano" | "abaixo" | "no_ritmo" | "acima";
+  allocations: BudgetAllocationProgress[];
+}
+
 // --- FINNOS IA (user's own provider key) ------------------------------------
 
 export type AiProvider = "openai" | "anthropic" | "gemini";
