@@ -43,7 +43,7 @@ export function FinnosLoading({
           preload="auto"
           aria-hidden="true"
         />
-        <FinnosLogo className="mt-2 w-36 brightness-0 invert" />
+        <FinnosLogo className="mt-2 w-36" />
         <p className="mt-5 font-heading text-lg font-bold tracking-tight">{title}</p>
         <p className="mt-2 max-w-64 text-sm leading-relaxed text-white/60">{description}</p>
       </div>
