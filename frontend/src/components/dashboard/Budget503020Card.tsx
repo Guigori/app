@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleDashed, XCircle, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -54,8 +54,15 @@ export function Budget503020Card({ month, income, rule }: Budget503020CardProps)
           </p>
         ) : null}
         {rule.map((item) => {
+          const isZero = item.spent <= 0;
+          const isGoal = item.key === "metas";
           const meta = STATUS_META[item.status];
-          const StatusIcon = meta.icon;
+          const displayMeta = isZero
+            ? { label: isGoal ? "Meta ainda não iniciada" : "Ainda não utilizado", icon: CircleDashed, bar: "bg-muted-foreground/30", text: "text-muted-foreground" }
+            : isGoal
+              ? { ...meta, label: item.percent >= 100 ? "Meta atingida" : `${Math.round(item.percent)}% da meta` }
+              : meta;
+          const StatusIcon = displayMeta.icon;
           return (
             <div key={item.key} data-testid={`rule-row-${item.key}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -65,20 +72,20 @@ export function Budget503020Card({ month, income, rule }: Budget503020CardProps)
                   >
                     {item.label}
                   </span>
-                  <span className={cn("inline-flex items-center gap-1 text-xs font-medium", meta.text)} data-testid={`rule-status-${item.key}`}>
+                  <span className={cn("inline-flex items-center gap-1 text-xs font-medium", displayMeta.text)} data-testid={`rule-status-${item.key}`}>
                     <StatusIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    {meta.label}
+                    {displayMeta.label}
                   </span>
                 </div>
                 <span className="font-heading text-sm font-bold tabular-nums text-foreground" data-testid={`rule-percent-${item.key}`}>
                   {Math.round(item.percent)}%
                 </span>
               </div>
-              <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={Math.round(item.percent)} aria-valuemin={0} aria-valuemax={100} aria-label={`${item.label}: ${meta.label}`}>
-                <div className={cn("h-full rounded-full transition-all duration-500", meta.bar)} style={{ width: `${Math.min(item.percent, 100)}%` }} />
+              <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={Math.round(item.percent)} aria-valuemin={0} aria-valuemax={100} aria-label={`${item.label}: ${displayMeta.label}`}>
+                <div className={cn("h-full rounded-full transition-all duration-500", displayMeta.bar)} style={{ width: `${Math.min(item.percent, 100)}%` }} />
               </div>
               <p className="mt-1.5 text-xs text-muted-foreground tabular-nums" data-testid={`rule-values-${item.key}`}>
-                {formatBRL(item.spent)} / {formatBRL(item.limit)}
+                {formatBRL(item.spent)} de {formatBRL(item.limit)}
               </p>
             </div>
           );
