@@ -41,6 +41,33 @@ class BudgetCycleIn(BaseModel):
         return self
 
 
+class BudgetAllocationProgress(BudgetAllocationOut):
+    spent: float = 0
+    committed: float = 0
+    available: float = 0
+    projected_close: float = 0
+    percent: float = 0
+
+
+class BudgetCycleProgress(BaseModel):
+    cycle_id: str
+    start_date: date
+    end_date: date
+    planned: float
+    spent: float
+    committed: float
+    available: float
+    projected_close: float
+    expected_income: float
+    received_income: float
+    committed_income: float
+    safe_to_spend: float
+    elapsed_percent: float
+    used_percent: float
+    pace: Literal["sem_plano", "abaixo", "no_ritmo", "acima"]
+    allocations: List[BudgetAllocationProgress] = Field(default_factory=list)
+
+
 class BudgetCycleOut(BudgetCycleIn):
     id: str
     status: BudgetCycleStatus
