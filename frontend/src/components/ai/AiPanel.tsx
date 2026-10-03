@@ -61,7 +61,7 @@ export function AiPanel() {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger
-        className="fixed bottom-[9.75rem] right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg transition-transform duration-200 hover:scale-105 active:scale-100 dashboard:bottom-[5.25rem] dashboard:md:bottom-[6.25rem] dashboard:md:right-8"
+        className="fixed bottom-[9.75rem] right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg transition-transform duration-200 hover:scale-105 active:scale-100 dashboard:bottom-[5.25rem] dashboard:md:bottom-[6.25rem] dashboard:md:right-6"
         aria-label="Abrir FINNOS IA"
         data-testid="ai-trigger-button"
       >
