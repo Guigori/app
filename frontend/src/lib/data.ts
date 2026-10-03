@@ -143,6 +143,19 @@ export async function fetchBudgetCycles(): Promise<BudgetCycle[]> {
 export async function fetchBudgetCycleProgress(id: string): Promise<BudgetCycleProgress> {
   return apiGet<BudgetCycleProgress>(`/budgets/${id}/progress`);
 }
+export type BudgetCyclePayload = {
+  mode: "503020" | "personalizado";
+  period: "semanal" | "quinzenal" | "mensal" | "anual";
+  start_date: string; end_date: string; expected_income: number;
+  allocations: { category_id: string; planned: number; priority: "essencial" | "flexivel" | "meta"; rollover: boolean }[];
+  extraordinary: boolean; notes?: string | null;
+};
+export async function createBudgetCycle(payload: BudgetCyclePayload): Promise<BudgetCycle> {
+  return apiPost<BudgetCycle>("/budgets", payload);
+}
+export async function updateBudgetCycle(id: string, payload: BudgetCyclePayload): Promise<BudgetCycle> {
+  return apiPut<BudgetCycle>(`/budgets/${id}`, payload);
+}
 
 // --- Accounts ---------------------------------------------------------------
 
