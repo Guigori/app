@@ -136,7 +136,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
             {view === "cards" ? "Resumo financeiro" : view === "pie" ? "Composição do período" : `Evolução · ${periodLabel}`}
           </p>
         </div>
-        <Button variant="outline" size="icon" className="absolute right-4 top-[7rem] z-20 h-10 w-10 rounded-full bg-background/70 shadow-sm sm:right-6 sm:top-[7.25rem]" onClick={() => setFiltersOpen(true)} aria-label="Personalizar gráfico" data-testid="home-chart-filter-button">
+        <Button variant="outline" size="icon" className="absolute right-0 top-[7rem] z-20 h-10 w-10 rounded-full bg-background/70 shadow-sm sm:right-0 sm:top-[7.25rem]" onClick={() => setFiltersOpen(true)} aria-label="Personalizar gráfico" data-testid="home-chart-filter-button">
           <SlidersHorizontal className="h-4 w-4" />
         </Button>
       </div>
