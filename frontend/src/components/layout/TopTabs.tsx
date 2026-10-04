@@ -8,7 +8,7 @@ import { TOP_TABS } from "@/components/layout/nav";
 export function TopTabs() {
   return (
     <div
-      className="sticky top-14 z-10 border-b border-border bg-background"
+      className="sticky top-14 z-10 hidden border-b border-border bg-background dashboard:block"
       data-testid="top-tabs"
     >
       <div className="mx-auto flex w-full max-w-7xl gap-1 overflow-x-auto px-2 sm:px-4 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
