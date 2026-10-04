@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Eye, EyeOff, Loader2, Smartphone } from "lucide-react";
+import { Check, Eye, EyeOff, Loader2, MonitorSmartphone, X } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { beginSession } from "@/lib/session";
@@ -29,7 +29,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);\n  const [loginSucceeded, setLoginSucceeded] = useState(false);
 
   const loginMutation = useMutation({
     mutationFn: (credentials: { email: string; password: string }) => apiPost<User>("/auth/login", credentials),
@@ -38,7 +38,7 @@ export default function Login() {
       await beginSession();
       navigate("/", { replace: true });
     },
-    onError: (error) => setFormError(getApiErrorMessage(error, "E-mail ou senha incorretos.")),
+    onError: (error) => { setLoginSucceeded(false); setFormError(getApiErrorMessage(error, "E-mail ou senha incorretos.")); },
   });
 
   const demoMutation = useMutation({
@@ -88,7 +88,7 @@ export default function Login() {
                 <Label htmlFor="login-email">E-mail</Label>
                 <Input
                   id="login-email"
-                  className="h-12 rounded-2xl border-[#DCD6FF] bg-[#FBFAFF] px-4 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
+                  className="h-12 rounded-2xl border-[#DCD6FF] !bg-white px-4 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
                   type="email"
                   autoComplete="email"
                   required
@@ -113,7 +113,7 @@ export default function Login() {
                 <div className="relative">
                 <Input
                   id="login-password"
-                  className="h-12 rounded-2xl border-[#DCD6FF] bg-[#FBFAFF] pl-4 pr-12 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
+                  className="h-12 rounded-2xl border-[#DCD6FF] !bg-white pl-4 pr-12 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   required
@@ -143,7 +143,7 @@ export default function Login() {
               ) : null}
 
               <Button type="submit" className="h-12 w-full rounded-xl" disabled={loginMutation.isPending || demoMutation.isPending} data-testid="login-submit-button">
-                {loginMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Entrando...</> : "Entrar"}
+                {loginMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" aria-label="Entrando" /> : loginSucceeded ? <Check className="h-5 w-5" aria-label="Conectado" /> : "Entrar"}
               </Button>
             </form>
 
@@ -154,35 +154,30 @@ export default function Login() {
               </Link>
             </p>
 
-            <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" />
-              Conheça o FINNOS
-              <span className="h-px flex-1 bg-border" />
+            <div className="my-4 h-px bg-[#E7E4FF]" />
+
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                className="h-11 rounded-xl border border-[#DCD6FF] bg-[#F1EDFF] text-[#4B2CFF] shadow-none transition-colors hover:bg-[#5B35FF] hover:text-white active:bg-[#4B2CFF]"
+                onClick={() => { setFormError(null); demoMutation.mutate(); }}
+                disabled={loginMutation.isPending || demoMutation.isPending}
+                data-testid="demo-login-button"
+              >
+                {demoMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ver demonstração"}
+              </Button>
+
+              <Button
+                className="h-11 rounded-xl border border-[#DCD6FF] bg-[#F1EDFF] text-[#4B2CFF] shadow-none transition-colors hover:bg-[#5B35FF] hover:text-white active:bg-[#4B2CFF]"
+                onClick={startLocalMode}
+                disabled={loginMutation.isPending || demoMutation.isPending}
+                data-testid="local-mode-button"
+              >
+                <MonitorSmartphone className="h-4 w-4" aria-hidden="true" />
+                Modo local
+              </Button>
             </div>
-
-            <Button
-              variant="outline"
-              className="h-11 w-full rounded-xl"
-              onClick={() => { setFormError(null); demoMutation.mutate(); }}
-              disabled={loginMutation.isPending || demoMutation.isPending}
-              data-testid="demo-login-button"
-            >
-              Ver demonstração
-            </Button>
-
-            <Button
-              variant="ghost"
-              className="mt-2 h-10 w-full rounded-xl text-sm"
-              onClick={startLocalMode}
-              disabled={loginMutation.isPending || demoMutation.isPending}
-              data-testid="local-mode-button"
-            >
-              <Smartphone className="h-4 w-4" aria-hidden="true" />
-              Entrar no modo local
-            </Button>
-            <p className="mt-1 text-center text-[11px] leading-snug text-slate-400">
-              Sem cadastro, os dados ficam apenas neste navegador.
-              Limpar os dados do navegador apaga seus registros.
+            <p className="mt-2 text-center text-[11px] leading-snug text-slate-400">
+              No modo local, seus dados ficam somente neste dispositivo.
             </p>
           </CardContent>
         </Card>
