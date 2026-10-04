@@ -69,16 +69,16 @@ export default function Login() {
   return (
     <>
       <AuthLayout>
-        <Card className="w-full max-w-[38rem] rounded-[1.75rem] border-white/30 bg-white text-slate-950 shadow-2xl [--card-spacing:--spacing(5)] sm:[--card-spacing:--spacing(6)] lg:border-0 lg:shadow-none">
-          <CardHeader className="lg:pt-0">
-            <CardTitle className="font-heading text-[2rem] font-bold tracking-tight xl:text-4xl lg:leading-none">Iniciar sessão</CardTitle>
+        <Card className="w-full max-w-[38rem] rounded-[1.5rem] border-0 bg-white text-slate-950 shadow-none [--card-spacing:--spacing(4)] sm:[--card-spacing:--spacing(5)] lg:[--card-spacing:--spacing(6)]">
+          <CardHeader className="pb-3 pt-2 sm:pb-4 lg:pt-0">
+            <CardTitle className="font-heading text-[1.85rem] font-bold leading-tight tracking-tight sm:text-[2rem] xl:text-4xl lg:leading-none">Iniciar sessão</CardTitle>
             <CardDescription>Entre para continuar acompanhando suas finanças.</CardDescription>
           </CardHeader>
           <CardContent>
             <SocialAuthButtons onUnavailable={(provider) => setFormError(`Login com ${provider} será ativado assim que a integração OAuth for configurada.`)} />
-            <div className="my-5 flex items-center gap-3 text-xs text-slate-500"><span className="h-px flex-1 bg-slate-200" />ou<span className="h-px flex-1 bg-slate-200" /></div>
+            <div className="my-4 flex items-center gap-3 text-xs text-slate-500 sm:my-5"><span className="h-px flex-1 bg-slate-200" />ou<span className="h-px flex-1 bg-slate-200" /></div>
             <form
-              className="space-y-4"
+              className="space-y-3 sm:space-y-4"
               onSubmit={(e) => {
                 e.preventDefault();
                 submit({ email: email.trim(), password });
@@ -148,18 +148,18 @@ export default function Login() {
               </Button>
             </form>
 
-            <p className="mt-5 text-center text-sm text-muted-foreground">
+            <p className="mt-4 text-center text-sm text-muted-foreground sm:mt-5">
               Não tem uma conta?{" "}
               <Link to="/cadastro" className="font-semibold text-primary hover:underline" data-testid="go-to-register-link">
                 Criar conta
               </Link>
             </p>
 
-            <div className="my-4 h-px bg-[#E7E4FF]" />
+            <div className="my-3 h-px bg-[#E7E4FF] sm:my-4" />
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
               <Button
-                className="h-11 rounded-xl border border-[#DCD6FF] bg-[#F1EDFF] text-[#4B2CFF] shadow-none transition-colors hover:bg-[#5B35FF] hover:text-white active:bg-[#4B2CFF]"
+                className="h-11 min-w-0 rounded-xl border border-[#DCD6FF] bg-[#F1EDFF] px-2 text-xs font-semibold text-[#4B2CFF] shadow-none transition-colors hover:bg-[#5B35FF] hover:text-white active:bg-[#4B2CFF] sm:px-4 sm:text-sm"
                 onClick={() => { setFormError(null); demoMutation.mutate(); }}
                 disabled={loginMutation.isPending || demoMutation.isPending}
                 data-testid="demo-login-button"
@@ -168,7 +168,7 @@ export default function Login() {
               </Button>
 
               <Button
-                className="h-11 rounded-xl border border-[#DCD6FF] bg-[#F1EDFF] text-[#4B2CFF] shadow-none transition-colors hover:bg-[#5B35FF] hover:text-white active:bg-[#4B2CFF]"
+                className="h-11 min-w-0 rounded-xl border border-[#DCD6FF] bg-[#F1EDFF] px-2 text-xs font-semibold text-[#4B2CFF] shadow-none transition-colors hover:bg-[#5B35FF] hover:text-white active:bg-[#4B2CFF] sm:px-4 sm:text-sm"
                 onClick={startLocalMode}
                 disabled={loginMutation.isPending || demoMutation.isPending}
                 data-testid="local-mode-button"
