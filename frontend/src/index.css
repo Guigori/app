@@ -61,18 +61,32 @@
 }
 
 
-/* FINNOS balance surface: stable institutional surface across themes.
-   Keep the hierarchy identical in light/dark mode and avoid decorative gradients. */
+/* FINNOS Home hero: institutional animated gradient.
+   Light mode keeps a bright violet wash; dark mode deepens the same palette into #03081F.
+   Background motion is deliberately slow and subtle. */
 .dashboard-hero-surface {
-  background: #FFFFFF;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(91, 53, 255, 0.18), transparent 34%),
+    linear-gradient(135deg, #FFFFFF 0%, #F5F2FF 40%, #EAE5FF 72%, #FFFFFF 100%);
+  background-size: 145% 145%, 180% 180%;
   color: var(--finnos-app);
-  box-shadow: 0 12px 34px rgba(7, 15, 82, 0.06);
+  box-shadow: 0 12px 34px rgba(7, 15, 82, 0.08);
+  animation: finnos-home-gradient 12s ease-in-out infinite alternate;
+  transition: background 700ms ease, border-color 500ms ease, box-shadow 500ms ease, color 500ms ease;
 }
 .dark .dashboard-hero-surface {
-  background: #070F52;
-  border-color: rgba(140, 91, 255, 0.22);
+  background:
+    radial-gradient(circle at 88% 10%, rgba(91, 53, 255, 0.30), transparent 36%),
+    linear-gradient(135deg, #03081F 0%, #070F52 50%, #24148F 78%, #03081F 100%);
+  background-size: 150% 150%, 185% 185%;
+  border-color: rgba(75, 44, 255, 0.34);
   color: #FFFFFF;
-  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.34);
+}
+
+@keyframes finnos-home-gradient {
+  0% { background-position: 0% 45%, 0% 50%; }
+  100% { background-position: 100% 55%, 100% 50%; }
 }
 
 /* FINNOS institutional palette. */
@@ -210,6 +224,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .dashboard-hero-surface { animation: none !important; }
   *, ::before, ::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
