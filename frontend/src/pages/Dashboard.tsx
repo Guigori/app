@@ -45,11 +45,6 @@ export default function Dashboard() {
     queryKey: ["dashboard", month],
     queryFn: () => fetchDashboard(month),
   });
-  const radarQuery = useQuery({
-    queryKey: ["radar", activeMonth],
-    queryFn: fetchRadar,
-    staleTime: 60_000,
-  });
   const accountsQuery = useQuery({
     queryKey: ["accounts"],
     queryFn: fetchAccounts,
@@ -60,6 +55,11 @@ export default function Dashboard() {
   const error = dashboardQuery.error;
   const noAccounts = !accountsQuery.isPending && (accountsQuery.data ?? []).length === 0;
   const activeMonth = data?.month ?? currentMonth();
+  const radarQuery = useQuery({
+    queryKey: ["radar", activeMonth],
+    queryFn: fetchRadar,
+    staleTime: 60_000,
+  });
   const categoryTransactionsQuery = useQuery({
     queryKey: ["dashboard-category-transactions", activeMonth, selectedCategory?.category_id],
     queryFn: () => fetchTransactions({ type: "despesa", category_id: selectedCategory?.category_id ?? undefined }),
