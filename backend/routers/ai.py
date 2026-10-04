@@ -92,6 +92,7 @@ async def ask(payload: AiAskIn, user: dict = Depends(require_user)) -> AiAnswerO
             model=model,
             system_prompt=system_prompt,
             question=payload.question.strip(),
+            history=[{"role": m.role, "content": m.content} for m in payload.history],
         )
     except ProviderError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.message) from exc
