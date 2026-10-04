@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink, Sparkles } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { fetchRadar, sendRadarFeedback, updateRadarSignal } from "@/lib/data";
 import { buttonVariants } from "@/components/ui/button";
@@ -44,7 +44,7 @@ export default function RadarDetail() {
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{signal.explanation}</p>
           {signal.evidence.length ? <dl className="mt-4 grid gap-2 sm:grid-cols-2">{signal.evidence.map((item) => <div key={item.label} className="rounded-2xl bg-muted/60 p-3"><dt className="text-xs text-muted-foreground">{item.label}</dt><dd className="mt-1 text-sm font-semibold">{item.value}</dd></div>)}</dl> : null}
         </div>
-        <div className="mt-6 flex flex-wrap gap-2"><Link to={target(signal)} className={cn(buttonVariants(), "w-full sm:w-auto")}>Ver dados relacionados <ExternalLink className="h-4 w-4" /></Link><button onClick={() => actionMutation.mutate("resolve")} className={buttonVariants({ variant: "outline" })}>Marcar como resolvido</button><button onClick={() => actionMutation.mutate("dismiss")} className={buttonVariants({ variant: "ghost" })}>Dispensar</button></div>
+        <div className="mt-6 flex flex-wrap gap-2"><button onClick={() => window.dispatchEvent(new CustomEvent("finnos-ai-open", { detail: { question: "Analise este alerta do Radar: " + signal.title + ". " + signal.description + " " + signal.explanation } }))} className={buttonVariants({ variant: "secondary" })}>Analisar com FINNOS IA <Sparkles className="h-4 w-4" /></button><Link to={target(signal)} className={cn(buttonVariants(), "w-full sm:w-auto")}>Ver dados relacionados <ExternalLink className="h-4 w-4" /></Link><button onClick={() => actionMutation.mutate("resolve")} className={buttonVariants({ variant: "outline" })}>Marcar como resolvido</button><button onClick={() => actionMutation.mutate("dismiss")} className={buttonVariants({ variant: "ghost" })}>Dispensar</button></div>
         <div className="mt-6 border-t border-border pt-5"><p className="text-sm font-semibold">Esse Radar foi útil?</p><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => feedbackMutation.mutate("useful")} className={buttonVariants({ variant: "outline", size: "sm" })}>Sim</button><button onClick={() => feedbackMutation.mutate("not_useful")} className={buttonVariants({ variant: "outline", size: "sm" })}>Não muito</button><button onClick={() => feedbackMutation.mutate("dont_show_similar")} className={buttonVariants({ variant: "ghost", size: "sm" })}>Não mostrar sinais assim</button></div></div>
       </section>
     </div>
