@@ -32,11 +32,9 @@ export function MonthSelector({ month, onChange, visibilityControl }: MonthSelec
           <Button variant="ghost" size="icon-sm" onClick={() => onChange(addMonth(month, -1))} aria-label="Mês anterior">
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <PopoverTrigger asChild>
-            <button type="button" className="flex min-w-28 items-center justify-center gap-2 px-2 font-heading text-sm font-semibold sm:min-w-36" aria-label={`Escolher mês. Atual: ${monthLabel(month)}`}>
-              <CalendarDays className="h-4 w-4 text-muted-foreground" />
-              {monthLabel(month)}
-            </button>
+          <PopoverTrigger className="flex min-w-28 items-center justify-center gap-2 rounded-md px-2 py-1.5 font-heading text-sm font-semibold text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:min-w-36" aria-label={`Escolher mês. Atual: ${monthLabel(month)}`}>
+            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            {monthLabel(month)}
           </PopoverTrigger>
           <Button variant="ghost" size="icon-sm" onClick={() => onChange(addMonth(month, 1))} aria-label="Próximo mês">
             <ChevronRight className="h-4 w-4" />
