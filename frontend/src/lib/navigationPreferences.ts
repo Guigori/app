@@ -2,8 +2,8 @@ import { useSyncExternalStore } from "react";
 import { MAIN_NAV, type NavItem } from "@/components/layout/nav";
 
 const KEY = "finnos:navigation-preferences:v2";
-// Deployment marker: semantically neutral; requests a production build that
-// includes the complete FINNOS IA + local migration package.
+// Deployment marker: semantically neutral; requests a production build with
+// the FINNOS IA contextual chat and conversation history.
 const EVENT = "finnos-navigation-preferences";
 
 export type NavigationPreferences = {
