@@ -28,6 +28,7 @@ export function AiPanel() {
   const [provider, setProvider] = useState<AiProvider | "">("");
   const [answer, setAnswer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showModeNotice, setShowModeNotice] = useState(true);
   const local = isLocalMode();
   const appMode = getMode();
   const navigationPreferences = useNavigationPreferences();
@@ -102,22 +103,24 @@ export function AiPanel() {
             FINNOS IA
           </SheetTitle>
           <SheetDescription className="text-left">
-            Pergunte sobre as suas finanças. As respostas usam <strong>a sua própria chave</strong> de
-            IA (ChatGPT, Claude ou Gemini) e um resumo dos seus dados montado no servidor.
+            {local
+              ? "Converse com o FINNOS sobre suas finanças, gastos, orçamento e planejamento."
+              : "Converse com o FINNOS usando sua IA conectada e seu contexto financeiro."}
           </SheetDescription>
         </SheetHeader>
 
         {local ? (
           <>
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm" data-testid="ai-local-mode-notice">
-              <p className="font-medium text-foreground">{appMode === "demo" ? "FINNOS IA · Demonstração" : "FINNOS IA · Modo local"}</p>
+            {showModeNotice ? <div className="relative rounded-xl border border-primary/20 bg-primary/5 p-4 pr-10 text-sm" data-testid="ai-local-mode-notice">
+              <button type="button" onClick={() => setShowModeNotice(false)} className="absolute right-3 top-3 text-lg leading-none text-muted-foreground transition-colors hover:text-foreground" aria-label="Ocultar informação">×</button>
+              <p className="font-medium text-foreground">{appMode === "demo" ? "Modo demonstração" : "Modo local"}</p>
               <p className="mt-1 text-muted-foreground">
                 {appMode === "demo"
-                  ? "Explore a inteligência do FINNOS com os dados fictícios da demonstração. Nenhuma chave de API é necessária."
-                  : "A inteligência nativa analisa os dados deste aparelho sem exigir uma chave externa. Para conectar ChatGPT, Claude ou Gemini e salvar a chave com segurança, crie uma conta FINNOS."}
+                  ? "Você está conversando com o FINNOS usando dados fictícios para experimentar a inteligência do app."
+                  : "O FINNOS está analisando os dados deste aparelho. Para conectar uma IA externa e guardar sua chave com segurança, crie uma conta."}
               </p>
               {appMode === "local" ? <Link to="/cadastro" onClick={() => setOpen(false)} className={buttonVariants({ variant: "outline", className: "mt-3" })}>Criar conta e preservar meus dados</Link> : null}
-            </div>
+            </div> : null}
             <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void ask(question); }}>
               <Input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Pergunte algo sobre suas finanças…" maxLength={2000} aria-label="Sua pergunta" />
               <Button type="submit" size="icon" disabled={!question.trim()} aria-label="Enviar pergunta"><Send className="h-4 w-4" /></Button>
