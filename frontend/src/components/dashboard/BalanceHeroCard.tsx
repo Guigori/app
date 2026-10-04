@@ -20,7 +20,7 @@ export function BalanceHeroCard({ month, total, income, expense, onOpen }: Balan
       <div className="flex items-start justify-between gap-4">
         <button type="button" onClick={onOpen} className="min-w-0 text-left" data-testid="balance-open-flow">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/65 dark:text-foreground/65 dark:text-white/60">Saldo total</p>
-          <p className="mt-2 max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-heading text-[clamp(2.25rem,11vw,4rem)] font-bold tracking-tight tabular-nums" data-testid="balance-total-value">
+          <p className="mt-2 max-w-full whitespace-nowrap font-heading text-[clamp(1.9rem,9.5vw,4rem)] font-bold tracking-tight tabular-nums" data-testid="balance-total-value">
             {money(total)}
           </p>
           <p className="mt-1.5 text-sm text-foreground/65 dark:text-foreground/65 dark:text-white/60">Visão geral de {monthLabel(month)}</p>
@@ -32,11 +32,11 @@ export function BalanceHeroCard({ month, total, income, expense, onOpen }: Balan
       <div className="mt-8 grid grid-cols-2 gap-6 border-t border-border/80 dark:border-white/10 pt-5">
         <div data-testid="hero-month-income">
           <p className="text-sm text-foreground/65 dark:text-white/60">Receitas do mês</p>
-          <p className="mt-1 font-heading text-xl font-bold tabular-nums text-income sm:text-2xl">{money(income)}</p>
+          <p className="mt-1 whitespace-nowrap font-heading text-[clamp(1.05rem,5vw,1.5rem)] font-bold tabular-nums text-income">{money(income)}</p>
         </div>
         <div className="text-right" data-testid="hero-month-expense">
           <p className="text-sm text-foreground/65 dark:text-white/60">Despesas do mês</p>
-          <p className="mt-1 font-heading text-xl font-bold tabular-nums text-expense sm:text-2xl">{money(expense)}</p>
+          <p className="mt-1 whitespace-nowrap font-heading text-[clamp(1.05rem,5vw,1.5rem)] font-bold tabular-nums text-expense">{money(expense)}</p>
         </div>
       </div>
     </div>
