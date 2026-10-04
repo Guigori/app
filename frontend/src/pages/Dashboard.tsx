@@ -87,8 +87,8 @@ export default function Dashboard() {
   return (
     <div className="min-w-0 space-y-5 overflow-x-hidden animate-fade-up sm:space-y-6">
       <section className="dashboard-hero-surface min-w-0 rounded-[24px] border border-border/70 px-4 pb-6 pt-6 shadow-sm sm:rounded-[28px] sm:px-6 sm:pb-7 sm:pt-7" data-testid="dashboard-financial-header">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1
             className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
             data-testid="dashboard-greeting"
@@ -99,9 +99,9 @@ export default function Dashboard() {
             Visão geral de {monthLabel(activeMonth)}
           </p>
         </div>
-        <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+        <div className="flex shrink-0 items-center gap-1">
           {data ? <MonthSelector month={data.month} onChange={setMonth} visibilityControl={
-            <Button variant="ghost" size="icon" onClick={toggleBalance} aria-label={balanceHidden ? "Exibir valores" : "Ocultar valores"} data-testid="dashboard-visibility-toggle" className="rounded-full">
+            <Button variant="ghost" size="icon" onClick={toggleBalance} aria-label={balanceHidden ? "Exibir valores" : "Ocultar valores"} data-testid="dashboard-visibility-toggle" className="h-10 w-10 rounded-full hover:bg-muted/60">
               {balanceHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </Button>
           } /> : null}
@@ -109,7 +109,7 @@ export default function Dashboard() {
       </div>
 
       {data ? (
-        <div className="mt-8 pb-2">
+        <div className="mt-5 pb-2 sm:mt-7">
           <BalanceHeroCard
             total={data.total_balance}
             onOpen={() => openFlow("balance")}
