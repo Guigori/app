@@ -85,7 +85,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-w-0 space-y-5 overflow-x-hidden animate-fade-up sm:space-y-6">
-      <section className="-mx-4 -mt-5 bg-[radial-gradient(circle_at_75%_8%,rgba(91,53,255,0.38),transparent_34%),linear-gradient(180deg,#070F52_0%,#070F52_34%,rgba(7,15,82,0.72)_62%,rgba(7,15,82,0.18)_86%,transparent_100%)] px-4 pb-14 pt-7 sm:-mx-6 sm:px-6 sm:pb-16 lg:-mx-10 lg:px-10" data-testid="dashboard-financial-header">
+      <section className="dashboard-hero-surface min-w-0 rounded-[28px] border border-primary/10 px-4 pb-6 pt-6 shadow-sm sm:rounded-[32px] sm:px-6 sm:pb-7 sm:pt-7" data-testid="dashboard-financial-header">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1
