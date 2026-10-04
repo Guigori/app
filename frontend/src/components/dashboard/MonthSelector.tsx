@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { addMonth, monthLabel } from "@/lib/format";
+import { monthLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface MonthSelectorProps {
@@ -26,25 +26,20 @@ export function MonthSelector({ month, onChange, visibilityControl }: MonthSelec
   };
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1">
       <Popover open={open} onOpenChange={setOpen}>
-        <div className="flex items-center rounded-full border border-border bg-card p-1 shadow-sm">
-          <Button variant="ghost" size="icon-sm" onClick={() => onChange(addMonth(month, -1))} aria-label="Mês anterior">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <PopoverTrigger className="flex min-w-28 items-center justify-center gap-2 rounded-md px-2 py-1.5 font-heading text-sm font-semibold text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:min-w-36" aria-label={`Escolher mês. Atual: ${monthLabel(month)}`}>
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            {monthLabel(month)}
-          </PopoverTrigger>
-          <Button variant="ghost" size="icon-sm" onClick={() => onChange(addMonth(month, 1))} aria-label="Próximo mês">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+        <PopoverTrigger
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground/75 transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 data-[state=open]:bg-transparent data-[state=open]:text-foreground"
+          aria-label={`Escolher mês. Atual: ${monthLabel(month)}`}
+          title={monthLabel(month)}
+        >
+          <CalendarDays className="h-5 w-5" />
+        </PopoverTrigger>
         <PopoverContent align="end" className="w-[18rem] rounded-3xl border-border/70 bg-popover/95 p-3 shadow-2xl backdrop-blur-xl">
           <div className="mb-3 flex items-center justify-between">
-            <button type="button" className="rounded-full p-2 hover:bg-muted" onClick={() => setPickerYear(shownYear - 1)}><ChevronLeft className="h-4 w-4" /></button>
+            <Button variant="ghost" size="icon-sm" className="rounded-full" onClick={() => setPickerYear(shownYear - 1)} aria-label="Ano anterior"><ChevronLeft className="h-4 w-4" /></Button>
             <strong className="font-heading text-base">{shownYear}</strong>
-            <button type="button" className="rounded-full p-2 hover:bg-muted" onClick={() => setPickerYear(shownYear + 1)}><ChevronRight className="h-4 w-4" /></button>
+            <Button variant="ghost" size="icon-sm" className="rounded-full" onClick={() => setPickerYear(shownYear + 1)} aria-label="Próximo ano"><ChevronRight className="h-4 w-4" /></Button>
           </div>
           <div className="grid grid-cols-4 gap-1.5">
             {MONTHS.map((label, index) => (
