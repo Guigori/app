@@ -40,7 +40,7 @@ export function RecentTransactions({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-row items-start justify-between gap-3">
         <div>
           <CardTitle className="font-heading">{categoryName ? `Últimas transações · ${categoryName}` : "Transações recentes"}</CardTitle>
           <CardDescription>{categoryName ? `Movimentações de ${categoryName} no mês selecionado` : "As últimas movimentações do mês"}</CardDescription>
@@ -48,7 +48,7 @@ export function RecentTransactions({
         {transactions.length > 0 ? (
           <Link
             to={categoryId && month ? `/transacoes?month=${month}&category_id=${categoryId}` : "/transacoes"}
-            className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-xs font-semibold text-primary hover:underline min-[390px]:text-sm"
             data-testid="see-all-transactions-link"
           >
             Ver todas
@@ -71,7 +71,7 @@ export function RecentTransactions({
         ) : (
           <ul className="divide-y divide-border">
             {transactions.map((t) => (
-              <li key={t.id} className="flex cursor-pointer items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/40" onClick={() => dialogs.openTransaction({ transaction: t })} data-testid="recent-transaction-item">
+              <li key={t.id} className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-lg py-3 transition-colors hover:bg-muted/40 min-[390px]:gap-3" onClick={() => dialogs.openTransaction({ transaction: t })} data-testid="recent-transaction-item">
                 <span
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
                   style={{ backgroundColor: (t.category_color ?? "#64748B") + "1A", color: t.category_color ?? "#64748B" }}
@@ -87,10 +87,10 @@ export function RecentTransactions({
                       .join(" · ")}
                   </p>
                 </div>
-                <div className="shrink-0 text-right">
+                <div className="min-w-0 max-w-[42%] shrink-0 text-right">
                   <p
                     className={cn(
-                      "text-sm font-semibold tabular-nums",
+                      "overflow-hidden text-ellipsis whitespace-nowrap text-xs font-semibold tabular-nums min-[390px]:text-sm",
                       t.type === "receita" ? "text-income" : t.type === "despesa" ? "text-expense" : "text-transfer",
                     )}
                     data-testid="recent-transaction-value"
