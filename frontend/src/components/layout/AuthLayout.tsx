@@ -3,7 +3,7 @@ import { FinnosIcon, FinnosLogo } from "@/components/brand/FinnosLogo";
 
 export function AuthLayout({ children, signup = false }: { children: ReactNode; signup?: boolean }) {
   return (
-    <div className="h-svh overflow-hidden bg-[linear-gradient(180deg,#5B35FF_0%,#070F52_58%,#03081F_100%)] lg:grid lg:grid-cols-[0.9fr_1.1fr] lg:bg-white">
+    <div className="min-h-svh bg-white lg:grid lg:h-svh lg:grid-cols-[0.9fr_1.1fr] lg:overflow-hidden">
       <aside className="relative hidden h-svh overflow-hidden bg-[linear-gradient(0deg,#4B2CFF_0%,#070F52_46%,#020619_100%)] px-10 py-8 text-white lg:flex lg:flex-col xl:px-14">
         <div className="absolute inset-x-0 top-0 h-[32%] bg-[linear-gradient(180deg,rgba(0,0,0,.30),transparent)]" />
         <FinnosLogo variant="dark" className="relative z-20 w-44 xl:w-48" />
@@ -18,7 +18,7 @@ export function AuthLayout({ children, signup = false }: { children: ReactNode; 
           </p>
         </div>
       </aside>
-      <main className="flex h-svh items-center justify-center overflow-y-auto px-4 py-4 sm:px-8 lg:bg-white lg:px-10 lg:py-5 xl:px-14">
+      <main className="flex min-h-svh items-start justify-center overflow-x-hidden bg-white px-4 py-3 sm:items-center sm:px-8 sm:py-4 lg:h-svh lg:min-h-0 lg:overflow-y-auto lg:px-10 lg:py-5 xl:px-14">
         {children}
       </main>
     </div>
