@@ -99,12 +99,11 @@ export default function Dashboard() {
             Visão geral de {monthLabel(activeMonth)}
           </p>
         </div>
-        <div className="flex shrink-0 flex-col items-center gap-1">
-          {data ? <MonthSelector month={data.month} onChange={setMonth} visibilityControl={
-            <Button variant="ghost" size="icon" onClick={toggleBalance} aria-label={balanceHidden ? "Exibir valores" : "Ocultar valores"} data-testid="dashboard-visibility-toggle" className="h-10 w-10 rounded-full hover:bg-muted/60">
-              {balanceHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-            </Button>
-          } /> : null}
+        <div className="absolute right-4 top-6 z-20 flex shrink-0 flex-col items-center gap-1 sm:right-6 sm:top-7" data-testid="dashboard-action-rail">
+          {data ? <MonthSelector month={data.month} onChange={setMonth} /> : null}
+          <Button variant="ghost" size="icon" onClick={toggleBalance} aria-label={balanceHidden ? "Exibir valores" : "Ocultar valores"} data-testid="dashboard-visibility-toggle" className="h-10 w-10 rounded-full hover:bg-muted/60">
+            {balanceHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          </Button>
         </div>
       </div>
 
