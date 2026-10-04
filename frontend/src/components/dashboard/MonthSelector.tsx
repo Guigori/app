@@ -8,12 +8,11 @@ import { cn } from "@/lib/utils";
 interface MonthSelectorProps {
   month: string;
   onChange: (month: string) => void;
-  visibilityControl?: React.ReactNode;
 }
 
 const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
-export function MonthSelector({ month, onChange, visibilityControl }: MonthSelectorProps) {
+export function MonthSelector({ month, onChange }: MonthSelectorProps) {
   const [open, setOpen] = useState(false);
   const [pickerYear, setPickerYear] = useState<number | null>(null);
   const [year, monthNumber] = month.split("-").map(Number);
@@ -51,7 +50,6 @@ export function MonthSelector({ month, onChange, visibilityControl }: MonthSelec
           </div>
         </PopoverContent>
       </Popover>
-      {visibilityControl}
     </div>
   );
 }
