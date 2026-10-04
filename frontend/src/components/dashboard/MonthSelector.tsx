@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -13,9 +13,9 @@ interface MonthSelectorProps {
 const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 export function MonthSelector({ month, onChange }: MonthSelectorProps) {
-  const touchX = useRef<number | null>(null);
+  const touchX = useRef<number | null>(null);\n  const [pickerYear, setPickerYear] = useState<number | null>(null);
   const [year, monthNumber] = month.split("-").map(Number);
-  const years = useMemo(() => Array.from({ length: 9 }, (_, index) => year - 4 + index), [year]);
+  const shownYear = pickerYear ?? year;\n  const years = useMemo(() => Array.from({ length: 9 }, (_, index) => shownYear - 4 + index), [shownYear]);
 
   const choose = (targetYear: number, targetMonth: number) =>
     onChange(`${targetYear}-${String(targetMonth).padStart(2, "0")}`);
@@ -52,11 +52,11 @@ export function MonthSelector({ month, onChange }: MonthSelectorProps) {
         </PopoverTrigger>
         <PopoverContent align="end" className="w-[18rem] rounded-3xl border-border/70 bg-popover/95 p-3 shadow-2xl backdrop-blur-xl dashboard:hidden">
           <div className="mb-3 flex items-center justify-between">
-            <button type="button" className="rounded-full p-2 hover:bg-muted" onClick={() => choose(year - 1, monthNumber)} aria-label="Ano anterior">
+            <button type="button" className="rounded-full p-2 hover:bg-muted" onClick={() => setPickerYear(shownYear - 1)} aria-label="Ano anterior">
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <strong className="font-heading text-base">{year}</strong>
-            <button type="button" className="rounded-full p-2 hover:bg-muted" onClick={() => choose(year + 1, monthNumber)} aria-label="Próximo ano">
+            <strong className="font-heading text-base">{shownYear}</strong>
+            <button type="button" className="rounded-full p-2 hover:bg-muted" onClick={() => setPickerYear(shownYear + 1)} aria-label="Próximo ano">
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
@@ -65,10 +65,10 @@ export function MonthSelector({ month, onChange }: MonthSelectorProps) {
               <button
                 key={label}
                 type="button"
-                onClick={() => choose(year, index + 1)}
+                onClick={() => choose(shownYear, index + 1)}
                 className={cn(
                   "rounded-xl px-2 py-2 text-xs font-medium transition-colors",
-                  index + 1 === monthNumber ? "bg-primary text-primary-foreground" : "hover:bg-muted",
+                  index + 1 === monthNumber && shownYear === year ? "bg-primary text-primary-foreground" : "hover:bg-muted",
                 )}
               >
                 {label}
@@ -77,7 +77,7 @@ export function MonthSelector({ month, onChange }: MonthSelectorProps) {
           </div>
           <div className="mt-3 flex gap-1 overflow-x-auto border-t border-border/60 pt-2 [scrollbar-width:none]">
             {years.map((item) => (
-              <button key={item} type="button" onClick={() => choose(item, monthNumber)} className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px]", item === year ? "bg-muted font-semibold" : "text-muted-foreground")}>
+              <button key={item} type="button" onClick={() => setPickerYear(item)} className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px]", item === shownYear ? "bg-muted font-semibold" : "text-muted-foreground")}>
                 {item}
               </button>
             ))}
