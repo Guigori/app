@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { beginSession } from "@/lib/session";
-import { disableLocalMode } from "@/lib/mode";
+import { disableLocalMode, getMode } from "@/lib/mode";
+import { readDb } from "@/lib/local/store";
 import type { SignupResult, User } from "@/types/finnos";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
@@ -51,6 +52,30 @@ export default function Register() {
   const verifyMutation = useMutation({
     mutationFn: () => apiPost<User>("/auth/verify-email", { email: email.trim(), code: code.trim() }),
     onSuccess: async () => {
+      // The verification response opens the secure account session. If signup
+      // started from local mode, migrate browser data before switching modes.
+      if (getMode() === "local") {
+        try {
+          const local = readDb();
+          const migrationKey = "finnos:local-migration-id";
+          let importId = window.localStorage.getItem(migrationKey);
+          if (!importId) {
+            importId = crypto.randomUUID();
+            window.localStorage.setItem(migrationKey, importId);
+          }
+          await apiPost("/migration/local", {
+            import_id: importId,
+            accounts: local.accounts,
+            categories: local.categories,
+            transactions: local.transactions,
+            cards: local.cards,
+          });
+          toast.success("Conta criada e seus dados locais foram preservados.");
+        } catch (error) {
+          setFormError(getApiErrorMessage(error, "Sua conta foi criada, mas não conseguimos importar os dados locais. Nada foi apagado deste aparelho."));
+          return;
+        }
+      }
       disableLocalMode();
       await beginSession();
       navigate("/", { replace: true });
