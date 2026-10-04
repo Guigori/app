@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { SlidersHorizontal } from "lucide-react";
+import { Eye, EyeOff, SlidersHorizontal } from "lucide-react";
+import { useBalanceHidden } from "@/lib/balance";
 import { fetchAccounts, fetchDashboard, fetchMe, fetchRadar, fetchTransactions } from "@/lib/data";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 
@@ -33,6 +34,7 @@ export default function Dashboard() {
   const dialogs = useDialogs();
   const navigate = useNavigate();
   const homePreferences = useHomePreferences();
+  const { hidden: balanceHidden, toggle: toggleBalance } = useBalanceHidden();
   const { data: user } = useQuery({
     queryKey: ["me"],
     queryFn: fetchMe,
@@ -98,17 +100,18 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
-          {data ? <MonthSelector month={data.month} onChange={setMonth} /> : null}
+          {data ? <MonthSelector month={data.month} onChange={setMonth} visibilityControl={
+            <Button variant="ghost" size="icon" onClick={toggleBalance} aria-label={balanceHidden ? "Exibir valores" : "Ocultar valores"} data-testid="dashboard-visibility-toggle" className="rounded-full">
+              {balanceHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </Button>
+          } /> : null}
         </div>
       </div>
 
       {data ? (
         <div className="mt-8 pb-2">
           <BalanceHeroCard
-            month={data.month}
             total={data.total_balance}
-            income={data.income}
-            expense={data.expense}
             onOpen={() => openFlow("balance")}
           />
           <div className="mt-6">
