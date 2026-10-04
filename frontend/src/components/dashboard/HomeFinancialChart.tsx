@@ -31,6 +31,12 @@ const VIEW_OPTIONS: Array<{ key: ChartView; label: string; icon: typeof LayoutGr
   { key: "bars", label: "Barras", icon: BarChart3 },
 ];
 
+const METRIC_UI = {
+  Receitas: { icon: ArrowDownLeft, color: "#22c997", soft: "bg-emerald-500/10 text-emerald-400" },
+  Despesas: { icon: ArrowUpRight, color: "#ff4d6d", soft: "bg-rose-500/10 text-rose-400" },
+  Resultado: { icon: Equal, color: "#8b5cf6", soft: "bg-violet-500/10 text-violet-400" },
+} as const;
+
 const PERIODS: Array<{ value: ChartPeriod; label: string }> = [
   { value: "7d", label: "7 dias" },
   { value: "1m", label: "1 mês" },
@@ -106,9 +112,9 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
   }, [chartData, daily]);
 
   const pieData = [
-    { name: "Receitas", value: Math.max(periodSummary.income, 0), fill: "var(--income)", metric: "income" as MetricKind },
-    { name: "Despesas", value: Math.max(periodSummary.expense, 0), fill: "var(--expense)", metric: "expense" as MetricKind },
-    { name: "Resultado", value: Math.max(periodSummary.result, 0), fill: "var(--primary)", metric: "balance" as MetricKind },
+    { name: "Receitas", value: Math.max(periodSummary.income, 0), fill: METRIC_UI.Receitas.color, metric: "income" as MetricKind },
+    { name: "Despesas", value: Math.max(periodSummary.expense, 0), fill: METRIC_UI.Despesas.color, metric: "expense" as MetricKind },
+    { name: "Resultado", value: Math.max(periodSummary.result, 0), fill: METRIC_UI.Resultado.color, metric: "balance" as MetricKind },
   ].filter((item) => item.value > 0);
   const selectedPieItem = selectedMetric ? pieData.find((item) => item.name === selectedMetric) ?? null : null;
   const metricVisible = (name: "Receitas" | "Despesas" | "Resultado") => !selectedMetric || selectedMetric === name;
@@ -166,17 +172,24 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
               <strong className="mt-1 max-w-[8rem] truncate font-heading text-lg font-bold tabular-nums text-foreground">{money(selectedPieItem?.value ?? periodSummary.result)}</strong>
             </div>
           </div>
-          <div className="w-full max-w-xs space-y-2">
-            {pieData.map((entry) => (
-              <button type="button" key={entry.name} onClick={() => toggleMetric(entry.name as "Receitas" | "Despesas" | "Resultado")} className="flex w-full items-center justify-between gap-5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-muted/40">
-                <span className="flex items-center gap-2 text-sm text-foreground"><span className="h-2.5 w-2.5 rounded-full" style={{ background: entry.fill }} />{entry.name}</span>
-                <strong className="font-heading text-sm tabular-nums text-foreground">{money(entry.value)}</strong>
-              </button>
-            ))}
+          <div className="w-full max-w-sm space-y-2">
+            {pieData.map((entry) => {
+              const metricName = entry.name as "Receitas" | "Despesas" | "Resultado";
+              const Icon = METRIC_UI[metricName].icon;
+              const active = !selectedMetric || selectedMetric === metricName;
+              return (
+                <button type="button" key={entry.name} onClick={() => toggleMetric(metricName)} className={`grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition-all hover:bg-muted/40 ${active ? "opacity-100" : "opacity-40"}`}>
+                  <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${METRIC_UI[metricName].soft}`}><Icon className="h-4 w-4" /></span>
+                  <span className="min-w-0 truncate text-sm font-medium text-foreground">{entry.name}</span>
+                  <strong className="whitespace-nowrap text-right font-heading text-sm tabular-nums text-foreground">{money(entry.value)}</strong>
+                </button>
+              );
+            })}
           </div>
         </div>
       ) : (
-        <div className="h-[280px] w-full sm:h-[310px]">
+        <div className="w-full overflow-x-auto pb-1 [scrollbar-width:none]">
+          <div className={`h-[280px] sm:h-[310px] ${view === "bars" && daily ? "min-w-[720px]" : "min-w-0 w-full"}`}>
           <ResponsiveContainer width="100%" height="100%">
             {view === "bars" ? (
               <BarChart data={chartData} margin={{ top: 12, right: 8, left: -8, bottom: 0 }} barGap={3}>
@@ -184,9 +197,9 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={daily ? 18 : 8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
                 <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
                 <Tooltip cursor={{ fill: "var(--muted)", opacity: 0.25 }} contentStyle={tooltipStyle} formatter={(value: number) => money(value)} labelFormatter={(label) => daily ? `Dia ${label}` : String(label)} />
-                {showIncome && metricVisible("Receitas") && <Bar dataKey="Receitas" onClick={() => toggleMetric("Receitas")} className="cursor-pointer" fill="var(--income)" radius={[6, 6, 0, 0]} maxBarSize={18} />}
-                {showExpense && metricVisible("Despesas") && <Bar dataKey="Despesas" onClick={() => toggleMetric("Despesas")} className="cursor-pointer" fill="var(--expense)" radius={[6, 6, 0, 0]} maxBarSize={18} />}
-                {showResult && metricVisible("Resultado") && <Bar dataKey="Resultado" onClick={() => toggleMetric("Resultado")} className="cursor-pointer" fill="var(--primary)" radius={[6, 6, 0, 0]} maxBarSize={18} />}
+                {showIncome && metricVisible("Receitas") && <Bar dataKey="Receitas" onClick={() => toggleMetric("Receitas")} className="cursor-pointer" fill={METRIC_UI.Receitas.color} radius={[6, 6, 0, 0]} maxBarSize={22} />}
+                {showExpense && metricVisible("Despesas") && <Bar dataKey="Despesas" onClick={() => toggleMetric("Despesas")} className="cursor-pointer" fill={METRIC_UI.Despesas.color} radius={[6, 6, 0, 0]} maxBarSize={22} />}
+                {showResult && metricVisible("Resultado") && <Bar dataKey="Resultado" onClick={() => toggleMetric("Resultado")} className="cursor-pointer" fill={METRIC_UI.Resultado.color} radius={[6, 6, 0, 0]} maxBarSize={22} />}
               </BarChart>
             ) : (
               <AreaChart data={chartData} margin={{ top: 12, right: 8, left: -8, bottom: 0 }}>
@@ -200,16 +213,17 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={daily ? 18 : 8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
                 <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
                 <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => money(value)} labelFormatter={(label) => daily ? `Dia ${label}` : String(label)} />
-                {showResult && metricVisible("Resultado") && <Area type="monotone" dataKey="Resultado" onClick={() => toggleMetric("Resultado")} className="cursor-pointer" stroke="var(--primary)" strokeWidth={3} fill="url(#finnosResultFill)" activeDot={{ r: 5 }} />}
-                {showIncome && metricVisible("Receitas") && <Area type="monotone" dataKey="Receitas" onClick={() => toggleMetric("Receitas")} className="cursor-pointer" stroke="var(--income)" strokeWidth={2.25} fill="transparent" activeDot={{ r: 4 }} />}
-                {showExpense && metricVisible("Despesas") && <Area type="monotone" dataKey="Despesas" onClick={() => toggleMetric("Despesas")} className="cursor-pointer" stroke="var(--expense)" strokeWidth={2.25} fill="transparent" activeDot={{ r: 4 }} />}
+                {showResult && metricVisible("Resultado") && <Area type="monotone" dataKey="Resultado" onClick={() => toggleMetric("Resultado")} className="cursor-pointer" stroke={METRIC_UI.Resultado.color} strokeWidth={3} fill="url(#finnosResultFill)" activeDot={{ r: 5 }} />}
+                {showIncome && metricVisible("Receitas") && <Area type="monotone" dataKey="Receitas" onClick={() => toggleMetric("Receitas")} className="cursor-pointer" stroke={METRIC_UI.Receitas.color} strokeWidth={2.25} fill="transparent" activeDot={{ r: 4 }} />}
+                {showExpense && metricVisible("Despesas") && <Area type="monotone" dataKey="Despesas" onClick={() => toggleMetric("Despesas")} className="cursor-pointer" stroke={METRIC_UI.Despesas.color} strokeWidth={2.25} fill="transparent" activeDot={{ r: 4 }} />}
               </AreaChart>
             )}
           </ResponsiveContainer>
+          </div>
           <div className="mt-1 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs">
-            {showExpense && <button type="button" onClick={() => toggleMetric("Despesas")} className="flex items-center gap-1.5 text-muted-foreground"><ArrowUpRight className="h-3.5 w-3.5 text-rose-500" />Despesas</button>}
-            {showIncome && <button type="button" onClick={() => toggleMetric("Receitas")} className="flex items-center gap-1.5 text-muted-foreground"><ArrowDownLeft className="h-3.5 w-3.5 text-emerald-500" />Receitas</button>}
-            {showResult && <button type="button" onClick={() => toggleMetric("Resultado")} className="flex items-center gap-1.5 text-muted-foreground"><Equal className="h-3.5 w-3.5 text-indigo-500" />Resultado</button>}
+            {showExpense && <button type="button" onClick={() => toggleMetric("Despesas")} className="flex items-center gap-1.5 text-muted-foreground"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-rose-500/10"><ArrowUpRight className="h-3.5 w-3.5 text-rose-400" /></span>Despesas</button>}
+            {showIncome && <button type="button" onClick={() => toggleMetric("Receitas")} className="flex items-center gap-1.5 text-muted-foreground"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/10"><ArrowDownLeft className="h-3.5 w-3.5 text-emerald-400" /></span>Receitas</button>}
+            {showResult && <button type="button" onClick={() => toggleMetric("Resultado")} className="flex items-center gap-1.5 text-muted-foreground"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-violet-500/10"><Equal className="h-3.5 w-3.5 text-violet-400" /></span>Resultado</button>}
           </div>
         </div>
       )}
