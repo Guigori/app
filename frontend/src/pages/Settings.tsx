@@ -177,7 +177,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card data-testid="settings-navigation-card">
+      <Card id="navigation" data-testid="settings-navigation-card">
         <CardHeader>
           <CardTitle className="font-heading">Barra de navegação</CardTitle>
           <CardDescription>Escolha e reordene os atalhos do mobile e da Web. Início é fixo e não pode ser removido.</CardDescription>
