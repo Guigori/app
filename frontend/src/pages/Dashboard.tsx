@@ -5,6 +5,7 @@ import { BarChart3, LayoutGrid, SlidersHorizontal } from "lucide-react";
 import { fetchAccounts, fetchDashboard, fetchMe, fetchTransactions } from "@/lib/data";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 import { useHomeView } from "@/lib/prefs";
+import { useHomePreferences, type HomeModuleId } from "@/lib/homePreferences";
 import { cn } from "@/lib/utils";
 import type { CategorySlice, MetricKind } from "@/types/finnos";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
@@ -31,6 +32,7 @@ export default function Dashboard() {
   const dialogs = useDialogs();
   const navigate = useNavigate();
   const { view, setView } = useHomeView();
+  const homePreferences = useHomePreferences();
   const { data: user } = useQuery({
     queryKey: ["me"],
     queryFn: fetchMe,
@@ -77,7 +79,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-w-0 space-y-5 overflow-x-hidden animate-fade-up sm:space-y-6">
-      <section className="-mx-4 -mt-5 bg-[linear-gradient(180deg,rgba(7,15,82,0.96)_0%,rgba(7,15,82,0.72)_34%,rgba(7,15,82,0.20)_72%,transparent_100%)] px-4 pb-5 pt-6 sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10" data-testid="dashboard-financial-header">
+      <section className="-mx-4 -mt-5 bg-[radial-gradient(circle_at_75%_8%,rgba(91,53,255,0.38),transparent_34%),linear-gradient(180deg,#070F52_0%,#070F52_34%,rgba(7,15,82,0.72)_62%,rgba(7,15,82,0.18)_86%,transparent_100%)] px-4 pb-14 pt-7 sm:-mx-6 sm:px-6 sm:pb-16 lg:-mx-10 lg:px-10" data-testid="dashboard-financial-header">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1
@@ -121,7 +123,7 @@ export default function Dashboard() {
       </div>
 
       {data ? (
-        <div className="mt-5">
+        <div className="mt-8 pb-2">
           {view === "cards" ? (
             <BalanceHeroCard
               month={data.month}
@@ -186,52 +188,25 @@ export default function Dashboard() {
 
       {data ? (
         <div className="min-w-0 space-y-5 sm:space-y-6">
-          {view === "cards" ? (
-            <SummaryCards
-              income={data.income}
-              expense={data.expense}
-              monthBalance={data.month_balance}
-              invested={data.invested}
-              prevIncome={data.prev_income}
-              prevExpense={data.prev_expense}
-              onOpenMetric={openFlow}
-            />
-          ) : (
-            <MetricCharts
-              month={data.month}
-              income={data.income}
-              expense={data.expense}
-              monthBalance={data.month_balance}
-              invested={data.invested}
-              onOpenMetric={openFlow}
-            />
-          )}
-
-          <div>
-            <ExpensesDonutChart
-              month={data.month}
-              slices={data.categories}
-              total={data.expense}
-              onOpenDetails={() => openFlow("expense")}
-              selectedCategoryId={selectedCategory?.category_id ?? null}
-              onSelectCategory={setSelectedCategory}
-              onOpenCategory={(slice) =>
-                navigate(`/fluxo?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)
-              }
-            />
-          </div>
-
-          <RecentTransactions
-            transactions={visibleRecent}
-            categoryName={selectedCategory?.name ?? null}
-            month={data.month}
-            categoryId={selectedCategory?.category_id ?? null}
-          />
-          <Budget503020Card month={monthLabel(data.month)} income={data.income} rule={data.rule} />
+          {homePreferences.order.filter((id) => !homePreferences.hidden.includes(id)).map((moduleId: HomeModuleId) => {
+            if (moduleId === "metrics") return view === "cards" ? (
+              <SummaryCards key={moduleId} income={data.income} expense={data.expense} monthBalance={data.month_balance} invested={data.invested} prevIncome={data.prev_income} prevExpense={data.prev_expense} onOpenMetric={openFlow} />
+            ) : (
+              <MetricCharts key={moduleId} month={data.month} income={data.income} expense={data.expense} monthBalance={data.month_balance} invested={data.invested} onOpenMetric={openFlow} />
+            );
+            if (moduleId === "categories") return (
+              <div key={moduleId}>
+                <ExpensesDonutChart month={data.month} slices={data.categories} total={data.expense} onOpenDetails={() => openFlow("expense")} selectedCategoryId={selectedCategory?.category_id ?? null} onSelectCategory={setSelectedCategory} onOpenCategory={(slice) => navigate(`/fluxo?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)} />
+              </div>
+            );
+            if (moduleId === "recent") return <RecentTransactions key={moduleId} transactions={visibleRecent} categoryName={selectedCategory?.name ?? null} month={data.month} categoryId={selectedCategory?.category_id ?? null} />;
+            if (moduleId === "budget") return <Budget503020Card key={moduleId} month={monthLabel(data.month)} income={data.income} rule={data.rule} />;
+            return null;
+          })}
 
           <div className="flex justify-center pb-2 pt-2">
             <Link
-              to="/configuracoes#navigation"
+              to="/configuracoes#home-panel"
               className={cn(buttonVariants({ variant: "outline" }), "rounded-full border-border/70 bg-card/70 px-5 shadow-sm backdrop-blur-xl")}
               data-testid="modify-dashboard-button"
             >
