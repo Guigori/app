@@ -1,170 +1,187 @@
-"""FINNOS Radar — deterministic, dynamic signals. No LLM is required.
+"""FINNOS Radar Intelligence Engine.
 
-Signals are recomputed from current financial data on every request. When the
-underlying condition is resolved (invoice closes/gets paid, budget returns to
-normal, etc.) the signal naturally disappears and higher-ranked/new signals
-take its place.
+Deterministic by design: builds a personal 90-day baseline, detects anomalies,
+card pressure, future commitments and cash-flow opportunities without LLM cost.
+Signals are regenerated from current data; user state/feedback is persisted.
 """
-from datetime import date
-from fastapi import APIRouter, Depends
+import uuid
+from calendar import monthrange
+from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
+from statistics import mean
+from fastapi import APIRouter, Depends, HTTPException
 
 from lib.db import db
 from lib.dates import today_iso
 from lib.stats import add_months, month_portion
-from calendar import monthrange
-from models.radar import RadarOut, RadarSignalOut
+from models.radar import RadarActionIn, RadarFeedbackIn, RadarOut, RadarSignalOut
 from routers.auth import require_user
 from routers.cards import _build as build_card, _context as card_context
 
 router = APIRouter(prefix="/radar", tags=["radar"])
-
 POSITIONS = [326, 34, 92, 178, 232, 286, 138]
 
-def brl(value: float) -> str:
-    raw = f"{value:,.2f}"
-    return "R$ " + raw.replace(",", "X").replace(".", ",").replace("X", ".")
+def brl(v: float) -> str:
+    raw=f"{v:,.2f}"; return "R$ "+raw.replace(",","X").replace(".",",").replace("X",".")
+
+def month_end(m: str) -> str:
+    y,mo=map(int,m.split("-")); return f"{m}-{monthrange(y,mo)[1]:02d}"
 
 def days_until(iso: str) -> int:
-    return (date.fromisoformat(iso) - date.fromisoformat(today_iso())).days
+    return (date.fromisoformat(iso)-date.fromisoformat(today_iso())).days
 
-def month_end(month: str) -> str:
-    year, mon = map(int, month.split("-"))
-    return f"{month}-{monthrange(year, mon)[1]:02d}"
+async def _state_map(user_id: str) -> dict:
+    docs=await db.radar_states.find({"user_id":user_id}).to_list(5000)
+    return {d["signal_id"]:d for d in docs}
 
-@router.get("", response_model=RadarOut)
-async def radar(user: dict = Depends(require_user)) -> RadarOut:
-    user_id = user["id"]
-    today = today_iso()
-    month = today[:7]
-    prev_month = add_months(month, -1)
-    signals: list[dict] = []
+async def _signals(user_id: str) -> list[dict]:
+    today=date.fromisoformat(today_iso()); today_s=today.isoformat(); month=today_s[:7]
+    start90=(today-timedelta(days=90)).isoformat()
+    txs=await db.transactions.find({"user_id":user_id}).to_list(20000)
+    cats=await db.categories.find({"user_id":user_id}).to_list(500)
+    cat_by_id={c["id"]:c for c in cats}
+    signals=[]
 
-    txs = await db.transactions.find({"user_id": user_id}).to_list(20000)
-    categories = await db.categories.find({"user_id": user_id}).to_list(500)
-    cat_by_id = {c["id"]: c for c in categories}
+    # 90-day personal baseline: category daily pace and individual purchase size.
+    hist=[t for t in txs if t.get("type")=="despesa" and t.get("status")=="pago" and start90<=t["date"]<today_s]
+    by_cat=defaultdict(list)
+    current_cat=defaultdict(float)
+    for t in hist:
+        if t.get("category_id"): by_cat[t["category_id"]].append(float(t.get("adjusted_value") or t["value"]))
+    for t in txs:
+        if t.get("type")=="despesa" and t.get("status")=="pago" and t["date"].startswith(month) and t.get("category_id"):
+            p=month_portion(t,month)
+            if p is not None: current_cat[t["category_id"]]+=p
 
-    # Category pace: compare current month with previous month up to the same
-    # day-of-month. Require a meaningful baseline to avoid noisy percentages.
-    current_by_cat: dict[str, float] = {}
-    previous_by_cat: dict[str, float] = {}
-    day = int(today[8:10])
-    for tx in txs:
-        if tx.get("type") != "despesa" or tx.get("status") != "pago":
-            continue
-        cid = tx.get("category_id")
-        if not cid:
-            continue
-        portion = month_portion(tx, month)
-        if portion is not None and tx["date"] <= today:
-            current_by_cat[cid] = current_by_cat.get(cid, 0.0) + portion
-        prev = month_portion(tx, prev_month)
-        if prev is not None and int(tx["date"][8:10]) <= day:
-            previous_by_cat[cid] = previous_by_cat.get(cid, 0.0) + prev
+    elapsed=max(today.day,1)
+    for cid,current in current_cat.items():
+        vals=by_cat.get(cid,[])
+        cat=cat_by_id.get(cid,{})
+        # Compare monthly pace against prior 90-day daily baseline.
+        hist_total=sum(vals)
+        hist_days=90
+        expected=hist_total/hist_days*elapsed if hist_total else 0
+        if expected>=50 and current>expected*1.25:
+            pct=round((current/expected-1)*100)
+            signals.append(dict(id=f"pace-{cid}-{month}",type="deviation",severity="high" if pct>=50 else "medium",
+              title=f"{cat.get('name','Categoria')} está acima do seu padrão",description=f"+{pct}% em relação ao seu ritmo dos últimos 90 dias",
+              explanation=f"Até hoje, seu padrão de 90 dias indicaria cerca de {brl(expected)}. Neste mês já foram {brl(current)}.",
+              metric=f"+{pct}%",score=70+min(pct,80)/4,related_entity_type="category",related_entity_id=cid,
+              expires_at=month_end(month),evidence=[{"label":"Esperado até hoje","value":brl(expected)},{"label":"Gasto atual","value":brl(current)},{"label":"Base analisada","value":"90 dias"}]))
 
-    for cid, current in current_by_cat.items():
-        previous = previous_by_cat.get(cid, 0.0)
-        if previous < 50 or current <= previous * 1.20:
-            continue
-        pct = round((current / previous - 1) * 100)
-        cat = cat_by_id.get(cid, {})
-        severity = "high" if pct >= 50 else "medium"
-        signals.append({
-            "id": f"category-pace-{cid}-{month}",
-            "type": "deviation", "severity": severity,
-            "title": f"{cat.get('name', 'Categoria')} acelerou este mês",
-            "description": f"+{pct}% comparado ao mesmo período do mês anterior",
-            "metric": f"+{pct}%", "score": 65 + min(pct, 80) / 4,
-            "related_entity_type": "category", "related_entity_id": cid,
-            "expires_at": month_end(month),
-        })
+        budget=float(cat.get("monthly_budget") or 0)
+        if budget>0 and current/budget>=.85:
+            pct=current/budget*100; critical=pct>=100
+            signals.append(dict(id=f"budget-{cid}-{month}",type="risk",severity="critical" if critical else "high",
+              title=f"{cat.get('name','Categoria')} {'passou' if critical else 'está perto'} do orçamento",
+              description=f"{brl(current)} de {brl(budget)} planejados",explanation=f"Você já utilizou {pct:.0f}% do orçamento definido para esta categoria.",
+              metric=f"{pct:.0f}%",score=98 if critical else 88,related_entity_type="category",related_entity_id=cid,
+              expires_at=month_end(month),evidence=[{"label":"Orçamento","value":brl(budget)},{"label":"Utilizado","value":brl(current)}]))
 
-    # Category budgets: explicit user budgets are stronger than historical pace.
-    for cid, current in current_by_cat.items():
-        cat = cat_by_id.get(cid, {})
-        budget = float(cat.get("monthly_budget") or 0)
-        if budget <= 0:
-            continue
-        pct = current / budget * 100
-        if pct < 85:
-            continue
-        critical = pct >= 100
-        signals.append({
-            "id": f"category-budget-{cid}-{month}",
-            "type": "risk", "severity": "critical" if critical else "high",
-            "title": f"{cat.get('name', 'Categoria')} {'passou' if critical else 'está perto'} do orçamento",
-            "description": f"{brl(current)} de {brl(budget)} planejados neste mês",
-            "metric": f"{round(pct)}%", "score": 96 if critical else 84,
-            "related_entity_type": "category", "related_entity_id": cid,
-            "expires_at": month_end(month),
-        })
+    # Transaction anomalies vs personal category purchase size.
+    for t in txs:
+        if t.get("type")!="despesa" or t.get("status")!="pago" or t["date"]< (today-timedelta(days=7)).isoformat(): continue
+        vals=by_cat.get(t.get("category_id"),[])
+        if len(vals)<5: continue
+        avg=mean(vals); value=float(t.get("adjusted_value") or t["value"])
+        if avg>=20 and value>=max(avg*2.5,avg+100):
+            signals.append(dict(id=f"anomaly-{t['id']}",type="deviation",severity="high",title=f"Gasto fora do seu padrão: {t['name']}",
+              description=f"{brl(value)} · sua média semelhante é {brl(avg)}",explanation="Este lançamento ficou muito acima do valor típico das suas compras nessa categoria nos últimos 90 dias.",
+              metric=f"{value/avg:.1f}×",score=82,related_entity_type="transaction",related_entity_id=t["id"],expires_at=(today+timedelta(days=7)).isoformat(),
+              evidence=[{"label":"Compra","value":brl(value)},{"label":"Média pessoal","value":brl(avg)}]))
 
-    # Cards: closing proximity + invoice pressure against card limit.
-    card_docs = await db.cards.find({"user_id": user_id, "active": True}).to_list(200)
-    card_txs, accounts = await card_context(user_id)
+    # Duplicate candidates: same normalized name/value/date.
+    seen={}
+    for t in sorted(hist,key=lambda x:x["date"],reverse=True):
+        key=(t.get("name","").strip().lower(),round(float(t.get("adjusted_value") or t["value"]),2),t["date"])
+        if key in seen:
+            signals.append(dict(id=f"duplicate-{t['id']}",type="risk",severity="high",title="Possível cobrança duplicada",
+              description=f"{t['name']} aparece duas vezes por {brl(key[1])}",explanation="Encontramos dois lançamentos com mesmo nome, valor e data. Vale conferir antes de considerar ambos corretos.",
+              metric=brl(key[1]),score=92,related_entity_type="transaction",related_entity_id=t["id"],expires_at=(today+timedelta(days=14)).isoformat(),
+              evidence=[{"label":"Valor","value":brl(key[1])},{"label":"Data","value":t["date"]}]))
+        seen[key]=t["id"]
+
+    # Cards: pressure, closing and future installments. Historical invoice baseline
+    # approximates the last 3 calendar months of card expenses.
+    card_docs=await db.cards.find({"user_id":user_id,"active":True}).to_list(200)
+    card_txs,accounts=await card_context(user_id)
     for doc in card_docs:
-        card = await build_card(doc, card_txs, accounts)
-        close_days = days_until(card.next_closing)
-        if 0 <= close_days <= 4 and not card.invoice_paid:
-            if card.used_percent >= 85:
-                critical = card.used_percent >= 100
-                signals.append({
-                    "id": f"card-pressure-{card.id}-{card.next_closing}",
-                    "type": "risk", "severity": "critical" if critical else "high",
-                    "title": f"Fatura {card.name} acima do planejado",
-                    "description": f"{brl(card.current_invoice)} até agora · fecha em {close_days} dia{'s' if close_days != 1 else ''}",
-                    "metric": f"{round(card.used_percent)}%", "score": 100 if critical else 90,
-                    "related_entity_type": "card", "related_entity_id": card.id,
-                    "expires_at": card.next_closing,
-                })
-            else:
-                signals.append({
-                    "id": f"card-closing-{card.id}-{card.next_closing}",
-                    "type": "information", "severity": "normal",
-                    "title": f"Cartão {card.name} fecha em {close_days} dia{'s' if close_days != 1 else ''}",
-                    "description": "Compras após o fechamento irão para a próxima fatura",
-                    "score": 48 + (4 - close_days) * 2,
-                    "related_entity_type": "card", "related_entity_id": card.id,
-                    "expires_at": card.next_closing,
-                })
-        if card.future_installments >= 500:
-            signals.append({
-                "id": f"card-future-{card.id}-{month}",
-                "type": "information", "severity": "normal",
-                "title": f"{brl(card.future_installments)} já comprometidos no {card.name}",
-                "description": "Parcelas futuras já ocupam parte do seu limite",
-                "score": 42,
-                "related_entity_type": "card", "related_entity_id": card.id,
-                "expires_at": month_end(month),
-            })
+        card=await build_card(doc,card_txs,accounts); close=days_until(card.next_closing)
+        monthly=[]
+        for offset in (1,2,3):
+            m=add_months(month,-offset)
+            total=sum((month_portion(t,m) or 0) for t in card_txs if t.get("card_id")==card.id and t.get("type")=="despesa")
+            if total>0: monthly.append(total)
+        avg3=mean(monthly) if monthly else 0
+        if avg3>=100 and card.current_invoice>avg3*1.15:
+            pct=round((card.current_invoice/avg3-1)*100)
+            signals.append(dict(id=f"card-trend-{card.id}-{card.next_closing}",type="risk",severity="critical" if pct>=35 else "high",
+              title=f"Fatura {card.name} acima das últimas faturas",description=f"+{pct}% sobre a média recente",explanation=f"A fatura atual está em {brl(card.current_invoice)}; a média dos últimos {len(monthly)} meses foi {brl(avg3)}.",
+              metric=f"+{pct}%",score=97 if pct>=35 else 89,related_entity_type="card",related_entity_id=card.id,expires_at=card.next_closing,
+              evidence=[{"label":"Fatura atual","value":brl(card.current_invoice)},{"label":"Média recente","value":brl(avg3)}]))
+        elif 0<=close<=4 and not card.invoice_paid:
+            signals.append(dict(id=f"card-close-{card.id}-{card.next_closing}",type="information",severity="normal",title=f"Cartão {card.name} fecha em {close} dia{'s' if close!=1 else ''}",
+              description="Compras novas em breve irão para a próxima fatura",explanation="O FINNOS acompanha o ciclo do cartão para você saber quando novas compras mudam de fatura.",
+              score=50+(4-close)*2,related_entity_type="card",related_entity_id=card.id,expires_at=card.next_closing,evidence=[{"label":"Fatura atual","value":brl(card.current_invoice)}]))
+        if card.future_installments>=500:
+            signals.append(dict(id=f"future-{card.id}-{month}",type="information",severity="normal",title=f"{brl(card.future_installments)} já comprometidos no {card.name}",
+              description="Parcelas futuras já ocupam parte do seu limite",explanation="Esse valor corresponde às parcelas que ainda chegarão nas próximas faturas.",
+              metric=brl(card.future_installments),score=45,related_entity_type="card",related_entity_id=card.id,expires_at=month_end(month),
+              evidence=[{"label":"Parcelas futuras","value":brl(card.future_installments)}]))
 
-    # Opportunity: meaningful positive month balance, shown only once the month
-    # has enough activity to avoid congratulating an empty/new account.
-    income = expense = 0.0
-    activity = 0
-    for tx in txs:
-        portion = month_portion(tx, month)
-        if portion is None or tx.get("status") != "pago":
-            continue
-        activity += 1
-        if tx.get("type") == "receita": income += portion
-        elif tx.get("type") == "despesa": expense += portion
-    surplus = income - expense
-    if activity >= 5 and income > 0 and surplus >= max(income * .15, 200):
-        signals.append({
-            "id": f"monthly-surplus-{month}",
-            "type": "opportunity", "severity": "normal",
-            "title": f"Você tem {brl(surplus)} de saldo positivo no mês",
-            "description": "Uma parte pode ser direcionada para metas ou investimentos",
-            "score": 38,
-            "expires_at": month_end(month),
-        })
+    # Cash-flow projection: paid balance plus pending/scheduled entries over 30 days.
+    accounts=await db.accounts.find({"user_id":user_id}).to_list(500)
+    balance=sum(float(a.get("initial_balance") or 0) for a in accounts)
+    for t in txs:
+        if t.get("status")=="pago" and t["date"]<=today_s:
+            v=float(t.get("adjusted_value") or t["value"])
+            if t["type"]=="receita": balance+=v
+            elif t["type"]=="despesa": balance-=v
+    projected=balance; negative_date=None
+    future=sorted([t for t in txs if t.get("status") in ("pendente","agendado") and today_s<=t["date"]<=(today+timedelta(days=30)).isoformat()],key=lambda x:x["date"])
+    for t in future:
+        v=float(t.get("adjusted_value") or t["value"])
+        projected += v if t["type"]=="receita" else -v if t["type"]=="despesa" else 0
+        if projected<0 and not negative_date: negative_date=t["date"]
+    if negative_date:
+        signals.append(dict(id=f"cash-negative-{negative_date}",type="risk",severity="critical",title="Seu saldo projetado pode ficar negativo",
+          description=f"Projeção indica saldo abaixo de zero em {negative_date[8:10]}/{negative_date[5:7]}",explanation="O FINNOS somou seu saldo atual aos lançamentos pendentes e agendados dos próximos 30 dias.",
+          metric=brl(projected),score=100,related_entity_type="cashflow",expires_at=negative_date,evidence=[{"label":"Saldo atual","value":brl(balance)},{"label":"Projeção 30 dias","value":brl(projected)}]))
+    elif future and projected>balance and projected>=200:
+        signals.append(dict(id=f"cash-opportunity-{month}",type="opportunity",severity="normal",title="Sua projeção abre espaço para uma meta",
+          description=f"Saldo projetado de {brl(projected)} nos próximos 30 dias",explanation="Considerando os lançamentos já programados, sua projeção permanece positiva. Você pode avaliar direcionar parte para uma meta.",
+          metric=brl(projected),score=40,related_entity_type="cashflow",expires_at=(today+timedelta(days=7)).isoformat(),evidence=[{"label":"Projeção 30 dias","value":brl(projected)}]))
 
-    # Deduplicate same entity/topic pressure: budget risk outranks pace deviation.
-    budget_entities = {s["related_entity_id"] for s in signals if s["id"].startswith("category-budget-")}
-    signals = [s for s in signals if not (s["id"].startswith("category-pace-") and s["related_entity_id"] in budget_entities)]
-    signals.sort(key=lambda s: (-s["score"], s["id"]))
-    for i, signal in enumerate(signals):
-        signal["radar_position"] = POSITIONS[i % len(POSITIONS)]
+    # Avoid a weaker pace signal when a category already has a budget risk.
+    risky={s.get("related_entity_id") for s in signals if s["id"].startswith("budget-")}
+    signals=[s for s in signals if not(s["id"].startswith("pace-") and s.get("related_entity_id") in risky)]
+    states=await _state_map(user_id); out=[]
+    for s in signals:
+        st=states.get(s["id"],{})
+        if st.get("state") in ("dismissed","resolved"): continue
+        if st.get("dont_show_similar"): continue
+        s["state"]=st.get("state","new"); s["detected_at"]=st.get("detected_at") or datetime.now(timezone.utc).isoformat()
+        out.append(s)
+    out.sort(key=lambda s:(-s["score"],s["id"]))
+    for i,s in enumerate(out): s["radar_position"]=POSITIONS[i%len(POSITIONS)]
+    return out
 
-    items = [RadarSignalOut(**s) for s in signals]
-    return RadarOut(items=items, count=len(items))
+@router.get("",response_model=RadarOut)
+async def radar(user:dict=Depends(require_user))->RadarOut:
+    items=[RadarSignalOut(**s) for s in await _signals(user["id"])]
+    return RadarOut(items=items,count=len(items),active_count=len(items))
+
+@router.post("/{signal_id}/action")
+async def radar_action(signal_id:str,payload:RadarActionIn,user:dict=Depends(require_user)):
+    state={"view":"viewed","dismiss":"dismissed","resolve":"resolved"}[payload.action]
+    await db.radar_states.update_one({"user_id":user["id"],"signal_id":signal_id},{"$set":{"state":state,"updated_at":datetime.now(timezone.utc)},"$setOnInsert":{"detected_at":datetime.now(timezone.utc)}},upsert=True)
+    return {"ok":True,"state":state}
+
+@router.post("/{signal_id}/feedback")
+async def radar_feedback(signal_id:str,payload:RadarFeedbackIn,user:dict=Depends(require_user)):
+    doc={"id":str(uuid.uuid4()),"user_id":user["id"],"signal_id":signal_id,"feedback":payload.feedback,"note":payload.note,"created_at":datetime.now(timezone.utc)}
+    await db.radar_feedback.insert_one(doc)
+    update={"last_feedback":payload.feedback,"updated_at":datetime.now(timezone.utc)}
+    if payload.feedback=="dont_show_similar": update["dont_show_similar"]=True
+    await db.radar_states.update_one({"user_id":user["id"],"signal_id":signal_id},{"$set":update,"$setOnInsert":{"detected_at":datetime.now(timezone.utc)}},upsert=True)
+    return {"ok":True}
