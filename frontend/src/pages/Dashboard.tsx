@@ -111,20 +111,19 @@ export default function Dashboard() {
             expense={data.expense}
             onOpen={() => openFlow("balance")}
           />
+          <div className="mt-6">
+            <HomeFinancialChart
+              month={data.month}
+              total={data.total_balance}
+              income={data.income}
+              expense={data.expense}
+              result={data.month_balance}
+              onOpenMetric={openFlow}
+            />
+          </div>
         </div>
       ) : null}
       </section>
-
-      {data ? (
-        <HomeFinancialChart
-          month={data.month}
-          total={data.total_balance}
-          income={data.income}
-          expense={data.expense}
-          result={data.month_balance}
-          onOpenMetric={openFlow}
-        />
-      ) : null}
 
       {error && !data ? (
         <Card className="border-destructive/30">
