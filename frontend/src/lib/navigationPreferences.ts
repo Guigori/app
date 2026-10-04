@@ -2,6 +2,8 @@ import { useSyncExternalStore } from "react";
 import { MAIN_NAV, type NavItem } from "@/components/layout/nav";
 
 const KEY = "finnos:navigation-preferences:v1";
+// Build marker: keep this file change semantically neutral; it forces a fresh
+// Vercel production deployment from the current main HEAD.
 const EVENT = "finnos-navigation-preferences";
 
 export type NavigationPreferences = {
