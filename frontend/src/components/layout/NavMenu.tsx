@@ -19,7 +19,7 @@ export function NavMenu({ onNavigate, animate = true, testidPrefix = "nav" }: Na
   let index = -1;
 
   return (
-    <nav className="flex flex-col gap-5" data-testid={`${testidPrefix}-menu`}>
+    <nav className="flex flex-col gap-5 max-dashboard:gap-3" data-testid={`${testidPrefix}-menu`}>
       {NAV_GROUPS.map((group) => (
         <div key={group.label ?? "principal"}>
           {group.label ? (
@@ -47,8 +47,8 @@ export function NavMenu({ onNavigate, animate = true, testidPrefix = "nav" }: Na
                     onClick={onNavigate}
                     className={({ isActive }) =>
                       cn(
-                        "group relative flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition-colors duration-200",
-                        isActive ? "bg-primary/8 text-foreground" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                        "group relative flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition-all duration-200 max-dashboard:rounded-[1.4rem] max-dashboard:border max-dashboard:border-white/5 max-dashboard:bg-muted/35 max-dashboard:shadow-sm max-dashboard:backdrop-blur-xl",
+                        isActive ? "bg-primary/8 text-foreground max-dashboard:bg-foreground/[0.09] max-dashboard:border-foreground/10" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                       )
                     }
                     data-testid={`${testidPrefix}-${item.slug}`}
@@ -65,7 +65,7 @@ export function NavMenu({ onNavigate, animate = true, testidPrefix = "nav" }: Na
                         ) : null}
                         <span
                           className={cn(
-                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors duration-200",
+                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors duration-200 max-dashboard:bg-transparent",
                             isActive
                               ? "bg-primary text-primary-foreground"
                               : "bg-primary/10 text-primary group-hover:bg-primary/15",
