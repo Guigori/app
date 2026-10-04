@@ -36,7 +36,12 @@ export async function askLocalFinnos(question: string, month?: string, history: 
   }
   if(q.includes("categoria")||q.includes("gastei mais")||q.includes("gastando mais")||q.includes("onde")){
     const top=dashboard.categories[0]; if(!top)return{text:"Ainda não há despesas categorizadas neste mês."};
-    return {text:`${intro}o maior peso está em **${top.name}**: ${money(top.total)}, ou ${top.percent}% das suas despesas. Quer que eu abra os lançamentos dessa categoria ou compare com outra?`,visual:{title:"Maiores categorias",items:dashboard.categories.slice(0,4).map(c=>({label:c.name,value:money(c.total),detail:`${c.percent}% do total`}))}};
+    return {text:`${intro}o maior peso está em **${top.name}**: ${money(top.total)}, ou ${top.percent}% das suas despesas. Quer que eu abra os lançamentos dessa categoria ou compare com outra?`,visual:{title:"Maiores categorias",items:dashboard.categories.slice(0,4).map(c=>({label:c.name,value:money(c.total),detail:`${c.percent}% do total`})),chart:{type:"donut",data:dashboard.categories.slice(0,6).map(c=>({name:c.name,value:c.total})),valueLabel:"Despesas"}}};
+  }
+  if(q.includes("compar")||q.includes("evolução")||q.includes("evolucao")||q.includes("linha")||q.includes("meses")) {
+    const months=Array.from({length:6},(_,i)=>{const d=new Date(Number(m.slice(0,4)),Number(m.slice(5,7))-1-i,1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`}).reverse();
+    const data=months.map(mm=>{const d=localDashboard(mm);return {name:new Intl.DateTimeFormat("pt-BR",{month:"short"}).format(new Date(Number(mm.slice(0,4)),Number(mm.slice(5,7))-1,1)),value:d.expense,secondary:d.income}});
+    return {text:"Aqui está a evolução dos últimos seis meses. Assim fica mais fácil enxergar se as despesas estão acelerando ou recuando em relação às receitas.",visual:{title:"Receitas × despesas",chart:{type:"line",data,valueLabel:"Despesas",secondaryLabel:"Receitas"}}};
   }
   if(q.includes("50/30/20")||q.includes("regra")){
     return {text:`${intro}a sua divisão 50/30/20 está assim. Eu destacaria primeiro qualquer grupo que já passou de 100% do limite.`,visual:{title:"Regra 50/30/20",items:dashboard.rule.map(r=>({label:r.label,value:`${Math.round(r.percent)}%`,detail:`${money(r.spent)} de ${money(r.limit)}`}))}};
