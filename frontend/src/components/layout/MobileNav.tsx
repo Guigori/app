@@ -18,8 +18,8 @@ function MobileTab({ item }: { item: NavItem }) {
       end={item.to === "/"}
       className={({ isActive }) =>
         cn(
-          "relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors duration-200",
-          isActive ? "text-primary" : "text-muted-foreground",
+          "relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-[1.35rem] px-3 py-2 text-[10px] font-medium transition-all duration-200",
+          isActive ? "bg-background/65 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground",
         )
       }
       data-testid={`mobile-nav-${item.slug}`}
@@ -30,9 +30,9 @@ function MobileTab({ item }: { item: NavItem }) {
             animate={{ y: isActive ? -1 : 0, scale: isActive ? 1.12 : 1 }}
             transition={{ type: "spring", stiffness: 400, damping: 24 }}
           >
-            <item.icon className="h-5 w-5" aria-hidden="true" />
+            <item.icon className="h-6 w-6" aria-hidden="true" />
           </motion.span>
-          {item.label}
+          <span className="sr-only">{item.label}</span>
           {isActive ? (
             <motion.span
               layoutId="mobile-nav-dot"
@@ -53,10 +53,10 @@ export function MobileNav() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur dashboard:hidden"
+      className="fixed inset-x-3 bottom-[max(0.55rem,env(safe-area-inset-bottom))] z-40 rounded-[2rem] border border-white/10 bg-card/72 p-1.5 shadow-2xl shadow-black/20 backdrop-blur-2xl dashboard:hidden"
       data-testid="mobile-nav"
     >
-      <div className="grid grid-cols-5 items-end">
+      <div className="grid grid-cols-5 items-center gap-1">
         {BOTTOM_LEFT.map((item) => (
           <MobileTab key={item.to} item={item} />
         ))}
@@ -64,7 +64,7 @@ export function MobileNav() {
         <div className="flex justify-center">
           <DropdownMenu>
             <DropdownMenuTrigger
-                className="-mt-7 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/35 transition-transform duration-200 hover:-translate-y-0.5 active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="flex h-14 w-14 items-center justify-center rounded-full border border-white/15 bg-primary/90 text-primary-foreground shadow-lg shadow-primary/30 backdrop-blur-xl transition-transform duration-200 hover:-translate-y-0.5 active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 aria-label="Adicionar lançamento"
                 data-testid="mobile-quick-action-button"
             >
