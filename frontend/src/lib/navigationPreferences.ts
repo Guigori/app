@@ -7,6 +7,8 @@ const EVENT = "finnos-navigation-preferences";
 export type NavigationPreferences = {
   mobile: string[];
   web: string[];
+  aiMobile: boolean;
+  aiWeb: boolean;
 };
 
 const HOME = "inicio";
@@ -18,7 +20,7 @@ function validSlugs() {
 }
 
 export function defaultNavigationPreferences(): NavigationPreferences {
-  return { mobile: [...MOBILE_DEFAULT], web: [...WEB_DEFAULT] };
+  return { mobile: [...MOBILE_DEFAULT], web: [...WEB_DEFAULT], aiMobile: true, aiWeb: true };
 }
 
 export function getNavigationPreferences(): NavigationPreferences {
@@ -31,7 +33,7 @@ export function getNavigationPreferences(): NavigationPreferences {
       const unique = [HOME, ...source.filter((x) => x !== HOME)].filter((x, i, a) => a.indexOf(x) === i);
       return max ? unique.slice(0, max) : unique;
     };
-    return { mobile: clean(raw.mobile, MOBILE_DEFAULT, 4), web: clean(raw.web, WEB_DEFAULT) };
+    return { mobile: clean(raw.mobile, MOBILE_DEFAULT, 4), web: clean(raw.web, WEB_DEFAULT), aiMobile: raw.aiMobile !== false, aiWeb: raw.aiWeb !== false };
   } catch {
     return defaultNavigationPreferences();
   }
