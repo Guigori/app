@@ -36,6 +36,8 @@ export default function App() {
             <Route path="/orcamento" element={<Budget />} />
             <Route path="/orcamento/configuracoes" element={<BudgetSettings />} />
             <Route path="/fluxo" element={<Flow />} />
+            <Route path="/radar" element={<ComingSoon module="radar" />} />
+            <Route path="/radar/:signalId" element={<ComingSoon module="radar" />} />
             <Route path="/assinaturas" element={<Subscriptions />} />
             <Route path="/metas" element={<ComingSoon module="metas" />} />
             <Route path="/investimentos" element={<ComingSoon module="investimentos" />} />
