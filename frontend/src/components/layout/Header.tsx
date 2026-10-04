@@ -1,10 +1,8 @@
 import { useTheme } from "next-themes";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Menu, Moon, Sun } from "lucide-react";
+import { Menu, Moon, Sun } from "lucide-react";
 import { FinnosLogo } from "@/components/brand/FinnosLogo";
-import { NotificationsBell } from "@/components/layout/NotificationsBell";
 import { Button } from "@/components/ui/button";
-import { useBalanceHidden } from "@/lib/balance";
 
 interface HeaderProps {
   /** The drawer lives in AppShell so the edge-swipe gesture can open it too. */
@@ -14,7 +12,6 @@ interface HeaderProps {
 export function Header({ onOpenMenu }: HeaderProps) {
   const { resolvedTheme, setTheme } = useTheme();
   const navigate = useNavigate();
-  const { hidden, toggle } = useBalanceHidden();
 
   return (
     <>
@@ -34,16 +31,6 @@ export function Header({ onOpenMenu }: HeaderProps) {
           </button>
         </div>
         <div className="flex shrink-0 items-center gap-0 sm:gap-1">
-          <NotificationsBell />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggle}
-            aria-label={hidden ? "Exibir valores" : "Ocultar valores"}
-            data-testid="header-visibility-toggle"
-          >
-            {hidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-          </Button>
           <Button
             variant="ghost"
             size="icon"
