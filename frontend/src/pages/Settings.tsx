@@ -8,7 +8,7 @@ import { getApiErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { endSession } from "@/lib/session";
 import { clearMyData, fetchMe, loadDemoData, updateMyName } from "@/lib/data";
-import { disableLocalMode, isLocalMode } from "@/lib/mode";
+import { disableLocalMode, getMode, isLocalMode } from "@/lib/mode";
 import { AiKeysCard } from "@/components/ai/AiKeysCard";
 import { NotificationsCard } from "@/components/settings/NotificationsCard";
 import type { User } from "@/types/finnos";
@@ -69,9 +69,21 @@ export default function Settings() {
   });
 
   const handleLogout = async () => {
-    if (local) disableLocalMode();
-    await endSession();
-    navigate("/login");
+    // Capture the current mode before clearing it. Local/demo sessions do not
+    // have a server cookie, but account sessions must invalidate it.
+    const mode = getMode();
+    disableLocalMode();
+
+    try {
+      if (mode === "account") {
+        await endSession();
+      } else {
+        queryClient.clear();
+      }
+    } finally {
+      // replace prevents the authenticated page from remaining in browser history.
+      navigate("/login", { replace: true });
+    }
   };
 
   return (
