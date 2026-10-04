@@ -107,6 +107,16 @@ export async function fetchRadar(): Promise<Radar | null> {
   return apiGet<Radar>("/radar");
 }
 
+export async function updateRadarSignal(signalId: string, action: "view" | "dismiss" | "resolve") {
+  if (isLocalMode()) return { ok: true, state: action };
+  return apiPost<{ ok: boolean; state: string }>(`/radar/${encodeURIComponent(signalId)}/action`, { action });
+}
+
+export async function sendRadarFeedback(signalId: string, feedback: "useful" | "not_useful" | "dont_show_similar") {
+  if (isLocalMode()) return { ok: true };
+  return apiPost<{ ok: boolean }>(`/radar/${encodeURIComponent(signalId)}/feedback`, { feedback });
+}
+
 // --- Analytics --------------------------------------------------------------
 
 export async function fetchTrends(months: number, endMonth?: string): Promise<Trends> {
