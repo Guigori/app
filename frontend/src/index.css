@@ -60,6 +60,22 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+
+/* Rounded FINNOS balance surface: brand-purple gradient in both themes, never fades into page gray. */
+.dashboard-hero-surface {
+  background:
+    radial-gradient(ellipse at 82% 0%, rgba(75, 44, 255, 0.16) 0%, transparent 42%),
+    linear-gradient(145deg, #F0ECFF 0%, #FFFFFF 58%, #F8F6FF 100%);
+  color: var(--finnos-app);
+}
+.dark .dashboard-hero-surface {
+  background:
+    radial-gradient(ellipse at 82% 0%, rgba(91, 53, 255, 0.30) 0%, transparent 42%),
+    linear-gradient(145deg, #070F52 0%, #080D35 58%, #090910 100%);
+  border-color: #222241;
+  color: #FFFFFF;
+}
+
 /* FINNOS institutional palette. */
 :root {
     --finnos-app: #070F52;
