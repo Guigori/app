@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -17,6 +17,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MAIN_NAV } from "@/components/layout/nav";
+import { defaultNavigationPreferences, resetNavigationPreferences, saveNavigationPreferences, useNavigationPreferences, type NavigationPreferences } from "@/lib/navigationPreferences";
 
 const THEME_OPTIONS = [
   { value: "light", label: "Claro" },
@@ -30,6 +32,34 @@ export default function Settings() {
   const { theme, setTheme } = useTheme();
   const local = isLocalMode();
   const { data: user } = useQuery({ queryKey: ["me"], queryFn: fetchMe, staleTime: 5 * 60 * 1000 });
+
+  const savedNavigation = useNavigationPreferences();
+  const [navigation, setNavigation] = useState<NavigationPreferences>(savedNavigation);
+  useEffect(() => setNavigation(savedNavigation), [JSON.stringify(savedNavigation)]);
+
+  const availableNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio");
+  const updateNavigation = (target: "mobile" | "web", slug: string, enabled: boolean) => {
+    setNavigation((current) => {
+      const list = current[target];
+      const next = enabled ? [...list, slug] : list.filter((item) => item !== slug);
+      const normalized = target === "mobile" ? ["inicio", ...next.filter((x) => x !== "inicio")].slice(0, 4) : ["inicio", ...next.filter((x) => x !== "inicio")];
+      const value = { ...current, [target]: normalized };
+      saveNavigationPreferences(value);
+      return value;
+    });
+  };
+  const moveNavigation = (target: "mobile" | "web", slug: string, direction: -1 | 1) => {
+    setNavigation((current) => {
+      const list = [...current[target]];
+      const index = list.indexOf(slug);
+      const destination = index + direction;
+      if (slug === "inicio" || index < 1 || destination < 1 || destination >= list.length) return current;
+      [list[index], list[destination]] = [list[destination], list[index]];
+      const value = { ...current, [target]: list };
+      saveNavigationPreferences(value);
+      return value;
+    });
+  };
 
   const [name, setName] = useState("");
   useEffect(() => {
@@ -144,6 +174,51 @@ export default function Settings() {
               </button>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="settings-navigation-card">
+        <CardHeader>
+          <CardTitle className="font-heading">Barra de navegação</CardTitle>
+          <CardDescription>Escolha e reordene os atalhos do mobile e da Web. Início é fixo e não pode ser removido.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {(["mobile", "web"] as const).map((target) => (
+            <div key={target} className="space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold">{target === "mobile" ? "Mobile" : "Web"}</h3>
+                <p className="text-xs text-muted-foreground">{target === "mobile" ? "Até 4 atalhos, incluindo Início. O botão + continua separado." : "Escolha os itens exibidos na navegação principal."}</p>
+              </div>
+              <div className="rounded-xl border border-border">
+                <div className="flex items-center gap-3 border-b border-border px-3 py-3">
+                  <Check className="h-4 w-4 text-primary" />
+                  <span className="flex-1 text-sm font-medium">Início</span>
+                  <span className="text-xs text-muted-foreground">Fixo</span>
+                </div>
+                {availableNavigation.map((item) => {
+                  const enabled = navigation[target].includes(item.slug);
+                  const position = navigation[target].indexOf(item.slug);
+                  const mobileFull = target === "mobile" && navigation.mobile.length >= 4;
+                  return (
+                    <div key={item.slug} className="flex items-center gap-2 border-b border-border px-3 py-2.5 last:border-b-0">
+                      <item.icon className="h-4 w-4 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
+                      {enabled ? (
+                        <>
+                          <button type="button" className="rounded-md p-1 text-muted-foreground disabled:opacity-30" disabled={position <= 1} onClick={() => moveNavigation(target, item.slug, -1)} aria-label={`Mover ${item.label} para cima`}><ChevronUp className="h-4 w-4" /></button>
+                          <button type="button" className="rounded-md p-1 text-muted-foreground disabled:opacity-30" disabled={position === navigation[target].length - 1} onClick={() => moveNavigation(target, item.slug, 1)} aria-label={`Mover ${item.label} para baixo`}><ChevronDown className="h-4 w-4" /></button>
+                        </>
+                      ) : null}
+                      <input type="checkbox" checked={enabled} disabled={!enabled && mobileFull} onChange={(event) => updateNavigation(target, item.slug, event.target.checked)} aria-label={`${enabled ? "Remover" : "Adicionar"} ${item.label} da navegação ${target}`} className="h-4 w-4 accent-primary" />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          <Button variant="outline" type="button" onClick={() => { resetNavigationPreferences(); setNavigation(defaultNavigationPreferences()); }}>
+            Restaurar padrão
+          </Button>
         </CardContent>
       </Card>
 
