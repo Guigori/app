@@ -26,7 +26,7 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-3">
+      <CardHeader className="flex flex-row items-start justify-between gap-2">
         <div>
           <CardTitle className="font-heading">Pra onde foi o dinheiro?</CardTitle>
           <CardDescription>
@@ -48,8 +48,8 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
             description="Quando houver despesas, o gráfico mostra para onde seu dinheiro está indo."
           />
         ) : (
-          <div className="flex flex-col items-center gap-6 sm:flex-row">
-            <div className="relative h-48 w-48 shrink-0" data-testid="expenses-donut-chart" onClick={(event) => { if (event.target === event.currentTarget) onSelectCategory?.(null); }}>
+          <div className="flex min-w-0 flex-col items-center gap-5 sm:flex-row sm:gap-6">
+            <div className="relative h-44 w-44 shrink-0 min-[390px]:h-48 min-[390px]:w-48" data-testid="expenses-donut-chart" onClick={(event) => { if (event.target === event.currentTarget) onSelectCategory?.(null); }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -79,16 +79,16 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
               </ResponsiveContainer>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <p className="text-xs text-muted-foreground">{selected ? selected.name : "Total gasto"}</p>
-                <p className="font-heading text-xl font-bold tabular-nums text-foreground" data-testid="donut-total-value">
+                <p className="max-w-[9rem] overflow-hidden text-ellipsis whitespace-nowrap font-heading text-lg font-bold tabular-nums text-foreground min-[390px]:text-xl" data-testid="donut-total-value">
                   {hidden ? formatHiddenBRL() : formatBRL(displayTotal)}
                 </p>
               </div>
             </div>
-            <ul className="w-full space-y-2.5">
+            <ul className="min-w-0 w-full space-y-2.5">
               {visibleSlices.slice(0, 6).map((slice) => (
                 <li
                   key={slice.category_id ?? slice.name}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted/50"
+                  className="grid min-w-0 cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-lg px-1 py-1.5 transition-colors hover:bg-muted/50 min-[390px]:gap-3 min-[390px]:px-2"
                   onClick={() => onSelectCategory?.(selected?.category_id === slice.category_id ? null : slice)}
                   data-testid="donut-legend-item"
                 >
@@ -110,8 +110,8 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                   >
                     {slice.name}
                   </button>
-                  <span className="text-sm tabular-nums text-muted-foreground">{hidden ? "••••" : formatBRL(slice.total)}</span>
-                  <span className="w-12 text-right text-sm font-semibold tabular-nums text-foreground">
+                  <span className="max-w-[6.5rem] overflow-hidden text-ellipsis whitespace-nowrap text-xs tabular-nums text-muted-foreground min-[390px]:text-sm">{hidden ? "••••" : formatBRL(slice.total)}</span>
+                  <span className="w-10 text-right text-xs font-semibold tabular-nums text-foreground min-[390px]:w-12 min-[390px]:text-sm">
                     {Math.round(slice.percent)}%
                   </span>
                 </li>
