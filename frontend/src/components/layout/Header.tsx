@@ -2,6 +2,7 @@ import { useTheme } from "next-themes";
 import { useNavigate } from "react-router-dom";
 import { Menu, Moon, Sun } from "lucide-react";
 import { FinnosLogo } from "@/components/brand/FinnosLogo";
+import { NotificationsBell } from "@/components/layout/NotificationsBell";
 import { Button } from "@/components/ui/button";
 
 interface HeaderProps {
@@ -31,6 +32,7 @@ export function Header({ onOpenMenu }: HeaderProps) {
           </button>
         </div>
         <div className="flex shrink-0 items-center gap-0 sm:gap-1">
+          <NotificationsBell />
           <Button
             variant="ghost"
             size="icon"
