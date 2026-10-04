@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MAIN_NAV } from "@/components/layout/nav";
 import { defaultNavigationPreferences, resetNavigationPreferences, saveNavigationPreferences, useNavigationPreferences, type NavigationPreferences } from "@/lib/navigationPreferences";
+import { HOME_MODULES, resetHomePreferences, saveHomePreferences, useHomePreferences, type HomeModuleId } from "@/lib/homePreferences";
 
 const THEME_OPTIONS = [
   { value: "light", label: "Claro" },
@@ -34,6 +35,9 @@ export default function Settings() {
   const { data: user } = useQuery({ queryKey: ["me"], queryFn: fetchMe, staleTime: 5 * 60 * 1000 });
 
   const savedNavigation = useNavigationPreferences();
+  const savedHome = useHomePreferences();
+  const [homePanel, setHomePanel] = useState(savedHome);
+  useEffect(() => setHomePanel(savedHome), [JSON.stringify(savedHome)]);
   const [navigation, setNavigation] = useState<NavigationPreferences>(savedNavigation);
   useEffect(() => setNavigation(savedNavigation), [JSON.stringify(savedNavigation)]);
 
@@ -174,6 +178,52 @@ export default function Settings() {
               </button>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card id="home-panel" data-testid="settings-home-panel-card">
+        <CardHeader>
+          <CardTitle className="font-heading">Painel da Home</CardTitle>
+          <CardDescription>Escolha o que aparece e a ordem dos módulos. A mesma configuração vale para Web e Mobile.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="rounded-xl border border-border">
+            {homePanel.order.map((id, index) => {
+              const item = HOME_MODULES.find((module) => module.id === id)!;
+              const visible = !homePanel.hidden.includes(id);
+              const move = (direction: -1 | 1) => {
+                const destination = index + direction;
+                if (destination < 0 || destination >= homePanel.order.length) return;
+                const order = [...homePanel.order];
+                [order[index], order[destination]] = [order[destination], order[index]];
+                const next = { ...homePanel, order };
+                setHomePanel(next);
+                saveHomePreferences(next);
+              };
+              return (
+                <div key={id} className="flex items-center gap-2 border-b border-border px-3 py-3 last:border-b-0">
+                  <span className="min-w-0 flex-1 text-sm font-medium">{item.label}</span>
+                  <button type="button" className="rounded-md p-1 text-muted-foreground disabled:opacity-30" disabled={index === 0} onClick={() => move(-1)} aria-label={`Mover ${item.label} para cima`}><ChevronUp className="h-4 w-4" /></button>
+                  <button type="button" className="rounded-md p-1 text-muted-foreground disabled:opacity-30" disabled={index === homePanel.order.length - 1} onClick={() => move(1)} aria-label={`Mover ${item.label} para baixo`}><ChevronDown className="h-4 w-4" /></button>
+                  <input
+                    type="checkbox"
+                    checked={visible}
+                    onChange={(event) => {
+                      const hidden = event.target.checked ? homePanel.hidden.filter((x) => x !== id) : [...homePanel.hidden, id as HomeModuleId];
+                      const next = { ...homePanel, hidden };
+                      setHomePanel(next);
+                      saveHomePreferences(next);
+                    }}
+                    aria-label={`${visible ? "Ocultar" : "Mostrar"} ${item.label}`}
+                    className="h-4 w-4 accent-primary"
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <Button variant="outline" type="button" onClick={() => { resetHomePreferences(); setHomePanel({ order: HOME_MODULES.map((item) => item.id), hidden: [] }); }}>
+            Restaurar painel padrão
+          </Button>
         </CardContent>
       </Card>
 
