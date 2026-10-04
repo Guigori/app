@@ -39,7 +39,7 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/65 dark:text-white/60">Saldo total</p>
-            <p className="mt-2 break-words font-heading text-4xl font-bold tracking-tight tabular-nums sm:text-5xl" data-testid="balance-total-value">
+            <p className="mt-2 whitespace-nowrap font-heading text-[clamp(1.9rem,9.5vw,3rem)] font-bold tracking-tight tabular-nums" data-testid="balance-total-value">
               {money(total)}
             </p>
             <p className="mt-2 text-sm text-foreground/65 dark:text-white/60">Visão geral de {monthLabel(month)}</p>
@@ -60,11 +60,11 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
         <div className="grid grid-cols-2 items-end gap-3 border-t border-border/80 dark:border-white/10 pt-5 sm:gap-4">
           <div data-testid="comparison-month-income">
             <p className="text-sm text-foreground/70 dark:text-white/70">Receitas do mês</p>
-            <p className="mt-1 whitespace-nowrap font-heading text-[clamp(1.15rem,5.2vw,1.5rem)] font-bold tabular-nums text-income sm:text-3xl">{money(income)}</p>
+            <p className="mt-1 whitespace-nowrap font-heading text-[clamp(1rem,4.8vw,1.5rem)] font-bold tabular-nums text-income sm:text-3xl">{money(income)}</p>
           </div>
           <div className="text-right" data-testid="comparison-month-expense">
             <p className="text-sm text-foreground/70 dark:text-white/70">Despesas do mês</p>
-            <p className="mt-1 whitespace-nowrap font-heading text-[clamp(1.15rem,5.2vw,1.5rem)] font-bold tabular-nums text-expense sm:text-3xl">{money(expense)}</p>
+            <p className="mt-1 whitespace-nowrap font-heading text-[clamp(1rem,4.8vw,1.5rem)] font-bold tabular-nums text-expense sm:text-3xl">{money(expense)}</p>
           </div>
         </div>
 
