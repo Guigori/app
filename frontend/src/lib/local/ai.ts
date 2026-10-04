@@ -14,6 +14,17 @@ export async function askLocalFinnos(question: string, month?: string): Promise<
   const demo = getMode() === "demo";
   const prefix = demo ? "Na demonstração, " : "";
 
+  if (q.includes("radar") || q.includes("atenção") || q.includes("atencao")) {
+    const top = dashboard.categories[0];
+    const over = dashboard.rule.filter((r) => r.percent > 100);
+    if (!top && !over.length) return `${prefix}não encontrei um sinal crítico com os dados atuais. Continue acompanhando orçamento e vencimentos.`;
+    return `${prefix}eu destacaria ${over.length ? over.map((r) => r.label).join(" e ") + " acima do limite 50/30/20" : "o peso de " + top?.name + " nas despesas"}. Posso detalhar esse ponto e montar um plano de ação.`;
+  }
+  if (q.includes("econom") || q.includes("cortar") || q.includes("plano de ação") || q.includes("plano de acao")) {
+    const top = dashboard.categories.slice(0, 3);
+    if (!top.length) return `${prefix}ainda preciso de mais despesas categorizadas para sugerir onde economizar.`;
+    return `${prefix}eu começaria pelas categorias de maior peso: ${top.map((x) => `${x.name}: 10% representa cerca de ${money(x.total * 0.1)}/mês`).join("; ")}. Isso é uma simulação para ajudar no planejamento.`;
+  }
   if (q.includes("quanto gastei") || q.includes("despesa")) {
     return `${prefix}suas despesas em ${m} somam ${money(dashboard.expense)}. A receita do período é ${money(dashboard.income)}, deixando um saldo mensal de ${money(dashboard.month_balance)}.`;
   }
