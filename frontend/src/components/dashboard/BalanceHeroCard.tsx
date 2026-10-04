@@ -18,7 +18,7 @@ export function BalanceHeroCard({ month, total, income, expense, onOpen }: Balan
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
 
   return (
-    <Card className="relative overflow-hidden border-0 bg-[#10142B] text-white dark:bg-[#17171C]">
+    <Card className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-black/10 text-white shadow-none backdrop-blur-[2px]">
       {/* Full-card hit area, under the eye toggle (which sits above it). */}
       <button
         type="button"
@@ -27,7 +27,7 @@ export function BalanceHeroCard({ month, total, income, expense, onOpen }: Balan
         className="absolute inset-0 z-10 cursor-pointer rounded-[inherit] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
         data-testid="balance-open-flow"
       />
-      <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#5B3FE4]/50 blur-3xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#5B35FF]/20 blur-3xl" aria-hidden="true" />
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-4">
           <div>
