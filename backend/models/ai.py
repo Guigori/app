@@ -19,6 +19,11 @@ class AiKeyIn(BaseModel):
     model: Optional[str] = Field(default=None, max_length=80)
 
 
+class AiChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
 class AiAskIn(BaseModel):
     provider: AiProvider
     question: str = Field(min_length=2, max_length=2000)
