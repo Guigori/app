@@ -65,14 +65,14 @@ export function Budget503020Card({ month, income, rule }: Budget503020CardProps)
           const StatusIcon = displayMeta.icon;
           return (
             <div key={item.key} data-testid={`rule-row-${item.key}`}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
+              <div className="flex min-w-0 flex-col items-start gap-2 min-[390px]:flex-row min-[390px]:items-center min-[390px]:justify-between">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span
                     className={cn("rounded-full px-3 py-1 text-xs font-semibold", GROUP_PILL[item.key])}
                   >
                     {item.label}
                   </span>
-                  <span className={cn("inline-flex items-center gap-1 text-xs font-medium", displayMeta.text)} data-testid={`rule-status-${item.key}`}>
+                  <span className={cn("inline-flex min-w-0 items-center gap-1 break-words text-xs font-medium", displayMeta.text)} data-testid={`rule-status-${item.key}`}>
                     <StatusIcon className="h-3.5 w-3.5" aria-hidden="true" />
                     {displayMeta.label}
                   </span>
