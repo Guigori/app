@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, LayoutGrid } from "lucide-react";
+import { BarChart3, LayoutGrid, SlidersHorizontal } from "lucide-react";
 import { fetchAccounts, fetchDashboard, fetchMe, fetchTransactions } from "@/lib/data";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 import { useHomeView } from "@/lib/prefs";
@@ -77,6 +77,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-w-0 space-y-5 overflow-x-hidden animate-fade-up sm:space-y-6">
+      <section className="-mx-4 -mt-5 bg-[linear-gradient(180deg,rgba(7,15,82,0.96)_0%,rgba(7,15,82,0.72)_34%,rgba(7,15,82,0.20)_72%,transparent_100%)] px-4 pb-5 pt-6 sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10" data-testid="dashboard-financial-header">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1
@@ -118,6 +119,31 @@ export default function Dashboard() {
           {data ? <MonthSelector month={data.month} onChange={setMonth} /> : null}
         </div>
       </div>
+
+      {data ? (
+        <div className="mt-5">
+          {view === "cards" ? (
+            <BalanceHeroCard
+              month={data.month}
+              total={data.total_balance}
+              income={data.income}
+              expense={data.expense}
+              onOpen={() => openFlow("balance")}
+            />
+          ) : (
+            <BalanceComparisonHeroCard
+              month={data.month}
+              total={data.total_balance}
+              income={data.income}
+              expense={data.expense}
+              onOpen={() => openFlow("balance")}
+              onOpenIncome={() => openFlow("income")}
+              onOpenExpense={() => openFlow("expense")}
+            />
+          )}
+        </div>
+      ) : null}
+      </section>
 
       {error && !data ? (
         <Card className="border-destructive/30">
@@ -161,26 +187,6 @@ export default function Dashboard() {
       {data ? (
         <div className="min-w-0 space-y-5 sm:space-y-6">
           {view === "cards" ? (
-            <BalanceHeroCard
-              month={data.month}
-              total={data.total_balance}
-              income={data.income}
-              expense={data.expense}
-              onOpen={() => openFlow("balance")}
-            />
-          ) : (
-            <BalanceComparisonHeroCard
-              month={data.month}
-              total={data.total_balance}
-              income={data.income}
-              expense={data.expense}
-              onOpen={() => openFlow("balance")}
-              onOpenIncome={() => openFlow("income")}
-              onOpenExpense={() => openFlow("expense")}
-            />
-          )}
-
-          {view === "cards" ? (
             <SummaryCards
               income={data.income}
               expense={data.expense}
@@ -222,6 +228,17 @@ export default function Dashboard() {
             categoryId={selectedCategory?.category_id ?? null}
           />
           <Budget503020Card month={monthLabel(data.month)} income={data.income} rule={data.rule} />
+
+          <div className="flex justify-center pb-2 pt-2">
+            <Link
+              to="/configuracoes#navigation"
+              className={cn(buttonVariants({ variant: "outline" }), "rounded-full border-border/70 bg-card/70 px-5 shadow-sm backdrop-blur-xl")}
+              data-testid="modify-dashboard-button"
+            >
+              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+              Modificar painel
+            </Link>
+          </div>
         </div>
       ) : !error ? (
         <div className="space-y-6" aria-hidden="true">
