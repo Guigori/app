@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Clock3, Loader2, Plus, Send, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowLeft, Clock3, FileText, Loader2, Mic, Plus, Send, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { getMode, isLocalMode } from "@/lib/mode";
@@ -12,15 +12,16 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigationPreferences } from "@/lib/navigationPreferences";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { AiVisual } from "@/components/ai/AiVisual";
 
 const BASE_SUGGESTIONS = ["Quanto gastei este mês?", "Onde posso economizar?", "Como está minha regra 50/30/20?", "O que merece minha atenção no Radar?"];
 
 export function AiPanel() {
-  const [open,setOpen]=useState(false), [historyOpen,setHistoryOpen]=useState(false), [question,setQuestion]=useState(""), [error,setError]=useState<string|null>(null);
+  const [open,setOpen]=useState(false), [historyOpen,setHistoryOpen]=useState(false), [question,setQuestion]=useState(""), [error,setError]=useState<string|null>(null), [attachOpen,setAttachOpen]=useState(false), [listening,setListening]=useState(false);
   const [conversation,setConversation]=useState<FinnConversation>(()=>newFinnConversation());
   const [history,setHistory]=useState<FinnConversation[]>(()=>readFinnConversations());
   const local=isLocalMode(), appMode=getMode(), navigationPreferences=useNavigationPreferences();
-  const [triggerVisible,setTriggerVisible]=useState(true), triggerTimer=useRef<number|null>(null);
+  const [triggerVisible,setTriggerVisible]=useState(true), triggerTimer=useRef<number|null>(null), fileRef=useRef<HTMLInputElement|null>(null);
   const isMobile=typeof window!=="undefined"&&window.matchMedia("(max-width: 767px)").matches;
   const showTrigger=isMobile?navigationPreferences.aiMobile:navigationPreferences.aiWeb;
 
@@ -35,6 +36,9 @@ export function AiPanel() {
     return BASE_SUGGESTIONS.filter(s=>!used.some(u=>u.includes(s.toLowerCase().slice(0,12)))).slice(0,3);
   },[conversation.messages]);
 
+  const speak=()=>{const w=window as any;const SR=w.SpeechRecognition||w.webkitSpeechRecognition;if(!SR){setError("Ditado por voz não está disponível neste navegador.");return}const rec=new SR();rec.lang="pt-BR";rec.interimResults=false;rec.onstart=()=>setListening(true);rec.onend=()=>setListening(false);rec.onerror=()=>setListening(false);rec.onresult=(e:any)=>setQuestion((v)=>[v,e.results[0][0].transcript].filter(Boolean).join(" "));rec.start()};
+  const attachFile=async(file:File)=>{setAttachOpen(false);if(file.size>2_000_000){setError("Use um arquivo de até 2 MB nesta versão.");return}if(file.type.startsWith("text/")||/\\.(csv|txt)$/i.test(file.name)){const body=await file.text();setQuestion(`Analise este arquivo ${file.name} e identifique possíveis lançamentos. Não registre nada sem minha confirmação.\\n\\n${body.slice(0,12000)}`)}else{setQuestion(`Quero analisar o arquivo "${file.name}" para registrar gastos. Mostre uma prévia e peça minha confirmação antes de salvar.`);setError("A leitura automática de imagens/PDFs será concluída pelo processador de documentos do servidor; nenhum lançamento será salvo automaticamente.")}};
+  const feedback=(id:string,rating:"up"|"down")=>{if(local){localStorage.setItem(`finnos:ai-feedback:${id}`,rating);return}void apiPost("/ai/feedback",{rating,response_id:id})};
   const persist=(next:FinnConversation)=>{setConversation(next);upsertFinnConversation(next);setHistory(readFinnConversations())};
   const startNew=()=>{setConversation(newFinnConversation());setQuestion("");setError(null);setHistoryOpen(false)};
   const ask=async(q:string)=>{
@@ -67,12 +71,12 @@ export function AiPanel() {
             <div className="flex gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-5 w-5"/></div><div className="rounded-2xl border border-border bg-card p-4 text-sm leading-relaxed">Olá! Sou a FINNOS IA. Posso analisar seus gastos, orçamento, Radar e ajudar no seu planejamento financeiro. O que você quer entender hoje?</div></div>
             {appMode==="local"?<div className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground">Se quiser conectar ChatGPT, Claude ou Gemini e guardar sua chave com segurança, <Link to="/cadastro" onClick={()=>setOpen(false)} className="font-semibold text-primary">crie sua conta preservando seus dados</Link>.</div>:null}
             <div className="grid gap-2">{suggestions.map(s=><button key={s} onClick={()=>void ask(s)} className="rounded-2xl bg-muted px-4 py-3 text-left text-sm font-medium hover:bg-accent">{s}</button>)}</div>
-          </div>:conversation.messages.map(m=><div key={m.id} className={m.role==="user"?"flex justify-end":"flex justify-start gap-3"}>{m.role==="assistant"?<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-4 w-4"/></div>:null}<div className={m.role==="user"?"max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground":"max-w-[88%] rounded-2xl border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-line"}><span>{m.content.replace(/\*\*/g,"")}</span>{m.role==="assistant"&&m.visual?<div className="mt-3 grid gap-2">{m.visual.title?<p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{m.visual.title}</p>:null}{m.visual.metrics?<div className="grid grid-cols-3 gap-2">{m.visual.metrics.map(x=><div key={x.label} className="rounded-xl bg-muted/70 p-3"><p className="text-[11px] text-muted-foreground">{x.label}</p><p className={x.tone==="positive"?"mt-1 font-semibold text-emerald-500":x.tone==="negative"?"mt-1 font-semibold text-red-500":"mt-1 font-semibold"}>{x.value}</p></div>)}</div>:null}{m.visual.items?<div className="overflow-hidden rounded-xl border border-border">{m.visual.items.map((x,i)=><div key={x.label+i} className="flex items-center justify-between gap-3 border-b border-border/70 px-3 py-2.5 last:border-b-0"><div className="min-w-0"><p className="truncate font-medium">{x.label}</p>{x.detail?<p className="text-xs text-muted-foreground">{x.detail}</p>:null}</div><strong className="shrink-0">{x.value}</strong></div>)}</div>:null}</div>:null}</div></div>)}
+          </div>:conversation.messages.map(m=><div key={m.id} className={m.role==="user"?"flex justify-end":"flex justify-start gap-3"}>{m.role==="assistant"?<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-4 w-4"/></div>:null}<div className={m.role==="user"?"max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground":"max-w-[88%] rounded-2xl border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-line"}><span>{m.content.replace(/\*\*/g,"")}</span>{m.role==="assistant"&&m.visual?<AiVisual visual={m.visual}/>:null}{m.role==="assistant"?<div className="mt-2 flex gap-1 text-muted-foreground"><button onClick={()=>feedback(m.id,"up")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta útil"><ThumbsUp className="h-3.5 w-3.5"/></button><button onClick={()=>feedback(m.id,"down")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta não útil"><ThumbsDown className="h-3.5 w-3.5"/></button></div>:null}</div></div>)}
           {askMutation.isPending?<div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin"/>Analisando suas finanças…</div>:null}
           {error?<p className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>:null}
         </main>
         <footer className="border-t border-border bg-background p-4">
-          <form className="flex gap-2" onSubmit={e=>{e.preventDefault();void ask(question)}}><Input value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Pergunte sobre suas finanças…" maxLength={2000}/><Button type="submit" size="icon" disabled={!question.trim()||askMutation.isPending}><Send className="h-4 w-4"/></Button></form>
+          <div className="relative"><form className="flex items-center gap-2 rounded-2xl border border-border bg-card p-1.5" onSubmit={e=>{e.preventDefault();void ask(question)}}><Button type="button" variant="ghost" size="icon" onClick={()=>setAttachOpen(v=>!v)} aria-label="Adicionar"><Plus className="h-5 w-5"/></Button><Input className="border-0 bg-transparent shadow-none focus-visible:ring-0" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Pergunte ao FINNOS…" maxLength={14000}/><Button type="button" variant="ghost" size="icon" onClick={speak} aria-label="Ditado por voz"><Mic className={listening?"h-5 w-5 text-primary":"h-5 w-5"}/></Button><Button type="submit" size="icon" disabled={!question.trim()||askMutation.isPending}><Send className="h-4 w-4"/></Button></form>{attachOpen?<div className="absolute bottom-14 left-0 z-20 w-64 rounded-2xl border border-border bg-popover p-2 shadow-xl"><button onClick={()=>fileRef.current?.click()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-muted"><FileText className="h-4 w-4"/>Enviar arquivo ou comprovante</button><p className="px-3 py-2 text-[11px] text-muted-foreground">CSV/TXT podem ser analisados agora. Outros arquivos entram no fluxo de confirmação.</p></div>:null}<input ref={fileRef} type="file" className="hidden" accept=".csv,.txt,.pdf,image/*" onChange={e=>{const file=e.target.files?.[0];if(file)void attachFile(file);e.currentTarget.value=""}}/></div>
           <p className="mt-2 text-center text-[11px] text-muted-foreground">A FINNOS IA pode cometer erros. Confira informações financeiras importantes.</p>
         </footer>
       </>}
