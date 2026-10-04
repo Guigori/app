@@ -56,6 +56,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "ai_keys": [
         IndexModel([("user_id", ASCENDING), ("provider", ASCENDING)], name="user_provider", unique=True),
     ],
+    "ai_feedback": [IndexModel([("user_id", ASCENDING), ("created_at", DESCENDING)], name="user_created")],
     "radar_states": [
         IndexModel([("user_id", ASCENDING), ("signal_id", ASCENDING)], name="user_signal", unique=True),
         IndexModel([("user_id", ASCENDING), ("updated_at", DESCENDING)], name="user_updated"),
