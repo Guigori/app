@@ -708,7 +708,7 @@ export function localCalendar(month: string): CalendarMonth {
     if (tx.date < start || tx.date > end) continue;
     const day =
       buckets.get(tx.date) ??
-      { date: tx.date, income: 0, expense: 0, projected_income: 0, projected_expense: 0, count: 0 };
+      { date: tx.date, income: 0, expense: 0, projected_income: 0, projected_expense: 0, count: 0, active_count: 0 };
     day.count += 1;
     if (tx.type !== "transferencia") {
       const value = round2(tx.installment ? tx.installment_value ?? 0 : tx.value);
