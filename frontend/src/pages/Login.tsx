@@ -70,8 +70,8 @@ export default function Login() {
     <>
       <AuthLayout>
         <Card className="w-full max-w-[38rem] rounded-[1.75rem] border-white/30 bg-white text-slate-950 shadow-2xl [--card-spacing:--spacing(5)] sm:[--card-spacing:--spacing(6)] lg:border-0 lg:shadow-none">
-          <CardHeader>
-            <CardTitle className="font-heading text-[2rem] font-bold tracking-tight xl:text-4xl">Iniciar sessão</CardTitle>
+          <CardHeader className="lg:pt-0">
+            <CardTitle className="font-heading text-[2rem] font-bold tracking-tight xl:text-4xl lg:leading-none">Iniciar sessão</CardTitle>
             <CardDescription>Entre para continuar acompanhando suas finanças.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -143,7 +143,7 @@ export default function Login() {
                 </p>
               ) : null}
 
-              <Button type="submit" className="h-12 w-full rounded-xl" disabled={loginMutation.isPending || demoMutation.isPending} data-testid="login-submit-button">
+              <Button type="submit" className="h-12 w-full rounded-xl bg-[#070F52] text-white transition-colors hover:bg-[#5B35FF] active:bg-[#4B2CFF]" disabled={loginMutation.isPending || demoMutation.isPending} data-testid="login-submit-button">
                 {loginMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" aria-label="Entrando" /> : loginSucceeded ? <Check className="h-5 w-5" aria-label="Conectado" /> : "Entrar"}
               </Button>
             </form>
