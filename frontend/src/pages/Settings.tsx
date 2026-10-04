@@ -42,7 +42,7 @@ export default function Settings() {
   useEffect(() => setNavigation(savedNavigation), [JSON.stringify(savedNavigation)]);
 
   const mobileNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia");
-  const webNavigation = MAIN_NAV.filter((item) => ["transacoes", "fluxo", "orcamento", "categorias", "contas"].includes(item.slug));
+  const webNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia");
   const updateNavigation = (target: "mobile" | "web", slug: string, enabled: boolean) => {
     setNavigation((current) => {
       const list = current[target];
