@@ -27,22 +27,22 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
   const hasMovement = moved > 0;
 
   return (
-    <div className="relative text-white" data-testid="balance-comparison-hero">
+    <div className="relative text-foreground dark:text-white" data-testid="balance-comparison-hero">
       <button
         type="button"
         onClick={onOpen}
         aria-label="Abrir o fluxo completo"
-        className="absolute inset-x-0 top-0 z-10 h-28 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+        className="absolute inset-x-0 top-0 z-10 h-28 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary/60 dark:focus-visible:outline-white/70"
         data-testid="balance-comparison-open-flow"
       />
       <div className="relative z-20">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-white/60">Saldo total</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/65 dark:text-white/60">Saldo total</p>
             <p className="mt-2 break-words font-heading text-4xl font-bold tracking-tight tabular-nums sm:text-5xl" data-testid="balance-total-value">
               {money(total)}
             </p>
-            <p className="mt-2 text-sm text-white/60">Visão geral de {monthLabel(month)}</p>
+            <p className="mt-2 text-sm text-foreground/65 dark:text-white/60">Visão geral de {monthLabel(month)}</p>
           </div>
           <Button
             variant="ghost"
@@ -50,20 +50,20 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
             onClick={toggle}
             aria-label={hidden ? "Exibir valores" : "Ocultar valores"}
             data-testid="toggle-visibility-btn"
-            className="relative z-30 shrink-0 text-white/70 hover:bg-white/10 hover:text-white"
+            className="relative z-30 shrink-0 text-foreground/70 dark:text-white/70 hover:bg-primary/5 dark:hover:bg-white/10 hover:text-foreground dark:hover:text-white"
           >
             {hidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
           </Button>
         </div>
       </div>
       <div className="relative z-20 pt-8">
-        <div className="grid grid-cols-2 items-end gap-3 border-t border-white/10 pt-5 sm:gap-4">
+        <div className="grid grid-cols-2 items-end gap-3 border-t border-border/80 dark:border-white/10 pt-5 sm:gap-4">
           <div data-testid="comparison-month-income">
-            <p className="text-sm text-white/70">Receitas do mês</p>
+            <p className="text-sm text-foreground/70 dark:text-white/70">Receitas do mês</p>
             <p className="mt-1 whitespace-nowrap font-heading text-[clamp(1.15rem,5.2vw,1.5rem)] font-bold tabular-nums text-income sm:text-3xl">{money(income)}</p>
           </div>
           <div className="text-right" data-testid="comparison-month-expense">
-            <p className="text-sm text-white/70">Despesas do mês</p>
+            <p className="text-sm text-foreground/70 dark:text-white/70">Despesas do mês</p>
             <p className="mt-1 whitespace-nowrap font-heading text-[clamp(1.15rem,5.2vw,1.5rem)] font-bold tabular-nums text-expense sm:text-3xl">{money(expense)}</p>
           </div>
         </div>
@@ -81,7 +81,7 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
                   type="button"
                   onClick={onOpenIncome}
                   aria-label={`Abrir receitas de ${monthLabel(month)}`}
-                  className="relative z-30 h-full cursor-pointer bg-income transition-[width,filter] duration-500 ease-out hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
+                  className="relative z-30 h-full cursor-pointer bg-income transition-[width,filter] duration-500 ease-out hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 dark:focus-visible:ring-white/70"
                   style={{ width: `${incomePercent}%` }}
                   data-testid="income-balance-segment"
                 />
@@ -89,7 +89,7 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
                   type="button"
                   onClick={onOpenExpense}
                   aria-label={`Abrir despesas de ${monthLabel(month)}`}
-                  className="relative z-30 h-full cursor-pointer bg-expense transition-[width,filter] duration-500 ease-out hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
+                  className="relative z-30 h-full cursor-pointer bg-expense transition-[width,filter] duration-500 ease-out hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 dark:focus-visible:ring-white/70"
                   style={{ width: `${expensePercent}%` }}
                   data-testid="expense-balance-segment"
                 />
@@ -99,11 +99,11 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
           <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <div>
               <p className="font-heading text-lg font-bold tabular-nums text-income">{incomePercent}%</p>
-              <p className="text-white/60">Receitas</p>
+              <p className="text-foreground/65 dark:text-white/60">Receitas</p>
             </div>
             <div className="text-right">
               <p className="font-heading text-lg font-bold tabular-nums text-expense">{expensePercent}%</p>
-              <p className="text-white/60">Despesas</p>
+              <p className="text-foreground/65 dark:text-white/60">Despesas</p>
             </div>
           </div>
         </div>
