@@ -450,3 +450,28 @@ export interface PayInvoiceInput {
   date: string;
   value: number | null;
 }
+
+
+// --- Radar (mirror: backend/models/radar.py) ---------------------------------
+
+export type RadarSignalType = "risk" | "deviation" | "information" | "opportunity";
+export type RadarSignalSeverity = "normal" | "medium" | "high" | "critical";
+
+export interface RadarSignal {
+  id: string;
+  type: RadarSignalType;
+  severity: RadarSignalSeverity;
+  title: string;
+  description: string;
+  metric: string | null;
+  radar_position: number;
+  score: number;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  expires_at: string | null;
+}
+
+export interface Radar {
+  items: RadarSignal[];
+  count: number;
+}
