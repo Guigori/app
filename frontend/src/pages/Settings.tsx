@@ -189,6 +189,20 @@ export default function Settings() {
                 <h3 className="text-sm font-semibold">{target === "mobile" ? "Mobile" : "Web"}</h3>
                 <p className="text-xs text-muted-foreground">{target === "mobile" ? "Até 4 atalhos, incluindo Início. O botão + continua separado." : "Escolha os itens exibidos na navegação principal."}</p>
               </div>
+              <label className="flex items-center gap-3 rounded-xl border border-border px-3 py-3">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="flex-1 text-sm font-medium">Botão suspenso FINNOS IA</span>
+                <input
+                  type="checkbox"
+                  checked={target === "mobile" ? navigation.aiMobile : navigation.aiWeb}
+                  onChange={(event) => {
+                    const value = { ...navigation, [target === "mobile" ? "aiMobile" : "aiWeb"]: event.target.checked };
+                    setNavigation(value);
+                    saveNavigationPreferences(value);
+                  }}
+                  className="h-4 w-4 accent-primary"
+                />
+              </label>
               <div className="rounded-xl border border-border">
                 <div className="flex items-center gap-3 border-b border-border px-3 py-3">
                   <Check className="h-4 w-4 text-primary" />
