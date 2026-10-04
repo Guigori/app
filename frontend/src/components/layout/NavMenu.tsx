@@ -3,7 +3,6 @@ import { motion } from "motion/react";
 import { ChevronRight, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS } from "@/components/layout/nav";
-import { useNavigationPreferences } from "@/lib/navigationPreferences";
 
 interface NavMenuProps {
   /** Called after a link is followed — the drawer uses it to close itself. */
@@ -18,12 +17,9 @@ interface NavMenuProps {
  *  soft icon tiles, section captions and a left bar marking the active route. */
 export function NavMenu({ onNavigate, animate = true, testidPrefix = "nav" }: NavMenuProps) {
   let index = -1;
-  const preferences = useNavigationPreferences();
-  const allowed = new Set(preferences.web);
-
   return (
     <nav className="flex flex-col gap-5 max-dashboard:gap-3" data-testid={`${testidPrefix}-menu`}>
-      {NAV_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => allowed.has(item.slug)) })).filter((group) => group.items.length > 0).map((group) => (
+      {NAV_GROUPS.map((group) => (
         <div key={group.label ?? "principal"}>
           {group.label ? (
             <p className="mb-1.5 flex items-center gap-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
