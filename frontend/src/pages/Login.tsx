@@ -88,7 +88,7 @@ export default function Login() {
                 <Label htmlFor="login-email">E-mail</Label>
                 <Input
                   id="login-email"
-                  className="h-12 rounded-2xl border-[#D9D7E8] bg-white px-4 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
+                  className="h-12 rounded-2xl border-[#DCD6FF] bg-[#FBFAFF] px-4 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
                   type="email"
                   autoComplete="email"
                   required
@@ -113,7 +113,7 @@ export default function Login() {
                 <div className="relative">
                 <Input
                   id="login-password"
-                  className="h-12 rounded-2xl border-[#D9D7E8] bg-white pl-4 pr-12 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
+                  className="h-12 rounded-2xl border-[#DCD6FF] bg-[#FBFAFF] pl-4 pr-12 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   required
@@ -180,7 +180,7 @@ export default function Login() {
               <Smartphone className="h-4 w-4" aria-hidden="true" />
               Entrar no modo local
             </Button>
-            <p className="mt-1 text-center text-[11px] leading-snug text-muted-foreground">
+            <p className="mt-1 text-center text-[11px] leading-snug text-slate-400">
               Sem cadastro, os dados ficam apenas neste navegador.
               Limpar os dados do navegador apaga seus registros.
             </p>
