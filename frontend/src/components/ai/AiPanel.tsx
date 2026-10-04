@@ -24,10 +24,11 @@ export function AiPanel() {
   const isMobile=typeof window!=="undefined"&&window.matchMedia("(max-width: 767px)").matches;
   const showTrigger=isMobile?navigationPreferences.aiMobile:navigationPreferences.aiWeb;
 
+  useEffect(()=>{const openFromContext=(event:Event)=>{const detail=(event as CustomEvent<{question?:string}>).detail;setOpen(true);setHistoryOpen(false);if(detail?.question)setQuestion(detail.question)};window.addEventListener("finnos-ai-open",openFromContext);return()=>window.removeEventListener("finnos-ai-open",openFromContext)},[]);
   useEffect(()=>{const onScroll=()=>{setTriggerVisible(false);if(triggerTimer.current)clearTimeout(triggerTimer.current);triggerTimer.current=window.setTimeout(()=>setTriggerVisible(true),220)};window.addEventListener("scroll",onScroll,{passive:true});return()=>window.removeEventListener("scroll",onScroll)},[]);
   const keysQuery=useQuery({queryKey:["ai-keys"],queryFn:()=>apiGet<AiKey[]>("/ai/keys"),enabled:open&&!local,staleTime:30000});
   const activeProvider=(keysQuery.data?.[0]?.provider||"") as AiProvider|"";
-  const askMutation=useMutation({mutationFn:(q:string)=>apiPost<AiAnswer>("/ai/ask",{provider:activeProvider,question:q})});
+  const askMutation=useMutation({mutationFn:({q,history}:{q:string;history:{role:"user"|"assistant";content:string}[]})=>apiPost<AiAnswer>("/ai/ask",{provider:activeProvider,question:q,history})});
 
   const suggestions=useMemo(()=>{
     const used=conversation.messages.filter(m=>m.role==="user").map(m=>m.content.toLowerCase());
@@ -41,7 +42,7 @@ export function AiPanel() {
     const user={id:crypto.randomUUID(),role:"user" as const,content:text,createdAt:new Date().toISOString()};
     let next={...conversation,title:conversation.messages.length?conversation.title:text.slice(0,52),messages:[...conversation.messages,user]};persist(next);
     try{
-      const reply=local?await askLocalFinnos(text):(await askMutation.mutateAsync(text)).answer;
+      const reply=local?await askLocalFinnos(text):(await askMutation.mutateAsync({q:text,history:conversation.messages.slice(-12).map(({role,content})=>({role,content}))})).answer;
       next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:reply,createdAt:new Date().toISOString()}]};persist(next);
     }catch(e){setError(getApiErrorMessage(e,"Não foi possível responder agora."))}
   };
