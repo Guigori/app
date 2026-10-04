@@ -11,10 +11,10 @@ export function TopTabs() {
   const visibleTabs = TOP_TABS.filter((tab) => tab.slug === "inicio" || preferences.web.includes(tab.slug));
   return (
     <div
-      className="sticky top-14 z-10 hidden border-b border-border bg-background dashboard:block"
+      className="sticky top-14 z-10 hidden px-3 pt-2 dashboard:block"
       data-testid="top-tabs"
     >
-      <div className="mx-auto flex w-full max-w-7xl gap-1 overflow-x-auto px-2 sm:px-4 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mx-auto flex w-full max-w-7xl gap-1 overflow-x-auto rounded-[1.65rem] border border-white/20 bg-background/55 px-2 shadow-[0_10px_32px_rgba(0,0,0,.10),inset_0_1px_0_rgba(255,255,255,.22)] backdrop-blur-[26px] supports-[backdrop-filter]:bg-background/45 sm:px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {visibleTabs.map((tab) => (
           <NavLink
             key={tab.to}
@@ -22,8 +22,8 @@ export function TopTabs() {
             end={tab.to === "/"}
             className={({ isActive }) =>
               cn(
-                "relative flex shrink-0 items-center gap-2 px-3 py-3 text-sm font-medium transition-colors duration-200",
-                isActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                "relative flex shrink-0 items-center gap-2 rounded-full px-3 py-3 text-sm font-medium transition-all duration-200",
+                isActive ? "bg-primary/[.07] text-primary" : "text-muted-foreground hover:bg-background/35 hover:text-foreground",
               )
             }
             data-testid={`top-tab-${tab.slug}`}
