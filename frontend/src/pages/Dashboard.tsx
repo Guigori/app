@@ -17,6 +17,7 @@ import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 import { MetricCharts } from "@/components/dashboard/MetricCharts";
 import { MonthSelector } from "@/components/dashboard/MonthSelector";
 import { RecentTransactions } from "@/components/dashboard/RecentTransactions";
+import { RadarSection } from "@/components/dashboard/RadarSection";
 import { SummaryCards } from "@/components/dashboard/SummaryCards";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -194,6 +195,7 @@ export default function Dashboard() {
             ) : (
               <MetricCharts key={moduleId} month={data.month} income={data.income} expense={data.expense} monthBalance={data.month_balance} invested={data.invested} onOpenMetric={openFlow} />
             );
+            if (moduleId === "radar") return <RadarSection key={moduleId} />;
             if (moduleId === "categories") return (
               <div key={moduleId}>
                 <ExpensesDonutChart month={data.month} slices={data.categories} total={data.expense} onOpenDetails={() => openFlow("expense")} selectedCategoryId={selectedCategory?.category_id ?? null} onSelectCategory={setSelectedCategory} onOpenCategory={(slice) => navigate(`/fluxo?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)} />
