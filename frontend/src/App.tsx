@@ -16,6 +16,8 @@ import Cards from "@/pages/Cards";
 import CardInvoice from "@/pages/CardInvoice";
 import Subscriptions from "@/pages/Subscriptions";
 import ComingSoon from "@/pages/ComingSoon";
+import Radar from "@/pages/Radar";
+import RadarDetail from "@/pages/RadarDetail";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
@@ -36,8 +38,8 @@ export default function App() {
             <Route path="/orcamento" element={<Budget />} />
             <Route path="/orcamento/configuracoes" element={<BudgetSettings />} />
             <Route path="/fluxo" element={<Flow />} />
-            <Route path="/radar" element={<ComingSoon module="radar" />} />
-            <Route path="/radar/:signalId" element={<ComingSoon module="radar" />} />
+            <Route path="/radar" element={<Radar />} />
+            <Route path="/radar/:signalId" element={<RadarDetail />} />
             <Route path="/assinaturas" element={<Subscriptions />} />
             <Route path="/metas" element={<ComingSoon module="metas" />} />
             <Route path="/investimentos" element={<ComingSoon module="investimentos" />} />
