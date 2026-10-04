@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import { MAIN_NAV, type NavItem } from "@/components/layout/nav";
 
 const KEY = "finnos:navigation-preferences:v2";
-// FINNOS IA redeploy marker: retry the complete production package from the current main HEAD.
+// FINNOS IA multimodal release: visual answers, charts, voice, files and feedback.
 const EVENT = "finnos-navigation-preferences";
 
 export type NavigationPreferences = {
