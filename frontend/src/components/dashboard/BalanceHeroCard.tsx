@@ -56,11 +56,11 @@ export function BalanceHeroCard({ month, total, income, expense, onOpen }: Balan
         <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
           <div className="rounded-2xl border border-white/10 bg-white/10 p-4 dark:bg-white/5" data-testid="hero-month-income">
             <p className="text-xs text-white/60">Receitas do mês</p>
-            <p className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-heading text-[clamp(1rem,5vw,1.125rem)] font-bold tabular-nums text-emerald-300">{money(income)}</p>
+            <p className="mt-1 whitespace-nowrap font-heading text-[clamp(.82rem,3.7vw,1.125rem)] font-bold tracking-tight tabular-nums text-emerald-300">{money(income)}</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/10 p-4 dark:bg-white/5" data-testid="hero-month-expense">
             <p className="text-xs text-white/60">Despesas do mês</p>
-            <p className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-heading text-[clamp(1rem,5vw,1.125rem)] font-bold tabular-nums text-rose-300">{money(expense)}</p>
+            <p className="mt-1 whitespace-nowrap font-heading text-[clamp(.82rem,3.7vw,1.125rem)] font-bold tracking-tight tabular-nums text-rose-300">{money(expense)}</p>
           </div>
         </div>
       </CardContent>
