@@ -2,18 +2,7 @@ import { ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
-export type RadarSignalType = "risk" | "deviation" | "information" | "opportunity";
-export type RadarSignalSeverity = "normal" | "medium" | "high" | "critical";
-
-export type RadarSignal = {
-  id: string;
-  type: RadarSignalType;
-  severity: RadarSignalSeverity;
-  title: string;
-  description: string;
-  metric?: string;
-  radarPosition: number;
-};
+import type { RadarSignal } from "@/types/finnos";
 
 const SIGNAL_COLORS: Record<RadarSignalType, string> = {
   risk: "#FB4A6B",
@@ -28,51 +17,6 @@ const SIGNAL_LABELS: Record<RadarSignalType, string> = {
   information: "Informação",
   opportunity: "Oportunidade",
 };
-
-export const RADAR_MOCK_SIGNALS: RadarSignal[] = [
-  {
-    id: "nubank-fatura-acima",
-    type: "risk",
-    severity: "critical",
-    title: "Fatura Nubank acima do planejado",
-    description: "R$ 2.840,32 até agora · fecha em 4 dias",
-    metric: "+18%",
-    radarPosition: -28,
-  },
-  {
-    id: "alimentacao-acelerou",
-    type: "deviation",
-    severity: "medium",
-    title: "Alimentação acelerou este mês",
-    description: "+23% comparado ao seu padrão",
-    metric: "+23%",
-    radarPosition: 34,
-  },
-  {
-    id: "inter-fecha",
-    type: "information",
-    severity: "normal",
-    title: "Cartão Inter fecha em 2 dias",
-    description: "Compras novas irão para a próxima fatura",
-    radarPosition: 92,
-  },
-  {
-    id: "economia-possivel",
-    type: "opportunity",
-    severity: "normal",
-    title: "Você pode economizar R$ 218/mês",
-    description: "Encontramos 4 oportunidades",
-    radarPosition: 178,
-  },
-  {
-    id: "novembro-comprometido",
-    type: "information",
-    severity: "normal",
-    title: "R$ 1.460 já comprometidos em novembro",
-    description: "Contas, assinaturas e parcelas",
-    radarPosition: 232,
-  },
-];
 
 function RadarIcon({
   signal,
@@ -95,7 +39,7 @@ function RadarIcon({
       <svg viewBox="0 0 56 56" width={size} height={size} aria-hidden="true">
         <circle cx="28" cy="28" r="20" fill="none" stroke="currentColor" strokeWidth="7" className="text-primary/16" />
         <circle cx="28" cy="28" r="8" fill={critical ? color : "currentColor"} className={critical ? undefined : "text-primary/20"} />
-        <g transform={`rotate(${signal.radarPosition} 28 28)`}>
+        <g transform={`rotate(${signal.radar_position} 28 28)`}>
           <path d="M28 28 L28 5 A23 23 0 0 1 45.7 13.3 Z" fill={color} />
         </g>
       </svg>
@@ -130,9 +74,11 @@ function RadarSignalItem({ signal }: { signal: RadarSignal }) {
 }
 
 export function RadarSection({
-  signals = RADAR_MOCK_SIGNALS,
+  signals,
+  totalCount,
 }: {
-  signals?: RadarSignal[];
+  signals: RadarSignal[];
+  totalCount?: number;
 }) {
   const navigate = useNavigate();
   const visibleSignals = signals.slice(0, 5);
@@ -149,7 +95,7 @@ export function RadarSection({
             Radar
           </h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {signals.length} {signals.length === 1 ? "sinal para você" : "sinais para você"}
+            {totalCount ?? signals.length} {(totalCount ?? signals.length) === 1 ? "sinal para você" : "sinais para você"}
           </p>
         </div>
         <button
@@ -167,6 +113,9 @@ export function RadarSection({
       </div>
 
       <div className="px-4 pb-2 sm:px-5 sm:pb-3">
+        {visibleSignals.length === 0 ? (
+          <p className="py-5 text-sm text-muted-foreground">Tudo tranquilo no seu Radar por enquanto.</p>
+        ) : null}
         {visibleSignals.map((signal) => (
           <RadarSignalItem key={signal.id} signal={signal} />
         ))}
