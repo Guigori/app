@@ -61,19 +61,18 @@
 }
 
 
-/* Rounded FINNOS balance surface: brand-purple gradient in both themes, never fades into page gray. */
+/* FINNOS balance surface: stable institutional surface across themes.
+   Keep the hierarchy identical in light/dark mode and avoid decorative gradients. */
 .dashboard-hero-surface {
-  background:
-    radial-gradient(ellipse at 82% 0%, rgba(75, 44, 255, 0.16) 0%, transparent 42%),
-    linear-gradient(145deg, #F0ECFF 0%, #FFFFFF 58%, #F8F6FF 100%);
+  background: #FFFFFF;
   color: var(--finnos-app);
+  box-shadow: 0 12px 34px rgba(7, 15, 82, 0.06);
 }
 .dark .dashboard-hero-surface {
-  background:
-    radial-gradient(ellipse at 82% 0%, rgba(91, 53, 255, 0.30) 0%, transparent 42%),
-    linear-gradient(145deg, #070F52 0%, #080D35 58%, #090910 100%);
-  border-color: #222241;
+  background: #070F52;
+  border-color: rgba(140, 91, 255, 0.22);
   color: #FFFFFF;
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28);
 }
 
 /* FINNOS institutional palette. */
