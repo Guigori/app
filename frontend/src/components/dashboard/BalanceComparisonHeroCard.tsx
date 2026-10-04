@@ -70,7 +70,7 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
 
         <div className="mt-5">
           <div
-            className="flex h-7 w-full overflow-hidden rounded-full bg-white/10"
+            className="relative flex h-3 w-full overflow-hidden rounded-full bg-muted dark:bg-white/10"
             role="img"
             aria-label={`Receitas ${incomePercent}% e despesas ${expensePercent}%`}
             data-testid="income-expense-balance-bar"
@@ -81,30 +81,33 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
                   type="button"
                   onClick={onOpenIncome}
                   aria-label={`Abrir receitas de ${monthLabel(month)}`}
-                  className="relative z-30 h-full cursor-pointer bg-income transition-[width,filter] duration-500 ease-out hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 dark:focus-visible:ring-white/70"
+                  className="relative z-30 h-full cursor-pointer bg-income transition-[width,filter] duration-500 ease-out hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 dark:focus-visible:ring-white/70"
                   style={{ width: `${incomePercent}%` }}
                   data-testid="income-balance-segment"
                 />
+                <span className="pointer-events-none absolute inset-y-0 z-40 w-px bg-background/90 dark:bg-white/35" style={{ left: `${incomePercent}%` }} aria-hidden="true" />
                 <button
                   type="button"
                   onClick={onOpenExpense}
                   aria-label={`Abrir despesas de ${monthLabel(month)}`}
-                  className="relative z-30 h-full cursor-pointer bg-expense transition-[width,filter] duration-500 ease-out hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 dark:focus-visible:ring-white/70"
+                  className="relative z-30 h-full cursor-pointer bg-expense transition-[width,filter] duration-500 ease-out hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 dark:focus-visible:ring-white/70"
                   style={{ width: `${expensePercent}%` }}
                   data-testid="expense-balance-segment"
                 />
               </>
             ) : null}
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <p className="font-heading text-lg font-bold tabular-nums text-income">{incomePercent}%</p>
-              <p className="text-foreground/65 dark:text-white/60">Receitas</p>
-            </div>
-            <div className="text-right">
-              <p className="font-heading text-lg font-bold tabular-nums text-expense">{expensePercent}%</p>
-              <p className="text-foreground/65 dark:text-white/60">Despesas</p>
-            </div>
+          <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+            <button type="button" onClick={onOpenIncome} className="inline-flex items-center gap-1.5 rounded-md py-1 hover:text-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-income" aria-hidden="true" />
+              <span>Receitas</span>
+              <strong className="font-heading font-semibold tabular-nums text-foreground">{incomePercent}%</strong>
+            </button>
+            <button type="button" onClick={onOpenExpense} className="inline-flex items-center gap-1.5 rounded-md py-1 text-right hover:text-foreground">
+              <strong className="font-heading font-semibold tabular-nums text-foreground">{expensePercent}%</strong>
+              <span>Despesas</span>
+              <span className="h-1.5 w-1.5 rounded-full bg-expense" aria-hidden="true" />
+            </button>
           </div>
         </div>
       </div>
