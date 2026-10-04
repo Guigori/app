@@ -1,233 +1,79 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Loader2, Send, Sparkles } from "lucide-react";
+import { ArrowLeft, Clock3, Loader2, Plus, Send, Sparkles, Trash2, X } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { getMode, isLocalMode } from "@/lib/mode";
 import { askLocalFinnos } from "@/lib/local/ai";
+import { clearFinnConversations, newFinnConversation, readFinnConversations, upsertFinnConversation, type FinnConversation } from "@/lib/aiConversations";
 import type { AiAnswer, AiKey, AiProvider } from "@/types/finnos";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useNavigationPreferences } from "@/lib/navigationPreferences";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
-const SUGGESTIONS = [
-  "Quanto gastei este mês?",
-  "Em qual categoria estou gastando mais?",
-  "Quanto ainda posso gastar?",
-  "Como está minha regra 50/30/20?",
-  "Quais contas vencem nos próximos dias?",
-];
+const BASE_SUGGESTIONS = ["Quanto gastei este mês?", "Onde posso economizar?", "Como está minha regra 50/30/20?", "O que merece minha atenção no Radar?"];
 
 export function AiPanel() {
-  const [open, setOpen] = useState(false);
-  const [question, setQuestion] = useState("");
-  const [provider, setProvider] = useState<AiProvider | "">("");
-  const [answer, setAnswer] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [showModeNotice, setShowModeNotice] = useState(true);
-  const local = isLocalMode();
-  const appMode = getMode();
-  const navigationPreferences = useNavigationPreferences();
-  const [triggerVisible, setTriggerVisible] = useState(true);
-  const triggerTimer = useRef<number | null>(null);
-  const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
-  const showTrigger = isMobile ? navigationPreferences.aiMobile : navigationPreferences.aiWeb;
+  const [open,setOpen]=useState(false), [historyOpen,setHistoryOpen]=useState(false), [question,setQuestion]=useState(""), [error,setError]=useState<string|null>(null);
+  const [conversation,setConversation]=useState<FinnConversation>(()=>newFinnConversation());
+  const [history,setHistory]=useState<FinnConversation[]>(()=>readFinnConversations());
+  const local=isLocalMode(), appMode=getMode(), navigationPreferences=useNavigationPreferences();
+  const [triggerVisible,setTriggerVisible]=useState(true), triggerTimer=useRef<number|null>(null);
+  const isMobile=typeof window!=="undefined"&&window.matchMedia("(max-width: 767px)").matches;
+  const showTrigger=isMobile?navigationPreferences.aiMobile:navigationPreferences.aiWeb;
 
-  useEffect(() => {
-    const onScroll = () => {
-      setTriggerVisible(false);
-      if (triggerTimer.current) window.clearTimeout(triggerTimer.current);
-      triggerTimer.current = window.setTimeout(() => setTriggerVisible(true), 220);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (triggerTimer.current) window.clearTimeout(triggerTimer.current);
-    };
-  }, []);
+  useEffect(()=>{const onScroll=()=>{setTriggerVisible(false);if(triggerTimer.current)clearTimeout(triggerTimer.current);triggerTimer.current=window.setTimeout(()=>setTriggerVisible(true),220)};window.addEventListener("scroll",onScroll,{passive:true});return()=>window.removeEventListener("scroll",onScroll)},[]);
+  const keysQuery=useQuery({queryKey:["ai-keys"],queryFn:()=>apiGet<AiKey[]>("/ai/keys"),enabled:open&&!local,staleTime:30000});
+  const activeProvider=(keysQuery.data?.[0]?.provider||"") as AiProvider|"";
+  const askMutation=useMutation({mutationFn:(q:string)=>apiPost<AiAnswer>("/ai/ask",{provider:activeProvider,question:q})});
 
-  const keysQuery = useQuery({
-    queryKey: ["ai-keys"],
-    queryFn: () => apiGet<AiKey[]>("/ai/keys"),
-    enabled: open && !local,
-    staleTime: 30_000,
-  });
-  const keys = keysQuery.data ?? [];
-  const activeProvider = (provider || keys[0]?.provider || "") as AiProvider | "";
+  const suggestions=useMemo(()=>{
+    const used=conversation.messages.filter(m=>m.role==="user").map(m=>m.content.toLowerCase());
+    return BASE_SUGGESTIONS.filter(s=>!used.some(u=>u.includes(s.toLowerCase().slice(0,12)))).slice(0,3);
+  },[conversation.messages]);
 
-  const askMutation = useMutation({
-    mutationFn: (q: string) => apiPost<AiAnswer>("/ai/ask", { provider: activeProvider, question: q }),
-    onSuccess: (data) => {
-      setAnswer(data.answer);
-      setError(null);
-    },
-    onError: (err) => {
-      setAnswer(null);
-      setError(getApiErrorMessage(err, "Não foi possível consultar a IA agora."));
-    },
-  });
-
-  const ask = async (q: string) => {
-    const text = q.trim();
-    if (!text) return;
-    setQuestion(text);
-    setAnswer(null);
-    setError(null);
-    if (local) {
-      try { setAnswer(await askLocalFinnos(text)); }
-      catch { setError("Não foi possível analisar os dados locais agora."); }
-      return;
-    }
-    if (!activeProvider) return;
-    askMutation.mutate(text);
+  const persist=(next:FinnConversation)=>{setConversation(next);upsertFinnConversation(next);setHistory(readFinnConversations())};
+  const startNew=()=>{setConversation(newFinnConversation());setQuestion("");setError(null);setHistoryOpen(false)};
+  const ask=async(q:string)=>{
+    const text=q.trim(); if(!text)return; setQuestion("");setError(null);
+    const user={id:crypto.randomUUID(),role:"user" as const,content:text,createdAt:new Date().toISOString()};
+    let next={...conversation,title:conversation.messages.length?conversation.title:text.slice(0,52),messages:[...conversation.messages,user]};persist(next);
+    try{
+      const reply=local?await askLocalFinnos(text):(await askMutation.mutateAsync(text)).answer;
+      next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:reply,createdAt:new Date().toISOString()}]};persist(next);
+    }catch(e){setError(getApiErrorMessage(e,"Não foi possível responder agora."))}
   };
 
-  return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      {showTrigger ? <SheetTrigger
-        className="fixed bottom-[5.75rem] right-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg transition-all duration-200 hover:scale-105 active:scale-100 dashboard:md:bottom-[6.25rem] dashboard:md:right-6 dashboard:md:h-11 dashboard:md:w-11"
-        style={{ opacity: triggerVisible ? 1 : 0, transform: triggerVisible ? "translateY(0) scale(1)" : "translateY(18px) scale(.97)", pointerEvents: triggerVisible ? "auto" : "none" }}
-        aria-label="Abrir FINNOS IA"
-        data-testid="ai-trigger-button"
-      >
-        <Sparkles className="h-5 w-5" aria-hidden="true" />
-      </SheetTrigger> : null}
-      <SheetContent side="right" className="flex w-full flex-col gap-4 overflow-y-auto p-6 sm:max-w-md">
-        <SheetHeader className="text-left">
-          <SheetTitle className="flex items-center gap-2 font-heading">
-            <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
-            FINNOS IA
-          </SheetTitle>
-          <SheetDescription className="text-left">
-            {local
-              ? "Converse com o FINNOS sobre suas finanças, gastos, orçamento e planejamento."
-              : "Converse com o FINNOS usando sua IA conectada e seu contexto financeiro."}
-          </SheetDescription>
-        </SheetHeader>
+  return <Sheet open={open} onOpenChange={setOpen}>
+    {showTrigger?<SheetTrigger className="fixed bottom-[5.75rem] right-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg transition-all duration-200 dashboard:md:bottom-[6.25rem] dashboard:md:right-6" style={{opacity:triggerVisible?1:0,pointerEvents:triggerVisible?"auto":"none"}} aria-label="Abrir FINNOS IA"><Sparkles className="h-5 w-5"/></SheetTrigger>:null}
+    <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-xl [&>button]:hidden">
+      <header className="flex items-center gap-3 border-b border-border px-5 py-4">
+        {historyOpen?<button onClick={()=>setHistoryOpen(false)} aria-label="Voltar"><ArrowLeft/></button>:<Sparkles className="h-6 w-6 text-primary"/>}
+        <div className="min-w-0 flex-1"><h2 className="font-heading text-lg font-bold">{historyOpen?"Conversas anteriores":"FINNOS IA"}</h2><p className="text-xs text-muted-foreground">{historyOpen?"Últimas conversas neste dispositivo":appMode==="demo"?"Assistente financeiro · Demonstração":appMode==="local"?"Assistente financeiro · Local":"Assistente financeiro contextual"}</p></div>
+        {!historyOpen?<><Button variant="ghost" size="icon" onClick={startNew} title="Nova conversa"><Plus/></Button><Button variant="ghost" size="icon" onClick={()=>setHistoryOpen(true)} title="Conversas anteriores"><Clock3/></Button></>:null}
+        <Button variant="ghost" size="icon" onClick={()=>setOpen(false)} aria-label="Fechar"><X/></Button>
+      </header>
 
-        {local ? (
-          <>
-            {showModeNotice ? <div className="relative rounded-xl border border-primary/20 bg-primary/5 p-4 pr-10 text-sm" data-testid="ai-local-mode-notice">
-              <button type="button" onClick={() => setShowModeNotice(false)} className="absolute right-3 top-3 text-lg leading-none text-muted-foreground transition-colors hover:text-foreground" aria-label="Ocultar informação">×</button>
-              <p className="font-medium text-foreground">{appMode === "demo" ? "Modo demonstração" : "Modo local"}</p>
-              <p className="mt-1 text-muted-foreground">
-                {appMode === "demo"
-                  ? "Você está conversando com o FINNOS usando dados fictícios para experimentar a inteligência do app."
-                  : "O FINNOS está analisando os dados deste aparelho. Para conectar uma IA externa e guardar sua chave com segurança, crie uma conta."}
-              </p>
-              {appMode === "local" ? <Link to="/cadastro" onClick={() => setOpen(false)} className={buttonVariants({ variant: "outline", className: "mt-3" })}>Criar conta e preservar meus dados</Link> : null}
-            </div> : null}
-            <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void ask(question); }}>
-              <Input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Pergunte algo sobre suas finanças…" maxLength={2000} aria-label="Sua pergunta" />
-              <Button type="submit" size="icon" disabled={!question.trim()} aria-label="Enviar pergunta"><Send className="h-4 w-4" /></Button>
-            </form>
-            {error ? <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm font-medium text-destructive">{error}</p> : null}
-            {answer ? <div className="rounded-xl border border-border bg-card p-4 text-sm leading-relaxed whitespace-pre-line">{answer}</div> : null}
-            <div className="flex flex-col gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sugestões</p>
-              {SUGGESTIONS.map((suggestion, index) => <button key={suggestion} type="button" onClick={() => void ask(suggestion)} className="flex items-center justify-between rounded-xl bg-muted px-4 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-accent" data-testid={`ai-suggestion-${index}`}>{suggestion}<ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" /></button>)}
-            </div>
-          </>
-        ) : keysQuery.isPending ? (
-          <div className="h-24 animate-pulse rounded-xl bg-muted" aria-hidden="true" />
-        ) : keys.length === 0 ? (
-          <div className="rounded-xl border border-border bg-muted/50 p-4 text-sm" data-testid="ai-no-key-notice">
-            <p className="font-medium text-foreground">Conecte sua IA</p>
-            <p className="mt-1 text-muted-foreground">
-              Cadastre a chave da sua conta do ChatGPT, Claude ou Gemini para liberar as respostas. A chave
-              fica criptografada no servidor e nunca é exibida de volta.
-            </p>
-            <Link
-              to="/configuracoes"
-              onClick={() => setOpen(false)}
-              className={buttonVariants({ className: "mt-3" })}
-              data-testid="ai-configure-link"
-            >
-              Cadastrar minha chave
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-          </div>
-        ) : (
-          <>
-            {keys.length > 1 ? (
-              <Select value={activeProvider} onValueChange={(v) => setProvider(v as AiProvider)}>
-                <SelectTrigger size="sm" className="w-full" aria-label="Provedor de IA" data-testid="ai-provider-select">
-                  <SelectValue>{keys.find((k) => k.provider === activeProvider)?.model ?? "Selecionar"}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {keys.map((k) => (
-                    <SelectItem key={k.provider} value={k.provider}>
-                      {k.provider} · {k.model}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Badge variant="secondary" className="w-fit" data-testid="ai-active-model">
-                {keys[0].provider} · {keys[0].model}
-              </Badge>
-            )}
-
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                ask(question);
-              }}
-              data-testid="ai-ask-form"
-            >
-              <Input
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                placeholder="Pergunte algo sobre suas finanças…"
-                maxLength={2000}
-                aria-label="Sua pergunta"
-                data-testid="ai-question-input"
-              />
-              <Button type="submit" size="icon" disabled={askMutation.isPending || !question.trim()} aria-label="Enviar pergunta" data-testid="ai-send-button">
-                {askMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </Button>
-            </form>
-
-            {askMutation.isPending ? (
-              <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground" data-testid="ai-loading">
-                Consultando sua IA…
-              </div>
-            ) : null}
-            {error ? (
-              <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm font-medium text-destructive" data-testid="ai-error">
-                {error}
-              </p>
-            ) : null}
-            {answer ? (
-              <div className="rounded-xl border border-border bg-card p-4 text-sm leading-relaxed whitespace-pre-line" data-testid="ai-answer">
-                {answer}
-              </div>
-            ) : null}
-
-            <div className="flex flex-col gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sugestões</p>
-              {SUGGESTIONS.map((suggestion, index) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  onClick={() => ask(suggestion)}
-                  disabled={askMutation.isPending}
-                  className="flex items-center justify-between rounded-xl bg-muted px-4 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
-                  data-testid={`ai-suggestion-${index}`}
-                >
-                  {suggestion}
-                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
-  );
+      {historyOpen?<div className="flex-1 overflow-y-auto p-5">
+        <div className="mb-5 flex items-center justify-between"><p className="text-sm text-muted-foreground">O FINNOS guarda até 3 conversas recentes neste dispositivo.</p>{history.length?<Button variant="ghost" size="sm" onClick={()=>{clearFinnConversations();setHistory([]);startNew()}}><Trash2 className="mr-2 h-4 w-4"/>Limpar</Button>:null}</div>
+        <div className="space-y-3">{history.length?history.map(c=><button key={c.id} onClick={()=>{setConversation(c);setHistoryOpen(false)}} className="w-full rounded-2xl border border-border p-4 text-left hover:bg-muted"><strong className="block truncate">{c.title}</strong><span className="text-xs text-muted-foreground">{c.messages.filter(m=>m.role==="user").length} perguntas</span></button>):<p className="py-16 text-center text-sm text-muted-foreground">Nenhuma conversa anterior.</p>}</div>
+      </div>:<>
+        <main className="flex-1 space-y-4 overflow-y-auto p-5">
+          {!conversation.messages.length?<div className="space-y-5">
+            <div className="flex gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-5 w-5"/></div><div className="rounded-2xl border border-border bg-card p-4 text-sm leading-relaxed">Olá! Sou a FINNOS IA. Posso analisar seus gastos, orçamento, Radar e ajudar no seu planejamento financeiro. O que você quer entender hoje?</div></div>
+            {appMode==="local"?<div className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground">Se quiser conectar ChatGPT, Claude ou Gemini e guardar sua chave com segurança, <Link to="/cadastro" onClick={()=>setOpen(false)} className="font-semibold text-primary">crie sua conta preservando seus dados</Link>.</div>:null}
+            <div className="grid gap-2">{suggestions.map(s=><button key={s} onClick={()=>void ask(s)} className="rounded-2xl bg-muted px-4 py-3 text-left text-sm font-medium hover:bg-accent">{s}</button>)}</div>
+          </div>:conversation.messages.map(m=><div key={m.id} className={m.role==="user"?"flex justify-end":"flex justify-start gap-3"}>{m.role==="assistant"?<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-4 w-4"/></div>:null}<div className={m.role==="user"?"max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground":"max-w-[88%] rounded-2xl border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-line"}>{m.content}</div></div>)}
+          {askMutation.isPending?<div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin"/>Analisando suas finanças…</div>:null}
+          {error?<p className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>:null}
+        </main>
+        <footer className="border-t border-border bg-background p-4">
+          <form className="flex gap-2" onSubmit={e=>{e.preventDefault();void ask(question)}}><Input value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Pergunte sobre suas finanças…" maxLength={2000}/><Button type="submit" size="icon" disabled={!question.trim()||askMutation.isPending}><Send className="h-4 w-4"/></Button></form>
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">A FINNOS IA pode cometer erros. Confira informações financeiras importantes.</p>
+        </footer>
+      </>}
+    </SheetContent>
+  </Sheet>;
 }
