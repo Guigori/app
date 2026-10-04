@@ -41,7 +41,8 @@ export default function Settings() {
   const [navigation, setNavigation] = useState<NavigationPreferences>(savedNavigation);
   useEffect(() => setNavigation(savedNavigation), [JSON.stringify(savedNavigation)]);
 
-  const availableNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio");
+  const mobileNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia");
+  const webNavigation = MAIN_NAV.filter((item) => ["transacoes", "fluxo", "orcamento", "categorias", "contas"].includes(item.slug));
   const updateNavigation = (target: "mobile" | "web", slug: string, enabled: boolean) => {
     setNavigation((current) => {
       const list = current[target];
@@ -239,7 +240,7 @@ export default function Settings() {
                 <h3 className="text-sm font-semibold">{target === "mobile" ? "Mobile" : "Web"}</h3>
                 <p className="text-xs text-muted-foreground">{target === "mobile" ? "Até 4 atalhos, incluindo Início. O botão + continua separado." : "Escolha os itens exibidos na navegação principal."}</p>
               </div>
-              <label className="flex items-center gap-3 rounded-xl border border-border px-3 py-3">
+              <label className="flex items-center gap-3 rounded-[1.35rem] border border-white/20 bg-background/55 px-4 py-3.5 shadow-[0_10px_32px_rgba(0,0,0,.10),inset_0_1px_0_rgba(255,255,255,.22)] backdrop-blur-[24px] supports-[backdrop-filter]:bg-background/45">
                 <Sparkles className="h-4 w-4 text-primary" />
                 <span className="flex-1 text-sm font-medium">FINNOS IA — desmarque para remover</span>
                 <input
@@ -253,18 +254,18 @@ export default function Settings() {
                   className="h-4 w-4 accent-primary"
                 />
               </label>
-              <div className="rounded-xl border border-border">
-                <div className="flex items-center gap-3 border-b border-border px-3 py-3">
+              <div className="overflow-hidden rounded-[1.6rem] border border-white/20 bg-background/55 shadow-[0_12px_36px_rgba(0,0,0,.10),inset_0_1px_0_rgba(255,255,255,.22)] backdrop-blur-[26px] supports-[backdrop-filter]:bg-background/45">
+                <div className="flex items-center gap-3 border-b border-border/55 px-4 py-3.5">
                   <Check className="h-4 w-4 text-primary" />
                   <span className="flex-1 text-sm font-medium">Início</span>
                   <span className="text-xs text-muted-foreground">Fixo</span>
                 </div>
-                {availableNavigation.map((item) => {
+                {(target === "mobile" ? mobileNavigation : webNavigation).map((item) => {
                   const enabled = navigation[target].includes(item.slug);
                   const position = navigation[target].indexOf(item.slug);
                   const mobileFull = target === "mobile" && navigation.mobile.length >= 4;
                   return (
-                    <div key={item.slug} className="flex items-center gap-2 border-b border-border px-3 py-2.5 last:border-b-0">
+                    <div key={item.slug} className="flex items-center gap-2 border-b border-border/55 px-4 py-3 last:border-b-0 transition-colors hover:bg-background/35">
                       <item.icon className="h-4 w-4 text-muted-foreground" />
                       <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
                       {enabled ? (
