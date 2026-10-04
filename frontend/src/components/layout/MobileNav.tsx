@@ -20,7 +20,7 @@ function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: strin
         cn(
           "flex h-14 min-w-14 items-center justify-center rounded-full transition-all duration-200",
           isActive
-            ? "bg-primary text-primary-foreground shadow-[0_5px_18px_hsl(var(--primary)/.30)]"
+            ? "text-primary"
             : "text-muted-foreground"
         )
       }
@@ -128,7 +128,7 @@ export function MobileNav() {
 
           <DropdownMenu open={quickOpen} onOpenChange={setQuickOpen}>
             <DropdownMenuTrigger
-              className="flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full border border-white/15 bg-background/55 text-foreground shadow-[0_10px_35px_rgba(0,0,0,.24),inset_0_1px_0_rgba(255,255,255,.16)] backdrop-blur-[28px] transition-transform active:scale-90 supports-[backdrop-filter]:bg-background/45"
+              className={cn("flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full border border-white/15 bg-background/55 shadow-[0_10px_35px_rgba(0,0,0,.24),inset_0_1px_0_rgba(255,255,255,.16)] backdrop-blur-[28px] transition-all active:scale-90 supports-[backdrop-filter]:bg-background/45", quickOpen ? "text-primary" : "text-muted-foreground")}
               aria-label="Adicionar lançamento"
               data-testid="mobile-quick-action-button"
             >
