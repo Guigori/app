@@ -6,6 +6,7 @@ import {
   PieChart,
   PiggyBank,
   Repeat,
+  Radar,
   Settings,
   Sparkles,
   Tags,
@@ -46,6 +47,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/fluxo", label: "Fluxo", icon: ArrowUpDown, slug: "fluxo" },
       { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
+      { to: "/radar", label: "Radar", icon: Radar, slug: "radar" },
       { to: "/metas", label: "Metas", icon: PiggyBank, soon: true, slug: "metas" },
     ],
   },
@@ -96,6 +98,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/categorias": "Categorias",
   "/fluxo": "Fluxo",
   "/orcamento": "Orçamento",
+  "/radar": "Radar",
   "/cartoes": "Cartões",
   "/assinaturas": "Assinaturas",
   "/metas": "Metas",
