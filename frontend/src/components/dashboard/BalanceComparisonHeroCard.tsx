@@ -59,14 +59,14 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
         </div>
       </CardHeader>
       <CardContent className="relative z-20 pt-6">
-        <div className="grid gap-4 sm:grid-cols-2 sm:items-end">
+        <div className="grid grid-cols-2 items-end gap-3 sm:gap-4">
           <div data-testid="comparison-month-income">
             <p className="text-sm text-white/70">Receitas do mês</p>
-            <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-income sm:text-3xl">{money(income)}</p>
+            <p className="mt-1 whitespace-nowrap font-heading text-[clamp(1.15rem,5.2vw,1.5rem)] font-bold tabular-nums text-income sm:text-3xl">{money(income)}</p>
           </div>
-          <div className="sm:text-right" data-testid="comparison-month-expense">
+          <div className="text-right" data-testid="comparison-month-expense">
             <p className="text-sm text-white/70">Despesas do mês</p>
-            <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-expense sm:text-3xl">{money(expense)}</p>
+            <p className="mt-1 whitespace-nowrap font-heading text-[clamp(1.15rem,5.2vw,1.5rem)] font-bold tabular-nums text-expense sm:text-3xl">{money(expense)}</p>
           </div>
         </div>
 
