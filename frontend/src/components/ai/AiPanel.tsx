@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowRight, Loader2, Send, Sparkles } from "lucide-react";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useNavigationPreferences } from "@/lib/navigationPreferences";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 const SUGGESTIONS = [
@@ -27,6 +28,24 @@ export function AiPanel() {
   const [answer, setAnswer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const local = isLocalMode();
+  const navigationPreferences = useNavigationPreferences();
+  const [triggerVisible, setTriggerVisible] = useState(true);
+  const triggerTimer = useRef<number | null>(null);
+  const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+  const showTrigger = isMobile ? navigationPreferences.aiMobile : navigationPreferences.aiWeb;
+
+  useEffect(() => {
+    const onScroll = () => {
+      setTriggerVisible(false);
+      if (triggerTimer.current) window.clearTimeout(triggerTimer.current);
+      triggerTimer.current = window.setTimeout(() => setTriggerVisible(true), 220);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (triggerTimer.current) window.clearTimeout(triggerTimer.current);
+    };
+  }, []);
 
   const keysQuery = useQuery({
     queryKey: ["ai-keys"],
@@ -60,13 +79,14 @@ export function AiPanel() {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger
-        className="fixed bottom-[5.75rem] right-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg transition-transform duration-200 hover:scale-105 active:scale-100 dashboard:md:bottom-[6.25rem] dashboard:md:right-6 dashboard:md:h-11 dashboard:md:w-11"
+      {showTrigger ? <SheetTrigger
+        className="fixed bottom-[5.75rem] right-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg transition-all duration-200 hover:scale-105 active:scale-100 dashboard:md:bottom-[6.25rem] dashboard:md:right-6 dashboard:md:h-11 dashboard:md:w-11"
+        style={{ opacity: triggerVisible ? 1 : 0, transform: triggerVisible ? "translateY(0) scale(1)" : "translateY(18px) scale(.97)", pointerEvents: triggerVisible ? "auto" : "none" }}
         aria-label="Abrir FINNOS IA"
         data-testid="ai-trigger-button"
       >
         <Sparkles className="h-5 w-5" aria-hidden="true" />
-      </SheetTrigger>
+      </SheetTrigger> : null}
       <SheetContent side="right" className="flex w-full flex-col gap-4 overflow-y-auto p-6 sm:max-w-md">
         <SheetHeader className="text-left">
           <SheetTitle className="flex items-center gap-2 font-heading">
