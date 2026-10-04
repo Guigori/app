@@ -12,7 +12,7 @@ interface NavDrawerProps {
 export function NavDrawer({ open, onOpenChange }: NavDrawerProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="left" className="flex w-[21rem] max-w-[88vw] flex-col gap-4 overflow-y-auto p-4" data-testid="nav-drawer">
+      <SheetContent side="left" className="flex w-[20rem] max-w-[86vw] flex-col gap-3 overflow-y-auto border-r border-white/10 bg-background/82 p-3 shadow-2xl backdrop-blur-2xl supports-[backdrop-filter]:bg-background/72 dashboard:w-[21rem] dashboard:max-w-[88vw] dashboard:gap-4 dashboard:p-4" data-testid="nav-drawer">
         <SheetHeader className="space-y-3 p-0 text-left">
           <SheetTitle className="sr-only">Navegação</SheetTitle>
           <FinnosLogo />
