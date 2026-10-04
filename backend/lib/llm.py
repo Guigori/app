@@ -74,7 +74,8 @@ def _classify(status: int, body: str) -> ProviderError:
     return ProviderError(502, "provider_error")
 
 
-async def call_llm(*, provider: str, user_key: str, model: str, system_prompt: str, question: str) -> str:
+async def call_llm(*, provider: str, user_key: str, model: str, system_prompt: str, question: str, history: list[dict] | None = None) -> str:
+    history = (history or [])[-12:]
     timeout = httpx.Timeout(45.0, connect=10.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         if provider == "openai":
@@ -84,6 +85,7 @@ async def call_llm(*, provider: str, user_key: str, model: str, system_prompt: s
                 "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
+                    *history,
                     {"role": "user", "content": question},
                 ],
                 "max_completion_tokens": 700,
@@ -95,14 +97,14 @@ async def call_llm(*, provider: str, user_key: str, model: str, system_prompt: s
                 "model": model,
                 "max_tokens": 700,
                 "system": system_prompt,
-                "messages": [{"role": "user", "content": question}],
+                "messages": [*history, {"role": "user", "content": question}],
             }
         else:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             headers = {"x-goog-api-key": user_key}
             body = {
                 "systemInstruction": {"parts": [{"text": system_prompt}]},
-                "contents": [{"role": "user", "parts": [{"text": question}]}],
+                "contents": [*[{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in history], {"role": "user", "parts": [{"text": question}]}],
                 "generationConfig": {"maxOutputTokens": 700},
             }
 
