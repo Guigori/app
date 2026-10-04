@@ -13,9 +13,11 @@ interface MonthSelectorProps {
 const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 export function MonthSelector({ month, onChange }: MonthSelectorProps) {
-  const touchX = useRef<number | null>(null);\n  const [pickerYear, setPickerYear] = useState<number | null>(null);
+  const touchX = useRef<number | null>(null);
+  const [pickerYear, setPickerYear] = useState<number | null>(null);
   const [year, monthNumber] = month.split("-").map(Number);
-  const shownYear = pickerYear ?? year;\n  const years = useMemo(() => Array.from({ length: 9 }, (_, index) => shownYear - 4 + index), [shownYear]);
+  const shownYear = pickerYear ?? year;
+  const years = useMemo(() => Array.from({ length: 9 }, (_, index) => shownYear - 4 + index), [shownYear]);
 
   const choose = (targetYear: number, targetMonth: number) =>
     onChange(`${targetYear}-${String(targetMonth).padStart(2, "0")}`);
