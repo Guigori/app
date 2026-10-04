@@ -9,6 +9,8 @@ import { disableLocalMode, enableLocalMode, enableDemoMode } from "@/lib/mode";
 import type { User } from "@/types/finnos";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
+import { firebaseAuth, firebaseConfigured, googleProvider } from "@/lib/firebase";
+import { signInWithPopup } from "firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -75,7 +77,7 @@ export default function Login() {
             <CardDescription>Entre para continuar acompanhando suas finanças.</CardDescription>
           </CardHeader>
           <CardContent>
-            <SocialAuthButtons onUnavailable={(provider) => setFormError(`Login com ${provider} será ativado assim que a integração OAuth for configurada.`)} />
+            <SocialAuthButtons onGoogle={async()=>{ setFormError(null); if(!firebaseConfigured||!firebaseAuth){setFormError("Firebase ainda não foi configurado neste ambiente.");return} try{await signInWithPopup(firebaseAuth,googleProvider);setFormError("Google conectado ao Firebase. A criação da sessão FINNOS será ativada na etapa de integração do backend.")}catch(error){setFormError(getApiErrorMessage(error,"Não foi possível entrar com Google."))}}} />
             <div className="my-4 flex items-center gap-3 text-xs text-slate-500 sm:my-5"><span className="h-px flex-1 bg-slate-200" />ou<span className="h-px flex-1 bg-slate-200" /></div>
             <form
               className="space-y-3 sm:space-y-4"
