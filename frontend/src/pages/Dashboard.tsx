@@ -89,7 +89,7 @@ export default function Dashboard() {
             Visão geral de {monthLabel(activeMonth)}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
           <div
             className="flex gap-1 rounded-full border border-border bg-muted/60 p-1"
             role="group"
@@ -105,13 +105,13 @@ export default function Dashboard() {
                 onClick={() => setView(option.key)}
                 aria-pressed={view === option.key}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-150",
+                  "flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors duration-150 dashboard:px-3",
                   view === option.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
                 data-testid={`home-view-${option.key}`}
               >
                 <option.icon className="h-3.5 w-3.5" aria-hidden="true" />
-                {option.label}
+                <span className="hidden min-[390px]:inline">{option.label}</span>
               </button>
             ))}
           </div>
