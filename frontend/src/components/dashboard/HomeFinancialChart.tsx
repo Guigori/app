@@ -110,8 +110,9 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
     { name: "Despesas", value: Math.max(periodSummary.expense, 0), fill: "var(--expense)", metric: "expense" as MetricKind },
     { name: "Resultado", value: Math.max(periodSummary.result, 0), fill: "var(--primary)", metric: "balance" as MetricKind },
   ].filter((item) => item.value > 0);
-  const selectedPieItem = selectedPie ? pieData.find((item) => item.name === selectedPie) ?? null : null;
-  const visiblePieItems = selectedPieItem ? [selectedPieItem] : pieData;
+  const selectedPieItem = selectedMetric ? pieData.find((item) => item.name === selectedMetric) ?? null : null;
+  const metricVisible = (name: "Receitas" | "Despesas" | "Resultado") => !selectedMetric || selectedMetric === name;
+  const toggleMetric = (name: "Receitas" | "Despesas" | "Resultado") => setSelectedMetric((current) => current === name ? null : name);
 
   const tooltipStyle = {
     background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 16,
@@ -161,8 +162,8 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
               </PieChart>
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-              <span className="text-xs text-muted-foreground">Saldo total</span>
-              <strong className="mt-1 max-w-[8rem] truncate font-heading text-lg font-bold tabular-nums text-foreground">{money(total)}</strong>
+              <span className="text-xs text-muted-foreground">{selectedPieItem?.name ?? "Resultado"}</span>
+              <strong className="mt-1 max-w-[8rem] truncate font-heading text-lg font-bold tabular-nums text-foreground">{money(selectedPieItem?.value ?? periodSummary.result)}</strong>
             </div>
           </div>
           <div className="w-full max-w-xs space-y-2">
@@ -170,7 +171,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
               <button type="button" key={entry.name} onClick={() => toggleMetric(entry.name as "Receitas" | "Despesas" | "Resultado")} className="flex w-full items-center justify-between gap-5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-muted/40">
                 <span className="flex items-center gap-2 text-sm text-foreground"><span className="h-2.5 w-2.5 rounded-full" style={{ background: entry.fill }} />{entry.name}</span>
                 <strong className="font-heading text-sm tabular-nums text-foreground">{money(entry.value)}</strong>
-              </div>
+              </button>
             ))}
           </div>
         </div>
