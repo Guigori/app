@@ -46,6 +46,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
   const [showIncome, setShowIncome] = useState(true);
   const [showExpense, setShowExpense] = useState(true);
   const [showResult, setShowResult] = useState(true);
+  const [selectedPie, setSelectedPie] = useState<string | null>(null);
 
   const daily = period === "7d" || period === "1m";
   const calendarQuery = useQuery({
@@ -93,11 +94,24 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
     return period === "7d" ? rows.slice(-7) : rows;
   }, [calendarQuery.data, daily, month, period, trendsQuery.data]);
 
+  const periodSummary = useMemo(() => {
+    if (chartData.length === 0) return { income: 0, expense: 0, result: 0 };
+    const last = chartData[chartData.length - 1];
+    if (daily) return { income: last.Receitas, expense: last.Despesas, result: last.Resultado };
+    return chartData.reduce((acc, item) => ({
+      income: acc.income + item.Receitas,
+      expense: acc.expense + item.Despesas,
+      result: acc.result + item.Resultado,
+    }), { income: 0, expense: 0, result: 0 });
+  }, [chartData, daily]);
+
   const pieData = [
-    ...(showIncome ? [{ name: "Receitas", value: Math.max(income, 0), fill: "var(--income)" }] : []),
-    ...(showExpense ? [{ name: "Despesas", value: Math.max(expense, 0), fill: "var(--expense)" }] : []),
-    ...(showResult ? [{ name: "Resultado", value: Math.max(result, 0), fill: "var(--primary)" }] : []),
+    { name: "Receitas", value: Math.max(periodSummary.income, 0), fill: "var(--income)", metric: "income" as MetricKind },
+    { name: "Despesas", value: Math.max(periodSummary.expense, 0), fill: "var(--expense)", metric: "expense" as MetricKind },
+    { name: "Resultado", value: Math.max(periodSummary.result, 0), fill: "var(--primary)", metric: "balance" as MetricKind },
   ].filter((item) => item.value > 0);
+  const selectedPieItem = selectedPie ? pieData.find((item) => item.name === selectedPie) ?? null : null;
+  const visiblePieItems = selectedPieItem ? [selectedPieItem] : pieData;
 
   const tooltipStyle = {
     background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 16,
@@ -121,29 +135,19 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
       </div>
 
       {view === "cards" ? (
-        <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-border/70 sm:grid-cols-4">
-          {[
-            ["Saldo total", total, "balance" as MetricKind],
-            ["Receitas", income, "income" as MetricKind],
-            ["Despesas", expense, "expense" as MetricKind],
-            ["Resultado", result, "balance" as MetricKind],
-          ].map(([label, value, metric], index) => (
-            <button key={String(label)} type="button" onClick={() => onOpenMetric(metric as MetricKind)} className={`p-4 text-left transition-colors hover:bg-muted/40 ${index > 0 ? "border-l border-border/70" : ""}`}>
-              <p className="text-xs font-medium text-muted-foreground">{String(label)}</p>
-              <p className="mt-1.5 font-heading text-lg font-bold tabular-nums text-foreground">{money(Number(value))}</p>
-            </button>
-          ))}
+        <div className="py-1 text-sm text-muted-foreground">
+          O resumo principal acima já mostra saldo, receitas e despesas. Use os filtros para alternar para Linhas, Pizza ou Barras.
         </div>
       ) : isLoading ? (
         <div className="h-[270px] animate-pulse rounded-2xl bg-muted/50" />
       ) : view === "pie" ? (
-        <div className="flex min-h-[270px] flex-col items-center justify-center gap-5 py-2 sm:flex-row sm:gap-10">
-          <div className="relative h-48 w-48 shrink-0">
+        <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 py-1 sm:min-h-[270px] sm:flex-row sm:gap-10 sm:py-2">
+          <div className="relative h-44 w-44 shrink-0 sm:h-48 sm:w-48" onClick={() => setSelectedPie(null)}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => money(value)} />
-                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius="68%" outerRadius="98%" paddingAngle={2} cornerRadius={6} strokeWidth={0}>
-                  {pieData.map((entry) => <Cell key={entry.name} fill={entry.fill} />)}
+                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius="68%" outerRadius="98%" paddingAngle={2} cornerRadius={6} strokeWidth={0} onClick={(_, index) => { const item = pieData[index]; if (item) setSelectedPie(selectedPie === item.name ? null : item.name); }}>
+                  {pieData.map((entry) => <Cell key={entry.name} fill={entry.fill} opacity={selectedPie && selectedPie !== entry.name ? 0.22 : 1} className="cursor-pointer" />)}
                 </Pie>
               </PieChart>
             </ResponsiveContainer>
