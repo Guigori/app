@@ -1,5 +1,4 @@
 import { Eye, EyeOff } from "lucide-react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatHiddenBRL, monthLabel } from "@/lib/format";
@@ -28,16 +27,15 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
   const hasMovement = moved > 0;
 
   return (
-    <Card className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-black/10 text-white shadow-none backdrop-blur-[2px]" data-testid="balance-comparison-hero">
+    <div className="relative text-white" data-testid="balance-comparison-hero">
       <button
         type="button"
         onClick={onOpen}
         aria-label="Abrir o fluxo completo"
-        className="absolute inset-0 z-10 cursor-pointer rounded-[inherit] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+        className="absolute inset-x-0 top-0 z-10 h-28 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
         data-testid="balance-comparison-open-flow"
       />
-      <div className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full bg-[#5B35FF]/18 blur-3xl" aria-hidden="true" />
-      <CardHeader className="relative z-20 pb-0">
+      <div className="relative z-20">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.15em] text-white/60">Saldo total</p>
@@ -57,9 +55,9 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
             {hidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="relative z-20 pt-6">
-        <div className="grid grid-cols-2 items-end gap-3 sm:gap-4">
+      </div>
+      <div className="relative z-20 pt-8">
+        <div className="grid grid-cols-2 items-end gap-3 border-t border-white/10 pt-5 sm:gap-4">
           <div data-testid="comparison-month-income">
             <p className="text-sm text-white/70">Receitas do mês</p>
             <p className="mt-1 whitespace-nowrap font-heading text-[clamp(1.15rem,5.2vw,1.5rem)] font-bold tabular-nums text-income sm:text-3xl">{money(income)}</p>
@@ -109,7 +107,7 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
             </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
