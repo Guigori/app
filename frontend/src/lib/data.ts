@@ -62,6 +62,7 @@ import type {
   TransactionInput,
   Trends,
   User,
+  Radar,
 } from "@/types/finnos";
 
 const LOCAL_USER_ID = "local";
@@ -97,6 +98,13 @@ async function apiPatchName(name: string): Promise<User> {
 export async function fetchDashboard(month: string | null): Promise<Dashboard> {
   if (isLocalMode()) return localDashboard(month);
   return apiGet<Dashboard>(month ? `/dashboard?month=${month}` : "/dashboard");
+}
+
+// --- Radar ------------------------------------------------------------------
+
+export async function fetchRadar(): Promise<Radar | null> {
+  if (isLocalMode()) return null;
+  return apiGet<Radar>("/radar");
 }
 
 // --- Analytics --------------------------------------------------------------
