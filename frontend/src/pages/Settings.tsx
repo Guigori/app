@@ -191,7 +191,7 @@ export default function Settings() {
               </div>
               <label className="flex items-center gap-3 rounded-xl border border-border px-3 py-3">
                 <Sparkles className="h-4 w-4 text-primary" />
-                <span className="flex-1 text-sm font-medium">Botão suspenso FINNOS IA</span>
+                <span className="flex-1 text-sm font-medium">FINNOS IA — desmarque para remover</span>
                 <input
                   type="checkbox"
                   checked={target === "mobile" ? navigation.aiMobile : navigation.aiWeb}
