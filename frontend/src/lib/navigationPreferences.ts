@@ -39,10 +39,12 @@ export function getNavigationPreferences(): NavigationPreferences {
   }
 }
 
-let snapshot = JSON.stringify(defaultNavigationPreferences());
+let snapshot = "";
 function readSnapshot() {
-  // useSyncExternalStore requires the snapshot to remain referentially stable
-  // until a subscribed change event occurs.
+  // Always reconcile with localStorage. This also fixes stale preferences when
+  // the page loaded before a previous setting was written.
+  const current = JSON.stringify(getNavigationPreferences());
+  if (current !== snapshot) snapshot = current;
   return snapshot;
 }
 function subscribe(callback: () => void) {
@@ -53,7 +55,12 @@ function subscribe(callback: () => void) {
 }
 
 export function saveNavigationPreferences(next: NavigationPreferences) {
-  localStorage.setItem(KEY, JSON.stringify(next));
+  const normalized = {
+    ...next,
+    mobile: [HOME, ...next.mobile.filter((x) => x !== HOME)].slice(0, 4),
+    web: [HOME, ...next.web.filter((x) => x !== HOME)],
+  };
+  localStorage.setItem(KEY, JSON.stringify(normalized));
   snapshot = JSON.stringify(getNavigationPreferences());
   window.dispatchEvent(new Event(EVENT));
 }
