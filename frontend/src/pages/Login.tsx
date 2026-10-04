@@ -70,8 +70,8 @@ export default function Login() {
       <AuthLayout>
         <Card className="w-full max-w-[38rem] rounded-[1.75rem] border-white/30 bg-white text-slate-950 shadow-2xl [--card-spacing:--spacing(5)] sm:[--card-spacing:--spacing(6)] lg:border-0 lg:shadow-none">
           <CardHeader>
-            <CardTitle className="font-heading text-[2rem] font-bold tracking-tight xl:text-4xl">Bem-vindo de volta</CardTitle>
-            <CardDescription>Entre na sua conta para acessar seu painel financeiro.</CardDescription>
+            <CardTitle className="font-heading text-[2rem] font-bold tracking-tight xl:text-4xl">Iniciar sessão</CardTitle>
+            <CardDescription>Entre para continuar acompanhando suas finanças.</CardDescription>
           </CardHeader>
           <CardContent>
             <SocialAuthButtons onUnavailable={(provider) => setFormError(`Login com ${provider} será ativado assim que a integração OAuth for configurada.`)} />
@@ -88,7 +88,7 @@ export default function Login() {
                 <Label htmlFor="login-email">E-mail</Label>
                 <Input
                   id="login-email"
-                  className="h-12 rounded-2xl border-[#D9D7E8] bg-[#F8F8FC] px-4 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
+                  className="h-12 rounded-2xl border-[#D9D7E8] bg-white px-4 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
                   type="email"
                   autoComplete="email"
                   required
@@ -113,7 +113,7 @@ export default function Login() {
                 <div className="relative">
                 <Input
                   id="login-password"
-                  className="h-12 rounded-2xl border-[#D9D7E8] bg-[#F8F8FC] pl-4 pr-12 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
+                  className="h-12 rounded-2xl border-[#D9D7E8] bg-white pl-4 pr-12 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)] placeholder:text-slate-400 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   required
@@ -167,7 +167,7 @@ export default function Login() {
               disabled={loginMutation.isPending || demoMutation.isPending}
               data-testid="demo-login-button"
             >
-              Explorar conta de demonstração
+              Ver demonstração
             </Button>
 
             <Button
@@ -178,7 +178,7 @@ export default function Login() {
               data-testid="local-mode-button"
             >
               <Smartphone className="h-4 w-4" aria-hidden="true" />
-              Usar sem cadastro
+              Entrar no modo local
             </Button>
             <p className="mt-1 text-center text-[11px] leading-snug text-muted-foreground">
               Sem cadastro, os dados ficam apenas neste navegador.
