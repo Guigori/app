@@ -20,6 +20,7 @@ from lib.db import client, db, ensure_indexes
 from routers import (
     accounts,
     ai,
+    ai_feedback,
     analytics,
     auth,
     budgets,
@@ -87,6 +88,7 @@ api_router.include_router(transactions.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(demo.router)
 api_router.include_router(ai.router)
+api_router.include_router(ai_feedback.router)
 api_router.include_router(analytics.router)
 api_router.include_router(cards.router)
 api_router.include_router(notifications.router)
