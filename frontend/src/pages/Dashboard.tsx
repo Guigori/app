@@ -88,7 +88,7 @@ export default function Dashboard() {
     <div className="min-w-0 space-y-5 overflow-x-hidden animate-fade-up sm:space-y-6">
       <section className="dashboard-hero-surface relative min-w-0 rounded-[24px] border border-border/70 px-4 pb-6 pt-6 shadow-sm sm:rounded-[28px] sm:px-6 sm:pb-7 sm:pt-7" data-testid="dashboard-financial-header">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 pr-12 sm:pr-14">
           <h1
             className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
             data-testid="dashboard-greeting"
@@ -99,7 +99,7 @@ export default function Dashboard() {
             Visão geral de {monthLabel(activeMonth)}
           </p>
         </div>
-        <div className="absolute right-4 top-6 z-20 flex shrink-0 flex-col items-center gap-1 sm:right-6 sm:top-7" data-testid="dashboard-action-rail">
+        <div className="absolute right-0 top-6 z-20 flex shrink-0 flex-col items-center gap-1 sm:right-0 sm:top-7" data-testid="dashboard-action-rail">
           {data ? <MonthSelector month={data.month} onChange={setMonth} /> : null}
           <Button variant="ghost" size="icon" onClick={toggleBalance} aria-label={balanceHidden ? "Exibir valores" : "Ocultar valores"} data-testid="dashboard-visibility-toggle" className="h-10 w-10 rounded-full hover:bg-muted/60">
             {balanceHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
