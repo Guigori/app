@@ -2,17 +2,20 @@ import { NavLink } from "react-router-dom";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { TOP_TABS } from "@/components/layout/nav";
+import { useNavigationPreferences } from "@/lib/navigationPreferences";
 
 /** Horizontal, scrollable tab strip under the header — the active tab keeps an animated
  *  underline that slides between items instead of snapping. */
 export function TopTabs() {
+  const preferences = useNavigationPreferences();
+  const visibleTabs = TOP_TABS.filter((tab) => tab.slug === "inicio" || preferences.web.includes(tab.slug));
   return (
     <div
       className="sticky top-14 z-10 hidden border-b border-border bg-background dashboard:block"
       data-testid="top-tabs"
     >
       <div className="mx-auto flex w-full max-w-7xl gap-1 overflow-x-auto px-2 sm:px-4 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {TOP_TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <NavLink
             key={tab.to}
             to={tab.to}
