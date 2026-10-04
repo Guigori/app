@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Bell, CalendarClock, CreditCard } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { fetchNotifications } from "@/lib/data";
 import { formatBRL, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,7 @@ const ICON: Record<NotificationKind, typeof Bell> = {
 /** Bell with a live badge: scheduled/pending entries coming due, overdue ones and card
  *  invoices closing within the next week. */
 export function NotificationsBell() {
+  const navigate = useNavigate();
   const { data } = useQuery({
     queryKey: ["notifications"],
     queryFn: fetchNotifications,
@@ -58,7 +60,15 @@ export function NotificationsBell() {
             {items.map((item) => {
               const Icon = ICON[item.kind];
               return (
-                <li key={item.id} className="flex gap-3 px-4 py-3" data-testid={`notification-${item.id}`}>
+                <li
+                  key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(item.kind === "fatura" && item.id.startsWith("card-") ? `/cartoes/${item.id.slice(5)}` : `/transacoes?highlight=${encodeURIComponent(item.id)}`)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigate(item.kind === "fatura" && item.id.startsWith("card-") ? `/cartoes/${item.id.slice(5)}` : `/transacoes?highlight=${encodeURIComponent(item.id)}`); } }}
+                  className="flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  data-testid={`notification-${item.id}`}
+                >
                   <span
                     className={cn(
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl",
