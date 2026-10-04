@@ -3,7 +3,8 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { BOTTOM_LEFT, BOTTOM_RIGHT, type NavItem } from "@/components/layout/nav";
+import { type NavItem } from "@/components/layout/nav";
+import { navItemsFor, useNavigationPreferences } from "@/lib/navigationPreferences";
 import { useQuickActions } from "@/components/layout/QuickActions";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -41,6 +42,8 @@ function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: strin
 
 export function MobileNav() {
   const { actions, run } = useQuickActions();
+  const navigationPreferences = useNavigationPreferences();
+  const mobileItems = navItemsFor(navigationPreferences.mobile);
   const navigate = useNavigate();
   const [quickOpen, setQuickOpen] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
@@ -118,10 +121,7 @@ export function MobileNav() {
       >
         <div className="flex w-full max-w-[28rem] items-center gap-2">
           <div className="grid min-w-0 flex-1 grid-cols-4 items-center rounded-[2.15rem] border border-white/15 bg-background/55 p-1.5 shadow-[0_10px_35px_rgba(0,0,0,.24),inset_0_1px_0_rgba(255,255,255,.14)] backdrop-blur-[28px] supports-[backdrop-filter]:bg-background/45">
-            {BOTTOM_LEFT.map((item) => (
-              <MobileTab key={item.to} item={item} onNavigate={navigateFromDock} />
-            ))}
-            {BOTTOM_RIGHT.map((item) => (
+            {mobileItems.map((item) => (
               <MobileTab key={item.to} item={item} onNavigate={navigateFromDock} />
             ))}
           </div>
