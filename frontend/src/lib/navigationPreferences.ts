@@ -41,7 +41,8 @@ export function getNavigationPreferences(): NavigationPreferences {
 
 let snapshot = JSON.stringify(defaultNavigationPreferences());
 function readSnapshot() {
-  snapshot = JSON.stringify(getNavigationPreferences());
+  // useSyncExternalStore requires the snapshot to remain referentially stable
+  // until a subscribed change event occurs.
   return snapshot;
 }
 function subscribe(callback: () => void) {
@@ -53,11 +54,13 @@ function subscribe(callback: () => void) {
 
 export function saveNavigationPreferences(next: NavigationPreferences) {
   localStorage.setItem(KEY, JSON.stringify(next));
+  snapshot = JSON.stringify(getNavigationPreferences());
   window.dispatchEvent(new Event(EVENT));
 }
 
 export function resetNavigationPreferences() {
   localStorage.removeItem(KEY);
+  snapshot = JSON.stringify(getNavigationPreferences());
   window.dispatchEvent(new Event(EVENT));
 }
 
