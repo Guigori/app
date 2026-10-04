@@ -96,7 +96,7 @@ export function SummaryCards({
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 min-[430px]:grid-cols-2 sm:gap-4 xl:grid-cols-4">
       {cards.map((card) => (
         <Card
           key={card.metric}
@@ -107,7 +107,7 @@ export function SummaryCards({
             <button
               type="button"
               onClick={() => onOpenMetric(card.metric)}
-              className="w-full rounded-2xl px-4 py-4 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="min-w-0 w-full overflow-hidden rounded-2xl px-4 py-4 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               aria-label={`Ver gráficos de ${card.label}`}
               data-testid={`summary-open-${card.metric}`}
             >
@@ -125,7 +125,7 @@ export function SummaryCards({
               </div>
               <p
                 className={cn(
-                  "mt-1.5 font-heading text-2xl font-bold tabular-nums text-foreground",
+                  "mt-1.5 max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-heading text-[clamp(1.25rem,6vw,1.5rem)] font-bold tabular-nums text-foreground",
                   card.valueClass,
                 )}
                 data-testid={`summary-${card.metric}-value`}
