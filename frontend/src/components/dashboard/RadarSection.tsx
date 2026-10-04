@@ -2,7 +2,7 @@ import { ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
-import type { RadarSignal } from "@/types/finnos";
+import type { RadarSignal, RadarSignalType } from "@/types/finnos";
 
 const SIGNAL_COLORS: Record<RadarSignalType, string> = {
   risk: "#FB4A6B",
