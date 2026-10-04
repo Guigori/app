@@ -4,7 +4,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowRight, Loader2, Send, Sparkles } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
-import { isLocalMode } from "@/lib/mode";
+import { getMode, isLocalMode } from "@/lib/mode";
+import { askLocalFinnos } from "@/lib/local/ai";
 import type { AiAnswer, AiKey, AiProvider } from "@/types/finnos";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export function AiPanel() {
   const [answer, setAnswer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const local = isLocalMode();
+  const appMode = getMode();
   const navigationPreferences = useNavigationPreferences();
   const [triggerVisible, setTriggerVisible] = useState(true);
   const triggerTimer = useRef<number | null>(null);
@@ -68,12 +70,18 @@ export function AiPanel() {
     },
   });
 
-  const ask = (q: string) => {
+  const ask = async (q: string) => {
     const text = q.trim();
-    if (!text || !activeProvider) return;
+    if (!text) return;
     setQuestion(text);
     setAnswer(null);
     setError(null);
+    if (local) {
+      try { setAnswer(await askLocalFinnos(text)); }
+      catch { setError("Não foi possível analisar os dados locais agora."); }
+      return;
+    }
+    if (!activeProvider) return;
     askMutation.mutate(text);
   };
 
@@ -100,15 +108,27 @@ export function AiPanel() {
         </SheetHeader>
 
         {local ? (
-          <div className="rounded-xl border border-border bg-muted/50 p-4 text-sm" data-testid="ai-local-mode-notice">
-            <p className="text-muted-foreground">
-              Na conta local os dados ficam apenas neste aparelho, então a IA não pode consultá-los.
-              Crie uma conta completa para usar a FINNOS IA com a sua chave.
-            </p>
-            <Link to="/cadastro" className={buttonVariants({ variant: "outline", className: "mt-3" })}>
-              Criar conta completa
-            </Link>
-          </div>
+          <>
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm" data-testid="ai-local-mode-notice">
+              <p className="font-medium text-foreground">{appMode === "demo" ? "FINNOS IA · Demonstração" : "FINNOS IA · Modo local"}</p>
+              <p className="mt-1 text-muted-foreground">
+                {appMode === "demo"
+                  ? "Explore a inteligência do FINNOS com os dados fictícios da demonstração. Nenhuma chave de API é necessária."
+                  : "A inteligência nativa analisa os dados deste aparelho sem exigir uma chave externa. Para conectar ChatGPT, Claude ou Gemini e salvar a chave com segurança, crie uma conta FINNOS."}
+              </p>
+              {appMode === "local" ? <Link to="/cadastro" onClick={() => setOpen(false)} className={buttonVariants({ variant: "outline", className: "mt-3" })}>Criar conta e preservar meus dados</Link> : null}
+            </div>
+            <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void ask(question); }}>
+              <Input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Pergunte algo sobre suas finanças…" maxLength={2000} aria-label="Sua pergunta" />
+              <Button type="submit" size="icon" disabled={!question.trim()} aria-label="Enviar pergunta"><Send className="h-4 w-4" /></Button>
+            </form>
+            {error ? <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm font-medium text-destructive">{error}</p> : null}
+            {answer ? <div className="rounded-xl border border-border bg-card p-4 text-sm leading-relaxed whitespace-pre-line">{answer}</div> : null}
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sugestões</p>
+              {SUGGESTIONS.map((suggestion, index) => <button key={suggestion} type="button" onClick={() => void ask(suggestion)} className="flex items-center justify-between rounded-xl bg-muted px-4 py-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-accent" data-testid={`ai-suggestion-${index}`}>{suggestion}<ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" /></button>)}
+            </div>
+          </>
         ) : keysQuery.isPending ? (
           <div className="h-24 animate-pulse rounded-xl bg-muted" aria-hidden="true" />
         ) : keys.length === 0 ? (
