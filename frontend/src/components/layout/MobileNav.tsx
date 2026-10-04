@@ -120,7 +120,8 @@ export function MobileNav() {
         data-testid="mobile-nav"
       >
         <div className="flex w-full max-w-[28rem] items-center gap-2">
-          <div className="grid min-w-0 flex-1 grid-cols-4 items-center rounded-[2.15rem] border border-white/15 bg-background/55 p-1.5 shadow-[0_10px_35px_rgba(0,0,0,.24),inset_0_1px_0_rgba(255,255,255,.14)] backdrop-blur-[28px] supports-[backdrop-filter]:bg-background/45">
+          <div style={{ gridTemplateColumns: `repeat(${Math.max(mobileItems.length, 1)}, minmax(0, 1fr))` }}
+          className="grid min-w-0 flex-1 items-center rounded-[2.15rem] border border-white/15 bg-background/55 p-1.5 shadow-[0_10px_35px_rgba(0,0,0,.24),inset_0_1px_0_rgba(255,255,255,.14)] backdrop-blur-[28px] supports-[backdrop-filter]:bg-background/45">
             {mobileItems.map((item) => (
               <MobileTab key={item.to} item={item} onNavigate={navigateFromDock} />
             ))}
