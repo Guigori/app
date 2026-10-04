@@ -307,6 +307,7 @@ export interface DayFlow {
   projected_income: number;
   projected_expense: number;
   count: number;
+  active_count: number;
 }
 
 export interface CalendarMonth {
@@ -456,19 +457,24 @@ export interface PayInvoiceInput {
 
 export type RadarSignalType = "risk" | "deviation" | "information" | "opportunity";
 export type RadarSignalSeverity = "normal" | "medium" | "high" | "critical";
+export type RadarSignalState = "new" | "active" | "viewed" | "resolved" | "expired" | "dismissed";
 
 export interface RadarSignal {
   id: string;
   type: RadarSignalType;
   severity: RadarSignalSeverity;
+  state: RadarSignalState;
   title: string;
   description: string;
+  explanation: string;
   metric: string | null;
   radar_position: number;
   score: number;
   related_entity_type: string | null;
   related_entity_id: string | null;
   expires_at: string | null;
+  evidence: { label: string; value: string }[];
+  detected_at: string | null;
 }
 
 export interface Radar {
