@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -7,9 +7,9 @@ import { BOTTOM_LEFT, BOTTOM_RIGHT, type NavItem } from "@/components/layout/nav
 import { useQuickActions } from "@/components/layout/QuickActions";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-function MobileTab({ item }: { item: NavItem }) {
+function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: string) => void }) {
   return (
-    <NavLink to={item.to} end={item.to === "/"} className={({ isActive }) => cn(
+    <NavLink to={item.to} end={item.to === "/"} onClick={(event) => { event.preventDefault(); onNavigate(item.to); }} className={({ isActive }) => cn(
       "flex h-14 min-w-14 items-center justify-center rounded-full transition-all duration-200",
       isActive ? "bg-primary text-primary-foreground shadow-[0_5px_18px_hsl(var(--primary)/.30)]" : "text-muted-foreground"
     )} data-testid={`mobile-nav-${item.slug}`}>
@@ -24,7 +24,7 @@ function MobileTab({ item }: { item: NavItem }) {
 }
 
 export function MobileNav() {
-  const { actions, run } = useQuickActions();
+  const { actions, run } = useQuickActions();\n  const navigate = useNavigate();\n  const [transitioning, setTransitioning] = useState(false);
   const [visible, setVisible] = useState(true);
   const timer = useRef<number | null>(null);
 
