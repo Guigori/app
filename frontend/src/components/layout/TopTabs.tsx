@@ -1,14 +1,13 @@
 import { NavLink } from "react-router-dom";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
-import { TOP_TABS } from "@/components/layout/nav";
-import { useNavigationPreferences } from "@/lib/navigationPreferences";
+import { navItemsFor, useNavigationPreferences } from "@/lib/navigationPreferences";
 
 /** Horizontal, scrollable tab strip under the header — the active tab keeps an animated
  *  underline that slides between items instead of snapping. */
 export function TopTabs() {
   const preferences = useNavigationPreferences();
-  const visibleTabs = TOP_TABS.filter((tab) => tab.slug === "inicio" || preferences.web.includes(tab.slug));
+  const visibleTabs = navItemsFor(preferences.web).filter((tab) => !tab.soon && tab.slug !== "ia");
   return (
     <div
       className="sticky top-14 z-10 hidden px-3 pt-2 dashboard:block"
