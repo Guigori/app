@@ -76,7 +76,7 @@ export default function Dashboard() {
     navigate(`/fluxo?month=${activeMonth}&metric=${METRIC_TAB[metric]}`);
 
   return (
-    <div className="space-y-6 animate-fade-up">
+    <div className="min-w-0 space-y-5 overflow-x-hidden animate-fade-up sm:space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1
@@ -159,7 +159,7 @@ export default function Dashboard() {
       ) : null}
 
       {data ? (
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-5 sm:space-y-6">
           {view === "cards" ? (
             <BalanceHeroCard
               month={data.month}
