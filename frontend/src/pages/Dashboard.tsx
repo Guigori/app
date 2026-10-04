@@ -85,7 +85,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-w-0 space-y-5 overflow-x-hidden animate-fade-up sm:space-y-6">
-      <section className="dashboard-hero-surface min-w-0 rounded-[28px] border border-primary/10 px-4 pb-6 pt-6 shadow-sm sm:rounded-[32px] sm:px-6 sm:pb-7 sm:pt-7" data-testid="dashboard-financial-header">
+      <section className="dashboard-hero-surface min-w-0 rounded-[24px] border border-border/70 px-4 pb-6 pt-6 shadow-sm sm:rounded-[28px] sm:px-6 sm:pb-7 sm:pt-7" data-testid="dashboard-financial-header">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1
