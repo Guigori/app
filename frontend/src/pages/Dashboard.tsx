@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, LayoutGrid, SlidersHorizontal } from "lucide-react";
-import { fetchAccounts, fetchDashboard, fetchMe, fetchTransactions } from "@/lib/data";
+import { fetchAccounts, fetchDashboard, fetchMe, fetchRadar, fetchTransactions } from "@/lib/data";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 import { useHomeView } from "@/lib/prefs";
 import { useHomePreferences, type HomeModuleId } from "@/lib/homePreferences";
@@ -44,6 +44,11 @@ export default function Dashboard() {
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", month],
     queryFn: () => fetchDashboard(month),
+  });
+  const radarQuery = useQuery({
+    queryKey: ["radar", activeMonth],
+    queryFn: fetchRadar,
+    staleTime: 60_000,
   });
   const accountsQuery = useQuery({
     queryKey: ["accounts"],
@@ -195,7 +200,7 @@ export default function Dashboard() {
             ) : (
               <MetricCharts key={moduleId} month={data.month} income={data.income} expense={data.expense} monthBalance={data.month_balance} invested={data.invested} onOpenMetric={openFlow} />
             );
-            if (moduleId === "radar") return <RadarSection key={moduleId} />;
+            if (moduleId === "radar") return <RadarSection key={moduleId} signals={radarQuery.data?.items ?? []} totalCount={radarQuery.data?.count ?? 0} />;
             if (moduleId === "categories") return (
               <div key={moduleId}>
                 <ExpensesDonutChart month={data.month} slices={data.categories} total={data.expense} onOpenDetails={() => openFlow("expense")} selectedCategoryId={selectedCategory?.category_id ?? null} onSelectCategory={setSelectedCategory} onOpenCategory={(slice) => navigate(`/fluxo?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)} />
