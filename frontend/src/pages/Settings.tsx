@@ -329,8 +329,7 @@ export default function Settings() {
               Criar conta completa
             </Link>
             <p className="mt-2 text-xs text-muted-foreground">
-              Ao criar a conta completa você começa com dados novos no servidor; os lançamentos locais
-              continuam neste aparelho.
+              Ao criar sua conta, o FINNOS importa com segurança os dados deste aparelho para a nova conta. Os dados locais só deixam de ser usados depois que a importação for confirmada.
             </p>
           </CardContent>
         ) : null}
