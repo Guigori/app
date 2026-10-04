@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, Eye, EyeOff, Loader2, MonitorSmartphone, X } from "lucide-react";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, apiPostWithBearer } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { beginSession } from "@/lib/session";
 import { disableLocalMode, enableLocalMode, enableDemoMode } from "@/lib/mode";
@@ -77,7 +77,7 @@ export default function Login() {
             <CardDescription>Entre para continuar acompanhando suas finanças.</CardDescription>
           </CardHeader>
           <CardContent>
-            <SocialAuthButtons onGoogle={async()=>{ setFormError(null); if(!firebaseConfigured||!firebaseAuth){setFormError("Firebase ainda não foi configurado neste ambiente.");return} try{await signInWithPopup(firebaseAuth,googleProvider);setFormError("Google conectado ao Firebase. A criação da sessão FINNOS será ativada na etapa de integração do backend.")}catch(error){setFormError(getApiErrorMessage(error,"Não foi possível entrar com Google."))}}} />
+            <SocialAuthButtons onGoogle={async()=>{ setFormError(null); if(!firebaseConfigured||!firebaseAuth){setFormError("Firebase ainda não foi configurado neste ambiente.");return} try{const result=await signInWithPopup(firebaseAuth,googleProvider);const idToken=await result.user.getIdToken();await apiPostWithBearer<User>("/auth/firebase-session",idToken);disableLocalMode();await beginSession();navigate("/",{replace:true})}catch(error){setFormError(getApiErrorMessage(error,"Não foi possível entrar com Google."))}}} />
             <div className="my-4 flex items-center gap-3 text-xs text-slate-500 sm:my-5"><span className="h-px flex-1 bg-slate-200" />ou<span className="h-px flex-1 bg-slate-200" /></div>
             <form
               className="space-y-3 sm:space-y-4"
