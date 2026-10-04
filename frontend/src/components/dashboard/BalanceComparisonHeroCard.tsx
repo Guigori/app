@@ -28,7 +28,7 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
   const hasMovement = moved > 0;
 
   return (
-    <Card className="relative overflow-hidden border-0 bg-[#10142B] text-white dark:bg-[#090910]" data-testid="balance-comparison-hero">
+    <Card className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-black/10 text-white shadow-none backdrop-blur-[2px]" data-testid="balance-comparison-hero">
       <button
         type="button"
         onClick={onOpen}
@@ -36,7 +36,7 @@ export function BalanceComparisonHeroCard({ month, total, income, expense, onOpe
         className="absolute inset-0 z-10 cursor-pointer rounded-[inherit] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
         data-testid="balance-comparison-open-flow"
       />
-      <div className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full bg-[#5B35FF]/40 blur-3xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full bg-[#5B35FF]/18 blur-3xl" aria-hidden="true" />
       <CardHeader className="relative z-20 pb-0">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
