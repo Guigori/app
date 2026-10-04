@@ -204,15 +204,18 @@
 
 .auth-slogan-typing {
   display: inline;
-  background: linear-gradient(90deg, #ffffff 0 0) left / 0% 100% no-repeat;
-  animation: finnos-slogan-reveal 4.8s steps(38, end) .45s infinite alternate;
+  background: linear-gradient(90deg, rgba(255,255,255,.30) 0%, #fff 35%, #A46DFF 50%, #fff 65%, rgba(255,255,255,.30) 100%);
+  background-size: 240% 100%;
+  background-position: 100% 0;
   -webkit-background-clip: text;
   background-clip: text;
-  color: rgba(255,255,255,.32);
+  color: transparent;
+  animation: finnos-slogan-flow 5.5s ease-in-out infinite alternate;
 }
 
-@keyframes finnos-slogan-reveal {
-  to { background-size: 100% 100%; color: transparent; }
+@keyframes finnos-slogan-flow {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
