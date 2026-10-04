@@ -2,8 +2,8 @@ import { useSyncExternalStore } from "react";
 import { MAIN_NAV, type NavItem } from "@/components/layout/nav";
 
 const KEY = "finnos:navigation-preferences:v2";
-// Deployment retry marker: semantically neutral; used to request a fresh
-// production build from the current main HEAD.
+// Deployment marker: semantically neutral; requests a production build that
+// includes the complete FINNOS IA + local migration package.
 const EVENT = "finnos-navigation-preferences";
 
 export type NavigationPreferences = {
