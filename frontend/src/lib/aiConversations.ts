@@ -4,6 +4,7 @@ export type FinnVisual = {
   title?: string;
   metrics?: { label: string; value: string; tone?: "positive" | "negative" | "neutral" }[];
   items?: { label: string; value: string; detail?: string }[];
+  chart?: { type: "line" | "donut"; data: { name: string; value: number; secondary?: number }[]; valueLabel?: string; secondaryLabel?: string };
 };
 export type FinnMessage = { id: string; role: "user" | "assistant"; content: string; createdAt: string; visual?: FinnVisual };
 export type FinnConversation = { id: string; title: string; updatedAt: string; messages: FinnMessage[] };
