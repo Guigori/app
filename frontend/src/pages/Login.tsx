@@ -29,7 +29,8 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [forgotOpen, setForgotOpen] = useState(false);\n  const [loginSucceeded, setLoginSucceeded] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [loginSucceeded, setLoginSucceeded] = useState(false);
 
   const loginMutation = useMutation({
     mutationFn: (credentials: { email: string; password: string }) => apiPost<User>("/auth/login", credentials),
