@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends
 from lib.db import db
 from lib.dates import today_iso
 from lib.stats import add_months, month_portion
+from calendar import monthrange
 from models.radar import RadarOut, RadarSignalOut
 from routers.auth import require_user
 from routers.cards import _build as build_card, _context as card_context
@@ -25,6 +26,10 @@ def brl(value: float) -> str:
 
 def days_until(iso: str) -> int:
     return (date.fromisoformat(iso) - date.fromisoformat(today_iso())).days
+
+def month_end(month: str) -> str:
+    year, mon = map(int, month.split("-"))
+    return f"{month}-{monthrange(year, mon)[1]:02d}"
 
 @router.get("", response_model=RadarOut)
 async def radar(user: dict = Depends(require_user)) -> RadarOut:
@@ -70,7 +75,7 @@ async def radar(user: dict = Depends(require_user)) -> RadarOut:
             "description": f"+{pct}% comparado ao mesmo período do mês anterior",
             "metric": f"+{pct}%", "score": 65 + min(pct, 80) / 4,
             "related_entity_type": "category", "related_entity_id": cid,
-            "expires_at": f"{month}-28",
+            "expires_at": month_end(month),
         })
 
     # Category budgets: explicit user budgets are stronger than historical pace.
@@ -90,7 +95,7 @@ async def radar(user: dict = Depends(require_user)) -> RadarOut:
             "description": f"{brl(current)} de {brl(budget)} planejados neste mês",
             "metric": f"{round(pct)}%", "score": 96 if critical else 84,
             "related_entity_type": "category", "related_entity_id": cid,
-            "expires_at": f"{month}-28",
+            "expires_at": month_end(month),
         })
 
     # Cards: closing proximity + invoice pressure against card limit.
@@ -129,7 +134,7 @@ async def radar(user: dict = Depends(require_user)) -> RadarOut:
                 "description": "Parcelas futuras já ocupam parte do seu limite",
                 "score": 42,
                 "related_entity_type": "card", "related_entity_id": card.id,
-                "expires_at": f"{month}-28",
+                "expires_at": month_end(month),
             })
 
     # Opportunity: meaningful positive month balance, shown only once the month
@@ -151,7 +156,7 @@ async def radar(user: dict = Depends(require_user)) -> RadarOut:
             "title": f"Você tem {brl(surplus)} de saldo positivo no mês",
             "description": "Uma parte pode ser direcionada para metas ou investimentos",
             "score": 38,
-            "expires_at": f"{month}-28",
+            "expires_at": month_end(month),
         })
 
     # Deduplicate same entity/topic pressure: budget risk outranks pace deviation.
