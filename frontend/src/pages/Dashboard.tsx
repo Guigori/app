@@ -1,24 +1,24 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, LayoutGrid, SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 import { fetchAccounts, fetchDashboard, fetchMe, fetchRadar, fetchTransactions } from "@/lib/data";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
-import { useHomeView } from "@/lib/prefs";
+
 import { useHomePreferences, type HomeModuleId } from "@/lib/homePreferences";
 import { cn } from "@/lib/utils";
 import type { CategorySlice, MetricKind } from "@/types/finnos";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { BalanceHeroCard } from "@/components/dashboard/BalanceHeroCard";
-import { BalanceComparisonHeroCard } from "@/components/dashboard/BalanceComparisonHeroCard";
+import { HomeFinancialChart } from "@/components/dashboard/HomeFinancialChart";
 import { Budget503020Card } from "@/components/dashboard/Budget503020Card";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
-import { MetricCharts } from "@/components/dashboard/MetricCharts";
+
 import { MonthSelector } from "@/components/dashboard/MonthSelector";
 import { RecentTransactions } from "@/components/dashboard/RecentTransactions";
 import { RadarSection } from "@/components/dashboard/RadarSection";
-import { SummaryCards } from "@/components/dashboard/SummaryCards";
+
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -32,7 +32,6 @@ const METRIC_TAB: Record<MetricKind, string> = {
 export default function Dashboard() {
   const dialogs = useDialogs();
   const navigate = useNavigate();
-  const { view, setView } = useHomeView();
   const homePreferences = useHomePreferences();
   const { data: user } = useQuery({
     queryKey: ["me"],
@@ -98,60 +97,34 @@ export default function Dashboard() {
             Visão geral de {monthLabel(activeMonth)}
           </p>
         </div>
-        <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
-          <div
-            className="flex gap-1 rounded-full border border-border bg-muted/60 p-1"
-            role="group"
-            aria-label="Como ver o resumo"
-          >
-            {([
-              { key: "cards" as const, label: "Cards", icon: LayoutGrid },
-              { key: "graficos" as const, label: "Gráficos", icon: BarChart3 },
-            ]).map((option) => (
-              <button
-                key={option.key}
-                type="button"
-                onClick={() => setView(option.key)}
-                aria-pressed={view === option.key}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors duration-150 dashboard:px-3",
-                  view === option.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                )}
-                data-testid={`home-view-${option.key}`}
-              >
-                <option.icon className="h-3.5 w-3.5" aria-hidden="true" />
-                <span className="hidden min-[390px]:inline">{option.label}</span>
-              </button>
-            ))}
-          </div>
+        <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
           {data ? <MonthSelector month={data.month} onChange={setMonth} /> : null}
         </div>
       </div>
 
       {data ? (
         <div className="mt-8 pb-2">
-          {view === "cards" ? (
-            <BalanceHeroCard
-              month={data.month}
-              total={data.total_balance}
-              income={data.income}
-              expense={data.expense}
-              onOpen={() => openFlow("balance")}
-            />
-          ) : (
-            <BalanceComparisonHeroCard
-              month={data.month}
-              total={data.total_balance}
-              income={data.income}
-              expense={data.expense}
-              onOpen={() => openFlow("balance")}
-              onOpenIncome={() => openFlow("income")}
-              onOpenExpense={() => openFlow("expense")}
-            />
-          )}
+          <BalanceHeroCard
+            month={data.month}
+            total={data.total_balance}
+            income={data.income}
+            expense={data.expense}
+            onOpen={() => openFlow("balance")}
+          />
         </div>
       ) : null}
       </section>
+
+      {data ? (
+        <HomeFinancialChart
+          month={data.month}
+          total={data.total_balance}
+          income={data.income}
+          expense={data.expense}
+          result={data.month_balance}
+          onOpenMetric={openFlow}
+        />
+      ) : null}
 
       {error && !data ? (
         <Card className="border-destructive/30">
@@ -195,11 +168,7 @@ export default function Dashboard() {
       {data ? (
         <div className="min-w-0 space-y-5 sm:space-y-6">
           {homePreferences.order.filter((id) => !homePreferences.hidden.includes(id)).map((moduleId: HomeModuleId) => {
-            if (moduleId === "metrics") return view === "cards" ? (
-              <SummaryCards key={moduleId} income={data.income} expense={data.expense} monthBalance={data.month_balance} invested={data.invested} prevIncome={data.prev_income} prevExpense={data.prev_expense} onOpenMetric={openFlow} />
-            ) : (
-              <MetricCharts key={moduleId} month={data.month} income={data.income} expense={data.expense} monthBalance={data.month_balance} invested={data.invested} onOpenMetric={openFlow} />
-            );
+            if (moduleId === "metrics") return null;
             if (moduleId === "radar") return <RadarSection key={moduleId} signals={radarQuery.data?.items ?? []} totalCount={radarQuery.data?.count ?? 0} />;
             if (moduleId === "categories") return (
               <div key={moduleId}>
