@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import { MAIN_NAV, type NavItem } from "@/components/layout/nav";
 
 const KEY = "finnos:navigation-preferences:v2";
-// AI package deployment marker: contextual chat, Radar handoff and local intelligence.
+// FINNOS IA release marker: complete contextual chat, Radar, local/demo intelligence and secure provider integration.
 const EVENT = "finnos-navigation-preferences";
 
 export type NavigationPreferences = {
