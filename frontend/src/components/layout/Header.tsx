@@ -1,4 +1,5 @@
 import { useTheme } from "next-themes";
+import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Menu, Moon, Sun } from "lucide-react";
 import { FinnosLogo } from "@/components/brand/FinnosLogo";
 import { NotificationsBell } from "@/components/layout/NotificationsBell";
@@ -12,12 +13,13 @@ interface HeaderProps {
 
 export function Header({ onOpenMenu }: HeaderProps) {
   const { resolvedTheme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const { hidden, toggle } = useBalanceHidden();
 
   return (
     <>
-      <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-2 border-b border-border bg-background px-3 sm:px-6 lg:px-10">
-        <div className="flex min-w-0 items-center gap-2">
+      <header className="sticky top-0 z-20 flex h-12 items-center justify-between gap-1 border-b border-border/70 bg-background/95 px-2 backdrop-blur-xl sm:h-14 sm:px-6 lg:px-10">
+        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
           <Button
             variant="ghost"
             size="icon"
@@ -27,9 +29,11 @@ export function Header({ onOpenMenu }: HeaderProps) {
           >
             <Menu className="h-5 w-5" aria-hidden="true" />
           </Button>
-          <FinnosLogo />
+          <button type="button" onClick={() => navigate("/")} aria-label="Voltar para o início" className="rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+            <FinnosLogo className="w-32 sm:w-36" />
+          </button>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0 sm:gap-1">
           <NotificationsBell />
           <Button
             variant="ghost"
