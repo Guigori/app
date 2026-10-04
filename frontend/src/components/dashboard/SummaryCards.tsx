@@ -125,7 +125,7 @@ export function SummaryCards({
               </div>
               <p
                 className={cn(
-                  "mt-1.5 max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-heading text-[clamp(1.25rem,6vw,1.5rem)] font-bold tabular-nums text-foreground",
+                  "mt-1.5 whitespace-nowrap font-heading text-[clamp(1.05rem,4.8vw,1.5rem)] font-bold tracking-tight tabular-nums text-foreground",
                   card.valueClass,
                 )}
                 data-testid={`summary-${card.metric}-value`}
