@@ -29,7 +29,7 @@ PROVIDERS: dict[str, dict] = {
     "gemini": {
         "label": "Gemini (Google)",
         "default_model": "gemini-3.8-flash",
-        "models": ["gemini-3.8-flash", "gemini-3-pro"],
+        "models": ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"],
         "console_url": "https://aistudio.google.com/apikey",
     },
 }
