@@ -13,15 +13,10 @@ export type NavigationPreferences = {
 
 const HOME = "inicio";
 const MOBILE_DEFAULT = ["inicio", "transacoes", "fluxo", "contas"];
-const WEB_NAV_SLUGS = ["inicio", "transacoes", "fluxo", "orcamento", "categorias", "contas"];
-const WEB_DEFAULT = [...WEB_NAV_SLUGS];
+const WEB_DEFAULT = ["inicio", "transacoes", "fluxo", "orcamento", "categorias", "contas"];
 
 function validSlugs() {
   return new Set(MAIN_NAV.filter((item) => !item.soon).map((item) => item.slug));
-}
-
-function validWebSlugs() {
-  return new Set(WEB_NAV_SLUGS);
 }
 
 export function defaultNavigationPreferences(): NavigationPreferences {
@@ -38,7 +33,7 @@ export function getNavigationPreferences(): NavigationPreferences {
       const unique = [HOME, ...source.filter((x) => x !== HOME)].filter((x, i, a) => a.indexOf(x) === i);
       return max ? unique.slice(0, max) : unique;
     };
-    return { mobile: clean(raw.mobile, MOBILE_DEFAULT, 4), web: clean(raw.web, WEB_DEFAULT, undefined, validWebSlugs()), aiMobile: raw.aiMobile !== false, aiWeb: raw.aiWeb !== false };
+    return { mobile: clean(raw.mobile, MOBILE_DEFAULT, 4), web: clean(raw.web, WEB_DEFAULT), aiMobile: raw.aiMobile !== false, aiWeb: raw.aiWeb !== false };
   } catch {
     return defaultNavigationPreferences();
   }
