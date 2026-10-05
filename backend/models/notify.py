@@ -26,6 +26,12 @@ class NotifyPrefsIn(BaseModel):
     hour: int = Field(default=9, ge=0, le=23)
     # How many days before the due date to warn.
     days_before: int = Field(default=1, ge=0, le=7)
+    transaction_reminders: bool = True
+    invoice_reminders: bool = True
+    radar_alerts: bool = True
+    activity_reminders: bool = True
+    weekly_summary: bool = True
+    system_notices: bool = True
 
 
 class NotifyPrefsOut(NotifyPrefsIn):
