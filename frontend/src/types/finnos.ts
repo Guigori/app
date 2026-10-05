@@ -143,6 +143,13 @@ export interface Dashboard {
   recent: Transaction[];
 }
 
+export interface BudgetSuggestion {
+  expected_income: number;
+  method: "media_recente";
+  writes_data: false;
+  categories: { category_id: string; name: string; group: CategoryGroup; average: number; suggested: number; months_observed: number }[];
+}
+
 // --- Analytics --------------------------------------------------------------
 
 export type MetricKind = "income" | "expense" | "balance" | "invested";
