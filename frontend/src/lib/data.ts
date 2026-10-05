@@ -3,6 +3,7 @@
 // in account mode they hit /api via src/lib/api.ts, in local mode the browser engine.
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
+import { localRadar } from "@/lib/local/radar";
 import { isLocalMode } from "@/lib/mode";
 import {
   localClearData,
@@ -103,7 +104,7 @@ export async function fetchDashboard(month: string | null): Promise<Dashboard> {
 // --- Radar ------------------------------------------------------------------
 
 export async function fetchRadar(): Promise<Radar | null> {
-  if (isLocalMode()) return null;
+  if (isLocalMode()) return localRadar();
   return apiGet<Radar>("/radar");
 }
 
