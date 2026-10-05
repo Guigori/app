@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownUp, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChartNoAxesCombined, ChartPie, Filter, List, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchDashboard, fetchTransactions } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -175,11 +175,11 @@ export default function Transactions() {
 
       </div>
 
-      <div className="-mt-2 flex justify-end sm:-mt-12" data-testid="flow-view-rail">
+      <div className="-mt-16 flex justify-end sm:-mt-16" data-testid="flow-view-rail">
         <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
           {([
-            { key: "calendario" as const, label: "Calendário", icon: CalendarDays },
-            { key: "categorias" as const, label: "Categorias", icon: ChartPie },
+            { key: "calendario" as const, label: "Fluxo", icon: ChartNoAxesCombined },
+            { key: "categorias" as const, label: "Análise", icon: ChartPie },
             { key: "lista" as const, label: "Lista", icon: List },
           ]).map((item) => (
             <Button
@@ -202,6 +202,14 @@ export default function Transactions() {
           ))}
         </div>
       </div>
+
+      {flowView === "calendario" ? (
+        <div className="sticky top-[var(--app-header-height,4rem)] z-20 -mx-1 grid grid-cols-3 gap-2 rounded-2xl border border-border bg-background/95 p-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85" data-testid="flow-strip-real">
+          <div><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Entrada</p><p className="mt-1 font-heading text-base font-bold tabular-nums text-income">{money(strip.income)}</p></div>
+          <div><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Saída</p><p className="mt-1 font-heading text-base font-bold tabular-nums text-expense">{money(strip.expense)}</p></div>
+          <div><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Saldo</p><p className="mt-1 font-heading text-base font-bold tabular-nums text-foreground">{money(strip.income - strip.expense)}</p></div>
+        </div>
+      ) : null}
 
       {flowView === "calendario" ? (
         <TransactionCalendar
@@ -277,12 +285,12 @@ export default function Transactions() {
 
         <Button
           size="icon"
-          variant="outline"
+          variant={sortDir === "asc" ? "default" : "outline"}
           onClick={() => setSortDir((v) => (v === "desc" ? "asc" : "desc"))}
           aria-label={sortDir === "desc" ? "Ordenar das mais antigas para as mais recentes" : "Ordenar das mais recentes para as mais antigas"}
           data-testid="toolbar-sort-toggle"
         >
-          <ArrowDownUp className="h-4 w-4" aria-hidden="true" />
+          {sortDir === "desc" ? <ArrowDown className="h-4 w-4 animate-in fade-in slide-in-from-top-1" aria-hidden="true" /> : <ArrowUp className="h-4 w-4 animate-in fade-in slide-in-from-bottom-1" aria-hidden="true" />}
         </Button>
         <Button
           size="icon"
@@ -327,25 +335,12 @@ export default function Transactions() {
         </div>
       ) : null}
 
-      {flowView === "calendario" ? (
-        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-border bg-card p-4" data-testid="flow-strip-real">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Entrada</p>
-            <p className="mt-1 font-heading text-base font-bold tabular-nums text-income" data-testid="strip-income">{money(strip.income)}</p>
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Saída</p>
-            <p className="mt-1 font-heading text-base font-bold tabular-nums text-expense" data-testid="strip-expense">{money(strip.expense)}</p>
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Saldo</p>
-            <p className="mt-1 font-heading text-base font-bold tabular-nums text-foreground" data-testid="strip-net">{money(strip.income - strip.expense)}</p>
-          </div>
-        </div>
-      ) : null}
+
 
       {showFilters ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card p-4" data-testid="filters-panel">
+        <div className="relative -mt-4 ml-auto w-[min(22rem,calc(100vw-3rem))] rounded-2xl border border-border bg-popover p-3 shadow-xl" data-testid="filters-panel">
+          <span className="absolute -top-2 right-4 h-4 w-4 rotate-45 border-l border-t border-border bg-popover" aria-hidden="true" />
+          <div className="grid grid-cols-2 gap-2">
           <Select value={type} onValueChange={(v) => setType(v as TxType | "todos")}>
             <SelectTrigger size="sm" className="w-40" aria-label="Filtrar por tipo" data-testid="filter-type-select">
               <SelectValue>{type === "todos" ? "Todos os tipos" : TX_TYPE_LABEL[type]}</SelectValue>
@@ -394,8 +389,9 @@ export default function Transactions() {
               ))}
             </SelectContent>
           </Select>
+          </div>
           {hasFilters ? (
-            <Button variant="ghost" size="sm" onClick={clearFilters} data-testid="clear-filters-button">
+            <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={clearFilters} data-testid="clear-filters-button">
               Limpar filtros
             </Button>
           ) : null}
