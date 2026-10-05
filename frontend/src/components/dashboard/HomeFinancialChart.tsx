@@ -237,7 +237,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
               <legend className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Visualização</legend>
               <div className="grid grid-cols-2 gap-3">
                 {VIEW_OPTIONS.map((option) => (
-                  <button key={option.key} type="button" onClick={() => setView(option.key)} className={`flex min-h-12 items-center gap-2.5 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors ${view === option.key ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:bg-muted/60"}`}>
+                  <button key={option.key} type="button" onClick={() => { setView(option.key); setSelectedMetric(null); }} className={`flex min-h-12 items-center gap-2.5 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors ${view === option.key ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:bg-muted/60"}`}>
                     <option.icon className="h-4 w-4" />{option.label}
                   </button>
                 ))}
@@ -263,7 +263,11 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
                   ].map(([label, checked, setter]) => (
                     <label key={String(label)} className="flex min-h-12 cursor-pointer items-center justify-between rounded-2xl border border-border bg-card px-4 py-3 text-sm">
                       <span>{String(label)}</span>
-                      <input type="checkbox" checked={Boolean(checked)} onChange={(event) => (setter as (value: boolean) => void)(event.target.checked)} className="h-4 w-4 accent-primary" />
+                      <input type="checkbox" checked={Boolean(checked)} onChange={(event) => {
+                        const checked = event.target.checked;
+                        (setter as (value: boolean) => void)(checked);
+                        if (!checked && selectedMetric === label) setSelectedMetric(null);
+                      }} className="h-4 w-4 accent-primary" />
                     </label>
                   ))}
                 </div>
