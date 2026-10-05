@@ -116,6 +116,8 @@ def _document(user_id: str, payload: TransactionIn) -> dict:
 @router.get("", response_model=List[TransactionOut])
 async def list_transactions(
     month: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    start_date: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    end_date: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     type: Optional[TxType] = Query(default=None),
     status: Optional[TxStatus] = Query(default=None),
     category_id: Optional[str] = Query(default=None),
@@ -124,7 +126,14 @@ async def list_transactions(
     user: dict = Depends(require_user),
 ) -> list[TransactionOut]:
     query: dict = {"user_id": user["id"]}
-    if month:
+    if start_date or end_date:
+        date_filter: dict = {}
+        if start_date:
+            date_filter["$gte"] = start_date
+        if end_date:
+            date_filter["$lte"] = end_date
+        query["date"] = date_filter
+    elif month:
         start, end = month_bounds(month)
         query["date"] = {"$gte": start, "$lte": end}
     if type:
