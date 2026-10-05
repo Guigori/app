@@ -80,7 +80,7 @@ export default function Register() {
       }
       disableLocalMode();
       await beginSession();
-      navigate("/", { replace: true });
+      navigate("/onboarding", { replace: true });
     },
     onError: (error) => setFormError(getApiErrorMessage(error, "Código inválido.")),
   });
@@ -125,7 +125,7 @@ export default function Register() {
           </CardHeader>
           <CardContent>
             {step === "form" ? <>
-              <SocialAuthButtons onGoogle={async()=>{ setFormError(null); if(!firebaseConfigured||!firebaseAuth){setFormError("Firebase ainda não foi configurado neste ambiente.");return} try{const result=await signInWithPopup(firebaseAuth,googleProvider);const idToken=await result.user.getIdToken();await apiPostWithBearer<User>("/auth/firebase-session",idToken);disableLocalMode();await beginSession();navigate("/",{replace:true})}catch(error){setFormError(getApiErrorMessage(error,"Não foi possível entrar com Google."))}}} />
+              <SocialAuthButtons onGoogle={async()=>{ setFormError(null); if(!firebaseConfigured||!firebaseAuth){setFormError("Firebase ainda não foi configurado neste ambiente.");return} try{const result=await signInWithPopup(firebaseAuth,googleProvider);const idToken=await result.user.getIdToken();await apiPostWithBearer<User>("/auth/firebase-session",idToken);disableLocalMode();await beginSession();navigate("/onboarding",{replace:true})}catch(error){setFormError(getApiErrorMessage(error,"Não foi possível entrar com Google."))}}} />
               <div className="my-5 flex items-center gap-3 text-xs text-slate-500"><span className="h-px flex-1 bg-slate-200" />ou<span className="h-px flex-1 bg-slate-200" /></div>
               
               <form
