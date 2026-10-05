@@ -6,8 +6,7 @@ const EVENT = "finnos-home-preferences";
 export const HOME_MODULES = [
   { id: "metrics", label: "Receitas, despesas e saldo" },
   { id: "radar", label: "Radar" },
-  { id: "categories", label: "Pra onde foi o dinheiro?" },
-  { id: "recent", label: "Transações recentes" },
+  { id: "categories", label: "Gastos e transações" },
   { id: "budget", label: "Planejamento 50/30/20" },
 ] as const;
 
