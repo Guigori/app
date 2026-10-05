@@ -1,8 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownUp, Filter, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
+import { ArrowDownUp, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions } from "@/lib/data";
+import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchDashboard, fetchTransactions } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { useBalanceHidden } from "@/lib/balance";
 import {
@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { setSelectedDay } from "@/lib/selectedDay";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { TransactionCalendar } from "@/components/transactions/TransactionCalendar";
+import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -43,6 +44,7 @@ export default function Transactions() {
   const { hidden } = useBalanceHidden();
 
   const [month, setMonth] = useState(currentMonth());
+  const [flowView, setFlowView] = useState<"calendario" | "categorias" | "lista">("calendario");
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [scope, setScope] = useState<"dia" | "mes">("mes");
   const [calendarExpanded, setCalendarExpanded] = useState(true);
@@ -80,6 +82,7 @@ export default function Transactions() {
   const calendarQuery = useQuery({ queryKey: ["calendar", month], queryFn: () => fetchCalendar(month) });
   const calendar = calendarQuery.data;
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
+  const dashboardQuery = useQuery({ queryKey: ["dashboard", month], queryFn: () => fetchDashboard(month) });
   const accounts = accountsQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
 
@@ -151,8 +154,8 @@ export default function Transactions() {
     <div className="flex flex-col gap-6 animate-fade-up">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Transações</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Registre, busque e filtre todas as suas movimentações.</p>
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Acompanhe o que entrou, saiu e o que vem pela frente.</p>
         </div>
         <Button onClick={() => dialogs.openTransaction()} data-testid="new-transaction-button">
           <PlusCircle className="h-4 w-4" aria-hidden="true" />
@@ -160,16 +163,71 @@ export default function Transactions() {
         </Button>
       </div>
 
-      <TransactionCalendar
-        month={month}
-        days={calendar?.days ?? []}
-        selectedDate={selectedDate}
-        expanded={calendarExpanded}
-        onToggleExpanded={() => setCalendarExpanded((value) => !value)}
-        onMonthChange={changeMonth}
-        onSelectDate={pickDate}
-      />
+      <div className="flex justify-end" data-testid="flow-view-rail">
+        <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
+          {([
+            { key: "calendario" as const, label: "Calendário", icon: CalendarDays },
+            { key: "categorias" as const, label: "Categorias", icon: ChartPie },
+            { key: "lista" as const, label: "Lista", icon: List },
+          ]).map((item) => (
+            <Button
+              key={item.key}
+              type="button"
+              size="icon"
+              variant={flowView === item.key ? "default" : "ghost"}
+              className="rounded-full"
+              onClick={() => {
+                setFlowView(item.key);
+                if (item.key === "lista") setScope("mes");
+              }}
+              aria-label={`Visualizar ${item.label}`}
+              aria-pressed={flowView === item.key}
+              title={item.label}
+              data-testid={`flow-view-${item.key}`}
+            >
+              <item.icon className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          ))}
+        </div>
+      </div>
 
+      {flowView === "calendario" ? (
+        <TransactionCalendar
+          month={month}
+          days={calendar?.days ?? []}
+          selectedDate={selectedDate}
+          expanded={calendarExpanded}
+          onToggleExpanded={() => setCalendarExpanded((value) => !value)}
+          onMonthChange={changeMonth}
+          onSelectDate={pickDate}
+        />
+      ) : null}
+
+      {flowView === "categorias" ? (
+        dashboardQuery.isPending ? (
+          <FinnosPageLoading title="Carregando categorias" description="Organizando para onde seu dinheiro foi no período." />
+        ) : dashboardQuery.data ? (
+          <ExpensesDonutChart
+            month={dashboardQuery.data.month}
+            slices={dashboardQuery.data.categories}
+            total={dashboardQuery.data.expense}
+            onOpenCategory={(slice) => {
+              if (slice.category_id) setCategoryId(slice.category_id);
+              setScope("mes");
+              setFlowView("lista");
+            }}
+          />
+        ) : (
+          <Card>
+            <CardContent className="p-5 text-sm text-muted-foreground">
+              Não foi possível carregar as categorias deste período.
+            </CardContent>
+          </Card>
+        )
+      ) : null}
+
+      {flowView !== "categorias" ? (
+      <>
       <div className="flex items-center gap-2">
         <Button
           size="icon"
@@ -255,6 +313,7 @@ export default function Transactions() {
         </div>
       ) : null}
 
+      {flowView === "calendario" ? (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="grid grid-cols-3 gap-2 rounded-2xl border border-border bg-card p-4" data-testid="flow-strip-real">
           <div>
@@ -293,6 +352,7 @@ export default function Transactions() {
           </div>
         </div>
       </div>
+      ) : null}
 
       {showFilters ? (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card p-4" data-testid="filters-panel">
@@ -352,7 +412,11 @@ export default function Transactions() {
         </div>
       ) : null}
 
-      {transactionsQuery.isPending ? (
+      </>
+      ) : null}
+
+      {flowView !== "categorias" ? (
+      transactionsQuery.isPending ? (
         <FinnosPageLoading title="Carregando transações" description="Buscando seus lançamentos do período." />
       ) : transactionsQuery.error ? (
         <Card>
@@ -515,7 +579,8 @@ export default function Transactions() {
             ))}
           </div>
         </>
-      )}
+      )
+      ) : null}
 
       <ConfirmDialog
         open={pendingDelete !== null}
