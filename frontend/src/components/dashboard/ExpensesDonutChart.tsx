@@ -18,17 +18,18 @@ interface ExpensesDonutChartProps {
   selectedCategoryId?: string | null;
   onSelectCategory?: (slice: CategorySlice | null) => void;
   onOpenCategory?: (slice: CategorySlice) => void;
+  periodLabel?: string;
   transactions?: Transaction[];
   onOpenAllTransactions?: () => void;
 }
 
-export function ExpensesDonutChart({ month, slices, total, onOpenDetails, selectedCategoryId = null, onSelectCategory, onOpenCategory, transactions, onOpenAllTransactions }: ExpensesDonutChartProps) {
+export function ExpensesDonutChart({ month, slices, total, onOpenDetails, selectedCategoryId = null, onSelectCategory, onOpenCategory, periodLabel, transactions, onOpenAllTransactions }: ExpensesDonutChartProps) {
   const dialogs = useDialogs();
   const { hidden } = useBalanceHidden();
   const selected = selectedCategoryId ? slices.find((slice) => slice.category_id === selectedCategoryId) ?? null : null;
   const visibleSlices = selected ? [selected] : slices;
   const displayTotal = selected?.total ?? total;
-
+  const displayPeriod = periodLabel ?? monthLabel(month);
 
   return (
     <Card>
@@ -37,8 +38,8 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
           <CardTitle className="font-heading">Pra onde foi o dinheiro?</CardTitle>
           <CardDescription>
             {slices.length > 0
-              ? `${monthLabel(month)} · ${slices.length} ${slices.length === 1 ? "categoria" : "categorias"}`
-              : `Distribuição das despesas de ${monthLabel(month)}`}
+              ? `${displayPeriod} · ${slices.length} ${slices.length === 1 ? "categoria" : "categorias"}`
+              : `Distribuição das despesas de ${displayPeriod}`}
           </CardDescription>
         </div>
         {slices.length > 0 && onOpenDetails ? (
@@ -112,7 +113,7 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                       event.stopPropagation();
                       onOpenCategory?.(slice);
                     }}
-                    aria-label={`Abrir despesas de ${slice.name} em ${monthLabel(month)}`}
+                    aria-label={`Abrir despesas de ${slice.name} em ${displayPeriod}`}
                   >
                     {slice.name}
                   </button>
