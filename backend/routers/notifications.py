@@ -31,6 +31,9 @@ async def notifications(
     dismissed_docs = await db.notification_states.find({"user_id": user["id"], "dismissed": True}).to_list(5000)
     dismissed = {doc["notification_id"] for doc in dismissed_docs}
 
+    dismissed_docs = await db.notification_states.find({"user_id": user["id"], "dismissed": True}).to_list(5000)
+    dismissed = {doc["notification_id"] for doc in dismissed_docs}
+
     items: list[NotificationItem] = []
     for tx in txs:
         if tx.get("notify_enabled", True) is False:
@@ -124,4 +127,28 @@ async def clear_notifications(payload: dict, user: dict = Depends(require_user))
         ]
         if missing:
             await db.notification_states.insert_many(missing)
+    return {"ok": True, "count": len(ids)}
+
+
+@router.post("/{notification_id}/dismiss")
+async def dismiss_notification(notification_id: str, user: dict = Depends(require_user)) -> dict:
+    """Hide one notification from the user's central without changing the underlying financial record."""
+    await db.notification_states.update_one(
+        {"user_id": user["id"], "notification_id": notification_id},
+        {"$set": {"dismissed": True}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@router.post("/clear")
+async def clear_notifications(payload: dict, user: dict = Depends(require_user)) -> dict:
+    """Dismiss the notification IDs currently visible in the central."""
+    ids = [str(item) for item in payload.get("ids", []) if str(item).strip()]
+    for notification_id in ids:
+        await db.notification_states.update_one(
+            {"user_id": user["id"], "notification_id": notification_id},
+            {"$set": {"dismissed": True}},
+            upsert=True,
+        )
     return {"ok": True, "count": len(ids)}
