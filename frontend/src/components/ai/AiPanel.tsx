@@ -55,9 +55,8 @@ export function AiPanel() {
       const amount=amountMatch?Number(amountMatch[1].replace(/\\./g,"").replace(",",".")):0;
       const lower=text.toLowerCase();
       const wantsSimulation=amount>0&&["posso","comprar","gastar","cabe","parcel"].some(k=>lower.includes(k));
-      const xPos=lower.indexOf("x");
-      const beforeX=xPos>0?lower.slice(Math.max(0,xPos-2),xPos).trim():"";
-      const requestedInstallments=/^[0-9]{1,2}$/.test(beforeX)?Math.min(48,Math.max(1,Number(beforeX))):1;
+      const installmentToken=lower.split(/\s+/).find(token=>token.length>1&&token.length<=3&&token.endsWith("x")&&Number.isFinite(Number(token.slice(0,-1))));
+      const requestedInstallments=installmentToken?Math.min(48,Math.max(1,Number(installmentToken.slice(0,-1)))):1;
       const normalizedText=lower.normalize("NFD").replace(/[̀-ͯ]/g,"");
       const matchedCard=cardsQuery.data?.find(card=>normalizedText.includes(card.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""))||normalizedText.includes(card.institution.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")));
       const matchedCategory=categoriesQuery.data?.find(cat=>normalizedText.includes(cat.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")));
