@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { BellRing, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { fetchNotifications, fetchRadar } from "@/lib/data";
+import { fetchNotifications, fetchNotifyPrefs, fetchRadar } from "@/lib/data";
 import { isLocalMode } from "@/lib/mode";
 import { enablePush, pushAvailable } from "@/lib/push";
 import { Button } from "@/components/ui/button";
@@ -130,7 +130,7 @@ export function LocalNotificationPulse() {
     let cancelled = false;
     const tick = async () => {
       try {
-        const [notifications, radar] = await Promise.all([fetchNotifications(), fetchRadar()]);
+        const [notifications, radar, prefs] = await Promise.all([fetchNotifications(), fetchRadar(), fetchNotifyPrefs()]);
         if (cancelled) return;
         const today = new Date().toISOString().slice(0, 10);
         const shown = JSON.parse(localStorage.getItem(LOCAL_SHOWN_KEY) || "{}") as Record<string, string>;
@@ -139,13 +139,14 @@ export function LocalNotificationPulse() {
         const candidates = [
           ...notifications.items
             .filter((item) => item.days_left <= 1)
+            .filter((item) => item.kind === "fatura" ? prefs.invoice_reminders : prefs.transaction_reminders)
             .map((item) => ({
               key: `money:${item.id}`,
               title: item.title,
               body: item.description,
               url: item.kind === "fatura" && item.id.startsWith("card-") ? `/cartoes/${item.id.slice(5)}` : "/transacoes",
             })),
-          ...(radar?.items ?? [])
+          ...(prefs.radar_alerts ? (radar?.items ?? []) : [])
             .filter((item) => item.severity === "critical" || item.severity === "high")
             .slice(0, 3)
             .map((item) => ({
