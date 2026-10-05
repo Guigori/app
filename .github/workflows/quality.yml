@@ -1,5 +1,5 @@
 name: FINNOS quality checks
-on:
+"on":
   push:
     branches: ["main"]
   pull_request:
