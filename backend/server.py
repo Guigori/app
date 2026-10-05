@@ -28,6 +28,7 @@ from routers import (
     categories,
     cron,
     dashboard,
+    fca,
     demo,
     notifications,
     migration,
@@ -88,6 +89,7 @@ api_router.include_router(accounts.router)
 api_router.include_router(categories.router)
 api_router.include_router(transactions.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(fca.router)
 api_router.include_router(demo.router)
 api_router.include_router(ai.router)
 api_router.include_router(ai_feedback.router)
