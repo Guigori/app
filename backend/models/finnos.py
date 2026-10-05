@@ -101,6 +101,7 @@ class TransactionOut(BaseModel):
     adjusted_value: Optional[float] = None
     attachment: Optional[str] = None
     notes: Optional[str] = None
+    notify_enabled: bool = True
     created_at: datetime
 
 
@@ -122,6 +123,7 @@ class TransactionIn(BaseModel):
     adjusted_value: Optional[float] = Field(default=None, gt=0)
     attachment: Optional[str] = Field(default=None, max_length=300)
     notes: Optional[str] = Field(default=None, max_length=500)
+    notify_enabled: bool = True
 
 
 # --- Dashboard --------------------------------------------------------------
