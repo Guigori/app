@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from lib.db import db
 from lib.dates import today_iso
 from lib.stats import add_months, month_portion
+from lib.radar_patterns import recurring_signals
 from models.radar import RadarActionIn, RadarFeedbackIn, RadarOut, RadarSignalOut
 from routers.auth import require_user
 from routers.cards import _build as build_card, _context as card_context
@@ -152,7 +153,7 @@ async def _signals(user_id: str) -> list[dict]:
           description=f"Saldo projetado de {brl(projected)} nos próximos 30 dias",explanation="Considerando os lançamentos já programados, sua projeção permanece positiva. Você pode avaliar direcionar parte para uma meta.",
           metric=brl(projected),score=40,related_entity_type="cashflow",expires_at=(today+timedelta(days=7)).isoformat(),evidence=[{"label":"Projeção 30 dias","value":brl(projected)}]))
 
-    # Avoid a weaker pace signal when a category already has a budget risk.
+    # Recurrence detection: propose, never silently convert a transaction.\n    signals.extend(await recurring_signals(user_id, month_end(month)))\n\n    # Avoid a weaker pace signal when a category already has a budget risk.
     risky={s.get("related_entity_id") for s in signals if s["id"].startswith("budget-")}
     signals=[s for s in signals if not(s["id"].startswith("pace-") and s.get("related_entity_id") in risky)]
     states=await _state_map(user_id); out=[]
