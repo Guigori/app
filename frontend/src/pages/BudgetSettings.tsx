@@ -55,6 +55,19 @@ export default function BudgetSettings(){
   const current: AllocationDraft = prev[id] ?? { planned:"", priority:"flexivel", rollover:false };
   return {...prev,[id]:{...current,...patch}};
 });
+ const applyBehavior=()=>{
+  const s=behavior.data;
+  if(!s||!s.categories.length)return toast.error("Ainda não há histórico suficiente para sugerir um orçamento.");
+  if(s.expected_income>0)setIncome(String(s.expected_income));
+  const nextAlloc={...alloc};
+  s.categories.forEach(item=>{
+    const cat=categories.find(c=>c.id===item.category_id);
+    if(!cat)return;
+    nextAlloc[cat.id]={planned:item.suggested.toFixed(2),priority:cat.group==="necessidades"?"essencial":cat.group==="metas"?"meta":"flexivel",rollover:alloc[cat.id]?.rollover??false};
+  });
+  setAlloc(nextAlloc);setMode("personalizado");
+  toast.success("Sugestão aplicada para revisão. Nada foi salvo ainda.");
+ };
  const apply503020=()=>{if(!incomeNumber)return toast.error("Informe a renda prevista primeiro.");const nextAlloc={...alloc};(["necessidades","desejos","metas"] as const).forEach(g=>{const list=groupCats(g);const each=list.length?suggested[g]/list.length:0;list.forEach(c=>nextAlloc[c.id]={planned:each.toFixed(2),priority:g==="necessidades"?"essencial":g==="metas"?"meta":"flexivel",rollover:alloc[c.id]?.rollover??false});});setAlloc(nextAlloc);toast.success("50/30/20 distribuído entre as categorias. Você pode ajustar os valores.");};
 
  const save=useMutation({mutationFn:async()=>{if(!start||!end)throw new Error("Defina o período do ciclo.");const payload:BudgetCyclePayload={mode,period,start_date:start,end_date:end,expected_income:incomeNumber,extraordinary,notes:notes.trim()||null,allocations:categories.map(c=>{const d=getDraft(c);return{category_id:c.id,planned:Math.max(Number(d.planned)||0,0),priority:d.priority,rollover:d.rollover}}).filter(a=>a.planned>0)};return existing?updateBudgetCycle(existing.id,payload):createBudgetCycle(payload);},onSuccess:async()=>{toast.success(existing?"Orçamento atualizado.":"Orçamento criado.");await Promise.all([qc.invalidateQueries({queryKey:["budget-v2-current"]}),qc.invalidateQueries({queryKey:["budget-v2-next"]}),qc.invalidateQueries({queryKey:["budget-v2-history"]})]);},onError:e=>toast.error(e instanceof Error&&e.message.startsWith("Defina")?e.message:getApiErrorMessage(e))});
