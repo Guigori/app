@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart,
@@ -54,6 +54,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
   const [showExpense, setShowExpense] = useState(true);
   const [showResult, setShowResult] = useState(true);
   const [selectedMetric, setSelectedMetric] = useState<"Receitas" | "Despesas" | "Resultado" | null>(null);
+  const chartScrollerRef = useRef<HTMLDivElement | null>(null);
 
   const daily = period === "7d" || period === "1m";
   const calendarQuery = useQuery({
@@ -79,7 +80,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
       }));
     }
 
-    const rows = buildMonthlyCumulativeRows(month, calendarQuery.data?.days ?? []);
+    const rows = buildMonthlyCumulativeRows(month, calendarQuery.data?.days ?? [], todayISO());
     return selectVisibleDailyRows(rows, month, period, todayISO());
   }, [calendarQuery.data, daily, month, period, trendsQuery.data]);
 
@@ -87,6 +88,18 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
     () => daily ? defaultDailyTooltipIndex(chartData, month, todayISO()) : undefined,
     [chartData, daily, month],
   );
+
+  useEffect(() => {
+    if (view !== "bars" || !daily || !chartScrollerRef.current) return;
+    const today = todayISO();
+    if (today.slice(0, 7) !== month) return;
+    const day = Number(today.slice(8, 10));
+    const ratio = Math.max(0, Math.min(1, (day - 1) / Math.max(chartData.length - 1, 1)));
+    const node = chartScrollerRef.current;
+    window.requestAnimationFrame(() => {
+      node.scrollLeft = Math.max(0, (node.scrollWidth - node.clientWidth) * ratio - node.clientWidth * 0.35);
+    });
+  }, [chartData.length, daily, month, view]);
 
   const periodSummary = useMemo(() => {
     if (chartData.length === 0) return { income: 0, expense: 0, result: 0 };
@@ -175,7 +188,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
           </div>
         </div>
       ) : (
-        <div className="w-full overflow-x-auto pb-1 [scrollbar-width:none]">
+        <div ref={chartScrollerRef} className="w-full overflow-x-auto pb-1 [scrollbar-width:none]">
           <div className={`h-[280px] sm:h-[310px] ${view === "bars" && daily ? "min-w-[720px]" : "min-w-0 w-full"}`}>
           <ResponsiveContainer width="100%" height="100%">
             {view === "bars" ? (
@@ -218,10 +231,17 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
             )}
           </ResponsiveContainer>
           </div>
-          <div className="mt-1 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs">
-            {showExpense && <button type="button" onClick={() => toggleMetric("Despesas")} className="flex items-center gap-1.5 text-muted-foreground"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-rose-500/10"><ArrowUpRight className="h-3.5 w-3.5 text-rose-400" /></span>Despesas</button>}
-            {showIncome && <button type="button" onClick={() => toggleMetric("Receitas")} className="flex items-center gap-1.5 text-muted-foreground"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/10"><ArrowDownLeft className="h-3.5 w-3.5 text-emerald-400" /></span>Receitas</button>}
-            {showResult && <button type="button" onClick={() => toggleMetric("Resultado")} className="flex items-center gap-1.5 text-muted-foreground"><span className="flex h-6 w-6 items-center justify-center rounded-lg bg-violet-500/10"><Equal className="h-3.5 w-3.5 text-violet-400" /></span>Resultado</button>}
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs" role="group" aria-label="Filtrar série do gráfico">
+            <button
+              type="button"
+              onClick={() => setSelectedMetric(null)}
+              className={`rounded-full border px-3 py-1.5 font-medium transition-colors ${selectedMetric === null ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"}`}
+            >
+              Todos
+            </button>
+            {showExpense && <button type="button" onClick={() => setSelectedMetric("Despesas")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium transition-colors ${selectedMetric === "Despesas" ? "border-rose-400 bg-rose-500/10 text-rose-600" : "border-border text-muted-foreground"}`}><span className="flex h-5 w-5 items-center justify-center rounded-lg bg-rose-500/10"><ArrowUpRight className="h-3.5 w-3.5 text-rose-400" /></span>Despesas</button>}
+            {showIncome && <button type="button" onClick={() => setSelectedMetric("Receitas")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium transition-colors ${selectedMetric === "Receitas" ? "border-emerald-400 bg-emerald-500/10 text-emerald-600" : "border-border text-muted-foreground"}`}><span className="flex h-5 w-5 items-center justify-center rounded-lg bg-emerald-500/10"><ArrowDownLeft className="h-3.5 w-3.5 text-emerald-400" /></span>Receitas</button>}
+            {showResult && <button type="button" onClick={() => setSelectedMetric("Resultado")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium transition-colors ${selectedMetric === "Resultado" ? "border-violet-400 bg-violet-500/10 text-violet-600" : "border-border text-muted-foreground"}`}><span className="flex h-5 w-5 items-center justify-center rounded-lg bg-violet-500/10"><Equal className="h-3.5 w-3.5 text-violet-400" /></span>Resultado</button>}
           </div>
         </div>
       )}
