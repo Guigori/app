@@ -130,6 +130,17 @@ async def _signals(user_id: str) -> list[dict]:
               metric=brl(card.future_installments),score=45,related_entity_type="card",related_entity_id=card.id,expires_at=month_end(month),
               evidence=[{"label":"Parcelas futuras","value":brl(card.future_installments)}]))
 
+    # Overdue commitments: registered expenses that should already have been paid.
+    overdue=[t for t in txs if t.get("type")=="despesa" and t.get("status") in ("pendente","agendado") and t.get("date","9999")<today_s]
+    for t in sorted(overdue,key=lambda x:x.get("date",""))[:5]:
+        value=float(t.get("adjusted_value") or t.get("value") or 0)
+        late=(today-date.fromisoformat(t["date"])).days
+        signals.append(dict(id=f"overdue-{t['id']}",type="risk",severity="critical" if late>=7 else "high",
+          title=f"Pagamento em atraso: {t.get('name','Despesa')}",description=f"{brl(value)} venceu há {late} dia{'s' if late!=1 else ''}",
+          explanation="Este compromisso está cadastrado como pendente ou agendado e a data prevista já passou. Confirme o pagamento ou revise o lançamento.",
+          metric=brl(value),score=99 if late>=7 else 94,related_entity_type="transaction",related_entity_id=t["id"],
+          expires_at=None,evidence=[{"label":"Vencimento","value":t["date"]},{"label":"Dias em atraso","value":str(late)},{"label":"Valor","value":brl(value)}]))
+
     # Cash-flow projection: paid balance plus pending/scheduled entries over 30 days.
     accounts=await db.accounts.find({"user_id":user_id}).to_list(500)
     balance=sum(float(a.get("initial_balance") or 0) for a in accounts)
