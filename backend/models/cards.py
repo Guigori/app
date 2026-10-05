@@ -58,6 +58,7 @@ class NotificationItem(BaseModel):
     date: str
     value: float
     days_left: int
+    target_url: str
 
 
 class NotificationsOut(BaseModel):
