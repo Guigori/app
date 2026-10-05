@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from lib.db import db
 from lib.dates import today_iso
 from routers.auth import require_user
+from routers.cards import _build as build_card, _context as card_context
 
 router = APIRouter(prefix="/simulate", tags=["simulation"])
 
@@ -38,11 +39,10 @@ async def simulate_purchase(payload: PurchaseSimulationIn, user: dict = Depends(
     if payload.card_id:
         card_doc = await db.cards.find_one({"id": payload.card_id, "user_id": user["id"], "active": True})
         if card_doc:
-            limit_value = float(card_doc.get("limit") or 0)
-            card_txs = [t for t in txs if t.get("card_id") == payload.card_id and t.get("type") == "despesa"]
-            used = sum(float(t.get("installment_value") or t.get("value") or 0) for t in card_txs)
-            available = max(limit_value - used, 0)
-            card = {"id": payload.card_id, "name": card_doc.get("name"), "available_before": round(available, 2), "available_after": round(available - payload.amount, 2), "fits_limit": available >= payload.amount}
+            card_txs, account_map = await card_context(user["id"])
+            current = await build_card(card_doc, card_txs, account_map)
+            available = current.available
+            card = {"id": current.id, "name": current.name, "available_before": available, "available_after": round(available - payload.amount, 2), "fits_limit": available >= payload.amount, "current_invoice_before": current.current_invoice, "current_invoice_after": round(current.current_invoice + installment_value, 2), "future_installments_before": current.future_installments, "future_installments_after": round(current.future_installments + max(payload.amount - installment_value, 0), 2)}
     after = round(projected - cash_impact, 2)
     level = "confortavel" if after >= payload.amount * .2 and (not card or card["fits_limit"]) else "apertado" if after >= 0 and (not card or card["fits_limit"]) else "critico"
     return {"amount": round(payload.amount, 2), "installments": payload.installments, "installment_value": installment_value, "balance_now": round(balance, 2), "projected_30d_before": round(projected, 2), "projected_30d_after": after, "cash_impact_30d": round(cash_impact, 2), "card": card, "level": level, "writes_data": False}
