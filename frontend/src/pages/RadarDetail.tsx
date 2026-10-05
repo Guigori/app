@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Sparkles } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, ExternalLink, Sparkles } from "lucide-react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { fetchRadar, sendRadarFeedback, updateRadarSignal, fetchTransactions, updateTransaction } from "@/lib/data";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,8 @@ function target(signal: RadarSignal) {
 export default function RadarDetail() {
   const { signalId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromNotifications = Boolean((location.state as { fromNotifications?: boolean } | null)?.fromNotifications);
   const queryClient = useQueryClient();
   const { data, isPending } = useQuery({ queryKey: ["radar"], queryFn: fetchRadar, staleTime: 60_000 });
   const signal = data?.items.find((item) => item.id === signalId);
@@ -41,6 +43,15 @@ export default function RadarDetail() {
   );
   return (
     <div className="mx-auto max-w-2xl space-y-5 animate-fade-up">
+      <button
+        type="button"
+        onClick={() => fromNotifications ? navigate(-1) : navigate("/radar")}
+        className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-colors hover:bg-accent"
+        aria-label={fromNotifications ? "Voltar para a central de notificações" : "Voltar ao Radar"}
+        data-testid="radar-detail-back"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+      </button>
       <section className="rounded-3xl border border-border bg-card p-6 sm:p-8">
         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: COLOR[signal.type] }}>{LABEL[signal.type]}{signal.severity === "critical" ? " crítico" : ""}</p>
         <h1 className="mt-2 font-heading text-2xl font-bold tracking-tight">{signal.title}</h1>
