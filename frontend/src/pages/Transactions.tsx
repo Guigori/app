@@ -192,12 +192,12 @@ export default function Transactions() {
         </div>
       </div>
 
-      <div className="sticky top-[var(--app-header-height,4rem)] z-20 -mx-1 mr-[4.75rem] rounded-3xl border border-border bg-background/95 px-4 py-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:mr-0">
+      <div className="-mx-1 rounded-3xl border border-border bg-background/95 px-5 py-5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:mr-0">
         <div className="grid grid-cols-3 items-center gap-2 sm:gap-4">
           <div className="contents" data-testid="flow-strip-real">
-            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Entrada</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.68rem,2.7vw,0.95rem)] sm:text-base font-bold tabular-nums text-income">{money(strip.income)}</p></div>
-            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saída</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.68rem,2.7vw,0.95rem)] sm:text-base font-bold tabular-nums text-expense">{money(strip.expense)}</p></div>
-            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saldo</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.68rem,2.7vw,0.95rem)] sm:text-base font-bold tabular-nums text-foreground">{money(strip.income - strip.expense)}</p></div>
+            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Entrada</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.82rem,3.15vw,1.05rem)] sm:text-base font-bold tabular-nums text-income">{money(strip.income)}</p></div>
+            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saída</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.82rem,3.15vw,1.05rem)] sm:text-base font-bold tabular-nums text-expense">{money(strip.expense)}</p></div>
+            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saldo</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.82rem,3.15vw,1.05rem)] sm:text-base font-bold tabular-nums text-foreground">{money(strip.income - strip.expense)}</p></div>
           </div>
           
         </div>
@@ -219,6 +219,9 @@ export default function Transactions() {
           aria-label={sortDir === "desc" ? "Ordenar das mais antigas para as mais recentes" : "Ordenar das mais recentes para as mais antigas"} data-testid="toolbar-sort-toggle">
           {sortDir === "desc" ? <ArrowDown className="h-4 w-4 animate-in fade-in slide-in-from-top-1" /> : <ArrowUp className="h-4 w-4 animate-in fade-in slide-in-from-bottom-1" />}
         </Button>
+        <div className="shrink-0" data-testid="toolbar-period-selector">
+          <MonthSelector month={month} onChange={changeMonth} />
+        </div>
         <Button size="icon" variant={showFilters || hasFilters ? "default" : "outline"} onClick={() => setShowFilters((v) => !v)}
           aria-label="Filtros" aria-expanded={showFilters} data-testid="toolbar-filter-toggle"><Filter className="h-4 w-4" /></Button>
       </div>
