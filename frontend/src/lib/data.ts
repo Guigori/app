@@ -69,6 +69,21 @@ import type {
 
 const LOCAL_USER_ID = "local";
 
+const LOCAL_NOTIFICATION_DISMISSED_KEY = "finnos:notification-dismissed";
+
+function localDismissedNotificationIds(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(LOCAL_NOTIFICATION_DISMISSED_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveLocalDismissedNotificationIds(ids: Set<string>): void {
+  localStorage.setItem(LOCAL_NOTIFICATION_DISMISSED_KEY, JSON.stringify([...ids]));
+}
+
+
 /** The signed-in identity, or the synthetic local-mode profile. */
 export async function fetchMe(): Promise<User> {
   if (isLocalMode()) {
@@ -294,8 +309,33 @@ export async function deleteCard(id: string): Promise<void> {
 // --- Notificações ----------------------------------------------------------
 
 export async function fetchNotifications(): Promise<Notifications> {
-  if (isLocalMode()) return localNotifications();
+  if (isLocalMode()) {
+    const dismissed = localDismissedNotificationIds();
+    const local = localNotifications();
+    const items = local.items.filter((item) => !dismissed.has(item.id));
+    return { items, count: items.length };
+  }
   return apiGet<Notifications>("/notifications");
+}
+
+export async function dismissNotification(id: string): Promise<void> {
+  if (isLocalMode()) {
+    const dismissed = localDismissedNotificationIds();
+    dismissed.add(id);
+    saveLocalDismissedNotificationIds(dismissed);
+    return;
+  }
+  await apiPost<{ ok: boolean }>(`/notifications/${encodeURIComponent(id)}/dismiss`, {});
+}
+
+export async function clearNotifications(ids: string[]): Promise<void> {
+  if (isLocalMode()) {
+    const dismissed = localDismissedNotificationIds();
+    ids.forEach((id) => dismissed.add(id));
+    saveLocalDismissedNotificationIds(dismissed);
+    return;
+  }
+  await apiPost<{ ok: boolean; count: number }>("/notifications/clear", { ids });
 }
 
 // --- Fatura / assinaturas / avisos -----------------------------------------
