@@ -30,6 +30,8 @@ async def notifications(
 
     items: list[NotificationItem] = []
     for tx in txs:
+        if tx.get("notify_enabled", True) is False:
+            continue
         due = date.fromisoformat(tx["date"])
         days_left = due.toordinal() - today.toordinal()
         if days_left > window_days:
