@@ -28,6 +28,7 @@ class AiAskIn(BaseModel):
     provider: AiProvider
     question: str = Field(min_length=2, max_length=2000)
     month: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}$")
+    history: List[AiChatMessage] = Field(default_factory=list, max_length=12)
 
 
 class AiAnswerOut(BaseModel):
