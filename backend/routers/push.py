@@ -18,7 +18,18 @@ from routers.radar import _signals as radar_signals
 router = APIRouter(prefix="/push", tags=["push"])
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
 
-DEFAULT_PREFS = {"push_enabled": True, "email_enabled": False, "hour": 9, "days_before": 1}
+DEFAULT_PREFS = {
+    "push_enabled": True,
+    "email_enabled": False,
+    "hour": 9,
+    "days_before": 1,
+    "transaction_reminders": True,
+    "invoice_reminders": True,
+    "radar_alerts": True,
+    "activity_reminders": True,
+    "weekly_summary": True,
+    "system_notices": True,
+}
 
 
 async def prefs_for(user_id: str) -> dict:
@@ -128,6 +139,8 @@ async def dispatch_scheduled_notifications(
                 "notify_enabled": {"$ne": False},
             }
         ).to_list(500)
+        if not prefs.get("transaction_reminders", True):
+            txs = []
         for tx in txs:
             due = date.fromisoformat(tx["date"])
             left = (due - today).days
@@ -141,7 +154,11 @@ async def dispatch_scheduled_notifications(
                 url=f"/transacoes?date={tx['date']}&highlight={tx['id']}",
             )
 
-        cards = await db.cards.find({"user_id": user_id, "active": True}).to_list(200)
+        cards = (
+            await db.cards.find({"user_id": user_id, "active": True}).to_list(200)
+            if prefs.get("invoice_reminders", True)
+            else []
+        )
         for card in cards:
             _, closing = cycle_bounds(today, card["closing_day"])
             due = due_date(closing, card["closing_day"], card["due_day"])
@@ -155,7 +172,7 @@ async def dispatch_scheduled_notifications(
                     url=f"/cartoes/{card['id']}?due={due.isoformat()}",
                 )
 
-        for signal in (await radar_signals(user_id))[:10]:
+        for signal in ((await radar_signals(user_id))[:10] if prefs.get("radar_alerts", True) else []):
             if signal.get("severity") not in ("high", "critical"):
                 continue
             pushes_sent += await _send_once(
@@ -168,7 +185,7 @@ async def dispatch_scheduled_notifications(
 
         today_count = await db.transactions.count_documents({"user_id": user_id, "date": today.isoformat()})
         total_count = await db.transactions.count_documents({"user_id": user_id})
-        if total_count > 0 and today_count == 0:
+        if prefs.get("activity_reminders", True) and total_count > 0 and today_count == 0:
             pushes_sent += await _send_once(
                 user_id,
                 "registro-diario",
@@ -177,7 +194,7 @@ async def dispatch_scheduled_notifications(
                 url="/transacoes",
             )
 
-        if today.weekday() == 0:
+        if prefs.get("weekly_summary", True) and today.weekday() == 0:
             week_start = (today - timedelta(days=7)).isoformat()
             week_txs = await db.transactions.find(
                 {"user_id": user_id, "date": {"$gte": week_start, "$lt": today.isoformat()}, "status": "pago"}
