@@ -47,7 +47,7 @@ export function selectVisibleDailyRows(
   return rows.slice(0, endExclusive);
 }
 
-export function defaultDailyTooltipIndex(rows: DailyChartRow[], month: string, today: string): number | undefined {
+export function defaultDailyTooltipIndex(rows: Array<{ label: string }>, month: string, today: string): number | undefined {
   if (rows.length === 0) return undefined;
   if (today.slice(0, 7) !== month) return rows.length - 1;
   const todayLabel = today.slice(8, 10);
