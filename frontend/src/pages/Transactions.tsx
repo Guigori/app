@@ -21,6 +21,7 @@ import { setSelectedDay } from "@/lib/selectedDay";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { TransactionCalendar } from "@/components/transactions/TransactionCalendar";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
+import { MonthSelector } from "@/components/dashboard/MonthSelector";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -175,39 +176,75 @@ export default function Transactions() {
 
       </div>
 
-      <div className="-mt-16 flex justify-end sm:-mt-16" data-testid="flow-view-rail">
+      <div className="-mt-12 flex justify-end" data-testid="flow-view-rail">
         <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
           {([
             { key: "calendario" as const, label: "Fluxo", icon: ChartNoAxesCombined },
             { key: "categorias" as const, label: "Análise", icon: ChartPie },
             { key: "lista" as const, label: "Lista", icon: List },
           ]).map((item) => (
-            <Button
-              key={item.key}
-              type="button"
-              size="icon"
-              variant={flowView === item.key ? "default" : "ghost"}
-              className="rounded-full"
-              onClick={() => {
-                setFlowView(item.key);
-                if (item.key === "lista") setScope("mes");
-              }}
-              aria-label={`Visualizar ${item.label}`}
-              aria-pressed={flowView === item.key}
-              title={item.label}
-              data-testid={`flow-view-${item.key}`}
-            >
+            <Button key={item.key} type="button" size="icon" variant={flowView === item.key ? "default" : "ghost"} className="rounded-full"
+              onClick={() => setFlowView(item.key)} aria-label={`Visualizar ${item.label}`} aria-pressed={flowView === item.key}
+              title={item.label} data-testid={`flow-view-${item.key}`}>
               <item.icon className="h-4 w-4" aria-hidden="true" />
             </Button>
           ))}
         </div>
       </div>
 
-      {flowView === "calendario" ? (
-        <div className="sticky top-[var(--app-header-height,4rem)] z-20 -mx-1 grid grid-cols-3 gap-2 rounded-2xl border border-border bg-background/95 p-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85" data-testid="flow-strip-real">
-          <div><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Entrada</p><p className="mt-1 font-heading text-base font-bold tabular-nums text-income">{money(strip.income)}</p></div>
-          <div><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Saída</p><p className="mt-1 font-heading text-base font-bold tabular-nums text-expense">{money(strip.expense)}</p></div>
-          <div><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Saldo</p><p className="mt-1 font-heading text-base font-bold tabular-nums text-foreground">{money(strip.income - strip.expense)}</p></div>
+      <div className="sticky top-[var(--app-header-height,4rem)] z-20 -mx-1 rounded-2xl border border-border bg-background/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+          <div className="grid grid-cols-3 gap-2" data-testid="flow-strip-real">
+            <div><p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Entrada</p><p className="mt-0.5 font-heading text-sm font-bold tabular-nums text-income">{money(strip.income)}</p></div>
+            <div><p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Saída</p><p className="mt-0.5 font-heading text-sm font-bold tabular-nums text-expense">{money(strip.expense)}</p></div>
+            <div><p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Saldo</p><p className="mt-0.5 font-heading text-sm font-bold tabular-nums text-foreground">{money(strip.income - strip.expense)}</p></div>
+          </div>
+          <MonthSelector month={month} onChange={changeMonth} />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button size="icon" variant={showSearch ? "default" : "outline"} onClick={() => setShowSearch((v) => !v)}
+          aria-label="Buscar transações" aria-expanded={showSearch} data-testid="toolbar-search-toggle">
+          <Search className="h-4 w-4" aria-hidden="true" />
+        </Button>
+        <div className="flex flex-1 justify-center gap-1 rounded-full border border-border bg-muted/60 p-1" role="group" aria-label="Ver por dia ou por mês">
+          {([{ key: "dia" as const, label: "Dia" }, { key: "mes" as const, label: "Mês" }]).map((option) => (
+            <button key={option.key} type="button" onClick={() => setScope(option.key)} aria-pressed={scope === option.key}
+              className={cn("flex-1 rounded-full px-4 py-1.5 text-sm font-medium transition-colors duration-150", scope === option.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+              data-testid={`scope-${option.key}`}>{option.label}</button>
+          ))}
+        </div>
+        <Button size="icon" variant={sortDir === "asc" ? "default" : "outline"} onClick={() => setSortDir((v) => (v === "desc" ? "asc" : "desc"))}
+          aria-label={sortDir === "desc" ? "Ordenar das mais antigas para as mais recentes" : "Ordenar das mais recentes para as mais antigas"} data-testid="toolbar-sort-toggle">
+          {sortDir === "desc" ? <ArrowDown className="h-4 w-4 animate-in fade-in slide-in-from-top-1" /> : <ArrowUp className="h-4 w-4 animate-in fade-in slide-in-from-bottom-1" />}
+        </Button>
+        <Button size="icon" variant={showFilters || hasFilters ? "default" : "outline"} onClick={() => setShowFilters((v) => !v)}
+          aria-label="Filtros" aria-expanded={showFilters} data-testid="toolbar-filter-toggle"><Filter className="h-4 w-4" /></Button>
+      </div>
+
+      <p className="-mt-4 text-xs text-muted-foreground" data-testid="scope-label">
+        {scope === "dia" ? formatDate(selectedDate) : monthLabel(month)} · {sortDir === "desc" ? "mais recentes primeiro" : "mais antigas primeiro"}
+      </p>
+
+      {showSearch ? (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nome…" className="pl-9 pr-9" autoFocus />
+          {search ? <button type="button" onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-muted"><X className="h-4 w-4" /></button> : null}
+        </div>
+      ) : null}
+
+      {showFilters ? (
+        <div className="relative -mt-4 ml-auto w-[min(22rem,calc(100vw-3rem))] rounded-2xl border border-border bg-popover p-3 shadow-xl" data-testid="filters-panel">
+          <span className="absolute -top-2 right-4 h-4 w-4 rotate-45 border-l border-t border-border bg-popover" />
+          <div className="grid grid-cols-2 gap-2">
+            <Select value={type} onValueChange={(v) => setType(v as TxType | "todos")}><SelectTrigger size="sm"><SelectValue>{type === "todos" ? "Todos os tipos" : TX_TYPE_LABEL[type]}</SelectValue></SelectTrigger><SelectContent><SelectItem value="todos">Todos os tipos</SelectItem><SelectItem value="receita">Receita</SelectItem><SelectItem value="despesa">Despesa</SelectItem><SelectItem value="transferencia">Transferência</SelectItem></SelectContent></Select>
+            <Select value={status} onValueChange={(v) => setStatus(v as TxStatus | "todos")}><SelectTrigger size="sm"><SelectValue>{status === "todos" ? "Todos os status" : TX_STATUS_LABEL[status]}</SelectValue></SelectTrigger><SelectContent><SelectItem value="todos">Todos os status</SelectItem><SelectItem value="pago">Pago</SelectItem><SelectItem value="pendente">Pendente</SelectItem><SelectItem value="agendado">Agendado</SelectItem></SelectContent></Select>
+            <Select value={categoryId} onValueChange={setCategoryId}><SelectTrigger size="sm"><SelectValue>{categoryId === "todas" ? "Todas as categorias" : categories.find((x) => x.id === categoryId)?.name}</SelectValue></SelectTrigger><SelectContent><SelectItem value="todas">Todas as categorias</SelectItem>{categories.map((x) => <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>)}</SelectContent></Select>
+            <Select value={accountId} onValueChange={setAccountId}><SelectTrigger size="sm"><SelectValue>{accountId === "todas" ? "Todas as contas" : accounts.find((x) => x.id === accountId)?.name}</SelectValue></SelectTrigger><SelectContent><SelectItem value="todas">Todas as contas</SelectItem>{accounts.map((x) => <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>)}</SelectContent></Select>
+          </div>
+          {hasFilters ? <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={clearFilters}>Limpar filtros</Button> : null}
         </div>
       ) : null}
 
@@ -246,159 +283,6 @@ export default function Transactions() {
             </CardContent>
           </Card>
         )
-      ) : null}
-
-      {flowView !== "categorias" ? (
-      <>
-      <div className="flex items-center gap-2">
-        <Button
-          size="icon"
-          variant={showSearch ? "default" : "outline"}
-          onClick={() => setShowSearch((v) => !v)}
-          aria-label="Buscar transações"
-          aria-expanded={showSearch}
-          data-testid="toolbar-search-toggle"
-        >
-          <Search className="h-4 w-4" aria-hidden="true" />
-        </Button>
-
-        <div className="flex flex-1 justify-center gap-1 rounded-full border border-border bg-muted/60 p-1" role="group" aria-label="Ver por dia ou por mês">
-          {([
-            { key: "dia" as const, label: "Dia" },
-            { key: "mes" as const, label: "Mês" },
-          ]).map((option) => (
-            <button
-              key={option.key}
-              type="button"
-              onClick={() => setScope(option.key)}
-              aria-pressed={scope === option.key}
-              className={cn(
-                "flex-1 rounded-full px-4 py-1.5 text-sm font-medium transition-colors duration-150",
-                scope === option.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-              )}
-              data-testid={`scope-${option.key}`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        <Button
-          size="icon"
-          variant={sortDir === "asc" ? "default" : "outline"}
-          onClick={() => setSortDir((v) => (v === "desc" ? "asc" : "desc"))}
-          aria-label={sortDir === "desc" ? "Ordenar das mais antigas para as mais recentes" : "Ordenar das mais recentes para as mais antigas"}
-          data-testid="toolbar-sort-toggle"
-        >
-          {sortDir === "desc" ? <ArrowDown className="h-4 w-4 animate-in fade-in slide-in-from-top-1" aria-hidden="true" /> : <ArrowUp className="h-4 w-4 animate-in fade-in slide-in-from-bottom-1" aria-hidden="true" />}
-        </Button>
-        <Button
-          size="icon"
-          variant={showFilters || hasFilters ? "default" : "outline"}
-          onClick={() => setShowFilters((v) => !v)}
-          aria-label="Filtros"
-          aria-expanded={showFilters}
-          data-testid="toolbar-filter-toggle"
-        >
-          <Filter className="h-4 w-4" aria-hidden="true" />
-        </Button>
-      </div>
-
-      <p className="-mt-3 text-sm text-muted-foreground" data-testid="scope-label">
-        {scope === "dia" ? formatDate(selectedDate) : monthLabel(month)} ·{" "}
-        {sortDir === "desc" ? "mais recentes primeiro" : "mais antigas primeiro"}
-      </p>
-
-      {showSearch ? (
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nome…"
-            className="pl-9 pr-9"
-            autoFocus
-            aria-label="Buscar transações"
-            data-testid="transaction-search-input"
-          />
-          {search ? (
-            <button
-              type="button"
-              onClick={() => setSearch("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-muted"
-              aria-label="Limpar busca"
-              data-testid="clear-search-button"
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-
-
-      {showFilters ? (
-        <div className="relative -mt-4 ml-auto w-[min(22rem,calc(100vw-3rem))] rounded-2xl border border-border bg-popover p-3 shadow-xl" data-testid="filters-panel">
-          <span className="absolute -top-2 right-4 h-4 w-4 rotate-45 border-l border-t border-border bg-popover" aria-hidden="true" />
-          <div className="grid grid-cols-2 gap-2">
-          <Select value={type} onValueChange={(v) => setType(v as TxType | "todos")}>
-            <SelectTrigger size="sm" className="w-40" aria-label="Filtrar por tipo" data-testid="filter-type-select">
-              <SelectValue>{type === "todos" ? "Todos os tipos" : TX_TYPE_LABEL[type]}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os tipos</SelectItem>
-              <SelectItem value="receita">Receita</SelectItem>
-              <SelectItem value="despesa">Despesa</SelectItem>
-              <SelectItem value="transferencia">Transferência</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={status} onValueChange={(v) => setStatus(v as TxStatus | "todos")}>
-            <SelectTrigger size="sm" className="w-36" aria-label="Filtrar por status" data-testid="filter-status-select">
-              <SelectValue>{status === "todos" ? "Todos os status" : TX_STATUS_LABEL[status]}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os status</SelectItem>
-              <SelectItem value="pago">Pago</SelectItem>
-              <SelectItem value="pendente">Pendente</SelectItem>
-              <SelectItem value="agendado">Agendado</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={categoryId} onValueChange={setCategoryId}>
-            <SelectTrigger size="sm" className="w-44" aria-label="Filtrar por categoria" data-testid="filter-category-select">
-              <SelectValue>{categoryId === "todas" ? "Todas as categorias" : categories.find((c) => c.id === categoryId)?.name}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todas">Todas as categorias</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={accountId} onValueChange={setAccountId}>
-            <SelectTrigger size="sm" className="w-40" aria-label="Filtrar por conta" data-testid="filter-account-select">
-              <SelectValue>{accountId === "todas" ? "Todas as contas" : accounts.find((a) => a.id === accountId)?.name}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todas">Todas as contas</SelectItem>
-              {accounts.map((a) => (
-                <SelectItem key={a.id} value={a.id}>
-                  {a.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          </div>
-          {hasFilters ? (
-            <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={clearFilters} data-testid="clear-filters-button">
-              Limpar filtros
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-
-      </>
       ) : null}
 
       {flowView !== "categorias" ? (
