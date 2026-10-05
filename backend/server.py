@@ -34,6 +34,7 @@ from routers import (
     imports,
     push,
     radar,
+    simulation,
     subscriptions,
     transactions,
 )
@@ -97,6 +98,7 @@ api_router.include_router(migration.router)
 api_router.include_router(imports.router)
 api_router.include_router(push.router)
 api_router.include_router(radar.router)
+api_router.include_router(simulation.router)
 api_router.include_router(subscriptions.router)
 api_router.include_router(cron.router)
 
