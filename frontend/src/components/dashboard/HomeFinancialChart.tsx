@@ -7,7 +7,7 @@ import {
 import { ArrowDownLeft, ArrowUpRight, BarChart3, ChartPie, Equal, LayoutGrid, LineChart, SlidersHorizontal } from "lucide-react";
 import { fetchCalendar, fetchTrends } from "@/lib/data";
 import { useBalanceHidden } from "@/lib/balance";
-import { formatBRL, formatHiddenBRL } from "@/lib/format";
+import { formatBRL, formatHiddenBRL, todayISO } from "@/lib/format";
 import type { MetricKind } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -97,8 +97,25 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
         Resultado: Math.round((cumulativeIncome - cumulativeExpense) * 100) / 100,
       };
     });
-    return period === "7d" ? rows.slice(-7) : rows;
+    if (period === "7d") {
+      const today = todayISO();
+      const lastVisibleDay =
+        today.slice(0, 7) === month
+          ? Number(today.slice(8, 10))
+          : daysInMonth;
+      return rows.slice(Math.max(0, lastVisibleDay - 7), lastVisibleDay);
+    }
+    return rows;
   }, [calendarQuery.data, daily, month, period, trendsQuery.data]);
+
+  const defaultTooltipIndex = useMemo(() => {
+    if (!daily || chartData.length === 0) return undefined;
+    const today = todayISO();
+    if (today.slice(0, 7) !== month) return chartData.length - 1;
+    const todayLabel = today.slice(8, 10);
+    const index = chartData.findIndex((item) => item.label === todayLabel);
+    return index >= 0 ? index : chartData.length - 1;
+  }, [chartData, daily, month]);
 
   const periodSummary = useMemo(() => {
     if (chartData.length === 0) return { income: 0, expense: 0, result: 0 };
@@ -196,7 +213,13 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
                 <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={daily ? 18 : 8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
                 <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
-                <Tooltip cursor={{ fill: "var(--muted)", opacity: 0.25 }} contentStyle={tooltipStyle} formatter={(value: number) => money(value)} labelFormatter={(label) => daily ? `Dia ${label}` : String(label)} />
+                <Tooltip
+                  defaultIndex={defaultTooltipIndex}
+                  cursor={{ fill: "var(--muted)", opacity: 0.25 }}
+                  contentStyle={tooltipStyle}
+                  formatter={(value: number) => money(value)}
+                  labelFormatter={(label) => daily ? `Dia ${label}` : String(label)}
+                />
                 {showIncome && metricVisible("Receitas") && <Bar dataKey="Receitas" onClick={() => toggleMetric("Receitas")} className="cursor-pointer" fill={METRIC_UI.Receitas.color} radius={[6, 6, 0, 0]} maxBarSize={22} />}
                 {showExpense && metricVisible("Despesas") && <Bar dataKey="Despesas" onClick={() => toggleMetric("Despesas")} className="cursor-pointer" fill={METRIC_UI.Despesas.color} radius={[6, 6, 0, 0]} maxBarSize={22} />}
                 {showResult && metricVisible("Resultado") && <Bar dataKey="Resultado" onClick={() => toggleMetric("Resultado")} className="cursor-pointer" fill={METRIC_UI.Resultado.color} radius={[6, 6, 0, 0]} maxBarSize={22} />}
@@ -212,7 +235,12 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
                 <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={daily ? 18 : 8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
                 <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => money(value)} labelFormatter={(label) => daily ? `Dia ${label}` : String(label)} />
+                <Tooltip
+                  defaultIndex={defaultTooltipIndex}
+                  contentStyle={tooltipStyle}
+                  formatter={(value: number) => money(value)}
+                  labelFormatter={(label) => daily ? `Dia ${label}` : String(label)}
+                />
                 {showResult && metricVisible("Resultado") && <Area type="monotone" dataKey="Resultado" onClick={() => toggleMetric("Resultado")} className="cursor-pointer" stroke={METRIC_UI.Resultado.color} strokeWidth={3} fill="url(#finnosResultFill)" activeDot={{ r: 5 }} />}
                 {showIncome && metricVisible("Receitas") && <Area type="monotone" dataKey="Receitas" onClick={() => toggleMetric("Receitas")} className="cursor-pointer" stroke={METRIC_UI.Receitas.color} strokeWidth={2.25} fill="transparent" activeDot={{ r: 4 }} />}
                 {showExpense && metricVisible("Despesas") && <Area type="monotone" dataKey="Despesas" onClick={() => toggleMetric("Despesas")} className="cursor-pointer" stroke={METRIC_UI.Despesas.color} strokeWidth={2.25} fill="transparent" activeDot={{ r: 4 }} />}
