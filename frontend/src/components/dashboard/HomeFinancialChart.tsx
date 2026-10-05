@@ -8,6 +8,7 @@ import { ArrowDownLeft, ArrowUpRight, BarChart3, ChartPie, Equal, LayoutGrid, Li
 import { fetchCalendar, fetchTrends } from "@/lib/data";
 import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatHiddenBRL, todayISO } from "@/lib/format";
+import { buildMonthlyCumulativeRows, defaultDailyTooltipIndex, selectVisibleDailyRows } from "@/lib/homeChart";
 import type { MetricKind } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -78,44 +79,14 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
       }));
     }
 
-    const [year, monthNumber] = month.split("-").map(Number);
-    const daysInMonth = new Date(year, monthNumber, 0).getDate();
-    const byDate = new Map((calendarQuery.data?.days ?? []).map((day) => [day.date, day]));
-    let cumulativeIncome = 0;
-    let cumulativeExpense = 0;
-    const rows = Array.from({ length: daysInMonth }, (_, index) => {
-      const dayNumber = index + 1;
-      const date = `${month}-${String(dayNumber).padStart(2, "0")}`;
-      const day = byDate.get(date);
-      cumulativeIncome += day?.income ?? 0;
-      cumulativeExpense += day?.expense ?? 0;
-      return {
-        date,
-        label: String(dayNumber).padStart(2, "0"),
-        Receitas: Math.round(cumulativeIncome * 100) / 100,
-        Despesas: Math.round(cumulativeExpense * 100) / 100,
-        Resultado: Math.round((cumulativeIncome - cumulativeExpense) * 100) / 100,
-      };
-    });
-    if (period === "7d") {
-      const today = todayISO();
-      const lastVisibleDay =
-        today.slice(0, 7) === month
-          ? Number(today.slice(8, 10))
-          : daysInMonth;
-      return rows.slice(Math.max(0, lastVisibleDay - 7), lastVisibleDay);
-    }
-    return rows;
+    const rows = buildMonthlyCumulativeRows(month, calendarQuery.data?.days ?? []);
+    return selectVisibleDailyRows(rows, month, period, todayISO());
   }, [calendarQuery.data, daily, month, period, trendsQuery.data]);
 
-  const defaultTooltipIndex = useMemo(() => {
-    if (!daily || chartData.length === 0) return undefined;
-    const today = todayISO();
-    if (today.slice(0, 7) !== month) return chartData.length - 1;
-    const todayLabel = today.slice(8, 10);
-    const index = chartData.findIndex((item) => item.label === todayLabel);
-    return index >= 0 ? index : chartData.length - 1;
-  }, [chartData, daily, month]);
+  const defaultTooltipIndex = useMemo(
+    () => daily ? defaultDailyTooltipIndex(chartData, month, todayISO()) : undefined,
+    [chartData, daily, month],
+  );
 
   const periodSummary = useMemo(() => {
     if (chartData.length === 0) return { income: 0, expense: 0, result: 0 };
@@ -131,7 +102,6 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
   const pieData = [
     { name: "Receitas", value: Math.max(periodSummary.income, 0), fill: METRIC_UI.Receitas.color, metric: "income" as MetricKind },
     { name: "Despesas", value: Math.max(periodSummary.expense, 0), fill: METRIC_UI.Despesas.color, metric: "expense" as MetricKind },
-    { name: "Resultado", value: Math.max(periodSummary.result, 0), fill: METRIC_UI.Resultado.color, metric: "balance" as MetricKind },
   ].filter((item) => item.value > 0);
   const selectedPieItem = selectedMetric ? pieData.find((item) => item.name === selectedMetric) ?? null : null;
   const metricVisible = (name: "Receitas" | "Despesas" | "Resultado") => !selectedMetric || selectedMetric === name;
@@ -179,7 +149,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => money(value)} />
-                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius="68%" outerRadius="98%" paddingAngle={2} cornerRadius={6} strokeWidth={0} onClick={(_, index) => { const item = pieData[index]; if (item) toggleMetric(item.name as "Receitas" | "Despesas" | "Resultado"); }}>
+                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius="68%" outerRadius="98%" paddingAngle={2} cornerRadius={6} strokeWidth={0} onClick={(_, index) => { const item = pieData[index]; if (item) toggleMetric(item.name as "Receitas" | "Despesas"); }}>
                   {pieData.map((entry) => <Cell key={entry.name} fill={entry.fill} opacity={selectedMetric && selectedMetric !== entry.name ? 0.18 : 1} className="cursor-pointer" />)}
                 </Pie>
               </PieChart>
