@@ -1,6 +1,7 @@
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Bell, CalendarClock, CreditCard, Radar as RadarIcon, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { clearNotifications, dismissNotification, fetchNotifications, fetchRadar, updateRadarSignal } from "@/lib/data";
 import { formatBRL, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -17,7 +18,25 @@ const ICON: Record<NotificationKind, typeof Bell> = {
  *  invoices closing within the next week. */
 export function NotificationsBell() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const origin = sessionStorage.getItem("finnos:notifications-return-origin");
+    if (!origin) return;
+    const here = `${location.pathname}${location.search}`;
+    if (here === origin) {
+      sessionStorage.removeItem("finnos:notifications-return-origin");
+      setOpen(true);
+    }
+  }, [location.pathname, location.search]);
+
+  const openNotificationTarget = (target: string) => {
+    sessionStorage.setItem("finnos:notifications-return-origin", `${location.pathname}${location.search}`);
+    setOpen(false);
+    navigate(target, { state: { fromNotifications: true } });
+  };
   const { data } = useQuery({
     queryKey: ["notifications"],
     queryFn: fetchNotifications,
@@ -66,7 +85,7 @@ export function NotificationsBell() {
   });
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         aria-label={`Notificações (${totalItems})`}
@@ -114,8 +133,8 @@ export function NotificationsBell() {
                 key={`radar-${item.id}`}
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate(`/radar/${encodeURIComponent(item.id)}`)}
-                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigate(`/radar/${encodeURIComponent(item.id)}`); } }}
+                onClick={() => openNotificationTarget(`/radar/${encodeURIComponent(item.id)}`)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openNotificationTarget(`/radar/${encodeURIComponent(item.id)}`); } }}
                 className="flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 data-testid={`notification-radar-${item.id}`}
               >
@@ -146,8 +165,8 @@ export function NotificationsBell() {
                   key={item.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => navigate(item.target_url)}
-                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigate(item.target_url); } }}
+                  onClick={() => openNotificationTarget(item.target_url)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openNotificationTarget(item.target_url); } }}
                   className="flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   data-testid={`notification-${item.id}`}
                 >
