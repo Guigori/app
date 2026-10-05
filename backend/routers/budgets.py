@@ -111,10 +111,14 @@ async def _progress(cycle: dict, user_id: str) -> BudgetCycleProgress:
 async def budget_suggestion(user: dict = Depends(require_user)):
     """Suggest category limits from recent behaviour; never writes a budget."""
     today = date.today()
-    start_idx = today.year * 12 + today.month - 1 - 3
+    current_idx = today.year * 12 + today.month - 1
+    start_idx = current_idx - 3
     sy, sm = start_idx // 12, start_idx % 12 + 1
+    ey, em = (current_idx - 1) // 12, (current_idx - 1) % 12 + 1
+    import calendar
     start = date(sy, sm, 1).isoformat()
-    txs = await db.transactions.find({"user_id": user["id"], "type": "despesa", "status": "pago", "date": {"$gte": start}}).to_list(20000)
+    end = date(ey, em, calendar.monthrange(ey, em)[1]).isoformat()
+    txs = await db.transactions.find({"user_id": user["id"], "type": "despesa", "status": "pago", "date": {"$gte": start, "$lte": end}}).to_list(20000)
     cats = await db.categories.find({"user_id": user["id"]}).to_list(500)
     by_id = {c["id"]: c for c in cats}
     monthly: dict[tuple[str, str], float] = {}
