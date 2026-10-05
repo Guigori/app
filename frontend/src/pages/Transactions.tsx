@@ -176,7 +176,7 @@ export default function Transactions() {
 
       </div>
 
-      <div className="flex h-28 justify-end -mt-12 mb-0 sm:absolute sm:right-0 sm:top-12 sm:z-10 sm:mt-0 sm:h-auto" data-testid="flow-view-rail">
+      <div className="absolute right-0 top-[5.25rem] z-30 flex justify-end" data-testid="flow-view-rail">
         <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
           {([
             { key: "calendario" as const, label: "Fluxo", icon: ChartNoAxesCombined },
@@ -192,7 +192,7 @@ export default function Transactions() {
         </div>
       </div>
 
-      <div className="sticky top-[var(--app-header-height,4rem)] z-20 -mx-1 rounded-2xl border border-border bg-background/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85">
+      <div className="sticky top-[var(--app-header-height,4rem)] z-20 -mx-1 mr-14 rounded-2xl border border-border bg-background/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85">
         <div className="grid grid-cols-[1fr_auto] items-center gap-2">
           <div className="grid grid-cols-3 gap-2" data-testid="flow-strip-real">
             <div><p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Entrada</p><p className="mt-0.5 font-heading text-sm font-bold tabular-nums text-income">{money(strip.income)}</p></div>
