@@ -312,14 +312,16 @@ export default function Transactions() {
         )
       ) : null}
 
-      {flowView === "lista" && categoryId !== "todas" ? (() => {
+      {categoryId !== "todas" && (flowView === "lista" || (flowView === "categorias" && selectedDonutCategory)) ? (() => {
         const selectedCategory = categories.find((category) => category.id === categoryId);
         const categoryTotal = transactions
           .filter((transaction) => transaction.type === "despesa")
           .reduce((sum, transaction) => sum + transaction.value, 0);
         return (
           <div className="rounded-2xl border border-border bg-card px-4 py-3" data-testid="selected-category-summary">
-            <p className="text-xs font-medium text-muted-foreground">Total em {selectedCategory?.name ?? "categoria"}</p>
+            <p className="text-xs font-medium text-muted-foreground">
+              {flowView === "categorias" ? "Transações de " : "Total em "}{selectedCategory?.name ?? "categoria"}
+            </p>
             <p className="mt-1 font-heading text-xl font-bold tabular-nums text-expense">
               {hidden ? formatHiddenBRL() : formatBRL(categoryTotal)}
             </p>
