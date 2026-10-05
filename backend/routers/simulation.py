@@ -12,6 +12,7 @@ class PurchaseSimulationIn(BaseModel):
     amount: float = Field(gt=0)
     installments: int = Field(default=1, ge=1, le=48)
     card_id: str | None = None
+    compare_installments: bool = True
 
 @router.post("/purchase")
 async def simulate_purchase(payload: PurchaseSimulationIn, user: dict = Depends(require_user)):
@@ -45,4 +46,10 @@ async def simulate_purchase(payload: PurchaseSimulationIn, user: dict = Depends(
             card = {"id": current.id, "name": current.name, "available_before": available, "available_after": round(available - payload.amount, 2), "fits_limit": available >= payload.amount, "current_invoice_before": current.current_invoice, "current_invoice_after": round(current.current_invoice + installment_value, 2), "future_installments_before": current.future_installments, "future_installments_after": round(current.future_installments + max(payload.amount - installment_value, 0), 2)}
     after = round(projected - cash_impact, 2)
     level = "confortavel" if after >= payload.amount * .2 and (not card or card["fits_limit"]) else "apertado" if after >= 0 and (not card or card["fits_limit"]) else "critico"
-    return {"amount": round(payload.amount, 2), "installments": payload.installments, "installment_value": installment_value, "balance_now": round(balance, 2), "projected_30d_before": round(projected, 2), "projected_30d_after": after, "cash_impact_30d": round(cash_impact, 2), "card": card, "level": level, "writes_data": False}
+    scenarios = []
+    if payload.compare_installments:
+        for parts in (1, 3, 6, 12):
+            per_month = round(payload.amount / parts, 2)
+            scenario_after = round(projected - (payload.amount if parts == 1 and not payload.card_id else per_month), 2)
+            scenarios.append({"installments": parts, "installment_value": per_month, "projected_30d_after": scenario_after, "card_limit_after": round(card["available_before"] - payload.amount, 2) if card else None})
+    return {"amount": round(payload.amount, 2), "installments": payload.installments, "installment_value": installment_value, "balance_now": round(balance, 2), "projected_30d_before": round(projected, 2), "projected_30d_after": after, "cash_impact_30d": round(cash_impact, 2), "card": card, "level": level, "scenarios": scenarios, "writes_data": False}
