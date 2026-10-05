@@ -35,8 +35,8 @@ interface TransactionCalendarProps {
   onSelectDate: (date: string) => void;
 }
 
-/** Month calendar: clean day numbers with entrada/saída dots, a selected day pill and a
- *  drag handle that expands or collapses the grid to the current week. */
+/** Fluid month calendar. The bottom handle is the only expansion control: drag upward
+ *  to reduce the visible weeks and downward to progressively reveal the month. */
 export function TransactionCalendar({
   month,
   days,
@@ -88,34 +88,6 @@ export function TransactionCalendar({
         {WEEKDAYS.map((label) => (
           <span key={label}>{label}</span>
         ))}
-      </div>
-
-      <div className="mt-3 flex justify-center gap-1" role="group" aria-label="Quantidade de semanas visíveis">
-        {([1, 2, 3] as const).map((count) => (
-          <button
-            key={count}
-            type="button"
-            onClick={() => {
-              setWeekCount(count);
-              if (expanded) onToggleExpanded();
-            }}
-            className={cn(
-              "h-7 min-w-7 rounded-full px-2 text-xs font-semibold transition-colors",
-              !expanded && weekCount === count ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
-            )}
-            aria-pressed={!expanded && weekCount === count}
-          >
-            {count}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => { if (!expanded) onToggleExpanded(); }}
-          className={cn("h-7 rounded-full px-3 text-xs font-semibold transition-colors", expanded ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}
-          aria-pressed={expanded}
-        >
-          Mês
-        </button>
       </div>
 
       <AnimatePresence initial={false} mode="wait">
@@ -185,10 +157,14 @@ export function TransactionCalendar({
             else if (!expanded) onToggleExpanded();
           }
         }}
-        onClick={onToggleExpanded}
+        onClick={() => {
+          if (expanded) onToggleExpanded();
+          else if (weekCount < 3) setWeekCount((value) => (value === 1 ? 2 : 3));
+          else onToggleExpanded();
+        }}
         whileTap={{ scaleX: 1.15 }}
         className="mx-auto mt-1 flex h-7 w-full max-w-32 cursor-grab items-center justify-center active:cursor-grabbing"
-        aria-label={expanded ? "Recolher calendário para a semana" : "Expandir calendário para o mês"}
+        aria-label={expanded ? "Recolher calendário" : "Mostrar mais semanas do calendário"}
         aria-expanded={expanded}
         data-testid="calendar-toggle-expanded"
       >
