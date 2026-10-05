@@ -55,7 +55,8 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
             description="Quando houver despesas, o gráfico mostra para onde seu dinheiro está indo."
           />
         ) : (
-          <div className="flex min-w-0 flex-col items-center gap-5 sm:flex-row sm:gap-6">
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-col items-center gap-5 sm:flex-row sm:gap-6">
             <div className="relative h-44 w-44 shrink-0 min-[390px]:h-48 min-[390px]:w-48" data-testid="expenses-donut-chart" onClick={(event) => { if (event.target === event.currentTarget) onSelectCategory?.(null); }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -91,6 +92,7 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                 </p>
               </div>
             </div>
+            <div className="min-w-0 w-full">
             <ul className="min-w-0 w-full space-y-2.5">
               {visibleSlices.slice(0, 6).map((slice) => (
                 <li
@@ -134,6 +136,8 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                 Ver todas as categorias
               </button>
             ) : null}
+            </div>
+            </div>
             {transactions ? (
               <div className="mt-6 border-t border-border pt-5">
                 <div className="mb-3 flex items-start justify-between gap-3">
