@@ -28,7 +28,7 @@ class ImportConfirmIn(BaseModel):
 async def confirm_import(payload:ImportConfirmIn,user:dict=Depends(require_user)):
     account=await db.accounts.find_one({"id":payload.account_id,"user_id":user["id"]})
     if not account: raise HTTPException(400,"Conta inválida.")
-    if payload.card_id and not await db.cards.find_one({"id":payload.card_id,"user_id":user["id"]):
+    if payload.card_id and not await db.cards.find_one({"id":payload.card_id,"user_id":user["id"]}):
         raise HTTPException(400,"Cartão inválido.")
     categories={c["id"] for c in await db.categories.find({"user_id":user["id"]}).to_list(500)}
     selected=[r for r in payload.rows if r.selected]
