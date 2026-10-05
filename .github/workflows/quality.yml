@@ -6,6 +6,8 @@ name: FINNOS CI
   pull_request:
     branches: ["main"]
   workflow_dispatch:
+  schedule:
+    - cron: "5 * * * *"
 
 concurrency:
   group: finnos-ci-${{ github.ref }}
@@ -16,6 +18,7 @@ permissions:
 
 jobs:
   frontend:
+    if: github.event_name != 'schedule'
     name: Frontend · typecheck, lint and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -44,6 +47,7 @@ jobs:
         run: npm run build
 
   backend:
+    if: github.event_name != 'schedule'
     name: Backend · Python validation
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -61,3 +65,23 @@ jobs:
 
       - name: Validate changed backend imports
         run: python -m py_compile backend/routers/transactions.py
+
+
+  notifications:
+    if: github.event_name == 'schedule'
+    name: Notifications · hourly dispatcher
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger FINNOS notification dispatcher
+        env:
+          FINNOS_CRON_SECRET: ${{ secrets.FINNOS_CRON_SECRET }}
+        run: |
+          if [ -z "$FINNOS_CRON_SECRET" ]; then
+            echo "FINNOS_CRON_SECRET is not configured; dispatcher skipped."
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "X-Cron-Secret: $FINNOS_CRON_SECRET" \
+            https://finnos.vercel.app/api/push/dispatch
