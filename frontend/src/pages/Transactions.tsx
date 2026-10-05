@@ -176,10 +176,10 @@ export default function Transactions() {
 
       </div>
 
-      <div className="absolute right-0 top-[4.25rem] z-30 flex justify-end" data-testid="flow-view-rail">
+      <div className="absolute right-0 top-[3.25rem] z-30 flex justify-end" data-testid="flow-view-rail">
         <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
           {([
-            { key: "calendario" as const, label: "Fluxo", icon: ChartNoAxesCombined },
+            { key: "calendario" as const, label: "Calendário", icon: CalendarDays },
             { key: "categorias" as const, label: "Análise", icon: ChartPie },
             { key: "lista" as const, label: "Lista", icon: List },
           ]).map((item) => (
@@ -192,14 +192,14 @@ export default function Transactions() {
         </div>
       </div>
 
-      <div className="sticky top-[var(--app-header-height,4rem)] z-20 -mx-1 mr-[4.75rem] rounded-3xl border border-border bg-background/95 px-5 py-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:mr-0">
-        <div className="flex items-center gap-4">
-          <div className="grid min-w-0 flex-1 grid-cols-3 gap-3" data-testid="flow-strip-real">
-            <div><p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Entrada</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.95rem,3.6vw,1.15rem)] font-bold tabular-nums text-income">{money(strip.income)}</p></div>
-            <div><p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Saída</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.95rem,3.6vw,1.15rem)] font-bold tabular-nums text-expense">{money(strip.expense)}</p></div>
-            <div><p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Saldo</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.95rem,3.6vw,1.15rem)] font-bold tabular-nums text-foreground">{money(strip.income - strip.expense)}</p></div>
+      <div className="sticky top-[var(--app-header-height,4rem)] z-20 -mx-1 rounded-3xl border border-border bg-background/95 px-4 py-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:mr-0">
+        <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_auto] items-center gap-2">
+          <div className="contents" data-testid="flow-strip-real">
+            <div><p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Entrada</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.82rem,3.25vw,1.05rem)] font-bold tabular-nums text-income">{money(strip.income)}</p></div>
+            <div><p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Saída</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.82rem,3.25vw,1.05rem)] font-bold tabular-nums text-expense">{money(strip.expense)}</p></div>
+            <div><p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Saldo</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.82rem,3.25vw,1.05rem)] font-bold tabular-nums text-foreground">{money(strip.income - strip.expense)}</p></div>
           </div>
-          <div className="shrink-0"><MonthSelector month={month} onChange={changeMonth} /></div>
+          <div className="shrink-0 pl-1"><MonthSelector month={month} onChange={changeMonth} /></div>
         </div>
       </div>
 
