@@ -2,7 +2,9 @@ import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, CheckCircle2, FileSpreadsheet, Keyboard, Landmark, ReceiptText, ShieldCheck, Sparkles, Upload } from "lucide-react";
-import { fetchAccounts } from "@/lib/data";
+import { createTransaction, fetchAccounts, fetchCategories } from "@/lib/data";
+import { parseFinancialFile, type ImportRow } from "@/lib/importFinancial";
+import { ImportReview } from "@/components/onboarding/ImportReview";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,11 +28,17 @@ export default function Onboarding() {
   const dialogs = useDialogs();
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts });
   const accounts = accountsQuery.data ?? [];
+  const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
+  const categories = categoriesQuery.data ?? [];
   const [method, setMethod] = useState<Method>(null);
   const [fileName, setFileName] = useState("");
   const [preview, setPreview] = useState<{ rows: number; recurring: number } | null>(null);
+  const [importRows, setImportRows] = useState<ImportRow[]>([]);
+  const [accountId, setAccountId] = useState("");
+  const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const hasAccount = accounts.length > 0;
+  const targetAccountId = accountId || accounts[0]?.id || "";
 
   const finish = () => {
     window.localStorage.setItem("finnos:onboarding:completed", "1");
@@ -42,10 +50,24 @@ export default function Onboarding() {
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (ext === "csv" || ext === "ofx" || ext === "qfx" || ext === "txt") {
       const text = await file.text();
-      setPreview(parsePreview(text));
+      const rows=parseFinancialFile(text, method === "invoice" ? "invoice" : "statement");
+      setImportRows(rows);
+      setPreview({rows:rows.length,recurring:rows.filter(r=>r.recurring_candidate).length});
     } else {
+      setImportRows([]);
       setPreview({ rows: 0, recurring: 0 });
     }
+  };
+
+  const confirmImport = async () => {
+    if(!targetAccountId)return;
+    setBusy(true);
+    try{
+      for(const row of importRows.filter(r=>r.selected)){
+        await createTransaction({name:row.description,value:row.value,type:row.type,status:"pago",date:row.date,account_id:targetAccountId,card_id:null,to_account_id:null,category_id:row.category_id,fixed:false,recurrence:null,installment:false,total_installments:null,current_installment:null,adjusted_value:null,attachment:fileName||null,notes:"Importado durante o onboarding após revisão do usuário."});
+      }
+      finish();
+    }finally{setBusy(false)}
   };
 
   return (
@@ -90,7 +112,7 @@ export default function Onboarding() {
           <input ref={inputRef} className="hidden" type="file" accept=".csv,.ofx,.qfx,.txt,.pdf" onChange={(e) => { const file=e.target.files?.[0]; if(file) void readFile(file); }} />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{method === "statement" ? "Anexar extrato" : "Anexar fatura"}</p><p className="text-sm text-muted-foreground">CSV/OFX/QFX têm pré-análise local. PDF fica anexado para a etapa de extração do backend, sem gravação automática.</p></div><Button variant="outline" onClick={() => inputRef.current?.click()}><Upload className="h-4 w-4" /> Selecionar arquivo</Button></div>
           {fileName ? <div className="mt-4 rounded-xl bg-muted/60 p-4"><p className="font-semibold">{fileName}</p>{preview && preview.rows > 0 ? <p className="mt-1 text-sm text-muted-foreground">Pré-análise: {preview.rows} linhas financeiras encontradas · {preview.recurring} possíveis padrões recorrentes. A importação definitiva exige revisão.</p> : <p className="mt-1 text-sm text-muted-foreground">Arquivo recebido. Nenhum dado será lançado sem revisão e confirmação.</p>}</div> : null}
-          {fileName ? <div className="mt-4 flex justify-end"><Button onClick={finish}>Continuar para revisão <ArrowRight className="h-4 w-4" /></Button></div> : null}
+          {importRows.length ? <ImportReview rows={importRows} setRows={setImportRows} accounts={accounts} categories={categories} accountId={targetAccountId} setAccountId={setAccountId} onConfirm={confirmImport} busy={busy} /> : null}
         </div> : null}
       </section> : null}
     </div>
