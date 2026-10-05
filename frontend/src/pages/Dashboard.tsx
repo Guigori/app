@@ -17,7 +17,6 @@ import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 
 import { MonthSelector } from "@/components/dashboard/MonthSelector";
-import { RecentTransactions } from "@/components/dashboard/RecentTransactions";
 import { RadarSection } from "@/components/dashboard/RadarSection";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -173,10 +172,25 @@ export default function Dashboard() {
             if (moduleId === "radar") return <RadarSection key={moduleId} signals={radarQuery.data?.items ?? []} totalCount={radarQuery.data?.count ?? 0} />;
             if (moduleId === "categories") return (
               <div key={moduleId}>
-                <ExpensesDonutChart month={data.month} slices={data.categories} total={data.expense} onOpenDetails={() => openFlow("expense")} selectedCategoryId={selectedCategory?.category_id ?? null} onSelectCategory={setSelectedCategory} onOpenCategory={(slice) => navigate(`/fluxo?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)} />
+                <ExpensesDonutChart
+                  month={data.month}
+                  slices={data.categories}
+                  total={data.expense}
+                  transactions={visibleRecent}
+                  onOpenDetails={() => openFlow("expense")}
+                  onOpenAllTransactions={() =>
+                    navigate(
+                      selectedCategory?.category_id
+                        ? `/fluxo?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(selectedCategory.category_id)}`
+                        : `/fluxo?month=${activeMonth}`,
+                    )
+                  }
+                  selectedCategoryId={selectedCategory?.category_id ?? null}
+                  onSelectCategory={setSelectedCategory}
+                  onOpenCategory={(slice) => navigate(`/fluxo?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)}
+                />
               </div>
             );
-            if (moduleId === "recent") return <RecentTransactions key={moduleId} transactions={visibleRecent} categoryName={selectedCategory?.name ?? null} month={data.month} categoryId={selectedCategory?.category_id ?? null} />;
             if (moduleId === "budget") return <Budget503020Card key={moduleId} month={monthLabel(data.month)} income={data.income} rule={data.rule} />;
             return null;
           })}
