@@ -45,6 +45,7 @@ export default function Transactions() {
   const { hidden } = useBalanceHidden();
 
   const [month, setMonth] = useState(currentMonth());
+  const [periodMode, setPeriodMode] = useState<"rolling30" | "month">("rolling30");
   const [flowView, setFlowView] = useState<"calendario" | "categorias" | "lista">("calendario");
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [scope, setScope] = useState<"dia" | "mes">("mes");
@@ -75,6 +76,8 @@ export default function Transactions() {
   };
 
   const changeMonth = (next: string) => {
+    setPeriodMode("month");
+    setScope("mes");
     setMonth(next);
     // Keep the selection inside the visible month: today when it belongs there, day 1 otherwise.
     setSelectedDate(todayISO().slice(0, 7) === next ? todayISO() : `${next}-01`);
@@ -88,15 +91,28 @@ export default function Transactions() {
   const accounts = accountsQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
 
+  const rollingRange = useMemo(() => {
+    const end = todayISO();
+    const endDate = new Date(`${end}T12:00:00`);
+    endDate.setDate(endDate.getDate() - 29);
+    const start = [
+      endDate.getFullYear(),
+      String(endDate.getMonth() + 1).padStart(2, "0"),
+      String(endDate.getDate()).padStart(2, "0"),
+    ].join("-");
+    return { start, end };
+  }, []);
+
   const filters = useMemo(() => {
-    const f: Record<string, string> = { month };
+    const f: Record<string, string> =
+      periodMode === "rolling30" ? { start_date: rollingRange.start, end_date: rollingRange.end } : { month };
     if (deferredSearch.trim()) f.search = deferredSearch.trim();
     if (type !== "todos") f.type = type;
     if (status !== "todos") f.status = status;
     if (categoryId !== "todas") f.category_id = categoryId;
     if (accountId !== "todas") f.account_id = accountId;
     return f;
-  }, [month, deferredSearch, type, status, categoryId, accountId]);
+  }, [month, periodMode, rollingRange, deferredSearch, type, status, categoryId, accountId]);
 
   const transactionsQuery = useQuery({
     queryKey: ["transactions", filters],
@@ -121,6 +137,21 @@ export default function Transactions() {
   }, [transactions]);
 
   const dayFlow = calendar?.days.find((d) => d.date === selectedDate);
+  const periodTotals = useMemo(() => {
+    if (periodMode === "rolling30" && scope === "mes") {
+      return monthTransactions.reduce(
+        (totals, transaction) => {
+          if (transaction.status !== "pago") return totals;
+          if (transaction.type === "receita") totals.income += transaction.value;
+          if (transaction.type === "despesa") totals.expense += transaction.value;
+          return totals;
+        },
+        { income: 0, expense: 0 },
+      );
+    }
+    return null;
+  }, [periodMode, scope, monthTransactions]);
+
   const strip =
     scope === "dia"
       ? {
@@ -130,8 +161,8 @@ export default function Transactions() {
           projectedExpense: dayFlow?.projected_expense ?? 0,
         }
       : {
-          income: calendar?.income ?? 0,
-          expense: calendar?.expense ?? 0,
+          income: periodTotals?.income ?? calendar?.income ?? 0,
+          expense: periodTotals?.expense ?? calendar?.expense ?? 0,
           projectedIncome: calendar?.projected_income ?? 0,
           projectedExpense: calendar?.projected_expense ?? 0,
         };
@@ -243,7 +274,7 @@ export default function Transactions() {
       </div>
 
       <p className="-mt-4 text-xs text-muted-foreground" data-testid="scope-label">
-        {scope === "dia" ? formatDate(selectedDate) : monthLabel(month)} · {sortDir === "desc" ? "mais recentes primeiro" : "mais antigas primeiro"}
+        {scope === "dia" ? formatDate(selectedDate) : periodMode === "rolling30" ? "Últimos 30 dias" : monthLabel(month)} · {sortDir === "desc" ? "mais recentes primeiro" : "mais antigas primeiro"}
       </p>
 
       {showSearch ? (
@@ -326,7 +357,7 @@ export default function Transactions() {
               {hidden ? formatHiddenBRL() : formatBRL(categoryTotal)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {transactions.length} {transactions.length === 1 ? "transação" : "transações"} em {monthLabel(month)}
+              {transactions.length} {transactions.length === 1 ? "transação" : "transações"} · {periodMode === "rolling30" ? "últimos 30 dias" : monthLabel(month)}
             </p>
           </div>
         );
