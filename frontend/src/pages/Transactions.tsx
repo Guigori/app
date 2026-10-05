@@ -290,7 +290,9 @@ export default function Transactions() {
             selectedCategoryId={selectedDonutCategory}
             onSelectCategory={(slice) => setSelectedDonutCategory(slice?.category_id ?? null)}
             onOpenCategory={(slice) => {
-              if (slice.category_id) setCategoryId(slice.category_id);
+              setSelectedDonutCategory(slice.category_id ?? null);
+              setCategoryId(slice.category_id ?? "todas");
+              setType("despesa");
               setScope("mes");
               setFlowView("lista");
             }}
@@ -303,6 +305,24 @@ export default function Transactions() {
           </Card>
         )
       ) : null}
+
+      {flowView === "lista" && categoryId !== "todas" ? (() => {
+        const selectedCategory = categories.find((category) => category.id === categoryId);
+        const categoryTotal = transactions
+          .filter((transaction) => transaction.type === "despesa")
+          .reduce((sum, transaction) => sum + transaction.value, 0);
+        return (
+          <div className="rounded-2xl border border-border bg-card px-4 py-3" data-testid="selected-category-summary">
+            <p className="text-xs font-medium text-muted-foreground">Total em {selectedCategory?.name ?? "categoria"}</p>
+            <p className="mt-1 font-heading text-xl font-bold tabular-nums text-expense">
+              {hidden ? formatHiddenBRL() : formatBRL(categoryTotal)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {transactions.length} {transactions.length === 1 ? "transação" : "transações"} em {monthLabel(month)}
+            </p>
+          </div>
+        );
+      })() : null}
 
       {flowView !== "categorias" ? (
       transactionsQuery.isPending ? (
