@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Sparkles } from "lucide-react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { fetchRadar, sendRadarFeedback, updateRadarSignal, fetchTransactions, updateTransaction } from "@/lib/data";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -18,8 +18,6 @@ function target(signal: RadarSignal) {
 export default function RadarDetail() {
   const { signalId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
-  const fromNotifications = Boolean((location.state as { fromNotifications?: boolean } | null)?.fromNotifications);
   const queryClient = useQueryClient();
   const { data, isPending } = useQuery({ queryKey: ["radar"], queryFn: fetchRadar, staleTime: 60_000 });
   const signal = data?.items.find((item) => item.id === signalId);
@@ -45,9 +43,12 @@ export default function RadarDetail() {
     <div className="mx-auto max-w-2xl space-y-5 animate-fade-up">
       <button
         type="button"
-        onClick={() => fromNotifications ? navigate(-1) : navigate("/radar")}
+        onClick={() => {
+          const notificationOrigin = sessionStorage.getItem("finnos:notifications-return-origin");
+          navigate(notificationOrigin || "/radar");
+        }}
         className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-colors hover:bg-accent"
-        aria-label={fromNotifications ? "Voltar para a central de notificações" : "Voltar ao Radar"}
+        aria-label="Voltar"
         data-testid="radar-detail-back"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
