@@ -105,6 +105,20 @@ export default function Transactions() {
   const transactions = (scope === "dia" ? monthTransactions.filter((t) => t.date === selectedDate) : monthTransactions)
     .slice()
     .sort((a, b) => (sortDir === "desc" ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
+  const groupedTransactions = useMemo(() => {
+    const groups = new Map<string, Transaction[]>();
+    transactions.forEach((transaction) => {
+      const group = groups.get(transaction.date) ?? [];
+      group.push(transaction);
+      groups.set(transaction.date, group);
+    });
+    return Array.from(groups.entries()).map(([date, items]) => ({
+      date,
+      items,
+      net: items.reduce((sum, item) => sum + signedValue(item), 0),
+    }));
+  }, [transactions]);
+
   const dayFlow = calendar?.days.find((d) => d.date === selectedDate);
   const strip =
     scope === "dia"
@@ -507,51 +521,83 @@ export default function Transactions() {
             </Table>
           </div>
 
-          <div className="space-y-3 md:hidden" data-testid="transactions-card-list">
-            {transactions.map((t) => (
-              <Card key={t.id} className="py-0" data-testid="transaction-card">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-foreground">{t.name}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {[t.category_name ?? (t.type === "transferencia" ? "Transferência" : "Sem categoria"), t.account_name]
-                          .filter(Boolean)
-                          .join(" · ")}
-                        {" · "}
-                        {formatDate(t.date)}
-                      </p>
-                    </div>
-                    <p
-                      className={cn(
-                        "shrink-0 font-heading text-base font-bold tabular-nums",
-                        t.type === "receita" ? "text-income" : t.type === "despesa" ? "text-expense" : "text-transfer",
-                      )}
-                    >
-                      {hidden ? formatHiddenBRL() : formatSignedBRL(signedValue(t))}
+          <div className="space-y-5 md:hidden" data-testid="transactions-card-list">
+            {groupedTransactions.map((group) => (
+              <section key={group.date} className="overflow-hidden rounded-2xl border border-border bg-card" data-testid="transaction-day-group">
+                <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+                  <div>
+                    <p className="font-heading text-sm font-bold text-foreground">
+                      {group.date === todayISO() ? "Hoje · " : ""}{formatDate(group.date)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {group.items.length} {group.items.length === 1 ? "lançamento" : "lançamentos"}
                     </p>
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap gap-1">
-                      <StatusBadge status={t.status} />
-                      {t.fixed ? <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Fixa</Badge> : null}
-                      {t.installment && t.total_installments ? (
-                        <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-                          {t.current_installment}/{t.total_installments}
-                        </Badge>
-                      ) : null}
+                  <p className={cn(
+                    "shrink-0 font-heading text-sm font-bold tabular-nums",
+                    group.net > 0 ? "text-income" : group.net < 0 ? "text-expense" : "text-foreground",
+                  )}>
+                    {hidden ? formatHiddenBRL() : formatSignedBRL(group.net)}
+                  </p>
+                </div>
+
+                <div className="divide-y divide-border">
+                  {group.items.map((t) => (
+                    <div key={t.id} className="px-4 py-3.5" data-testid="transaction-card">
+                      <div className="flex items-start gap-3">
+                        <span
+                          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                          style={{
+                            backgroundColor: (t.category_color ?? "#64748B") + "1A",
+                            color: t.category_color ?? "#64748B",
+                          }}
+                          aria-hidden="true"
+                        >
+                          <CategoryIcon name={t.category_icon ?? "more-horizontal"} className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-foreground">{t.name}</p>
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {[t.category_name ?? (t.type === "transferencia" ? "Transferência" : "Sem categoria"), t.account_name]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </p>
+                            </div>
+                            <p className={cn(
+                              "shrink-0 font-heading text-base font-bold tabular-nums",
+                              t.type === "receita" ? "text-income" : t.type === "despesa" ? "text-expense" : "text-transfer",
+                            )}>
+                              {hidden ? formatHiddenBRL() : formatSignedBRL(signedValue(t))}
+                            </p>
+                          </div>
+
+                          <div className="mt-2.5 flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 flex-wrap gap-1">
+                              <StatusBadge status={t.status} />
+                              {t.fixed ? <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Fixa</Badge> : null}
+                              {t.installment && t.total_installments ? (
+                                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                                  {t.current_installment}/{t.total_installments}
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <div className="flex shrink-0 gap-1">
+                              <Button size="icon-sm" variant="ghost" onClick={() => dialogs.openTransaction({ transaction: t })} aria-label={`Editar ${t.name}`} data-testid={`edit-transaction-${t.id}`}>
+                                <Pencil className="h-4 w-4" aria-hidden="true" />
+                              </Button>
+                              <Button size="icon-sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setPendingDelete(t)} aria-label={`Excluir ${t.name}`} data-testid={`delete-transaction-${t.id}`}>
+                                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button size="icon-sm" variant="ghost" onClick={() => dialogs.openTransaction({ transaction: t })} aria-label={`Editar ${t.name}`} data-testid={`edit-transaction-${t.id}`}>
-                        <Pencil className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                      <Button size="icon-sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setPendingDelete(t)} aria-label={`Excluir ${t.name}`} data-testid={`delete-transaction-${t.id}`}>
-                        <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         </>
