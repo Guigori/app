@@ -49,7 +49,11 @@ export function AiPanel() {
     try{
       const contextualText=pendingContext?`${text}\n\n[Contexto estruturado do FINNOS: ${JSON.stringify(pendingContext)}]`:text;
       const localReply=local?await askLocalFinnos(contextualText,undefined,conversation.messages):null;
-      const reply=localReply?.text??(await askMutation.mutateAsync({q:contextualText,history:conversation.messages.slice(-12).map(({role,content})=>({role,content}))})).answer;
+      const amountMatch=text.match(/(?:R\\$\\s*)?([0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{1,2})|[0-9]+(?:[.,][0-9]{1,2})?)/);
+      const amount=amountMatch?Number(amountMatch[1].replace(/\\./g,"").replace(",",".")):0;
+      const wantsSimulation=amount>0&&["posso","comprar","gastar","cabe","parcel"].some(k=>text.toLowerCase().includes(k));
+      const simulation=!local&&wantsSimulation?await apiPost<{projected_30d_before:number;projected_30d_after:number;installment_value:number;level:string;writes_data:false}>("/simulate/purchase",{amount,installments:1}):null;
+      const reply=localReply?.text??(simulation?`Simulei **${new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(amount)}** sem criar nenhum lançamento. Seu saldo projetado para os próximos 30 dias iria de **${new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(simulation.projected_30d_before)}** para **${new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(simulation.projected_30d_after)}**. Cenário: **${simulation.level}**.`:(await askMutation.mutateAsync({q:contextualText,history:conversation.messages.slice(-12).map(({role,content})=>({role,content}))})).answer);
       setPendingContext(null);
       next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:reply,visual:localReply?.visual,createdAt:new Date().toISOString()}]};persist(next);
     }catch(e){setError(getApiErrorMessage(e,"Não foi possível responder agora."))}
