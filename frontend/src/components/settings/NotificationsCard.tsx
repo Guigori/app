@@ -28,9 +28,15 @@ export function NotificationsCard() {
     email_enabled: false,
     hour: 9,
     days_before: 1,
+    transaction_reminders: true,
+    invoice_reminders: true,
+    radar_alerts: true,
+    activity_reminders: true,
+    weekly_summary: true,
+    system_notices: true,
   });
 
-  const prefsQuery = useQuery({ queryKey: ["notify-prefs"], queryFn: fetchNotifyPrefs, enabled: !local });
+  const prefsQuery = useQuery({ queryKey: ["notify-prefs"], queryFn: fetchNotifyPrefs });
   const prefs = prefsQuery.data;
 
   useEffect(() => {
@@ -40,6 +46,12 @@ export function NotificationsCard() {
       email_enabled: prefs.email_enabled,
       hour: prefs.hour,
       days_before: prefs.days_before,
+      transaction_reminders: prefs.transaction_reminders,
+      invoice_reminders: prefs.invoice_reminders,
+      radar_alerts: prefs.radar_alerts,
+      activity_reminders: prefs.activity_reminders,
+      weekly_summary: prefs.weekly_summary,
+      system_notices: prefs.system_notices,
     });
   }, [prefs]);
 
@@ -52,21 +64,6 @@ export function NotificationsCard() {
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
 
-  if (local) {
-    return (
-      <section className="rounded-3xl border border-border bg-card p-5" data-testid="notifications-card">
-        <h2 className="flex items-center gap-2 font-heading text-lg font-semibold text-foreground">
-          <BellRing className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
-          Avisos de vencimento
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Os avisos no celular e por e-mail precisam de uma conta FINNOS — no modo local os dados ficam só neste
-          aparelho e não há servidor para disparar o lembrete.
-        </p>
-      </section>
-    );
-  }
-
   return (
     <section className="rounded-3xl border border-border bg-card p-5" data-testid="notifications-card">
       <h2 className="flex items-center gap-2 font-heading text-lg font-semibold text-foreground">
@@ -74,7 +71,7 @@ export function NotificationsCard() {
         Avisos de vencimento
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Um empurrãozinho antes de cada conta agendada e de cada fatura fechar.
+        Escolha quais tipos de aviso o FINNOS pode enviar para este aparelho.
       </p>
 
       <div className="mt-4 space-y-3">
@@ -102,6 +99,33 @@ export function NotificationsCard() {
             <span className="block text-xs text-muted-foreground">Enviado para o e-mail da sua conta.</span>
           </span>
         </label>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-border p-4">
+        <p className="font-heading text-sm font-semibold text-foreground">Tipos de notificação</p>
+        <p className="mt-1 text-xs text-muted-foreground">Você pode ativar ou desativar cada grupo sem desligar todos os avisos.</p>
+        <div className="mt-4 space-y-3">
+          {([
+            ["transaction_reminders", "Contas e lançamentos", "Vencimentos, contas a pagar e movimentações agendadas."],
+            ["invoice_reminders", "Faturas de cartão", "Fechamento e vencimento das faturas."],
+            ["radar_alerts", "Radar FINNOS", "Riscos, desvios e oportunidades importantes."],
+            ["activity_reminders", "Lembretes de registro", "Avisos para manter suas movimentações atualizadas."],
+            ["weekly_summary", "Resumo semanal", "Resumo dos lançamentos e gastos da semana."],
+            ["system_notices", "Avisos do sistema", "Novidades, segurança e comunicações importantes do FINNOS."],
+          ] as const).map(([key, title, description]) => (
+            <label key={key} className="flex items-start gap-3 text-sm text-foreground">
+              <Checkbox
+                checked={form[key]}
+                onCheckedChange={(value) => setForm((current) => ({ ...current, [key]: value === true }))}
+                data-testid={`notify-${key}`}
+              />
+              <span>
+                {title}
+                <span className="block text-xs text-muted-foreground">{description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -149,7 +173,15 @@ export function NotificationsCard() {
           onClick={async () => {
             setWorking(true);
             try {
-              await enablePush();
+              if (local) {
+                if (!("Notification" in window) || !("serviceWorker" in navigator)) throw new Error("Este navegador não suporta notificações.");
+                const permission = await Notification.requestPermission();
+                if (permission !== "granted") throw new Error("Permissão de notificação não concedida.");
+                await navigator.serviceWorker.register("/sw.js");
+                await navigator.serviceWorker.ready;
+              } else {
+                await enablePush();
+              }
               await queryClient.invalidateQueries({ queryKey: ["notify-prefs"] });
               toast.success("Aparelho registrado para receber avisos.");
             } catch (error) {
@@ -188,9 +220,10 @@ export function NotificationsCard() {
           onClick={async () => {
             setWorking(true);
             try {
-              await disablePush();
+              if (!local) await disablePush();
+              setForm((current) => ({ ...current, push_enabled: false }));
               await queryClient.invalidateQueries({ queryKey: ["notify-prefs"] });
-              toast.success("Aparelho removido dos avisos.");
+              toast.success(local ? "Avisos desativados nas preferências locais." : "Aparelho removido dos avisos.");
             } catch (error) {
               toast.error(getApiErrorMessage(error));
             } finally {
@@ -204,7 +237,7 @@ export function NotificationsCard() {
       </div>
       {!pushAvailable() ? (
         <p className="mt-3 text-xs text-muted-foreground" data-testid="notify-unsupported">
-          Este navegador não suporta avisos push. Instale o FINNOS na tela inicial ou use o aviso por e-mail.
+          Este navegador não suporta avisos push. No iPhone, instale o FINNOS na tela inicial para receber avisos como um app.
         </p>
       ) : null}
     </section>
