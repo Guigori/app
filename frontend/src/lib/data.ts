@@ -43,6 +43,7 @@ import type {
   AccountDetail,
   AccountInput,
   BudgetSummary,
+  BudgetSuggestion,
   BudgetCycle,
   BudgetCycleProgress,
   CalendarMonth,
@@ -147,7 +148,7 @@ export async function fetchCalendar(month: string): Promise<CalendarMonth> {
 }
 
 
-export async function fetchCurrentBudgetCycle(): Promise<BudgetCycle | null> {
+export async function fetchBudgetSuggestion(): Promise<BudgetSuggestion | null> {\n  if (isLocalMode()) return null;\n  return apiGet<BudgetSuggestion>("/budgets/suggestion");\n}\n\nexport async function fetchCurrentBudgetCycle(): Promise<BudgetCycle | null> {
   if (isLocalMode()) return null;
   return apiGet<BudgetCycle | null>("/budgets/current");
 }
