@@ -176,7 +176,7 @@ export default function Transactions() {
 
       </div>
 
-      <div className="absolute right-0 top-12 z-10 flex justify-end" data-testid="flow-view-rail">
+      <div className="flex h-28 justify-end -mt-12 mb-0 sm:absolute sm:right-0 sm:top-12 sm:z-10 sm:mt-0 sm:h-auto" data-testid="flow-view-rail">
         <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
           {([
             { key: "calendario" as const, label: "Fluxo", icon: ChartNoAxesCombined },
