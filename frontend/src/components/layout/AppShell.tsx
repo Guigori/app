@@ -9,6 +9,7 @@ import { NavDrawer } from "@/components/layout/NavDrawer";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { QuickActionFAB } from "@/components/layout/QuickActionFAB";
 import { TopTabs } from "@/components/layout/TopTabs";
+import { LocalNotificationPulse, NotificationPermissionPrompt } from "@/components/notifications/NotificationPermissionPrompt";
 import { useEdgeSwipe } from "@/lib/useEdgeSwipe";
 
 export function AppShell() {
@@ -43,6 +44,8 @@ export function AppShell() {
         <MobileNav />
         <QuickActionFAB />
         <AiPanel />
+        <NotificationPermissionPrompt />
+        <LocalNotificationPulse />
       </div>
     </DialogsProvider>
   );
