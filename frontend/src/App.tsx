@@ -18,6 +18,7 @@ import Subscriptions from "@/pages/Subscriptions";
 import ComingSoon from "@/pages/ComingSoon";
 import Radar from "@/pages/Radar";
 import RadarDetail from "@/pages/RadarDetail";
+import Onboarding from "@/pages/Onboarding";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
             <Route index element={<Dashboard />} />
+            <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/transacoes" element={<Transactions />} />
             <Route path="/contas" element={<Accounts />} />
             <Route path="/categorias" element={<Categories />} />
