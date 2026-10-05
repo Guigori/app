@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Sparkles } from "lucide-react";
+import { ExternalLink, Sparkles } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { fetchRadar, sendRadarFeedback, updateRadarSignal, fetchTransactions, updateTransaction } from "@/lib/data";
 import { buttonVariants } from "@/components/ui/button";
@@ -41,7 +41,6 @@ export default function RadarDetail() {
   );
   return (
     <div className="mx-auto max-w-2xl space-y-5 animate-fade-up">
-      <button type="button" onClick={() => navigate(-1)} className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card hover:bg-accent" aria-label="Voltar"><ArrowLeft className="h-4 w-4" /></button>
       <section className="rounded-3xl border border-border bg-card p-6 sm:p-8">
         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: COLOR[signal.type] }}>{LABEL[signal.type]}{signal.severity === "critical" ? " crítico" : ""}</p>
         <h1 className="mt-2 font-heading text-2xl font-bold tracking-tight">{signal.title}</h1>
