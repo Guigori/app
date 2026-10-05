@@ -58,6 +58,7 @@ def enrich_transaction(
         adjusted_value=doc.get("adjusted_value"),
         attachment=doc.get("attachment"),
         notes=doc.get("notes"),
+        notify_enabled=doc.get("notify_enabled", True),
         created_at=aware(doc.get("created_at")) or datetime.now(timezone.utc),
     )
 
@@ -107,6 +108,7 @@ def _document(user_id: str, payload: TransactionIn) -> dict:
         "adjusted_value": payload.adjusted_value,
         "attachment": payload.attachment,
         "notes": payload.notes,
+        "notify_enabled": payload.notify_enabled,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
