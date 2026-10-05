@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { ArrowDown, ArrowUp, BellOff, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions } from "@/lib/data";
@@ -42,6 +43,9 @@ function signedValue(t: Transaction): number {
 export default function Transactions() {
   const dialogs = useDialogs();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const linkedDate = searchParams.get("date");
+  const highlightedTransactionId = searchParams.get("highlight");
   const { hidden } = useBalanceHidden();
 
   const [month, setMonth] = useState(currentMonth());
@@ -62,6 +66,15 @@ export default function Transactions() {
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
 
   const deferredSearch = useDeferredValue(search);
+
+  useEffect(() => {
+    if (!linkedDate || !/^\d{4}-\d{2}-\d{2}$/.test(linkedDate)) return;
+    setPeriodMode("month");
+    setMonth(linkedDate.slice(0, 7));
+    setSelectedDate(linkedDate);
+    setScope("dia");
+    setFlowView("calendario");
+  }, [linkedDate]);
 
   // The global "+" reads this, so a new entry lands on the day being viewed.
   useEffect(() => {
@@ -125,6 +138,17 @@ export default function Transactions() {
   const transactions = monthTransactions
     .slice()
     .sort((a, b) => (sortDir === "desc" ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
+  useEffect(() => {
+    if (!highlightedTransactionId || transactions.length === 0) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(`transaction-${highlightedTransactionId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [highlightedTransactionId, transactions]);
+
   const groupedTransactions = useMemo(() => {
     const groups = new Map<string, Transaction[]>();
     transactions.forEach((transaction) => {
@@ -428,7 +452,7 @@ export default function Transactions() {
               </TableHeader>
               <TableBody>
                 {transactions.map((t) => (
-                  <TableRow key={t.id} data-testid="transaction-row">
+                  <TableRow key={t.id} id={`transaction-${t.id}`} data-testid="transaction-row" className={cn(highlightedTransactionId === t.id && "bg-primary/5 ring-2 ring-inset ring-primary/30")}>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(t.date)}</TableCell>
                     <TableCell>
                       <p className="font-medium text-foreground">{t.name}</p>
@@ -525,7 +549,7 @@ export default function Transactions() {
 
                 <div className="divide-y divide-border">
                   {group.items.map((t) => (
-                    <div key={t.id} className="px-4 py-3.5" data-testid="transaction-card">
+                    <div key={t.id} id={`transaction-${t.id}`} className={cn("px-4 py-3.5 transition-colors", highlightedTransactionId === t.id && "bg-primary/5 ring-2 ring-inset ring-primary/30")} data-testid="transaction-card">
                       <div className="flex items-start gap-3">
                         <span
                           className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
