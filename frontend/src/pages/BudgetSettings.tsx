@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Save, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Save, SlidersHorizontal, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { createBudgetCycle, fetchCategories, fetchCurrentBudgetCycle, fetchNextBudgetCycle, updateBudgetCycle, type BudgetCyclePayload } from "@/lib/data";
+import { createBudgetCycle, fetchCategories, fetchCurrentBudgetCycle, fetchNextBudgetCycle, fetchBudgetSuggestion, updateBudgetCycle, type BudgetCyclePayload } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { formatBRL } from "@/lib/format";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
@@ -34,6 +34,7 @@ export default function BudgetSettings(){
  const current=useQuery({queryKey:["budget-v2-current"],queryFn:fetchCurrentBudgetCycle});
  const next=useQuery({queryKey:["budget-v2-next"],queryFn:fetchNextBudgetCycle});
  const cats=useQuery({queryKey:["categories"],queryFn:fetchCategories});
+ const behavior=useQuery({queryKey:["budget-suggestion"],queryFn:fetchBudgetSuggestion});
  const [target,setTarget]=useState<"current"|"next">("current");
  const existing=target==="current"?current.data:next.data;
  const [mode,setMode]=useState<BudgetMode>("503020"),[period,setPeriod]=useState<BudgetPeriod>("mensal");
