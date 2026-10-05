@@ -1,6 +1,7 @@
 import {
   ArrowUpDown,
   CalendarDays,
+  GitCompareArrows,
   CreditCard,
   Home,
   PieChart,
@@ -36,7 +37,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: null,
     items: [
       { to: "/", label: "Início", icon: Home, slug: "inicio" },
-      { to: "/transacoes", label: "Fluxo", icon: CalendarDays, slug: "transacoes" },
+      { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
       { to: "/contas", label: "Contas e cartões", icon: Wallet, slug: "contas" },
       { to: "/configuracoes#ia", label: "FINNOS IA", icon: Sparkles, slug: "ia" },
     ],
@@ -73,7 +74,7 @@ export const MAIN_NAV: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 /** Horizontal tab strip under the header (Calen's Início · Fluxo · Categorias …). */
 export const TOP_TABS: NavItem[] = [
   { to: "/", label: "Início", icon: Home, slug: "inicio" },
-  { to: "/transacoes", label: "Fluxo", icon: CalendarDays, slug: "transacoes" },
+  { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
   { to: "/fluxo", label: "Fluxo", icon: ArrowUpDown, slug: "fluxo" },
   { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
   { to: "/categorias", label: "Categorias", icon: Tags, slug: "categorias" },
@@ -83,7 +84,7 @@ export const TOP_TABS: NavItem[] = [
 /** Bottom bar on mobile — the central "+" sits between these two pairs. */
 export const BOTTOM_LEFT: NavItem[] = [
   { to: "/", label: "Início", icon: Home, slug: "inicio" },
-  { to: "/transacoes", label: "Fluxo", icon: CalendarDays, slug: "transacoes" },
+  { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
 ];
 
 export const BOTTOM_RIGHT: NavItem[] = [
