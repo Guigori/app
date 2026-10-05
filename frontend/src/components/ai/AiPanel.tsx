@@ -19,13 +19,14 @@ const BASE_SUGGESTIONS = ["Quanto gastei este mês?", "Onde posso economizar?", 
 export function AiPanel() {
   const [open,setOpen]=useState(false), [historyOpen,setHistoryOpen]=useState(false), [question,setQuestion]=useState(""), [error,setError]=useState<string|null>(null), [attachOpen,setAttachOpen]=useState(false), [listening,setListening]=useState(false);
   const [conversation,setConversation]=useState<FinnConversation>(()=>newFinnConversation());
+  const [pendingContext,setPendingContext]=useState<Record<string,unknown>|null>(null);
   const [history,setHistory]=useState<FinnConversation[]>(()=>readFinnConversations());
   const local=isLocalMode(), appMode=getMode(), navigationPreferences=useNavigationPreferences();
   const [triggerVisible,setTriggerVisible]=useState(true), triggerTimer=useRef<number|null>(null), fileRef=useRef<HTMLInputElement|null>(null);
   const isMobile=typeof window!=="undefined"&&window.matchMedia("(max-width: 767px)").matches;
   const showTrigger=isMobile?navigationPreferences.aiMobile:navigationPreferences.aiWeb;
 
-  useEffect(()=>{const openFromContext=(event:Event)=>{const detail=(event as CustomEvent<{question?:string}>).detail;setOpen(true);setHistoryOpen(false);if(detail?.question)setQuestion(detail.question)};window.addEventListener("finnos-ai-open",openFromContext);return()=>window.removeEventListener("finnos-ai-open",openFromContext)},[]);
+  useEffect(()=>{const openFromContext=(event:Event)=>{const detail=(event as CustomEvent<{question?:string;context?:Record<string,unknown>}>).detail;setOpen(true);setHistoryOpen(false);if(detail?.context)setPendingContext(detail.context);if(detail?.question)setQuestion(detail.question)};window.addEventListener("finnos-ai-open",openFromContext);return()=>window.removeEventListener("finnos-ai-open",openFromContext)},[]);
   useEffect(()=>{const onScroll=()=>{setTriggerVisible(false);if(triggerTimer.current)clearTimeout(triggerTimer.current);triggerTimer.current=window.setTimeout(()=>setTriggerVisible(true),220)};window.addEventListener("scroll",onScroll,{passive:true});return()=>window.removeEventListener("scroll",onScroll)},[]);
   const keysQuery=useQuery({queryKey:["ai-keys"],queryFn:()=>apiGet<AiKey[]>("/ai/keys"),enabled:open&&!local,staleTime:30000});
   const activeProvider=(keysQuery.data?.[0]?.provider||"") as AiProvider|"";
@@ -40,14 +41,16 @@ export function AiPanel() {
   const attachFile=async(file:File)=>{setAttachOpen(false);if(file.size>2_000_000){setError("Use um arquivo de até 2 MB nesta versão.");return}if(file.type.startsWith("text/")||/\\.(csv|txt)$/i.test(file.name)){const body=await file.text();setQuestion(`Analise este arquivo ${file.name} e identifique possíveis lançamentos. Não registre nada sem minha confirmação.\\n\\n${body.slice(0,12000)}`)}else{setQuestion(`Quero analisar o arquivo "${file.name}" para registrar gastos. Mostre uma prévia e peça minha confirmação antes de salvar.`);setError("A leitura automática de imagens/PDFs será concluída pelo processador de documentos do servidor; nenhum lançamento será salvo automaticamente.")}};
   const feedback=(id:string,rating:"up"|"down")=>{if(local){localStorage.setItem(`finnos:ai-feedback:${id}`,rating);return}void apiPost("/ai/feedback",{rating,response_id:id})};
   const persist=(next:FinnConversation)=>{setConversation(next);upsertFinnConversation(next);setHistory(readFinnConversations())};
-  const startNew=()=>{setConversation(newFinnConversation());setQuestion("");setError(null);setHistoryOpen(false)};
+  const startNew=()=>{setConversation(newFinnConversation());setQuestion("");setError(null);setPendingContext(null);setHistoryOpen(false)};
   const ask=async(q:string)=>{
     const text=q.trim(); if(!text)return; setQuestion("");setError(null);
     const user={id:crypto.randomUUID(),role:"user" as const,content:text,createdAt:new Date().toISOString()};
     let next={...conversation,title:conversation.messages.length?conversation.title:text.slice(0,52),messages:[...conversation.messages,user]};persist(next);
     try{
-      const localReply=local?await askLocalFinnos(text,undefined,conversation.messages):null;
-      const reply=localReply?.text??(await askMutation.mutateAsync({q:text,history:conversation.messages.slice(-12).map(({role,content})=>({role,content}))})).answer;
+      const contextualText=pendingContext?`${text}\n\n[Contexto estruturado do FINNOS: ${JSON.stringify(pendingContext)}]`:text;
+      const localReply=local?await askLocalFinnos(contextualText,undefined,conversation.messages):null;
+      const reply=localReply?.text??(await askMutation.mutateAsync({q:contextualText,history:conversation.messages.slice(-12).map(({role,content})=>({role,content}))})).answer;
+      setPendingContext(null);
       next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:reply,visual:localReply?.visual,createdAt:new Date().toISOString()}]};persist(next);
     }catch(e){setError(getApiErrorMessage(e,"Não foi possível responder agora."))}
   };
