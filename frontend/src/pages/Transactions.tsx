@@ -288,13 +288,19 @@ export default function Transactions() {
             slices={dashboardQuery.data.categories}
             total={dashboardQuery.data.expense}
             selectedCategoryId={selectedDonutCategory}
-            onSelectCategory={(slice) => setSelectedDonutCategory(slice?.category_id ?? null)}
+            onSelectCategory={(slice) => {
+              const nextCategoryId = slice?.category_id ?? null;
+              setSelectedDonutCategory(nextCategoryId);
+              setCategoryId(nextCategoryId ?? "todas");
+              setType(nextCategoryId ? "despesa" : "todos");
+              setScope("mes");
+            }}
             onOpenCategory={(slice) => {
-              setSelectedDonutCategory(slice.category_id ?? null);
-              setCategoryId(slice.category_id ?? "todas");
+              const nextCategoryId = slice.category_id ?? null;
+              setSelectedDonutCategory(nextCategoryId);
+              setCategoryId(nextCategoryId ?? "todas");
               setType("despesa");
               setScope("mes");
-              setFlowView("lista");
             }}
           />
         ) : (
@@ -324,7 +330,7 @@ export default function Transactions() {
         );
       })() : null}
 
-      {flowView !== "categorias" ? (
+      {flowView !== "categorias" || selectedDonutCategory ? (
       transactionsQuery.isPending ? (
         <FinnosPageLoading title="Carregando transações" description="Buscando seus lançamentos do período." />
       ) : transactionsQuery.error ? (
