@@ -379,6 +379,7 @@ export interface NotificationItem {
   date: string;
   value: number;
   days_left: number;
+  target_url: string;
 }
 
 export interface Notifications {
