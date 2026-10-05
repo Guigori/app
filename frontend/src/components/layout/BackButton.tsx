@@ -10,6 +10,7 @@ export function BackButton() {
 
   const segments = location.pathname.split("/").filter(Boolean);
   if (segments.length < 2) return null;
+  if (segments[0] === "radar" && segments.length === 2) return null;
   const parentPath = `/${segments.slice(0, -1).join("/")}`;
   const fromNotifications = Boolean((location.state as { fromNotifications?: boolean } | null)?.fromNotifications);
 
