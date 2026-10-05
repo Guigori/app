@@ -52,8 +52,13 @@ export function AiPanel() {
       const amountMatch=text.match(/(?:R\\$\\s*)?([0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{1,2})|[0-9]+(?:[.,][0-9]{1,2})?)/);
       const amount=amountMatch?Number(amountMatch[1].replace(/\\./g,"").replace(",",".")):0;
       const wantsSimulation=amount>0&&["posso","comprar","gastar","cabe","parcel"].some(k=>text.toLowerCase().includes(k));
-      const simulation=!local&&wantsSimulation?await apiPost<{projected_30d_before:number;projected_30d_after:number;installment_value:number;level:string;writes_data:false}>("/simulate/purchase",{amount,installments:1}):null;
-      const reply=localReply?.text??(simulation?`Simulei **${new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(amount)}** sem criar nenhum lançamento. Seu saldo projetado para os próximos 30 dias iria de **${new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(simulation.projected_30d_before)}** para **${new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(simulation.projected_30d_after)}**. Cenário: **${simulation.level}**.`:(await askMutation.mutateAsync({q:contextualText,history:conversation.messages.slice(-12).map(({role,content})=>({role,content}))})).answer);
+      const simulation=!local&&wantsSimulation?await apiPost<{projected_30d_before:number;projected_30d_after:number;installment_value:number;level:string;scenarios:{installments:number;installment_value:number;projected_30d_after:number}[];card?:{fits_limit:boolean}|null;budget?:{available_before:number;available_after:number;fits_budget:boolean}|null;writes_data:false}>("/simulate/purchase",{amount,installments:1,compare_installments:true}):null;
+      const reply=localReply?.text??(simulation?(()=>{
+        const money=(v:number)=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(v);
+        const options=simulation.scenarios.map(s=>`${s.installments}x de ${money(s.installment_value)} → projeção de ${money(s.projected_30d_after)}`).join("\n");
+        const budgetLine=simulation.budget?`\nOrçamento da categoria: ${money(simulation.budget.available_before)} disponível antes e ${money(simulation.budget.available_after)} depois.`:"";
+        return `Simulei **${money(amount)}** sem criar nenhum lançamento. Seu saldo projetado para os próximos 30 dias parte de **${money(simulation.projected_30d_before)}**. Cenário: **${simulation.level}**.${budgetLine}\n\nComparação:\n${options}\n\nIsso é uma simulação; nenhuma compra ou despesa foi registrada.`;
+      })():(await askMutation.mutateAsync({q:contextualText,history:conversation.messages.slice(-12).map(({role,content})=>({role,content}))})).answer);
       setPendingContext(null);
       next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:reply,visual:localReply?.visual,createdAt:new Date().toISOString()}]};persist(next);
     }catch(e){setError(getApiErrorMessage(e,"Não foi possível responder agora."))}
