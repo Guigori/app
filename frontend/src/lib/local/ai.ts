@@ -31,6 +31,28 @@ export async function askLocalFinnos(question: string, month?: string, history: 
       visual:{title:category.name,items:rows.map(t=>({label:t.name,value:money(t.installment_value??t.value),detail:new Date(t.date+"T12:00:00").toLocaleDateString("pt-BR")}))}
     };
   }
+  const amountMatch = question.match(/(?:R\\$\\s*)?([0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{1,2})|[0-9]+(?:[.,][0-9]{1,2})?)/);
+  const simulatedAmount = amountMatch ? Number(amountMatch[1].replace(/\\./g, "").replace(",", ".")) : 0;
+  const simulationIntent = simulatedAmount > 0 && ["posso", "comprar", "gastar", "cabe", "à vista", "avista", "parcel"].some(k => q.includes(k));
+  if (simulationIntent) {
+    const after = dashboard.total_balance - simulatedAmount;
+    const budgetAfter = budget.remaining - simulatedAmount;
+    const installments = Array.from({length:3},(_,i)=>({n:[3,6,12][i],v:simulatedAmount/[3,6,12][i]}));
+    const healthy = after >= 0 && budgetAfter >= 0;
+    return {
+      text: `Simulei **${money(simulatedAmount)}** sem alterar nenhum lançamento. ${healthy ? "Pelo cenário atual, a compra cabe no caixa e no orçamento disponível." : "Esse valor pressiona seu caixa ou ultrapassa o orçamento disponível."} Antes de decidir, considere também os compromissos ainda não registrados no FINNOS.`,
+      visual:{
+        title:"Antes de gastar",
+        metrics:[
+          {label:"Saldo atual",value:money(dashboard.total_balance)},
+          {label:"Depois da compra",value:money(after),tone:after>=0?"positive":"negative"},
+          {label:"Orçamento após",value:money(budgetAfter),tone:budgetAfter>=0?"positive":"negative"}
+        ],
+        items:installments.map(x=>({label:`${x.n}× sem juros`,value:money(x.v),detail:`${x.n} meses comprometidos`}))
+      }
+    };
+  }
+
   if(q.includes("quanto gastei")||q.includes("despesa")){
     return {text:`${intro}você gastou **${money(dashboard.expense)}** em ${monthLabel(m)}. Como entraram ${money(dashboard.income)}, o mês está positivo em ${money(dashboard.month_balance)}.`,visual:metrics([{label:"Receitas",value:money(dashboard.income),tone:"positive"},{label:"Despesas",value:money(dashboard.expense),tone:"negative"},{label:"Resultado",value:money(dashboard.month_balance),tone:dashboard.month_balance>=0?"positive":"negative"}])};
   }
