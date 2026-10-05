@@ -8,7 +8,7 @@ export type DailyChartRow = {
   Resultado: number;
 };
 
-export function buildMonthlyCumulativeRows(month: string, days: DayFlow[]): DailyChartRow[] {
+export function buildMonthlyCumulativeRows(month: string, days: DayFlow[], today?: string): DailyChartRow[] {
   const [year, monthNumber] = month.split("-").map(Number);
   const daysInMonth = new Date(year, monthNumber, 0).getDate();
   const byDate = new Map(days.map((day) => [day.date, day]));
@@ -21,6 +21,10 @@ export function buildMonthlyCumulativeRows(month: string, days: DayFlow[]): Dail
     const day = byDate.get(date);
     cumulativeIncome += day?.income ?? 0;
     cumulativeExpense += day?.expense ?? 0;
+    if (today && date > today) {
+      cumulativeIncome += day?.projected_income ?? 0;
+      cumulativeExpense += day?.projected_expense ?? 0;
+    }
     return {
       date,
       label: String(dayNumber).padStart(2, "0"),
@@ -37,14 +41,15 @@ export function selectVisibleDailyRows(
   period: "7d" | "1m",
   today: string,
 ): DailyChartRow[] {
-  const currentMonth = today.slice(0, 7);
-  const currentDay = Number(today.slice(8, 10));
-  const endExclusive = month === currentMonth ? Math.min(currentDay, rows.length) : rows.length;
+  if (period === "1m") return rows;
 
-  if (period === "7d") {
-    return rows.slice(Math.max(0, endExclusive - 7), endExclusive);
+  if (month !== today.slice(0, 7)) {
+    return rows.slice(Math.max(0, rows.length - 7));
   }
-  return rows.slice(0, endExclusive);
+
+  const currentIndex = Math.min(Math.max(Number(today.slice(8, 10)) - 1, 0), Math.max(rows.length - 1, 0));
+  const start = Math.max(0, Math.min(currentIndex - 3, Math.max(rows.length - 7, 0)));
+  return rows.slice(start, start + 7);
 }
 
 export function defaultDailyTooltipIndex(rows: Array<{ label: string }>, month: string, today: string): number | undefined {
