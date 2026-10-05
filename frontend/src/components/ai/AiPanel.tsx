@@ -58,6 +58,9 @@ export function AiPanel() {
       const xPos=lower.indexOf("x");
       const beforeX=xPos>0?lower.slice(Math.max(0,xPos-2),xPos).trim():"";
       const requestedInstallments=/^[0-9]{1,2}$/.test(beforeX)?Math.min(48,Math.max(1,Number(beforeX))):1;
+      const normalizedText=lower.normalize("NFD").replace(/[̀-ͯ]/g,"");
+      const matchedCard=cardsQuery.data?.find(card=>normalizedText.includes(card.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""))||normalizedText.includes(card.institution.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")));
+      const matchedCategory=categoriesQuery.data?.find(cat=>normalizedText.includes(cat.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")));
       const simulation=!local&&wantsSimulation?await apiPost<{projected_30d_before:number;projected_30d_after:number;installment_value:number;level:string;scenarios:{installments:number;installment_value:number;projected_30d_after:number}[];card?:{fits_limit:boolean}|null;budget?:{available_before:number;available_after:number;fits_budget:boolean}|null;writes_data:false}>("/simulate/purchase",{amount,installments:1,compare_installments:true}):null;
       const reply=localReply?.text??(simulation?(()=>{
         const money=(v:number)=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(v);
