@@ -285,6 +285,7 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
     adjusted_value: input.adjusted_value,
     attachment: input.attachment,
     notes: input.notes,
+    notify_enabled: input.notify_enabled,
     created_at: existing?.created_at ?? new Date().toISOString(),
   };
 }
