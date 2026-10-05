@@ -36,7 +36,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: null,
     items: [
       { to: "/", label: "Início", icon: Home, slug: "inicio" },
-      { to: "/transacoes", label: "Calendário", icon: CalendarDays, slug: "transacoes" },
+      { to: "/transacoes", label: "Fluxo", icon: CalendarDays, slug: "transacoes" },
       { to: "/contas", label: "Contas e cartões", icon: Wallet, slug: "contas" },
       { to: "/configuracoes#ia", label: "FINNOS IA", icon: Sparkles, slug: "ia" },
     ],
@@ -93,7 +93,7 @@ export const BOTTOM_RIGHT: NavItem[] = [
 
 export const PAGE_TITLES: Record<string, string> = {
   "/": "Início",
-  "/transacoes": "Transações",
+  "/transacoes": "Fluxo",
   "/contas": "Contas",
   "/categorias": "Categorias",
   "/fluxo": "Fluxo",
