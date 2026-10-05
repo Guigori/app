@@ -129,12 +129,13 @@ async def budget_suggestion(user: dict = Depends(require_user)):
         monthly[key] = monthly.get(key, 0) + _tx_amount(tx)
     suggestions = []
     for cid, cat in by_id.items():
-        vals = [value for (key_cid, _), value in monthly.items() if key_cid == cid]
-        if not vals: continue
-        avg = round(sum(vals) / len(vals), 2)
+        month_keys = [f"{(start_idx+i)//12:04d}-{(start_idx+i)%12+1:02d}" for i in range(3)]
+        vals = [monthly.get((cid, key), 0.0) for key in month_keys]
+        if not any(vals): continue
+        avg = round(sum(vals) / 3, 2)
         buffer = 1.05 if cat.get("group") == "necessidades" else 1.0
         planned = round(avg * buffer, 2)
-        suggestions.append({"category_id": cid, "name": cat.get("name"), "group": cat.get("group"), "average": avg, "suggested": planned, "months_observed": len(vals)})
+        suggestions.append({"category_id": cid, "name": cat.get("name"), "group": cat.get("group"), "average": avg, "suggested": planned, "months_observed": sum(1 for value in vals if value > 0)})
     suggestions.sort(key=lambda x: -x["suggested"])
     income_txs = await db.transactions.find({"user_id": user["id"], "type": "receita", "status": "pago", "date": {"$gte": start}}).to_list(5000)
     income_by_month: dict[str, float] = {}
