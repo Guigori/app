@@ -394,6 +394,12 @@ export interface NotifyPrefsInput {
   email_enabled: boolean;
   hour: number;
   days_before: number;
+  transaction_reminders: boolean;
+  invoice_reminders: boolean;
+  radar_alerts: boolean;
+  activity_reminders: boolean;
+  weekly_summary: boolean;
+  system_notices: boolean;
 }
 
 export interface NotifyPrefs extends NotifyPrefsInput {
