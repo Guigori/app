@@ -70,6 +70,29 @@ import type {
 const LOCAL_USER_ID = "local";
 
 const LOCAL_NOTIFICATION_DISMISSED_KEY = "finnos:notification-dismissed";
+const LOCAL_NOTIFY_PREFS_KEY = "finnos:notify-prefs";
+const DEFAULT_NOTIFY_PREFS: NotifyPrefsInput = {
+  push_enabled: true,
+  email_enabled: false,
+  hour: 9,
+  days_before: 1,
+  transaction_reminders: true,
+  invoice_reminders: true,
+  radar_alerts: true,
+  activity_reminders: true,
+  weekly_summary: true,
+  system_notices: true,
+};
+
+function readLocalNotifyPrefs(): NotifyPrefsInput {
+  try {
+    return { ...DEFAULT_NOTIFY_PREFS, ...JSON.parse(localStorage.getItem(LOCAL_NOTIFY_PREFS_KEY) || "{}") };
+  } catch {
+    return DEFAULT_NOTIFY_PREFS;
+  }
+}
+
+
 
 function localDismissedNotificationIds(): Set<string> {
   try {
@@ -358,17 +381,34 @@ export async function fetchSubscriptions(): Promise<Subscriptions> {
 /** Reminder settings live on the server, so local mode reports them as unavailable. */
 export async function fetchNotifyPrefs(): Promise<NotifyPrefs> {
   if (isLocalMode()) {
-    return { push_enabled: false, email_enabled: false, hour: 9, days_before: 1, push_devices: 0, push_supported: false };
+    return { ...readLocalNotifyPrefs(), push_devices: 1, push_supported: true };
   }
   return apiGet<NotifyPrefs>("/push/prefs");
 }
 
 export async function saveNotifyPrefs(input: NotifyPrefsInput): Promise<NotifyPrefs> {
-  if (isLocalMode()) throw new Error("Os avisos exigem uma conta FINNOS (não funcionam no modo local).");
+  if (isLocalMode()) {
+    localStorage.setItem(LOCAL_NOTIFY_PREFS_KEY, JSON.stringify(input));
+    return { ...input, push_devices: 1, push_supported: true };
+  }
   return apiPut<NotifyPrefs>("/push/prefs", input);
 }
 
 export async function sendTestPush(): Promise<{ sent: number }> {
-  if (isLocalMode()) throw new Error("Os avisos exigem uma conta FINNOS (não funcionam no modo local).");
+  if (isLocalMode()) {
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || Notification.permission !== "granted") {
+      throw new Error("Ative as notificações neste aparelho antes de enviar o teste.");
+    }
+    await navigator.serviceWorker.register("/sw.js");
+    const registration = await navigator.serviceWorker.ready;
+    await registration.showNotification("FINNOS · Notificação de teste", {
+      body: "Tudo certo. Este aparelho está pronto para receber avisos do FINNOS.",
+      icon: "/brand/finnos-icon.png",
+      badge: "/brand/finnos-icon.png",
+      tag: "finnos-test",
+      data: { url: "/configuracoes" },
+    });
+    return { sent: 1 };
+  }
   return apiPost<{ sent: number }>("/push/test", {});
 }
