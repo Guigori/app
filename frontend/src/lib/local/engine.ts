@@ -211,6 +211,8 @@ export function localDeleteCategory(id: string): void {
 
 export interface LocalTxFilters {
   month?: string;
+  start_date?: string;
+  end_date?: string;
   type?: string;
   status?: string;
   category_id?: string;
@@ -221,7 +223,10 @@ export interface LocalTxFilters {
 export function localListTransactions(filters: LocalTxFilters): Transaction[] {
   const db = readDb();
   let rows = sortedTransactions(db);
-  if (filters.month) {
+  if (filters.start_date || filters.end_date) {
+    if (filters.start_date) rows = rows.filter((t) => t.date >= filters.start_date!);
+    if (filters.end_date) rows = rows.filter((t) => t.date <= filters.end_date!);
+  } else if (filters.month) {
     const [start, end] = monthBounds(filters.month);
     rows = rows.filter((t) => t.date >= start && t.date <= end);
   }
