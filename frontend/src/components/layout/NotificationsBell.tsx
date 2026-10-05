@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Bell, CalendarClock, CreditCard } from "lucide-react";
+import { AlertTriangle, Bell, CalendarClock, CreditCard, Radar as RadarIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { fetchNotifications } from "@/lib/data";
+import { fetchNotifications, fetchRadar } from "@/lib/data";
 import { formatBRL, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { NotificationKind } from "@/types/finnos";
@@ -23,18 +23,28 @@ export function NotificationsBell() {
     refetchInterval: 5 * 60 * 1000,
     staleTime: 60_000,
   });
+  const { data: radar } = useQuery({
+    queryKey: ["radar"],
+    queryFn: fetchRadar,
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 60_000,
+  });
   const items = data?.items ?? [];
-  const overdue = items.some((item) => item.kind === "atrasado");
+  const radarItems = (radar?.items ?? [])
+    .filter((item) => item.severity === "critical" || item.severity === "high")
+    .slice(0, 3);
+  const totalItems = items.length + radarItems.length;
+  const overdue = items.some((item) => item.kind === "atrasado") || radarItems.some((item) => item.severity === "critical");
 
   return (
     <Popover>
       <PopoverTrigger
         className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        aria-label={`Notificações (${items.length})`}
+        aria-label={`Notificações (${totalItems})`}
         data-testid="notifications-bell"
       >
         <Bell className="h-5 w-5" aria-hidden="true" />
-        {items.length > 0 ? (
+        {totalItems > 0 ? (
           <span
               className={cn(
                 "absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white",
@@ -42,7 +52,7 @@ export function NotificationsBell() {
               )}
               data-testid="notifications-badge"
             >
-              {items.length}
+              {totalItems}
             </span>
         ) : null}
       </PopoverTrigger>
@@ -51,12 +61,31 @@ export function NotificationsBell() {
           <p className="font-heading text-sm font-semibold text-foreground">Avisos</p>
           <p className="text-xs text-muted-foreground">Contas a vencer nos próximos 7 dias e faturas chegando.</p>
         </div>
-        {items.length === 0 ? (
+        {totalItems === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-muted-foreground" data-testid="notifications-empty">
             Nada vencendo por agora. Tudo em ordem.
           </p>
         ) : (
           <ul className="max-h-80 divide-y divide-border overflow-y-auto" data-testid="notifications-list">
+            {radarItems.map((item) => (
+              <li
+                key={`radar-${item.id}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/radar/${encodeURIComponent(item.id)}`)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigate(`/radar/${encodeURIComponent(item.id)}`); } }}
+                className="flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                data-testid={`notification-radar-${item.id}`}
+              >
+                <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl", item.severity === "critical" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary")} aria-hidden="true">
+                  <RadarIcon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">Radar FINNOS · {item.title}</p>
+                  <p className="text-xs text-muted-foreground">{item.description}</p>
+                </div>
+              </li>
+            ))}
             {items.map((item) => {
               const Icon = ICON[item.kind];
               return (
