@@ -854,12 +854,12 @@ export function localNotifications(windowDays = 7): Notifications {
 
   const items: NotificationItem[] = [];
   for (const tx of db.transactions) {
-    if (tx.status === "pago") continue;
+    if (tx.status === "pago" || tx.notify_enabled === false) continue;
     const daysLeft = dayDiff(tx.date);
     if (daysLeft > windowDays) continue;
     const word = tx.type === "receita" ? "Receita" : tx.type === "despesa" ? "Conta" : "Transferência";
     items.push({
-      id: tx.id,
+      id: `tx-${tx.id}-${tx.date}`,
       kind: daysLeft < 0 ? "atrasado" : "vencimento",
       title: `${word}: ${tx.name}`,
       description:
@@ -871,6 +871,7 @@ export function localNotifications(windowDays = 7): Notifications {
       date: tx.date,
       value: round2(tx.value),
       days_left: daysLeft,
+      target_url: `/transacoes?date=${tx.date}&highlight=${encodeURIComponent(tx.id)}`,
     });
   }
   for (const card of db.cards) {
@@ -880,13 +881,14 @@ export function localNotifications(windowDays = 7): Notifications {
     const daysLeft = dayDiff(due);
     if (daysLeft > windowDays) continue;
     items.push({
-      id: `card-${card.id}`,
+      id: `card-${card.id}-${due}`,
       kind: "fatura",
       title: `Fatura ${card.name}`,
       description: `Fecha em ${closing.slice(8, 10)}/${closing.slice(5, 7)} e vence em ${due.slice(8, 10)}/${due.slice(5, 7)}.`,
       date: due,
       value: 0,
       days_left: daysLeft,
+      target_url: `/cartoes/${card.id}?due=${due}`,
     });
   }
   items.sort((a, b) => a.days_left - b.days_left || a.title.localeCompare(b.title));
