@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, CheckCircle2, FileSpreadsheet, Keyboard, Landmark, ReceiptText, ShieldCheck, Sparkles, Upload } from "lucide-react";
 import { createTransaction, fetchAccounts, fetchCategories } from "@/lib/data";
+import { apiPost } from "@/lib/api";
+import { isLocalMode } from "@/lib/mode";
 import { parseFinancialFile, type ImportRow } from "@/lib/importFinancial";
 import { ImportReview } from "@/components/onboarding/ImportReview";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
@@ -63,8 +65,11 @@ export default function Onboarding() {
     if(!targetAccountId)return;
     setBusy(true);
     try{
-      for(const row of importRows.filter(r=>r.selected)){
-        await createTransaction({name:row.description,value:row.value,type:row.type,status:"pago",date:row.date,account_id:targetAccountId,card_id:null,to_account_id:null,category_id:row.category_id,fixed:false,recurrence:null,installment:false,total_installments:null,current_installment:null,adjusted_value:null,attachment:fileName||null,notes:"Importado durante o onboarding após revisão do usuário."});
+      const selected=importRows.filter(r=>r.selected);
+      if(isLocalMode()){
+        for(const row of selected) await createTransaction({name:row.description,value:row.value,type:row.type,status:"pago",date:row.date,account_id:targetAccountId,card_id:null,to_account_id:null,category_id:row.category_id,fixed:false,recurrence:null,installment:false,total_installments:null,current_installment:null,adjusted_value:null,attachment:fileName||null,notes:"Importado durante o onboarding após revisão do usuário."});
+      }else{
+        await apiPost("/imports/confirm",{account_id:targetAccountId,card_id:null,kind:method==="invoice"?"invoice":"statement",filename:fileName||null,rows:selected.map(r=>({date:r.date,description:r.description,value:r.value,type:r.type,category_id:r.category_id,selected:true}))});
       }
       finish();
     }finally{setBusy(false)}
