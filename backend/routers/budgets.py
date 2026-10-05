@@ -107,6 +107,39 @@ async def _progress(cycle: dict, user_id: str) -> BudgetCycleProgress:
     return BudgetCycleProgress(cycle_id=cycle["id"], start_date=start, end_date=end, planned=planned, spent=spent, committed=committed, available=round(planned-projected,2), projected_close=projected, expected_income=expected_income, received_income=round(received_income,2), committed_income=round(committed_income,2), safe_to_spend=round(max(income_base-spent-committed,0),2), elapsed_percent=elapsed_percent, used_percent=used_percent, pace=pace, allocations=allocations)
 
 
+@router.get("/suggestion")
+async def budget_suggestion(user: dict = Depends(require_user)):
+    """Suggest category limits from recent behaviour; never writes a budget."""
+    today = date.today()
+    start_idx = today.year * 12 + today.month - 1 - 3
+    sy, sm = start_idx // 12, start_idx % 12 + 1
+    start = date(sy, sm, 1).isoformat()
+    txs = await db.transactions.find({"user_id": user["id"], "type": "despesa", "status": "pago", "date": {"$gte": start}}).to_list(20000)
+    cats = await db.categories.find({"user_id": user["id"]}).to_list(500)
+    by_id = {c["id"]: c for c in cats}
+    monthly: dict[tuple[str, str], float] = {}
+    for tx in txs:
+        cid = tx.get("category_id")
+        if not cid: continue
+        key = (cid, str(tx["date"])[:7])
+        monthly[key] = monthly.get(key, 0) + _tx_amount(tx)
+    suggestions = []
+    for cid, cat in by_id.items():
+        vals = [value for (key_cid, _), value in monthly.items() if key_cid == cid]
+        if not vals: continue
+        avg = round(sum(vals) / len(vals), 2)
+        buffer = 1.05 if cat.get("group") == "necessidades" else 1.0
+        planned = round(avg * buffer, 2)
+        suggestions.append({"category_id": cid, "name": cat.get("name"), "group": cat.get("group"), "average": avg, "suggested": planned, "months_observed": len(vals)})
+    suggestions.sort(key=lambda x: -x["suggested"])
+    income_txs = await db.transactions.find({"user_id": user["id"], "type": "receita", "status": "pago", "date": {"$gte": start}}).to_list(5000)
+    income_by_month: dict[str, float] = {}
+    for tx in income_txs:
+        key = str(tx["date"])[:7]; income_by_month[key] = income_by_month.get(key, 0) + _tx_amount(tx)
+    expected_income = round(sum(income_by_month.values()) / len(income_by_month), 2) if income_by_month else 0
+    return {"expected_income": expected_income, "categories": suggestions, "method": "media_recente", "writes_data": False}
+
+
 @router.get("", response_model=List[BudgetCycleOut])
 async def list_cycles(
     status: Optional[str] = Query(default=None, pattern="^(programado|ativo|fechado)$"),
