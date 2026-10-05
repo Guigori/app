@@ -311,23 +311,23 @@ export default function Transactions() {
 
       {flowView === "categorias" ? (() => {
         const expenseTransactions = monthTransactions.filter((transaction) => transaction.type === "despesa" && transaction.status === "pago");
-        const categoryMap = new Map<string, { category_id: string | null; name: string; color: string; icon: string | null; value: number }>();
+        const categoryMap = new Map<string, { category_id: string | null; name: string; color: string; icon: string; total: number }>();
         expenseTransactions.forEach((transaction) => {
           const key = transaction.category_id ?? "__uncategorized__";
           const existing = categoryMap.get(key);
-          if (existing) existing.value += transaction.value;
+          if (existing) existing.total += transaction.value;
           else categoryMap.set(key, {
             category_id: transaction.category_id ?? null,
             name: transaction.category_name ?? "Sem categoria",
             color: transaction.category_color ?? "#64748B",
-            icon: transaction.category_icon ?? null,
-            value: transaction.value,
+            icon: transaction.category_icon ?? "more-horizontal",
+            total: transaction.value,
           });
         });
         const totalExpense = expenseTransactions.reduce((sum, transaction) => sum + transaction.value, 0);
         const slices = Array.from(categoryMap.values())
-          .map((item) => ({ ...item, percentage: totalExpense > 0 ? (item.value / totalExpense) * 100 : 0 }))
-          .sort((a, b) => b.value - a.value);
+          .map((item) => ({ ...item, percent: totalExpense > 0 ? (item.total / totalExpense) * 100 : 0 }))
+          .sort((a, b) => b.total - a.total);
         return (
           <ExpensesDonutChart
             month={periodMode === "rolling30" ? "Últimos 30 dias" : month}
