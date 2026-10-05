@@ -1,11 +1,14 @@
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
+import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { useBalanceHidden } from "@/lib/balance";
-import { formatBRL, formatHiddenBRL, monthLabel } from "@/lib/format";
-import type { CategorySlice } from "@/types/finnos";
+import { formatBRL, formatDate, formatHiddenBRL, formatSignedBRL, monthLabel } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import type { CategorySlice, Transaction } from "@/types/finnos";
 
 interface ExpensesDonutChartProps {
   month: string;
@@ -15,9 +18,12 @@ interface ExpensesDonutChartProps {
   selectedCategoryId?: string | null;
   onSelectCategory?: (slice: CategorySlice | null) => void;
   onOpenCategory?: (slice: CategorySlice) => void;
+  transactions?: Transaction[];
+  onOpenAllTransactions?: () => void;
 }
 
-export function ExpensesDonutChart({ month, slices, total, onOpenDetails, selectedCategoryId = null, onSelectCategory, onOpenCategory }: ExpensesDonutChartProps) {
+export function ExpensesDonutChart({ month, slices, total, onOpenDetails, selectedCategoryId = null, onSelectCategory, onOpenCategory, transactions, onOpenAllTransactions }: ExpensesDonutChartProps) {
+  const dialogs = useDialogs();
   const { hidden } = useBalanceHidden();
   const selected = selectedCategoryId ? slices.find((slice) => slice.category_id === selectedCategoryId) ?? null : null;
   const visibleSlices = selected ? [selected] : slices;
@@ -127,6 +133,75 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                 Ver todas as categorias
               </button>
             ) : null}
+            {transactions ? (
+              <div className="mt-6 border-t border-border pt-5">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-heading text-base font-semibold text-foreground">
+                      {selected ? `Transações · ${selected.name}` : "Transações recentes"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {selected ? "Movimentações que formam esta categoria" : "Últimas movimentações do período"}
+                    </p>
+                  </div>
+                  {onOpenAllTransactions ? (
+                    <button
+                      type="button"
+                      onClick={onOpenAllTransactions}
+                      className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                    >
+                      Ver todas <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </div>
+                {transactions.length === 0 ? (
+                  <p className="rounded-2xl bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
+                    Nenhuma transação encontrada para esta seleção.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {transactions.slice(0, 6).map((transaction) => {
+                      const signed = transaction.type === "receita"
+                        ? transaction.value
+                        : transaction.type === "despesa"
+                          ? -transaction.value
+                          : 0;
+                      return (
+                        <li
+                          key={transaction.id}
+                          className="flex min-w-0 cursor-pointer items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/40"
+                          onClick={() => dialogs.openTransaction({ transaction })}
+                        >
+                          <span
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                            style={{ backgroundColor: (transaction.category_color ?? "#64748B") + "1A", color: transaction.category_color ?? "#64748B" }}
+                            aria-hidden="true"
+                          >
+                            <CategoryIcon name={transaction.category_icon ?? "more-horizontal"} className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-foreground">{transaction.name}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {[transaction.category_name ?? "Sem categoria", transaction.account_name].filter(Boolean).join(" · ")}
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className={cn(
+                              "text-sm font-semibold tabular-nums",
+                              transaction.type === "receita" ? "text-income" : transaction.type === "despesa" ? "text-expense" : "text-transfer",
+                            )}>
+                              {hidden ? formatHiddenBRL() : transaction.type === "transferencia" ? formatBRL(transaction.value) : formatSignedBRL(signed)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{formatDate(transaction.date)}</p>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+
           </div>
         )}
       </CardContent>
