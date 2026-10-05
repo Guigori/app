@@ -7,7 +7,7 @@ import { getApiErrorMessage } from "@/lib/errors";
 import { getMode, isLocalMode } from "@/lib/mode";
 import { askLocalFinnos } from "@/lib/local/ai";
 import { clearFinnConversations, newFinnConversation, readFinnConversations, upsertFinnConversation, type FinnConversation } from "@/lib/aiConversations";
-import type { AiAnswer, AiKey, AiProvider } from "@/types/finnos";
+import type { AiAnswer, AiKey, AiProvider, Category, CreditCard } from "@/types/finnos";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigationPreferences } from "@/lib/navigationPreferences";
@@ -30,6 +30,8 @@ export function AiPanel() {
   useEffect(()=>{const onScroll=()=>{setTriggerVisible(false);if(triggerTimer.current)clearTimeout(triggerTimer.current);triggerTimer.current=window.setTimeout(()=>setTriggerVisible(true),220)};window.addEventListener("scroll",onScroll,{passive:true});return()=>window.removeEventListener("scroll",onScroll)},[]);
   const keysQuery=useQuery({queryKey:["ai-keys"],queryFn:()=>apiGet<AiKey[]>("/ai/keys"),enabled:open&&!local,staleTime:30000});
   const activeProvider=(keysQuery.data?.[0]?.provider||"") as AiProvider|"";
+  const cardsQuery=useQuery({queryKey:["cards"],queryFn:()=>apiGet<CreditCard[]>("/cards"),enabled:open&&!local,staleTime:30000});
+  const categoriesQuery=useQuery({queryKey:["categories"],queryFn:()=>apiGet<Category[]>("/categories"),enabled:open&&!local,staleTime:30000});
   const askMutation=useMutation({mutationFn:({q,history}:{q:string;history:{role:"user"|"assistant";content:string}[]})=>apiPost<AiAnswer>("/ai/ask",{provider:activeProvider,question:q,history})});
 
   const suggestions=useMemo(()=>{
