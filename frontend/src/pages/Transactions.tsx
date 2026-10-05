@@ -2,7 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchDashboard, fetchTransactions } from "@/lib/data";
+import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { useBalanceHidden } from "@/lib/balance";
 import {
@@ -87,7 +87,6 @@ export default function Transactions() {
   const calendarQuery = useQuery({ queryKey: ["calendar", month], queryFn: () => fetchCalendar(month) });
   const calendar = calendarQuery.data;
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
-  const dashboardQuery = useQuery({ queryKey: ["dashboard", month], queryFn: () => fetchDashboard(month) });
   const accounts = accountsQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
 
@@ -310,14 +309,30 @@ export default function Transactions() {
         />
       ) : null}
 
-      {flowView === "categorias" ? (
-        dashboardQuery.isPending ? (
-          <FinnosPageLoading title="Carregando categorias" description="Organizando para onde seu dinheiro foi no período." />
-        ) : dashboardQuery.data ? (
+      {flowView === "categorias" ? (() => {
+        const expenseTransactions = monthTransactions.filter((transaction) => transaction.type === "despesa" && transaction.status === "pago");
+        const categoryMap = new Map<string, { category_id: string | null; name: string; color: string; icon: string | null; value: number }>();
+        expenseTransactions.forEach((transaction) => {
+          const key = transaction.category_id ?? "__uncategorized__";
+          const existing = categoryMap.get(key);
+          if (existing) existing.value += transaction.value;
+          else categoryMap.set(key, {
+            category_id: transaction.category_id ?? null,
+            name: transaction.category_name ?? "Sem categoria",
+            color: transaction.category_color ?? "#64748B",
+            icon: transaction.category_icon ?? null,
+            value: transaction.value,
+          });
+        });
+        const totalExpense = expenseTransactions.reduce((sum, transaction) => sum + transaction.value, 0);
+        const slices = Array.from(categoryMap.values())
+          .map((item) => ({ ...item, percentage: totalExpense > 0 ? (item.value / totalExpense) * 100 : 0 }))
+          .sort((a, b) => b.value - a.value);
+        return (
           <ExpensesDonutChart
-            month={dashboardQuery.data.month}
-            slices={dashboardQuery.data.categories}
-            total={dashboardQuery.data.expense}
+            month={periodMode === "rolling30" ? "Últimos 30 dias" : month}
+            slices={slices}
+            total={totalExpense}
             selectedCategoryId={selectedDonutCategory}
             onSelectCategory={(slice) => {
               const nextCategoryId = slice?.category_id ?? null;
@@ -334,14 +349,8 @@ export default function Transactions() {
               setScope("mes");
             }}
           />
-        ) : (
-          <Card>
-            <CardContent className="p-5 text-sm text-muted-foreground">
-              Não foi possível carregar as categorias deste período.
-            </CardContent>
-          </Card>
-        )
-      ) : null}
+        );
+      })() : null}
 
       {categoryId !== "todas" && (flowView === "lista" || (flowView === "categorias" && selectedDonutCategory)) ? (() => {
         const selectedCategory = categories.find((category) => category.id === categoryId);
