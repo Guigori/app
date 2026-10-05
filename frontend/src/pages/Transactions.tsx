@@ -168,38 +168,54 @@ export default function Transactions() {
 
   return (
     <div className="relative flex flex-col gap-4 animate-fade-up">
-      <div className="flex flex-col gap-3 pr-16 sm:flex-row sm:items-center sm:justify-between sm:pr-0">
-        <div>
+      <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-start gap-x-3 gap-y-3" data-testid="flow-header-grid">
+        <div className="min-w-0 pt-1">
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo</h1>
           <p className="mt-1 text-sm text-muted-foreground">Acompanhe o que entrou, saiu e o que vem pela frente.</p>
         </div>
 
-      </div>
-
-      <div className="absolute right-0 top-[2.25rem] z-30 flex justify-end sm:top-[2.5rem]" data-testid="flow-view-rail">
-        <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
-          {([
-            { key: "calendario" as const, label: "Calendário", icon: CalendarDays },
-            { key: "categorias" as const, label: "Análise", icon: ChartPie },
-            { key: "lista" as const, label: "Lista", icon: List },
-          ]).map((item) => (
-            <Button key={item.key} type="button" size="icon" variant={flowView === item.key ? "default" : "ghost"} className="rounded-full"
-              onClick={() => setFlowView(item.key)} aria-label={`Visualizar ${item.label}`} aria-pressed={flowView === item.key}
-              title={item.label} data-testid={`flow-view-${item.key}`}>
-              <item.icon className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      <div className="-mx-1 rounded-3xl border border-border bg-background/95 px-5 py-5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:mr-0">
-        <div className="grid grid-cols-3 items-center gap-2 sm:gap-4">
-          <div className="contents" data-testid="flow-strip-real">
-            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Entrada</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.82rem,3.15vw,1.05rem)] sm:text-base font-bold tabular-nums text-income">{money(strip.income)}</p></div>
-            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saída</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.82rem,3.15vw,1.05rem)] sm:text-base font-bold tabular-nums text-expense">{money(strip.expense)}</p></div>
-            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saldo</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.82rem,3.15vw,1.05rem)] sm:text-base font-bold tabular-nums text-foreground">{money(strip.income - strip.expense)}</p></div>
+        <div className="row-span-2 flex justify-end self-start" data-testid="flow-view-rail">
+          <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
+            {([
+              { key: "calendario" as const, label: "Calendário", icon: CalendarDays },
+              { key: "categorias" as const, label: "Análise", icon: ChartPie },
+              { key: "lista" as const, label: "Lista", icon: List },
+            ]).map((item) => (
+              <Button
+                key={item.key}
+                type="button"
+                size="icon"
+                variant={flowView === item.key ? "default" : "ghost"}
+                className="rounded-full"
+                onClick={() => setFlowView(item.key)}
+                aria-label={`Visualizar ${item.label}`}
+                aria-pressed={flowView === item.key}
+                title={item.label}
+                data-testid={`flow-view-${item.key}`}
+              >
+                <item.icon className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            ))}
           </div>
-          
+        </div>
+
+        <div className="min-w-0 rounded-3xl border border-border bg-background/95 px-5 py-5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85">
+          <div className="grid grid-cols-3 items-center gap-3">
+            <div className="contents" data-testid="flow-strip-real">
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Entrada</p>
+                <p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.78rem,3vw,1rem)] font-bold tabular-nums text-income sm:text-base">{money(strip.income)}</p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saída</p>
+                <p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.78rem,3vw,1rem)] font-bold tabular-nums text-expense sm:text-base">{money(strip.expense)}</p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saldo</p>
+                <p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.78rem,3vw,1rem)] font-bold tabular-nums text-foreground sm:text-base">{money(strip.income - strip.expense)}</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
