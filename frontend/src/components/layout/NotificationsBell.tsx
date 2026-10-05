@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Bell, CalendarClock, CreditCard, Radar as RadarIcon } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Bell, CalendarClock, CreditCard, Radar as RadarIcon, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { fetchNotifications, fetchRadar } from "@/lib/data";
+import { clearNotifications, dismissNotification, fetchNotifications, fetchRadar, updateRadarSignal } from "@/lib/data";
 import { formatBRL, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { NotificationKind } from "@/types/finnos";
@@ -17,6 +17,7 @@ const ICON: Record<NotificationKind, typeof Bell> = {
  *  invoices closing within the next week. */
 export function NotificationsBell() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data } = useQuery({
     queryKey: ["notifications"],
     queryFn: fetchNotifications,
@@ -35,6 +36,34 @@ export function NotificationsBell() {
     .slice(0, 3);
   const totalItems = items.length + radarItems.length;
   const overdue = items.some((item) => item.kind === "atrasado") || radarItems.some((item) => item.severity === "critical");
+
+  const dismissMutation = useMutation({
+    mutationFn: async (entry: { kind: "notification" | "radar"; id: string }) => {
+      if (entry.kind === "radar") await updateRadarSignal(entry.id, "dismiss");
+      else await dismissNotification(entry.id);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+        queryClient.invalidateQueries({ queryKey: ["radar"] }),
+      ]);
+    },
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: async () => {
+      await Promise.all([
+        clearNotifications(items.map((item) => item.id)),
+        ...radarItems.map((item) => updateRadarSignal(item.id, "dismiss")),
+      ]);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+        queryClient.invalidateQueries({ queryKey: ["radar"] }),
+      ]);
+    },
+  });
 
   return (
     <Popover>
@@ -57,9 +86,22 @@ export function NotificationsBell() {
         ) : null}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0" data-testid="notifications-panel">
-        <div className="border-b border-border px-4 py-3">
-          <p className="font-heading text-sm font-semibold text-foreground">Avisos</p>
-          <p className="text-xs text-muted-foreground">Contas a vencer nos próximos 7 dias e faturas chegando.</p>
+        <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+          <div>
+            <p className="font-heading text-sm font-semibold text-foreground">Avisos</p>
+            <p className="text-xs text-muted-foreground">Vencimentos, faturas e Radar importantes.</p>
+          </div>
+          {totalItems > 0 ? (
+            <button
+              type="button"
+              className="shrink-0 text-xs font-medium text-primary hover:underline disabled:opacity-50"
+              disabled={clearMutation.isPending}
+              onClick={() => clearMutation.mutate()}
+              data-testid="notifications-clear-all"
+            >
+              Limpar
+            </button>
+          ) : null}
         </div>
         {totalItems === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-muted-foreground" data-testid="notifications-empty">
@@ -84,6 +126,17 @@ export function NotificationsBell() {
                   <p className="truncate text-sm font-medium text-foreground">Radar FINNOS · {item.title}</p>
                   <p className="text-xs text-muted-foreground">{item.description}</p>
                 </div>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Dispensar aviso"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    dismissMutation.mutate({ kind: "radar", id: item.id });
+                  }}
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
               </li>
             ))}
             {items.map((item) => {
@@ -93,8 +146,8 @@ export function NotificationsBell() {
                   key={item.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => navigate(item.kind === "fatura" && item.id.startsWith("card-") ? `/cartoes/${item.id.slice(5)}` : `/transacoes?highlight=${encodeURIComponent(item.id)}`)}
-                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigate(item.kind === "fatura" && item.id.startsWith("card-") ? `/cartoes/${item.id.slice(5)}` : `/transacoes?highlight=${encodeURIComponent(item.id)}`); } }}
+                  onClick={() => navigate(item.target_url)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigate(item.target_url); } }}
                   className="flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   data-testid={`notification-${item.id}`}
                 >
@@ -115,6 +168,17 @@ export function NotificationsBell() {
                       {item.value > 0 ? ` · ${formatBRL(item.value)}` : ""}
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Dispensar aviso"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      dismissMutation.mutate({ kind: "notification", id: item.id });
+                    }}
+                  >
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
                 </li>
               );
             })}
