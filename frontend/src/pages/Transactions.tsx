@@ -52,6 +52,7 @@ export default function Transactions() {
   const [type, setType] = useState<"todos" | TxType>("todos");
   const [status, setStatus] = useState<"todos" | TxStatus>("todos");
   const [categoryId, setCategoryId] = useState("todas");
+  const [selectedDonutCategory, setSelectedDonutCategory] = useState<string | null>(null);
   const [accountId, setAccountId] = useState("todas");
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
   const [showSearch, setShowSearch] = useState(false);
@@ -157,13 +158,10 @@ export default function Transactions() {
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo</h1>
           <p className="mt-1 text-sm text-muted-foreground">Acompanhe o que entrou, saiu e o que vem pela frente.</p>
         </div>
-        <Button onClick={() => dialogs.openTransaction()} data-testid="new-transaction-button">
-          <PlusCircle className="h-4 w-4" aria-hidden="true" />
-          Nova transação
-        </Button>
+
       </div>
 
-      <div className="flex justify-end" data-testid="flow-view-rail">
+      <div className="-mt-2 flex justify-end sm:-mt-12" data-testid="flow-view-rail">
         <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
           {([
             { key: "calendario" as const, label: "Calendário", icon: CalendarDays },
@@ -211,6 +209,8 @@ export default function Transactions() {
             month={dashboardQuery.data.month}
             slices={dashboardQuery.data.categories}
             total={dashboardQuery.data.expense}
+            selectedCategoryId={selectedDonutCategory}
+            onSelectCategory={(slice) => setSelectedDonutCategory(slice?.category_id ?? null)}
             onOpenCategory={(slice) => {
               if (slice.category_id) setCategoryId(slice.category_id);
               setScope("mes");
@@ -314,7 +314,6 @@ export default function Transactions() {
       ) : null}
 
       {flowView === "calendario" ? (
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="grid grid-cols-3 gap-2 rounded-2xl border border-border bg-card p-4" data-testid="flow-strip-real">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Entrada</p>
@@ -326,32 +325,9 @@ export default function Transactions() {
           </div>
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Saldo</p>
-            <p className="mt-1 font-heading text-base font-bold tabular-nums text-foreground" data-testid="strip-net">
-              {money(strip.income - strip.expense)}
-            </p>
+            <p className="mt-1 font-heading text-base font-bold tabular-nums text-foreground" data-testid="strip-net">{money(strip.income - strip.expense)}</p>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-dashed border-border bg-card p-4" data-testid="flow-strip-projection">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Previsto entra</p>
-            <p className="mt-1 font-heading text-base font-bold tabular-nums text-income" data-testid="strip-projected-income">
-              {money(strip.projectedIncome)}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Previsto sai</p>
-            <p className="mt-1 font-heading text-base font-bold tabular-nums text-expense" data-testid="strip-projected-expense">
-              {money(strip.projectedExpense)}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Saldo previsto</p>
-            <p className="mt-1 font-heading text-base font-bold tabular-nums text-foreground" data-testid="strip-projected-net">
-              {money(strip.income - strip.expense + strip.projectedIncome - strip.projectedExpense)}
-            </p>
-          </div>
-        </div>
-      </div>
       ) : null}
 
       {showFilters ? (
