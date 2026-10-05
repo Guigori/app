@@ -10,8 +10,8 @@ name: FINNOS CI
     - cron: "5 * * * *"
 
 concurrency:
-  group: finnos-ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: finnos-ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
