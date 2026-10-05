@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronUp, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, GitCommitHorizontal, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -150,6 +150,22 @@ export default function Settings() {
               {nameMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : "Salvar"}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="settings-version-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 font-heading"><GitCommitHorizontal className="h-4.5 w-4.5 text-primary" aria-hidden="true" />Versão do FINNOS</CardTitle>
+          <CardDescription>Identificação desta compilação para controle do beta, commits e deploys.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-xl bg-muted/60 p-3"><span className="block text-xs text-muted-foreground">Versão</span><strong>{__FINNOS_VERSION__}</strong></div>
+            <div className="rounded-xl bg-muted/60 p-3"><span className="block text-xs text-muted-foreground">Canal</span><strong>Beta</strong></div>
+            <div className="rounded-xl bg-muted/60 p-3"><span className="block text-xs text-muted-foreground">Commit</span><strong className="font-mono">{__FINNOS_COMMIT__}</strong></div>
+            <div className="rounded-xl bg-muted/60 p-3"><span className="block text-xs text-muted-foreground">Ambiente</span><strong>{__FINNOS_ENV__}</strong></div>
+          </div>
+          <p className="text-xs text-muted-foreground">Build: {new Date(__FINNOS_BUILD_TIME__).toLocaleString("pt-BR")}. Ao reportar um erro, informe a versão e o commit exibidos aqui.</p>
         </CardContent>
       </Card>
 
