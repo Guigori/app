@@ -167,8 +167,8 @@ export default function Transactions() {
   };
 
   return (
-    <div className="flex flex-col gap-6 animate-fade-up">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="relative flex flex-col gap-4 animate-fade-up">
+      <div className="flex flex-col gap-3 pr-16 sm:flex-row sm:items-center sm:justify-between sm:pr-0">
         <div>
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo</h1>
           <p className="mt-1 text-sm text-muted-foreground">Acompanhe o que entrou, saiu e o que vem pela frente.</p>
@@ -176,7 +176,7 @@ export default function Transactions() {
 
       </div>
 
-      <div className="-mt-12 flex justify-end" data-testid="flow-view-rail">
+      <div className="absolute right-0 top-12 z-10 flex justify-end" data-testid="flow-view-rail">
         <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
           {([
             { key: "calendario" as const, label: "Fluxo", icon: ChartNoAxesCombined },
