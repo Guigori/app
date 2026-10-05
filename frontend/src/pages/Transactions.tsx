@@ -285,7 +285,7 @@ export default function Transactions() {
         )
       ) : null}
 
-      {flowView === "lista" ? (
+      {flowView !== "categorias" ? (
       transactionsQuery.isPending ? (
         <FinnosPageLoading title="Carregando transações" description="Buscando seus lançamentos do período." />
       ) : transactionsQuery.error ? (
