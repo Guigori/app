@@ -176,7 +176,7 @@ export default function Transactions() {
 
       </div>
 
-      <div className="absolute right-0 top-[2.5rem] z-30 flex justify-end" data-testid="flow-view-rail">
+      <div className="absolute right-0 top-[2.25rem] z-30 flex justify-end sm:top-[2.5rem]" data-testid="flow-view-rail">
         <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
           {([
             { key: "calendario" as const, label: "Calendário", icon: CalendarDays },
@@ -192,14 +192,14 @@ export default function Transactions() {
         </div>
       </div>
 
-      <div className="sticky top-[var(--app-header-height,4rem)] z-20 -mx-1 rounded-3xl border border-border bg-background/95 px-4 py-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:mr-0">
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2.5rem] items-center gap-1.5 sm:gap-3">
+      <div className="sticky top-[var(--app-header-height,4rem)] z-20 -mx-1 mr-[4.75rem] rounded-3xl border border-border bg-background/95 px-4 py-4 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:mr-0">
+        <div className="grid grid-cols-3 items-center gap-2 sm:gap-4">
           <div className="contents" data-testid="flow-strip-real">
-            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Entrada</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.72rem,2.9vw,0.98rem)] sm:text-base font-bold tabular-nums text-income">{money(strip.income)}</p></div>
-            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saída</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.72rem,2.9vw,0.98rem)] sm:text-base font-bold tabular-nums text-expense">{money(strip.expense)}</p></div>
-            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saldo</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.72rem,2.9vw,0.98rem)] sm:text-base font-bold tabular-nums text-foreground">{money(strip.income - strip.expense)}</p></div>
+            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Entrada</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.68rem,2.7vw,0.95rem)] sm:text-base font-bold tabular-nums text-income">{money(strip.income)}</p></div>
+            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saída</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.68rem,2.7vw,0.95rem)] sm:text-base font-bold tabular-nums text-expense">{money(strip.expense)}</p></div>
+            <div className="min-w-0"><p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saldo</p><p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.68rem,2.7vw,0.95rem)] sm:text-base font-bold tabular-nums text-foreground">{money(strip.income - strip.expense)}</p></div>
           </div>
-          <div className="flex w-10 shrink-0 justify-center"><MonthSelector month={month} onChange={changeMonth} /></div>
+          
         </div>
       </div>
 
