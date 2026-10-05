@@ -3,6 +3,7 @@
 import os
 
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
 
@@ -103,7 +104,7 @@ async def dispatch_scheduled_notifications(
     if not CRON_SECRET or x_cron_secret != CRON_SECRET:
         raise HTTPException(status_code=401, detail="Scheduler não autorizado.")
 
-    now_local = datetime.now().astimezone()
+    now_local = datetime.now(ZoneInfo("America/Sao_Paulo"))
     today = date.fromisoformat(today_iso())
     user_ids = await db.push_subscriptions.distinct("user_id")
     users_checked = 0
