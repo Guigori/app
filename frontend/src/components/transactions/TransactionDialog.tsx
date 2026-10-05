@@ -52,6 +52,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   const [adjustedRaw, setAdjustedRaw] = useState("");
   const [attachment, setAttachment] = useState("");
   const [notes, setNotes] = useState("");
+  const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
 
   const accountsQuery = useQuery({
@@ -91,6 +92,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       setAdjustedRaw(transaction.adjusted_value != null ? String(transaction.adjusted_value) : "");
       setAttachment(transaction.attachment ?? "");
       setNotes(transaction.notes ?? "");
+      setNotifyEnabled(transaction.notify_enabled ?? true);
     } else {
       setType(initialType ?? "despesa");
       setName("");
@@ -108,6 +110,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       setAdjustedRaw("");
       setAttachment("");
       setNotes("");
+      setNotifyEnabled(true);
     }
   }, [open, transaction, initialType, initialDate]);
 
@@ -172,6 +175,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       adjusted_value: adjusted && adjusted > 0 ? adjusted : null,
       attachment: attachment.trim() || null,
       notes: notes.trim() || null,
+      notify_enabled: notifyEnabled,
     });
   };
 
@@ -351,6 +355,25 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            ) : null}
+
+            {status !== "pago" ? (
+              <div className="flex items-start gap-3 rounded-xl border border-border p-4">
+                <Checkbox
+                  id="tx-notify"
+                  checked={notifyEnabled}
+                  onCheckedChange={(checked) => setNotifyEnabled(checked === true)}
+                  data-testid="tx-notify-checkbox"
+                />
+                <div>
+                  <Label htmlFor="tx-notify" className="font-normal">
+                    Receber aviso desta transação
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Desative para manter o lançamento agendado ou pendente sem receber notificação.
+                  </p>
+                </div>
               </div>
             ) : null}
 
