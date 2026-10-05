@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
 import { addMonth, monthLabel, todayISO } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,10 @@ export function TransactionCalendar({
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   const trimmed = weeks.filter((week) => week.some((cell) => !cell.outside));
   const selectedWeek = trimmed.find((week) => week.some((cell) => cell.date === selectedDate)) ?? trimmed[0];
-  const visibleWeeks = expanded ? trimmed : [selectedWeek];
+  const [weekCount, setWeekCount] = useState<1 | 2 | 3>(1);
+  const selectedWeekIndex = Math.max(0, trimmed.findIndex((week) => week.some((cell) => cell.date === selectedDate)));
+  const compactStart = Math.min(Math.max(0, selectedWeekIndex - Math.floor((weekCount - 1) / 2)), Math.max(0, trimmed.length - weekCount));
+  const visibleWeeks = expanded ? trimmed : trimmed.slice(compactStart, compactStart + weekCount);
 
   return (
     <section className="rounded-3xl border border-border bg-card px-3 pb-2 pt-4" data-testid="transaction-calendar">
@@ -86,9 +90,37 @@ export function TransactionCalendar({
         ))}
       </div>
 
+      <div className="mt-3 flex justify-center gap-1" role="group" aria-label="Quantidade de semanas visíveis">
+        {([1, 2, 3] as const).map((count) => (
+          <button
+            key={count}
+            type="button"
+            onClick={() => {
+              setWeekCount(count);
+              if (expanded) onToggleExpanded();
+            }}
+            className={cn(
+              "h-7 min-w-7 rounded-full px-2 text-xs font-semibold transition-colors",
+              !expanded && weekCount === count ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+            )}
+            aria-pressed={!expanded && weekCount === count}
+          >
+            {count}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => { if (!expanded) onToggleExpanded(); }}
+          className={cn("h-7 rounded-full px-3 text-xs font-semibold transition-colors", expanded ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}
+          aria-pressed={expanded}
+        >
+          Mês
+        </button>
+      </div>
+
       <AnimatePresence initial={false} mode="wait">
         <motion.div
-          key={`${month}-${expanded ? "full" : "week"}`}
+          key={`${month}-${expanded ? "full" : `weeks-${weekCount}`}`}
           initial={{ opacity: 0, y: expanded ? -6 : 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
@@ -144,8 +176,14 @@ export function TransactionCalendar({
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={0.25}
         onDragEnd={(_, info) => {
-          if (info.offset.y < -18 && expanded) onToggleExpanded();
-          if (info.offset.y > 18 && !expanded) onToggleExpanded();
+          if (info.offset.y < -18) {
+            if (expanded) onToggleExpanded();
+            else setWeekCount((value) => (value === 3 ? 2 : 1));
+          }
+          if (info.offset.y > 18) {
+            if (!expanded && weekCount < 3) setWeekCount((value) => (value === 1 ? 2 : 3));
+            else if (!expanded) onToggleExpanded();
+          }
         }}
         onClick={onToggleExpanded}
         whileTap={{ scaleX: 1.15 }}
