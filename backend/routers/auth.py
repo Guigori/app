@@ -13,7 +13,8 @@ from passlib.context import CryptContext
 
 from lib.db import db
 from lib.demo_data import insert_default_categories
-from lib.email import send_email, verification_code_html\nfrom lib.firebase import verify_id_token
+from lib.email import send_email, verification_code_html
+from lib.firebase import verify_id_token
 from lib.stats import aware
 from models.auth import (
     LoginIn,
