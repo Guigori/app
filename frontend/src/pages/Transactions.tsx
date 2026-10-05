@@ -45,6 +45,9 @@ export default function Transactions() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const linkedDate = searchParams.get("date");
+  const linkedMonth = searchParams.get("month");
+  const linkedMetric = searchParams.get("metric");
+  const linkedCategoryId = searchParams.get("category_id");
   const highlightedTransactionId = searchParams.get("highlight");
   const { hidden } = useBalanceHidden();
 
@@ -75,6 +78,32 @@ export default function Transactions() {
     setScope("dia");
     setFlowView("calendario");
   }, [linkedDate]);
+
+  useEffect(() => {
+    if (linkedDate) return;
+    if (linkedMonth && /^\d{4}-\d{2}$/.test(linkedMonth)) {
+      setPeriodMode("month");
+      setMonth(linkedMonth);
+      setSelectedDate(todayISO().slice(0, 7) === linkedMonth ? todayISO() : `${linkedMonth}-01`);
+      setScope("mes");
+    }
+    if (linkedCategoryId) {
+      setCategoryId(linkedCategoryId);
+      setSelectedDonutCategory(linkedCategoryId);
+      setType("despesa");
+      setFlowView("categorias");
+    } else if (linkedMetric === "despesas") {
+      setType("despesa");
+      setFlowView("categorias");
+    } else if (linkedMetric === "receitas") {
+      setType("receita");
+      setFlowView("lista");
+    } else if (linkedMetric === "caixa") {
+      setType("todos");
+      setFlowView("lista");
+    }
+  }, [linkedCategoryId, linkedDate, linkedMetric, linkedMonth]);
+
 
   // The global "+" reads this, so a new entry lands on the day being viewed.
   useEffect(() => {
@@ -221,6 +250,7 @@ export default function Transactions() {
     setType("todos");
     setStatus("todos");
     setCategoryId("todas");
+    setSelectedDonutCategory(null);
     setAccountId("todas");
   };
 
@@ -358,7 +388,8 @@ export default function Transactions() {
           .sort((a, b) => b.total - a.total);
         return (
           <ExpensesDonutChart
-            month={periodMode === "rolling30" ? "Últimos 30 dias" : month}
+            month={month}
+            periodLabel={periodMode === "rolling30" ? "Últimos 30 dias" : undefined}
             slices={slices}
             total={totalExpense}
             selectedCategoryId={selectedDonutCategory}
