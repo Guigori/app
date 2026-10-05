@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, BellOff, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -104,21 +104,25 @@ export default function Transactions() {
 
   const filters = useMemo(() => {
     const f: Record<string, string> =
-      periodMode === "rolling30" ? { start_date: rollingRange.start, end_date: rollingRange.end } : { month };
+      scope === "dia"
+        ? { start_date: selectedDate, end_date: selectedDate }
+        : periodMode === "rolling30"
+          ? { start_date: rollingRange.start, end_date: rollingRange.end }
+          : { month };
     if (deferredSearch.trim()) f.search = deferredSearch.trim();
     if (type !== "todos") f.type = type;
     if (status !== "todos") f.status = status;
     if (categoryId !== "todas") f.category_id = categoryId;
     if (accountId !== "todas") f.account_id = accountId;
     return f;
-  }, [month, periodMode, rollingRange, deferredSearch, type, status, categoryId, accountId]);
+  }, [month, periodMode, rollingRange, scope, selectedDate, deferredSearch, type, status, categoryId, accountId]);
 
   const transactionsQuery = useQuery({
     queryKey: ["transactions", filters],
     queryFn: () => fetchTransactions(filters),
   });
   const monthTransactions = transactionsQuery.data ?? [];
-  const transactions = (scope === "dia" ? monthTransactions.filter((t) => t.date === selectedDate) : monthTransactions)
+  const transactions = monthTransactions
     .slice()
     .sort((a, b) => (sortDir === "desc" ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
   const groupedTransactions = useMemo(() => {
@@ -389,8 +393,14 @@ export default function Transactions() {
       ) : transactions.length === 0 ? (
         <EmptyState
           icon={<PlusCircle className="h-5 w-5" aria-hidden="true" />}
-          title="Nenhuma transação encontrada no período"
-          description="Ajuste os filtros ou registre uma nova movimentação para começar."
+          title={scope === "dia" ? `Nenhuma transação em ${formatDate(selectedDate)}` : "Nenhuma transação encontrada no período"}
+          description={
+            scope === "dia"
+              ? selectedDate > todayISO()
+                ? "Não há nenhuma movimentação programada para esta data."
+                : "Não há nenhuma movimentação registrada nesta data."
+              : "Ajuste os filtros ou registre uma nova movimentação para começar."
+          }
           action={
             <Button onClick={() => dialogs.openTransaction()} data-testid="transactions-empty-add-button">
               Adicionar transação
@@ -425,6 +435,11 @@ export default function Transactions() {
                       <div className="mt-1 flex flex-wrap gap-1">
                         {t.fixed ? (
                           <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Fixa · {t.recurrence}</Badge>
+                        ) : null}
+                        {t.status !== "pago" && t.notify_enabled === false ? (
+                          <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px]">
+                            <BellOff className="h-3 w-3" aria-hidden="true" /> Sem aviso
+                          </Badge>
                         ) : null}
                         {t.installment && t.total_installments ? (
                           <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
@@ -544,6 +559,11 @@ export default function Transactions() {
                             <div className="flex min-w-0 flex-wrap gap-1">
                               <StatusBadge status={t.status} />
                               {t.fixed ? <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Fixa</Badge> : null}
+                              {t.status !== "pago" && t.notify_enabled === false ? (
+                                <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px]">
+                                  <BellOff className="h-3 w-3" aria-hidden="true" /> Sem aviso
+                                </Badge>
+                              ) : null}
                               {t.installment && t.total_installments ? (
                                 <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
                                   {t.current_installment}/{t.total_installments}
