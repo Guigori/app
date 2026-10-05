@@ -31,6 +31,7 @@ from routers import (
     demo,
     notifications,
     migration,
+    imports,
     push,
     radar,
     subscriptions,
@@ -93,6 +94,7 @@ api_router.include_router(analytics.router)
 api_router.include_router(cards.router)
 api_router.include_router(notifications.router)
 api_router.include_router(migration.router)
+api_router.include_router(imports.router)
 api_router.include_router(push.router)
 api_router.include_router(radar.router)
 api_router.include_router(subscriptions.router)
