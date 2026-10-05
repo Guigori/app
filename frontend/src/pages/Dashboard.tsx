@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Eye, EyeOff, SlidersHorizontal } from "lucide-react";
@@ -55,6 +55,9 @@ export default function Dashboard() {
   const error = dashboardQuery.error;
   const noAccounts = !accountsQuery.isPending && (accountsQuery.data ?? []).length === 0;
   const activeMonth = data?.month ?? currentMonth();
+  useEffect(() => {
+    setSelectedCategory(null);
+  }, [activeMonth]);
   const radarQuery = useQuery({
     queryKey: ["radar", activeMonth],
     queryFn: fetchRadar,
