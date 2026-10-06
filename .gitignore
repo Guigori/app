@@ -47,6 +47,7 @@ dump.rdb
 *.pem
 
 # Python
+.pytest_cache/
 __pycache__/
 *pyc*
 venv/
