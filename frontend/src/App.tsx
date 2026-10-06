@@ -9,6 +9,7 @@ import Transactions from "@/pages/Transactions";
 import Accounts from "@/pages/Accounts";
 import Categories from "@/pages/Categories";
 import Settings from "@/pages/Settings";
+import ChartSettings from "@/pages/ChartSettings";
 import Budget from "@/pages/Budget";
 import BudgetSettings from "@/pages/BudgetSettings";
 import Flow from "@/pages/Flow";
@@ -35,6 +36,7 @@ export default function App() {
             <Route path="/contas" element={<Accounts />} />
             <Route path="/categorias" element={<Categories />} />
             <Route path="/configuracoes" element={<Settings />} />
+            <Route path="/configuracoes/graficos" element={<ChartSettings />} />
             <Route path="/cartoes" element={<Cards />} />
             <Route path="/cartoes/:cardId" element={<CardInvoice />} />
             <Route path="/orcamento" element={<Budget />} />
