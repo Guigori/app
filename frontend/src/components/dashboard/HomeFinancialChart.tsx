@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart as RechartsLineChart, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { ArrowDownLeft, ArrowUpRight, BarChart3, ChartPie, Equal, LayoutGrid, LineChart, SlidersHorizontal } from "lucide-react";
@@ -221,7 +221,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
         <div className="w-full pb-1">
           <div className="h-[300px] w-full sm:h-[330px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={projectionData} margin={{ top: 14, right: 8, left: -8, bottom: 0 }}>
+              <RechartsLineChart data={projectionData} margin={{ top: 14, right: 8, left: -8, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={18} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
                 <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
@@ -254,7 +254,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
                     <Line type="monotone" dataKey="DespesasPrevistas" name="DespesasPrevistas" stroke="var(--expense)" strokeOpacity={0.7} strokeWidth={2} strokeDasharray="6 7" dot={false} connectNulls={false} />
                   </>
                 )}
-              </LineChart>
+              </RechartsLineChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs">
