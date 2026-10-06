@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { ArrowDownLeft, ArrowUpRight, BarChart3, ChartPie, Equal, LayoutGrid, LineChart, SlidersHorizontal } from "lucide-react";
@@ -13,7 +13,7 @@ import type { MetricKind } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
-type ChartView = "cards" | "line" | "pie" | "bars";
+type ChartView = "cards" | "projection" | "line" | "pie" | "bars";
 type ChartPeriod = "7d" | "1m" | "6m" | "1y";
 
 interface HomeFinancialChartProps {
@@ -27,15 +27,16 @@ interface HomeFinancialChartProps {
 
 const VIEW_OPTIONS: Array<{ key: ChartView; label: string; icon: typeof LayoutGrid }> = [
   { key: "cards", label: "Cards", icon: LayoutGrid },
+  { key: "projection", label: "Projeção", icon: LineChart },
   { key: "line", label: "Linhas", icon: LineChart },
   { key: "pie", label: "Pizza", icon: ChartPie },
   { key: "bars", label: "Barras", icon: BarChart3 },
 ];
 
 const METRIC_UI = {
-  Receitas: { icon: ArrowDownLeft, color: "#22c997", soft: "bg-emerald-500/10 text-emerald-400" },
-  Despesas: { icon: ArrowUpRight, color: "#ff4d6d", soft: "bg-rose-500/10 text-rose-400" },
-  Resultado: { icon: Equal, color: "#8b5cf6", soft: "bg-violet-500/10 text-violet-400" },
+  Receitas: { icon: ArrowDownLeft, color: "var(--income)", soft: "bg-emerald-500/10 text-emerald-400" },
+  Despesas: { icon: ArrowUpRight, color: "var(--expense)", soft: "bg-rose-500/10 text-rose-400" },
+  Resultado: { icon: Equal, color: "var(--finnos-purple)", soft: "bg-violet-500/10 text-violet-400" },
 } as const;
 
 const PERIODS: Array<{ value: ChartPeriod; label: string }> = [
@@ -48,7 +49,7 @@ const PERIODS: Array<{ value: ChartPeriod; label: string }> = [
 export function HomeFinancialChart({ month, total, income, expense, result, onOpenMetric }: HomeFinancialChartProps) {
   const { hidden } = useBalanceHidden();
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [view, setView] = useState<ChartView>("line");
+  const [view, setView] = useState<ChartView>("projection");
   const [period, setPeriod] = useState<ChartPeriod>("1m");
   const [showIncome, setShowIncome] = useState(true);
   const [showExpense, setShowExpense] = useState(true);
@@ -88,6 +89,66 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
     () => daily ? defaultDailyTooltipIndex(chartData, month, todayISO()) : undefined,
     [chartData, daily, month],
   );
+
+  const projectionData = useMemo(() => {
+    const days = calendarQuery.data?.days ?? [];
+    const [year, monthNumber] = month.split("-").map(Number);
+    const daysInMonth = new Date(year, monthNumber, 0).getDate();
+    const today = todayISO();
+    const currentMonth = today.slice(0, 7);
+    const cutoffDay = month === currentMonth
+      ? Math.min(Number(today.slice(8, 10)), daysInMonth)
+      : month < currentMonth
+        ? daysInMonth
+        : 0;
+    const byDate = new Map(days.map((day) => [day.date, day]));
+
+    let actualIncome = 0;
+    let actualExpense = 0;
+    for (let dayNumber = 1; dayNumber <= cutoffDay; dayNumber += 1) {
+      const date = `${month}-${String(dayNumber).padStart(2, "0")}`;
+      const day = byDate.get(date);
+      actualIncome += day?.income ?? 0;
+      actualExpense += day?.expense ?? 0;
+    }
+
+    const actualNetAtCutoff = actualIncome - actualExpense;
+    const openingBalance = total - actualNetAtCutoff;
+    let cumulativeIncome = 0;
+    let cumulativeExpense = 0;
+    let projectedIncome = actualIncome;
+    let projectedExpense = actualExpense;
+
+    return Array.from({ length: daysInMonth }, (_, index) => {
+      const dayNumber = index + 1;
+      const date = `${month}-${String(dayNumber).padStart(2, "0")}`;
+      const day = byDate.get(date);
+
+      if (dayNumber <= cutoffDay) {
+        cumulativeIncome += day?.income ?? 0;
+        cumulativeExpense += day?.expense ?? 0;
+      }
+      if (dayNumber > cutoffDay) {
+        projectedIncome += day?.projected_income ?? 0;
+        projectedExpense += day?.projected_expense ?? 0;
+      }
+
+      const atOrBeforeToday = dayNumber <= cutoffDay;
+      const atOrAfterToday = dayNumber >= cutoffDay && cutoffDay > 0;
+      const actualBalance = openingBalance + cumulativeIncome - cumulativeExpense;
+      const projectedBalance = total + (projectedIncome - actualIncome) - (projectedExpense - actualExpense);
+
+      return {
+        label: String(dayNumber).padStart(2, "0"),
+        ReceitasReal: atOrBeforeToday ? Math.round(cumulativeIncome * 100) / 100 : null,
+        DespesasReal: atOrBeforeToday ? Math.round(cumulativeExpense * 100) / 100 : null,
+        SaldoReal: atOrBeforeToday ? Math.round(actualBalance * 100) / 100 : null,
+        ReceitasPrevistas: atOrAfterToday ? Math.round(projectedIncome * 100) / 100 : null,
+        DespesasPrevistas: atOrAfterToday ? Math.round(projectedExpense * 100) / 100 : null,
+        SaldoPrevisto: atOrAfterToday ? Math.round(projectedBalance * 100) / 100 : null,
+      };
+    });
+  }, [calendarQuery.data?.days, month, total]);
 
   useEffect(() => {
     if (view !== "bars" || !daily || !chartScrollerRef.current) return;
@@ -133,7 +194,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
         <div>
           <h2 className="font-heading text-base font-semibold text-foreground">Saldo ao longo do tempo</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {view === "cards" ? "Resumo financeiro" : view === "pie" ? "Composição do período" : `Evolução · ${periodLabel}`}
+            {view === "cards" ? "Resumo financeiro" : view === "pie" ? "Composição do período" : view === "projection" ? "Saldo real até hoje e estimativa até o fim do mês" : `Evolução · ${periodLabel}`}
           </p>
         </div>
         <Button variant="outline" size="icon" className="absolute right-0 top-[7rem] z-20 h-10 w-10 rounded-full bg-background/70 shadow-sm sm:right-0 sm:top-[7.25rem]" onClick={() => setFiltersOpen(true)} aria-label="Personalizar gráfico" data-testid="home-chart-filter-button">
@@ -156,6 +217,54 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
         </div>
       ) : isLoading ? (
         <div className="h-[270px] animate-pulse rounded-2xl bg-muted/50" />
+      ) : view === "projection" ? (
+        <div className="w-full pb-1">
+          <div className="h-[300px] w-full sm:h-[330px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={projectionData} margin={{ top: 14, right: 8, left: -8, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={18} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+                <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(value: number, name: string) => [
+                    money(value),
+                    name
+                      .replace("Real", "")
+                      .replace("Previstas", " · previsto")
+                      .replace("Previsto", " · previsto"),
+                  ]}
+                  labelFormatter={(label) => `Dia ${label}`}
+                />
+                {showResult && metricVisible("Resultado") && (
+                  <>
+                    <Line type="monotone" dataKey="SaldoReal" name="ResultadoReal" stroke="var(--finnos-purple)" strokeWidth={3.25} dot={{ r: 2.5, fill: "var(--finnos-purple)", strokeWidth: 0 }} activeDot={{ r: 5 }} connectNulls={false} />
+                    <Line type="monotone" dataKey="SaldoPrevisto" name="ResultadoPrevisto" stroke="var(--chart-3)" strokeWidth={3} strokeDasharray="8 7" dot={false} activeDot={{ r: 5 }} connectNulls={false} />
+                  </>
+                )}
+                {showIncome && metricVisible("Receitas") && (
+                  <>
+                    <Line type="monotone" dataKey="ReceitasReal" name="ReceitasReal" stroke="var(--income)" strokeWidth={2.1} dot={{ r: 2, fill: "var(--income)", strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls={false} />
+                    <Line type="monotone" dataKey="ReceitasPrevistas" name="ReceitasPrevistas" stroke="var(--income)" strokeOpacity={0.7} strokeWidth={2} strokeDasharray="6 7" dot={false} connectNulls={false} />
+                  </>
+                )}
+                {showExpense && metricVisible("Despesas") && (
+                  <>
+                    <Line type="monotone" dataKey="DespesasReal" name="DespesasReal" stroke="var(--expense)" strokeWidth={2.1} dot={{ r: 2, fill: "var(--expense)", strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls={false} />
+                    <Line type="monotone" dataKey="DespesasPrevistas" name="DespesasPrevistas" stroke="var(--expense)" strokeOpacity={0.7} strokeWidth={2} strokeDasharray="6 7" dot={false} connectNulls={false} />
+                  </>
+                )}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs">
+            <button type="button" onClick={() => setSelectedMetric(null)} className={`rounded-full border px-3 py-1.5 font-medium transition-colors ${selectedMetric === null ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"}`}>Todos</button>
+            {showIncome && <button type="button" onClick={() => setSelectedMetric("Receitas")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium ${selectedMetric === "Receitas" ? "border-income bg-income/10 text-income" : "border-border text-muted-foreground"}`}><ArrowDownLeft className="h-3.5 w-3.5" />Receitas</button>}
+            {showExpense && <button type="button" onClick={() => setSelectedMetric("Despesas")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium ${selectedMetric === "Despesas" ? "border-expense bg-expense/10 text-expense" : "border-border text-muted-foreground"}`}><ArrowUpRight className="h-3.5 w-3.5" />Despesas</button>}
+            {showResult && <button type="button" onClick={() => setSelectedMetric("Resultado")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium ${selectedMetric === "Resultado" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}><Equal className="h-3.5 w-3.5" />Resultado</button>}
+            <span className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-muted-foreground"><span className="h-0 w-5 border-t-2 border-dashed border-[var(--chart-3)]" />Previsto</span>
+          </div>
+        </div>
       ) : view === "pie" ? (
         <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 py-1 sm:min-h-[270px] sm:flex-row sm:gap-10 sm:py-2">
           <div className="relative h-44 w-44 shrink-0 sm:h-48 sm:w-48" onClick={(event) => { if (event.target === event.currentTarget) setSelectedMetric(null); }}>
@@ -263,6 +372,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
                 ))}
               </div>
             </fieldset>
+            {view !== "projection" && (
             <fieldset>
               <legend className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Período</legend>
               <div className="grid grid-cols-2 gap-3">
@@ -272,6 +382,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
               </div>
               <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Em 7 dias e 1 mês, o gráfico mostra a evolução dia a dia. Em 6 meses e 1 ano, compara os meses.</p>
             </fieldset>
+            )}
             {view !== "cards" && view !== "pie" && (
               <fieldset>
                 <legend className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Exibir no gráfico</legend>
