@@ -199,7 +199,21 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
   for (const [key, value] of Object.entries(params)) {
     if (value) search.set(key, String(value));
   }
-  return cachedFetch(`flow:${search.toString()}`, () => apiGet<Flow>(`/analytics/flow?${search.toString()}`));
+  const base = await cachedFetch(`flow:${search.toString()}`, () => apiGet<Flow>(`/analytics/flow?${search.toString()}`));
+  const pending = (await listSyncOperations()).filter((o) => o.kind === "transaction.create" && o.payload.status === "pago");
+  let incomeDelta = 0, expenseDelta = 0;
+  const series = base.series.map((point) => {
+    const ops = pending.filter((o) => o.payload.date.slice(0, 7) === point.month && (!params.category_id || o.payload.category_id === params.category_id));
+    const income = ops.filter((o) => o.payload.type === "receita").reduce((s,o)=>s+txAmount(o.payload),0);
+    const expense = ops.filter((o) => o.payload.type === "despesa").reduce((s,o)=>s+txAmount(o.payload),0);
+    if (point.month === base.month) { incomeDelta += income; expenseDelta += expense; }
+    return { ...point, income: point.income + income, expense: point.expense + expense, net: point.net + income - expense };
+  });
+  return { ...base, series, income: base.income + incomeDelta, expense: base.expense + expenseDelta,
+    net: base.net + incomeDelta - expenseDelta,
+    total_income: base.total_income + series.reduce((sum,p,i)=>sum + (p.income-base.series[i].income),0),
+    total_expense: base.total_expense + series.reduce((sum,p,i)=>sum + (p.expense-base.series[i].expense),0),
+    total_net: base.total_net + series.reduce((sum,p,i)=>sum + (p.net-base.series[i].net),0) };
 }
 
 export async function fetchCalendar(month: string): Promise<CalendarMonth> {
