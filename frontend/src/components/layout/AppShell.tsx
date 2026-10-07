@@ -11,6 +11,7 @@ import { QuickActionFAB } from "@/components/layout/QuickActionFAB";
 import { TopTabs } from "@/components/layout/TopTabs";
 import { LocalNotificationPulse, NotificationPermissionPrompt } from "@/components/notifications/NotificationPermissionPrompt";
 import { useEdgeSwipe } from "@/lib/useEdgeSwipe";
+import { ConnectivityStatus } from "@/components/sync/ConnectivityStatus";
 
 export function AppShell() {
   const location = useLocation();
@@ -44,6 +45,7 @@ export function AppShell() {
         <MobileNav />
         <QuickActionFAB />
         <AiPanel />
+        <ConnectivityStatus />
         <NotificationPermissionPrompt />
         <LocalNotificationPulse />
       </div>
