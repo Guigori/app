@@ -316,7 +316,8 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
 export async function createTransaction(input: TransactionInput, source: OperationSource = "manual"): Promise<Transaction> {
   if (isLocalMode()) return localCreateTransaction(input);
   if (!navigator.onLine) {
-    await queueTransaction(input, source);\n    throw new Error("FINNOS_OFFLINE_QUEUED");
+    await queueTransaction(input, source);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
   }
   return apiPost<Transaction>("/transactions", input, { "X-FINNOS-Source": source });
 }
