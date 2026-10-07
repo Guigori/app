@@ -5,6 +5,7 @@
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { localRadar } from "@/lib/local/radar";
 import { isLocalMode } from "@/lib/mode";
+import { queueTransaction, flushSyncQueue, type OperationSource } from "@/lib/sync/queue";
 import {
   localClearData,
   localCreateAccount,
@@ -280,15 +281,25 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
   return apiGet<Transaction[]>(`/transactions?${params.toString()}`);
 }
 
-export async function createTransaction(input: TransactionInput): Promise<Transaction> {
+export async function createTransaction(input: TransactionInput, source: OperationSource = "manual"): Promise<Transaction> {
   if (isLocalMode()) return localCreateTransaction(input);
-  return apiPost<Transaction>("/transactions", input);
+  if (!navigator.onLine) {
+    await queueTransaction(input, source);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiPost<Transaction>("/transactions", input, { "X-FINNOS-Source": source });
 }
 
-export async function updateTransaction(id: string, input: TransactionInput): Promise<Transaction> {
+export async function updateTransaction(id: string, input: TransactionInput, source: OperationSource = "manual"): Promise<Transaction> {
   if (isLocalMode()) return localUpdateTransaction(id, input);
-  return apiPut<Transaction>(`/transactions/${id}`, input);
+  if (!navigator.onLine) {
+    await queueTransaction(input, source, id);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiPut<Transaction>(`/transactions/${id}`, input, { "X-FINNOS-Source": source });
 }
+
+export { flushSyncQueue };
 
 export async function deleteTransaction(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteTransaction(id);
