@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createTransaction, fetchAccounts, fetchCards, fetchCategories, updateTransaction } from "@/lib/data";
-import { getApiErrorMessage } from "@/lib/errors";\nimport { updateQueuedTransaction, flushSyncQueue } from "@/lib/sync/queue";
+import { getApiErrorMessage } from "@/lib/errors";
+import { updateQueuedTransaction, flushSyncQueue } from "@/lib/sync/queue";
 import { formatBRL, parseAmount, todayISO, TX_STATUS_LABEL, TX_TYPE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Account, Category, Transaction, TransactionInput, TxStatus, TxType } from "@/types/finnos";
@@ -31,7 +32,11 @@ interface TransactionDialogProps {
   onOpenChange: (open: boolean) => void;
   initialType?: TxType;
   initialDate?: string;
-  transaction?: Transaction;\n  syncOperationId?: string;\n  syncPayload?: TransactionInput;\n  firstAttemptAt?: string;\n}
+  transaction?: Transaction;
+  syncOperationId?: string;
+  syncPayload?: TransactionInput;
+  firstAttemptAt?: string;
+}
 
 export function TransactionDialog({ open, onOpenChange, initialType, initialDate, transaction, syncOperationId, syncPayload, firstAttemptAt }: TransactionDialogProps) {
   const queryClient = useQueryClient();
@@ -74,7 +79,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   useEffect(() => {
     if (!open) return;
     setFormError(null);
-    const source = transaction ?? syncPayload;\n    if (source) {
+    const source = transaction ?? syncPayload;
+    if (source) {
       setType(source.type);
       setName(source.name);
       setValueRaw(String(source.value));
