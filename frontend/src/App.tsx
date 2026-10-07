@@ -20,6 +20,7 @@ import ComingSoon from "@/pages/ComingSoon";
 import Radar from "@/pages/Radar";
 import RadarDetail from "@/pages/RadarDetail";
 import Onboarding from "@/pages/Onboarding";
+import Analysis from "@/pages/Analysis";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="/radar" element={<Radar />} />
             <Route path="/radar/:signalId" element={<RadarDetail />} />
             <Route path="/assinaturas" element={<Subscriptions />} />
+            <Route path="/analise" element={<Analysis />} />
             <Route path="/metas" element={<ComingSoon module="metas" />} />
             <Route path="/investimentos" element={<ComingSoon module="investimentos" />} />
             <Route path="*" element={<Navigate to="/" replace />} />
