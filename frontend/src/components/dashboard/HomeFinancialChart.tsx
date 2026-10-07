@@ -55,6 +55,8 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
   const [showExpense, setShowExpense] = useState(true);
   const [showResult, setShowResult] = useState(true);
   const [selectedMetric, setSelectedMetric] = useState<"Receitas" | "Despesas" | "Resultado" | null>(null);
+  const [projectionMetric, setProjectionMetric] = useState<"balance" | "income" | "expense">("balance");
+  const [projectionDragX, setProjectionDragX] = useState<number | null>(null);
   const chartScrollerRef = useRef<HTMLDivElement | null>(null);
 
   const daily = period === "7d" || period === "1m";
@@ -96,47 +98,40 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
     const daysInMonth = new Date(year, monthNumber, 0).getDate();
     const today = todayISO();
     const currentMonth = today.slice(0, 7);
-    const cutoffDay = month === currentMonth
-      ? Math.min(Number(today.slice(8, 10)), daysInMonth)
-      : month < currentMonth
-        ? daysInMonth
-        : 0;
+    const cutoffDay = month === currentMonth ? Math.min(Number(today.slice(8, 10)), daysInMonth) : month < currentMonth ? daysInMonth : 0;
     const byDate = new Map(days.map((day) => [day.date, day]));
-
-    let realisedNet = 0;
-    for (let dayNumber = 1; dayNumber <= cutoffDay; dayNumber += 1) {
-      const date = `${month}-${String(dayNumber).padStart(2, "0")}`;
-      const day = byDate.get(date);
-      realisedNet += (day?.income ?? 0) - (day?.expense ?? 0);
+    let realisedIncome = 0;
+    let realisedExpense = 0;
+    for (let n = 1; n <= cutoffDay; n += 1) {
+      const day = byDate.get(`${month}-${String(n).padStart(2, "0")}`);
+      realisedIncome += day?.income ?? 0;
+      realisedExpense += day?.expense ?? 0;
     }
-
-    // `total` is the current account balance shown by FINNOS. Back into the
-    // opening balance so the realised line ends exactly at today's displayed balance.
-    const openingBalance = total - realisedNet;
-    let actualBalance = openingBalance;
-    let forecastBalance = total;
-
+    const openingBalance = total - (realisedIncome - realisedExpense);
+    let actualIncome = 0;
+    let actualExpense = 0;
+    let forecastIncome = realisedIncome;
+    let forecastExpense = realisedExpense;
     return Array.from({ length: daysInMonth }, (_, index) => {
-      const dayNumber = index + 1;
-      const date = `${month}-${String(dayNumber).padStart(2, "0")}`;
-      const day = byDate.get(date);
-
-      if (dayNumber <= cutoffDay) {
-        actualBalance += (day?.income ?? 0) - (day?.expense ?? 0);
+      const n = index + 1;
+      const day = byDate.get(`${month}-${String(n).padStart(2, "0")}`);
+      if (n <= cutoffDay) {
+        actualIncome += day?.income ?? 0;
+        actualExpense += day?.expense ?? 0;
       }
-      if (dayNumber > cutoffDay) {
-        forecastBalance += (day?.projected_income ?? 0) - (day?.projected_expense ?? 0);
+      if (n > cutoffDay) {
+        forecastIncome += day?.projected_income ?? 0;
+        forecastExpense += day?.projected_expense ?? 0;
       }
-
+      const actualValue = projectionMetric === "income" ? actualIncome : projectionMetric === "expense" ? actualExpense : openingBalance + actualIncome - actualExpense;
+      const forecastValue = projectionMetric === "income" ? forecastIncome : projectionMetric === "expense" ? forecastExpense : total + (forecastIncome - realisedIncome) - (forecastExpense - realisedExpense);
       return {
-        label: String(dayNumber).padStart(2, "0"),
-        actual: dayNumber <= cutoffDay ? Math.round(actualBalance * 100) / 100 : null,
-        forecast: dayNumber >= cutoffDay && cutoffDay > 0
-          ? Math.round((dayNumber === cutoffDay ? total : forecastBalance) * 100) / 100
-          : null,
+        label: String(n).padStart(2, "0"),
+        actual: n <= cutoffDay ? Math.round(actualValue * 100) / 100 : null,
+        forecast: n >= cutoffDay && cutoffDay > 0 ? Math.round((n === cutoffDay ? actualValue : forecastValue) * 100) / 100 : null,
       };
     });
-  }, [calendarQuery.data?.days, month, total]);
+  }, [calendarQuery.data?.days, month, projectionMetric, total]);
 
   useEffect(() => {
     if (view !== "bars" || !daily || !chartScrollerRef.current) return;
@@ -176,6 +171,10 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
   const isLoading = daily ? calendarQuery.isPending : trendsQuery.isPending;
   const periodLabel = PERIODS.find((item) => item.value === period)?.label ?? "1 mês";
 
+  const projectionColor = projectionMetric === "income" ? "var(--income)" : projectionMetric === "expense" ? "var(--expense)" : "var(--finnos-purple-live)";
+  const projectionLabel = projectionMetric === "income" ? "Receitas" : projectionMetric === "expense" ? "Despesas" : "Saldo";
+  const shiftProjectionMonth = (direction: -1 | 1) => setMonth(addMonth(month, direction));
+
   return (
     <div className="border-t border-border/70 pt-5" data-testid="home-financial-chart">
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -206,56 +205,52 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
       ) : isLoading ? (
         <div className="h-[270px] animate-pulse rounded-2xl bg-muted/50" />
       ) : view === "projection" ? (
-        <div className="w-full pb-1">
+        <div
+          className="w-full touch-pan-y pb-1"
+          onTouchStart={(event) => setProjectionDragX(event.touches[0]?.clientX ?? null)}
+          onTouchEnd={(event) => {
+            if (projectionDragX === null) return;
+            const endX = event.changedTouches[0]?.clientX ?? projectionDragX;
+            const delta = endX - projectionDragX;
+            if (Math.abs(delta) >= 55) shiftProjectionMonth(delta < 0 ? 1 : -1);
+            setProjectionDragX(null);
+          }}
+          data-testid="home-projection-chart"
+        >
+          <div className="mb-1 flex items-center justify-between">
+            <button type="button" onClick={() => shiftProjectionMonth(-1)} className="rounded-full px-2 py-1 text-lg text-muted-foreground" aria-label="Mês anterior">‹</button>
+            <span className="text-xs font-medium capitalize text-muted-foreground">{monthLabel(month)}</span>
+            <button type="button" onClick={() => shiftProjectionMonth(1)} className="rounded-full px-2 py-1 text-lg text-muted-foreground" aria-label="Próximo mês">›</button>
+          </div>
           <div className="h-[300px] w-full sm:h-[330px]">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsLineChart data={projectionData} margin={{ top: 16, right: 12, left: -8, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="finnosForecastBand" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--finnos-purple)" stopOpacity={0.16} />
-                    <stop offset="100%" stopColor="var(--finnos-purple)" stopOpacity={0.02} />
+                  <linearGradient id="finnosForecastSmoke" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={projectionColor} stopOpacity={0.24} />
+                    <stop offset="48%" stopColor={projectionColor} stopOpacity={0.11} />
+                    <stop offset="100%" stopColor={projectionColor} stopOpacity={0.015} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.42} strokeDasharray="4 6" />
+                <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.36} strokeDasharray="4 6" />
                 <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: "var(--border)" }} minTickGap={42} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
                 <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(value: number, name: string) => [
-                    money(value),
-                    name === "actual" ? "Saldo real" : "Estimativa",
-                  ]}
-                  labelFormatter={(label) => `Dia ${label}`}
-                />
-                <Area type="monotone" dataKey="forecast" stroke="none" fill="url(#finnosForecastBand)" connectNulls={false} />
-                <Line
-                  type="monotone"
-                  dataKey="actual"
-                  name="actual"
-                  stroke="var(--finnos-purple-live)"
-                  strokeWidth={3.25}
-                  dot={false}
-                  activeDot={{ r: 5, fill: "var(--finnos-purple-live)", stroke: "var(--background)", strokeWidth: 2 }}
-                  connectNulls={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="forecast"
-                  name="forecast"
-                  stroke="var(--finnos-violet)"
-                  strokeWidth={2.75}
-                  strokeDasharray="8 7"
-                  dot={false}
-                  activeDot={{ r: 5, fill: "var(--background)", stroke: "var(--finnos-violet)", strokeWidth: 3 }}
-                  connectNulls={false}
-                />
+                <Tooltip contentStyle={tooltipStyle} formatter={(value: number, name: string) => [money(value), name === "actual" ? `${projectionLabel} real` : `${projectionLabel} · estimativa`]} labelFormatter={(label) => `Dia ${label}`} />
+                <Area type="monotone" dataKey="forecast" stroke="none" fill="url(#finnosForecastSmoke)" connectNulls={false} />
+                <Line type="monotone" dataKey="actual" name="actual" stroke={projectionColor} strokeWidth={3.25} dot={false} activeDot={{ r: 5, fill: projectionColor, stroke: "var(--background)", strokeWidth: 2 }} connectNulls={false} />
+                <Line type="monotone" dataKey="forecast" name="forecast" stroke={projectionColor} strokeOpacity={0.78} strokeWidth={2.75} strokeDasharray="8 7" dot={false} activeDot={{ r: 5, fill: "var(--background)", stroke: projectionColor, strokeWidth: 3 }} connectNulls={false} />
               </RechartsLineChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-1 flex items-center justify-center gap-5 text-xs text-muted-foreground">
-            <span className="flex items-center gap-2"><span className="h-0 w-6 border-t-[3px] border-[var(--finnos-purple-live)]" />Saldo real</span>
-            <span className="flex items-center gap-2"><span className="h-0 w-6 border-t-[3px] border-dashed border-[var(--finnos-violet)]" />Estimativa</span>
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs">
+            {([["balance", "Saldo"], ["income", "Receitas"], ["expense", "Despesas"]] as const).map(([key, label]) => (
+              <button key={key} type="button" onClick={() => setProjectionMetric(key)} className={`rounded-full border px-3 py-1.5 font-medium transition-colors ${projectionMetric === key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"}`}>
+                {label}
+              </button>
+            ))}
+            <span className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-muted-foreground"><span className="h-0 w-5 border-t-2 border-dashed" style={{ borderColor: projectionColor }} />Estimativa</span>
           </div>
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">Arraste para os lados para mudar de mês.</p>
         </div>
       ) : view === "pie" ? (
         <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 py-1 sm:min-h-[270px] sm:flex-row sm:gap-10 sm:py-2">
