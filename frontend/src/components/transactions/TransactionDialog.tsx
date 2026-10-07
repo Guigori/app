@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createTransaction, fetchAccounts, fetchCards, fetchCategories, updateTransaction } from "@/lib/data";
-import { getApiErrorMessage } from "@/lib/errors";
+import { getApiErrorMessage } from "@/lib/errors";\nimport { updateQueuedTransaction, flushSyncQueue } from "@/lib/sync/queue";
 import { formatBRL, parseAmount, todayISO, TX_STATUS_LABEL, TX_TYPE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Account, Category, Transaction, TransactionInput, TxStatus, TxType } from "@/types/finnos";
@@ -31,10 +31,9 @@ interface TransactionDialogProps {
   onOpenChange: (open: boolean) => void;
   initialType?: TxType;
   initialDate?: string;
-  transaction?: Transaction;
-}
+  transaction?: Transaction;\n  syncOperationId?: string;\n  syncPayload?: TransactionInput;\n  firstAttemptAt?: string;\n}
 
-export function TransactionDialog({ open, onOpenChange, initialType, initialDate, transaction }: TransactionDialogProps) {
+export function TransactionDialog({ open, onOpenChange, initialType, initialDate, transaction, syncOperationId, syncPayload, firstAttemptAt }: TransactionDialogProps) {
   const queryClient = useQueryClient();
   const [type, setType] = useState<TxType>("despesa");
   const [name, setName] = useState("");
@@ -75,24 +74,24 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   useEffect(() => {
     if (!open) return;
     setFormError(null);
-    if (transaction) {
-      setType(transaction.type);
-      setName(transaction.name);
-      setValueRaw(String(transaction.value));
-      setDate(transaction.date);
-      setStatus(transaction.status);
-      setAccountId(transaction.account_id);
-      setToAccountId(transaction.to_account_id ?? "");
-      setCardId(transaction.card_id ?? "none");
-      setCategoryId(transaction.category_id ?? "none");
-      setFixed(transaction.fixed);
-      setInstallment(transaction.installment);
-      setTotalInstallments(String(transaction.total_installments ?? 2));
-      setCurrentInstallment(String(transaction.current_installment ?? 1));
-      setAdjustedRaw(transaction.adjusted_value != null ? String(transaction.adjusted_value) : "");
-      setAttachment(transaction.attachment ?? "");
-      setNotes(transaction.notes ?? "");
-      setNotifyEnabled(transaction.notify_enabled ?? true);
+    const source = transaction ?? syncPayload;\n    if (source) {
+      setType(source.type);
+      setName(source.name);
+      setValueRaw(String(source.value));
+      setDate(source.date);
+      setStatus(source.status);
+      setAccountId(source.account_id);
+      setToAccountId(source.to_account_id ?? "");
+      setCardId(source.card_id ?? "none");
+      setCategoryId(source.category_id ?? "none");
+      setFixed(source.fixed);
+      setInstallment(source.installment);
+      setTotalInstallments(String(source.total_installments ?? 2));
+      setCurrentInstallment(String(source.current_installment ?? 1));
+      setAdjustedRaw(source.adjusted_value != null ? String(source.adjusted_value) : "");
+      setAttachment(source.attachment ?? "");
+      setNotes(source.notes ?? "");
+      setNotifyEnabled(source.notify_enabled ?? true);
     } else {
       setType(initialType ?? "despesa");
       setName("");
@@ -112,7 +111,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       setNotes("");
       setNotifyEnabled(true);
     }
-  }, [open, transaction, initialType, initialDate]);
+  }, [open, transaction, syncPayload, initialType, initialDate]);
 
   // One less required tap: a new transaction defaults to the first account (still editable).
   useEffect(() => {
@@ -129,7 +128,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     mutationFn: (input: TransactionInput) =>
       transaction ? updateTransaction(transaction.id, input) : createTransaction(input),
     onSuccess: async () => {
-      toast.success(transaction ? "Transação atualizada." : "Transação registrada.");
+      toast.success(syncOperationId ? "Registro confirmado e sincronizado." : transaction ? "Transação atualizada." : "Transação registrada.");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["transactions"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
