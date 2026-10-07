@@ -46,6 +46,17 @@ const PERIODS: Array<{ value: ChartPeriod; label: string }> = [
   { value: "1y", label: "1 ano" },
 ];
 
+function addMonth(value: string, direction: -1 | 1): string {
+  const [year, month] = value.split("-").map(Number);
+  const date = new Date(year, month - 1 + direction, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(value: string): string {
+  const [year, month] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
+}
+
 export function HomeFinancialChart({ month, total, income, expense, result, onOpenMetric }: HomeFinancialChartProps) {
   const { hidden } = useBalanceHidden();
   const [filtersOpen, setFiltersOpen] = useState(false);
