@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createTransaction, fetchAccounts, fetchCards, fetchCategories, updateTransaction } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
-import { updateQueuedTransaction, flushSyncQueue } from "@/lib/sync/queue";
+import { updateQueuedTransaction, flushSyncQueue, queueTransaction } from "@/lib/sync/queue";
 import { formatBRL, parseAmount, todayISO, TX_STATUS_LABEL, TX_TYPE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Account, Category, Transaction, TransactionInput, TxStatus, TxType } from "@/types/finnos";
@@ -183,7 +183,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       return setFormError("Escolha contas diferentes para a transferência.");
     if (installment && installments < 2) return setFormError("O parcelamento precisa de ao menos 2 parcelas.");
     const adjusted = parseAmount(adjustedRaw);
-    mutation.mutate({
+    const input: TransactionInput = {
       name: name.trim(),
       value,
       type,
@@ -202,7 +202,23 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       attachment: attachment.trim() || null,
       notes: notes.trim() || null,
       notify_enabled: notifyEnabled,
-    });
+    };
+
+    if (!navigator.onLine && !syncOperationId) {
+      void queueTransaction(input, "manual", transaction?.id)
+        .then(async () => {
+          onOpenChange(false);
+          toast.info("Salvo neste aparelho", {
+            description: "Será sincronizado automaticamente quando a conexão voltar.",
+            duration: 3500,
+          });
+          await refreshFinancialViews();
+        })
+        .catch((error) => setFormError(getApiErrorMessage(error)));
+      return;
+    }
+
+    mutation.mutate(input);;
   };
 
   return (
