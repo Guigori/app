@@ -144,7 +144,14 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       ]);
       onOpenChange(false);
     },
-    onError: (error) => setFormError(getApiErrorMessage(error)),
+    onError: (error) => {
+      if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+        toast.info("Salvo neste aparelho", { description: "Aguardando conexão para sincronizar com sua conta FINNOS." });
+        onOpenChange(false);
+        return;
+      }
+      setFormError(getApiErrorMessage(error));
+    },
   });
 
   const submit = () => {
