@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Cloud, CloudOff, Loader2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
-import { flushSyncQueue, listSyncOperations, type SyncOperation } from "@/lib/sync/queue";\nimport { useDialogs } from "@/components/dialogs/DialogsProvider";
+import { flushSyncQueue, listSyncOperations, type SyncOperation } from "@/lib/sync/queue";
+import { useDialogs } from "@/components/dialogs/DialogsProvider";
 
 type NetworkState = "online" | "offline";
 
-export function ConnectivityStatus() {\n  const { openTransaction } = useDialogs();
+export function ConnectivityStatus() {
+  const { openTransaction } = useDialogs();
   const [state, setState] = useState<NetworkState>(() => navigator.onLine ? "online" : "offline");
   const [reconnected, setReconnected] = useState(false);
   const [pending, setPending] = useState(0);
@@ -14,8 +16,22 @@ export function ConnectivityStatus() {\n  const { openTransaction } = useDialogs
 
   useEffect(() => {
     void refresh();
-    const syncState = () => void refresh();\n    const syncSuccess = (event: Event) => {\n      const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;\n      toast.success("Sincronizado", { description: `Registro de ${new Date(op.createdAt).toLocaleString("pt-BR")} salvo na sua conta FINNOS.` });\n    };\n    const syncError = (event: Event) => {\n      const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;\n      toast.error("Não foi possível sincronizar", {\n        description: `O registro continua salvo neste aparelho. Primeira tentativa: ${new Date(op.createdAt).toLocaleString("pt-BR")}.`,\n        duration: Infinity,\n        action: { label: "Revisar registro", onClick: () => openTransaction({ syncOperationId: op.id, syncPayload: op.payload, firstAttemptAt: op.createdAt }) },\n      });\n    };
-    window.addEventListener("finnos:sync-state", syncState);\n    window.addEventListener("finnos:sync-success", syncSuccess);\n    window.addEventListener("finnos:sync-error", syncError);
+    const syncState = () => void refresh();
+    const syncSuccess = (event: Event) => {
+      const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;
+      toast.success("Sincronizado", { description: `Registro de ${new Date(op.createdAt).toLocaleString("pt-BR")} salvo na sua conta FINNOS.` });
+    };
+    const syncError = (event: Event) => {
+      const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;
+      toast.error("Não foi possível sincronizar", {
+        description: `O registro continua salvo neste aparelho. Primeira tentativa: ${new Date(op.createdAt).toLocaleString("pt-BR")}.`,
+        duration: Infinity,
+        action: { label: "Revisar registro", onClick: () => openTransaction({ syncOperationId: op.id, syncPayload: op.payload, firstAttemptAt: op.createdAt }) },
+      });
+    };
+    window.addEventListener("finnos:sync-state", syncState);
+    window.addEventListener("finnos:sync-success", syncSuccess);
+    window.addEventListener("finnos:sync-error", syncError);
     const offline = () => {
       setState("offline");
       setReconnected(false);
@@ -44,7 +60,9 @@ export function ConnectivityStatus() {\n  const { openTransaction } = useDialogs
     return () => {
       window.removeEventListener("offline", offline);
       window.removeEventListener("online", online);
-      window.removeEventListener("finnos:sync-state", syncState);\n      window.removeEventListener("finnos:sync-success", syncSuccess);\n      window.removeEventListener("finnos:sync-error", syncError);
+      window.removeEventListener("finnos:sync-state", syncState);
+      window.removeEventListener("finnos:sync-success", syncSuccess);
+      window.removeEventListener("finnos:sync-error", syncError);
     };
   }, [openTransaction]);
 
