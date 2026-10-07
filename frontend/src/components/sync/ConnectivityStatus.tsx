@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Cloud, CloudOff, Loader2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
-import { flushSyncQueue, listSyncOperations } from "@/lib/sync/queue";
+import { flushSyncQueue, listSyncOperations, type SyncOperation } from "@/lib/sync/queue";\nimport { useDialogs } from "@/components/dialogs/DialogsProvider";
 
 type NetworkState = "online" | "offline";
 
-export function ConnectivityStatus() {
+export function ConnectivityStatus() {\n  const { openTransaction } = useDialogs();
   const [state, setState] = useState<NetworkState>(() => navigator.onLine ? "online" : "offline");
   const [reconnected, setReconnected] = useState(false);
   const [pending, setPending] = useState(0);
@@ -14,8 +14,8 @@ export function ConnectivityStatus() {
 
   useEffect(() => {
     void refresh();
-    const syncState = () => void refresh();
-    window.addEventListener("finnos:sync-state", syncState);
+    const syncState = () => void refresh();\n    const syncSuccess = (event: Event) => {\n      const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;\n      toast.success("Sincronizado", { description: `Registro de ${new Date(op.createdAt).toLocaleString("pt-BR")} salvo na sua conta FINNOS.` });\n    };\n    const syncError = (event: Event) => {\n      const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;\n      toast.error("Não foi possível sincronizar", {\n        description: `O registro continua salvo neste aparelho. Primeira tentativa: ${new Date(op.createdAt).toLocaleString("pt-BR")}.`,\n        duration: Infinity,\n        action: { label: "Revisar registro", onClick: () => openTransaction({ syncOperationId: op.id, syncPayload: op.payload, firstAttemptAt: op.createdAt }) },\n      });\n    };
+    window.addEventListener("finnos:sync-state", syncState);\n    window.addEventListener("finnos:sync-success", syncSuccess);\n    window.addEventListener("finnos:sync-error", syncError);
     const offline = () => {
       setState("offline");
       setReconnected(false);
@@ -44,9 +44,9 @@ export function ConnectivityStatus() {
     return () => {
       window.removeEventListener("offline", offline);
       window.removeEventListener("online", online);
-      window.removeEventListener("finnos:sync-state", syncState);
+      window.removeEventListener("finnos:sync-state", syncState);\n      window.removeEventListener("finnos:sync-success", syncSuccess);\n      window.removeEventListener("finnos:sync-error", syncError);
     };
-  }, []);
+  }, [openTransaction]);
 
   if (state === "offline" || pending > 0 || syncing) {
     return (
