@@ -5,8 +5,8 @@
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { localRadar } from "@/lib/local/radar";
 import { isLocalMode } from "@/lib/mode";
-import { queueTransaction, flushSyncQueue, type OperationSource } from "@/lib/sync/queue";
-import { cachedFetch } from "@/lib/offline/accountCache";
+import { queueTransaction, flushSyncQueue, listSyncOperations, type OperationSource } from "@/lib/sync/queue";
+import { cachedFetch, cacheGet, cacheSet } from "@/lib/offline/accountCache";
 import {
   localClearData,
   localCreateAccount,
@@ -137,9 +137,29 @@ async function apiPatchName(name: string): Promise<User> {
 
 // --- Dashboard --------------------------------------------------------------
 
+function txAmount(tx: TransactionInput): number { return tx.adjusted_value ?? tx.value; }
+function txInMonth(tx: TransactionInput, month: string): boolean { return tx.date.slice(0, 7) === month; }
+function applyPendingToDashboard(base: Dashboard, pending: { id: string; payload: TransactionInput; createdAt: string }[]): Dashboard {
+  const relevant = pending.filter((op) => txInMonth(op.payload, base.month) && op.payload.status === "pago");
+  if (!relevant.length) return base;
+  const income = relevant.filter((o) => o.payload.type === "receita").reduce((s,o)=>s+txAmount(o.payload),0);
+  const expense = relevant.filter((o) => o.payload.type === "despesa").reduce((s,o)=>s+txAmount(o.payload),0);
+  const recent: Transaction[] = relevant.map((o) => ({
+    id: `offline:${o.id}`, ...o.payload, account_name: "Aguardando sincronização", card_name: null,
+    to_account_name: null, category_name: null, category_color: null, category_icon: null,
+    installment_value: o.payload.installment && o.payload.total_installments ? txAmount(o.payload) / o.payload.total_installments : null,
+    created_at: o.createdAt,
+  }));
+  return { ...base, income: base.income + income, expense: base.expense + expense,
+    month_balance: base.month_balance + income - expense, total_balance: base.total_balance + income - expense,
+    recent: [...recent, ...base.recent].slice(0, Math.max(base.recent.length, 5)) };
+}
+
 export async function fetchDashboard(month: string | null): Promise<Dashboard> {
   if (isLocalMode()) return localDashboard(month);
-  return cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(month ? `/dashboard?month=${month}` : "/dashboard"));
+  const base = await cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(month ? `/dashboard?month=${month}` : "/dashboard"));
+  const pending = (await listSyncOperations()).filter((o) => o.kind === "transaction.create");
+  return applyPendingToDashboard(base, pending);
 }
 
 // --- Radar ------------------------------------------------------------------
@@ -279,14 +299,24 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
   for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, String(value));
   }
-  return cachedFetch(`transactions:${params.toString()}`, () => apiGet<Transaction[]>(`/transactions?${params.toString()}`));
+  const key = `transactions:${params.toString()}`;
+  const base = await cachedFetch(key, () => apiGet<Transaction[]>(`/transactions?${params.toString()}`));
+  const pending = (await listSyncOperations()).filter((o) => o.kind === "transaction.create");
+  const optimistic: Transaction[] = pending
+    .filter((o) => !filters.month || o.payload.date.slice(0, 7) === filters.month)
+    .filter((o) => !filters.type || o.payload.type === filters.type)
+    .filter((o) => !filters.category_id || o.payload.category_id === filters.category_id)
+    .map((o) => ({ id: `offline:${o.id}`, ...o.payload, account_name: "Aguardando sincronização", card_name: null,
+      to_account_name: null, category_name: null, category_color: null, category_icon: null,
+      installment_value: o.payload.installment && o.payload.total_installments ? txAmount(o.payload) / o.payload.total_installments : null,
+      created_at: o.createdAt }));
+  return [...optimistic, ...base];
 }
 
 export async function createTransaction(input: TransactionInput, source: OperationSource = "manual"): Promise<Transaction> {
   if (isLocalMode()) return localCreateTransaction(input);
   if (!navigator.onLine) {
-    await queueTransaction(input, source);
-    throw new Error("FINNOS_OFFLINE_QUEUED");
+    await queueTransaction(input, source);\n    throw new Error("FINNOS_OFFLINE_QUEUED");
   }
   return apiPost<Transaction>("/transactions", input, { "X-FINNOS-Source": source });
 }
