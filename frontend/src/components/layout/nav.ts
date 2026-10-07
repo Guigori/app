@@ -5,6 +5,7 @@ import {
   CreditCard,
   Home,
   PieChart,
+  ChartNoAxesCombined,
   PiggyBank,
   Repeat,
   Radar,
@@ -56,6 +57,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Analisar",
     dot: "#F97316",
     items: [
+      { to: "/analise", label: "Análise", icon: ChartNoAxesCombined, slug: "analise" },
       { to: "/categorias", label: "Categorias", icon: Tags, slug: "categorias" },
       { to: "/cartoes", label: "Cartões", icon: CreditCard, slug: "cartoes" },
       { to: "/assinaturas", label: "Assinaturas", icon: Repeat, slug: "assinaturas" },
@@ -96,6 +98,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/": "Início",
   "/transacoes": "Fluxo",
   "/contas": "Contas",
+  "/analise": "Análise",
   "/categorias": "Categorias",
   "/fluxo": "Fluxo",
   "/orcamento": "Orçamento",
