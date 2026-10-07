@@ -62,7 +62,7 @@ export default function Analysis() {
 
     <div className="grid grid-cols-2 gap-3">
       <AnalysisCard title="Gasto do mês" value={money(d?.expense ?? 0)} note={expenseDelta ? `${expenseDelta>0?"▲":"▼"} ${pct(expenseDelta)}` : "Mês atual"} chart={mode==="charts"}/>
-      <AnalysisCard title="Orçamento" value={budget.data ? `${Math.round((budget.data.total_spent/Math.max(budget.data.total_budget,1))*100)}%` : "—"} note="utilizado" chart={mode==="charts"}/>
+      <AnalysisCard title="Orçamento" value={budget.data ? `${Math.round((budget.data.spent/Math.max(budget.data.planned,1))*100)}%` : "—"} note="utilizado" chart={mode==="charts"}/>
       <AnalysisCard title="Dia de maior gasto" value="Ver detalhes" note="toque para analisar" chart={mode==="charts"}/>
       <AnalysisCard title="Dias sem gastos" value="—" note="no período" chart={mode==="charts"}/>
     </div>
