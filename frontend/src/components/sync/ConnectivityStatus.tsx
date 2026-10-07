@@ -1,14 +1,21 @@
 import { useEffect, useState } from "react";
 import { Cloud, CloudOff, Loader2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
+import { flushSyncQueue, listSyncOperations } from "@/lib/sync/queue";
 
 type NetworkState = "online" | "offline";
 
 export function ConnectivityStatus() {
   const [state, setState] = useState<NetworkState>(() => navigator.onLine ? "online" : "offline");
   const [reconnected, setReconnected] = useState(false);
+  const [pending, setPending] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const refresh = async () => setPending((await listSyncOperations()).length);
 
   useEffect(() => {
+    void refresh();
+    const syncState = () => void refresh();
+    window.addEventListener("finnos:sync-state", syncState);
     const offline = () => {
       setState("offline");
       setReconnected(false);
@@ -18,8 +25,9 @@ export function ConnectivityStatus() {
         duration: Infinity,
       });
     };
-    const online = () => {
+    const online = async () => {
       setState("online");
+      setSyncing(true);
       toast.dismiss("finnos-offline");
       setReconnected(true);
       toast.success("Conexão restabelecida", {
@@ -27,6 +35,7 @@ export function ConnectivityStatus() {
         id: "finnos-online",
         duration: 3500,
       });
+      try { await flushSyncQueue(); } finally { setSyncing(false); await refresh(); }
       window.setTimeout(() => setReconnected(false), 4000);
     };
     window.addEventListener("offline", offline);
@@ -35,14 +44,15 @@ export function ConnectivityStatus() {
     return () => {
       window.removeEventListener("offline", offline);
       window.removeEventListener("online", online);
+      window.removeEventListener("finnos:sync-state", syncState);
     };
   }, []);
 
-  if (state === "offline") {
+  if (state === "offline" || pending > 0 || syncing) {
     return (
       <div className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-[70] flex -translate-x-1/2 items-center gap-2 rounded-full border border-amber-500/30 bg-background/95 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg backdrop-blur-md" role="status" aria-live="polite" data-testid="offline-status">
-        <CloudOff className="size-3.5 text-amber-500" />
-        Sem conexão
+        {syncing ? <Loader2 className="size-3.5 animate-spin" /> : state === "offline" ? <CloudOff className="size-3.5 text-amber-500" /> : <Cloud className="size-3.5 text-amber-500" />}
+        {syncing ? "Sincronizando…" : pending > 0 ? `${pending} aguardando sincronização` : "Sem conexão"}
       </div>
     );
   }
