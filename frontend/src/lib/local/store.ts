@@ -61,33 +61,112 @@ export function freshDb(name = "Você"): LocalDb {
   };
 }
 
-export function readDb(): LocalDb {
-  const raw = window.localStorage.getItem(storageKey());
-  if (!raw) {
-    const db = freshDb();
-    writeDb(db);
-    return db;
-  }
-  try {
-    const parsed = JSON.parse(raw) as Partial<LocalDb>;
-    return {
-      profile: parsed.profile ?? { name: "Você" },
-      accounts: parsed.accounts ?? [],
-      categories: parsed.categories ?? [],
-      transactions: parsed.transactions ?? [],
-      cards: parsed.cards ?? [],
+const IDB_NAME = "finnos-local";
+const IDB_VERSION = 1;
+const IDB_STORE = "databases";
+const memory = new Map<string, LocalDb>();
+
+function openLocalDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(IDB_NAME, IDB_VERSION);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(IDB_STORE)) request.result.createObjectStore(IDB_STORE);
     };
-  } catch {
-    const db = freshDb();
-    writeDb(db);
-    return db;
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function idbGet(key: string): Promise<LocalDb | null> {
+  const db = await openLocalDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readonly");
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = () => resolve((req.result as LocalDb | undefined) ?? null);
+    req.onerror = () => reject(req.error);
+    tx.oncomplete = () => db.close();
+  });
+}
+
+async function idbPut(key: string, value: LocalDb): Promise<void> {
+  const db = await openLocalDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+async function idbDelete(key: string): Promise<void> {
+  const db = await openLocalDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).delete(key);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+function normalizeDb(parsed: Partial<LocalDb>): LocalDb {
+  return {
+    profile: parsed.profile ?? { name: "Você" },
+    accounts: parsed.accounts ?? [],
+    categories: parsed.categories ?? [],
+    transactions: parsed.transactions ?? [],
+    cards: parsed.cards ?? [],
+  };
+}
+
+function legacyRead(key: string): LocalDb | null {
+  const raw = window.localStorage.getItem(key);
+  if (!raw) return null;
+  try { return normalizeDb(JSON.parse(raw) as Partial<LocalDb>); } catch { return null; }
+}
+
+export async function initializeLocalPersistence(): Promise<void> {
+  for (const key of ["finnos:local-db", "finnos:demo-db"]) {
+    try {
+      let value = await idbGet(key);
+      if (!value) {
+        value = legacyRead(key);
+        if (value) {
+          await idbPut(key, value);
+          window.localStorage.removeItem(key);
+        }
+      }
+      if (value) memory.set(key, normalizeDb(value));
+    } catch {
+      const legacy = legacyRead(key);
+      if (legacy) memory.set(key, legacy);
+    }
   }
+}
+
+export function readDb(): LocalDb {
+  const key = storageKey();
+  const cached = memory.get(key);
+  if (cached) return cached;
+  const legacy = legacyRead(key);
+  if (legacy) {
+    memory.set(key, legacy);
+    return legacy;
+  }
+  const db = freshDb();
+  memory.set(key, db);
+  void idbPut(key, db).catch(() => window.localStorage.setItem(key, JSON.stringify(db)));
+  return db;
 }
 
 export function writeDb(db: LocalDb): void {
-  window.localStorage.setItem(storageKey(), JSON.stringify(db));
+  const key = storageKey();
+  memory.set(key, db);
+  void idbPut(key, db).catch(() => window.localStorage.setItem(key, JSON.stringify(db)));
 }
 
 export function wipeDb(): void {
-  window.localStorage.removeItem(storageKey());
+  const key = storageKey();
+  memory.delete(key);
+  window.localStorage.removeItem(key);
+  void idbDelete(key).catch(() => undefined);
 }
