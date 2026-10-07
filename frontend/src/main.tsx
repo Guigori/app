@@ -6,24 +6,28 @@ import { ThemeProvider } from 'next-themes'
 import './index.css'
 import App from './App.tsx'
 import { queryClient } from './lib/queryClient'
+import { initializeLocalPersistence } from './lib/local/store'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </ThemeProvider>
-    </QueryClientProvider>
-  </StrictMode>,
-)
+async function bootstrap() {
+  await initializeLocalPersistence()
 
-// PWA: register the passthrough service worker so the app can be added to the home screen.
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      // installation is optional — the app works fine without it
-    });
-  });
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </StrictMode>,
+  )
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch(() => undefined)
+    })
+  }
 }
+
+void bootstrap()
