@@ -3,15 +3,17 @@ import { Cloud, CloudOff, Loader2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { flushSyncQueue, listSyncOperations, type SyncOperation } from "@/lib/sync/queue";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
+import { cn } from "@/lib/utils";
 
 type NetworkState = "online" | "offline";
 
 export function ConnectivityStatus() {
   const { openTransaction } = useDialogs();
   const [state, setState] = useState<NetworkState>(() => navigator.onLine ? "online" : "offline");
-  const [reconnected, setReconnected] = useState(false);
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [pulse, setPulse] = useState(false);
   const refresh = async () => setPending((await listSyncOperations()).length);
 
   useEffect(() => {
@@ -19,72 +21,101 @@ export function ConnectivityStatus() {
     const syncState = () => void refresh();
     const syncSuccess = (event: Event) => {
       const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;
-      toast.success("Sincronizado", { description: `Registro de ${new Date(op.createdAt).toLocaleString("pt-BR")} salvo na sua conta FINNOS.` });
+      toast.success("Sincronizado", {
+        description: `Registro de ${new Date(op.createdAt).toLocaleString("pt-BR")} salvo na sua conta FINNOS.`,
+        duration: 3500,
+      });
     };
     const syncError = (event: Event) => {
       const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;
       toast.error("Não foi possível sincronizar", {
         description: `O registro continua salvo neste aparelho. Primeira tentativa: ${new Date(op.createdAt).toLocaleString("pt-BR")}.`,
-        duration: Infinity,
-        action: { label: "Revisar registro", onClick: () => openTransaction({ syncOperationId: op.id, syncPayload: op.payload, firstAttemptAt: op.createdAt }) },
+        duration: 6500,
+        action: { label: "Revisar", onClick: () => openTransaction({ syncOperationId: op.id, syncPayload: op.payload, firstAttemptAt: op.createdAt }) },
       });
     };
-    window.addEventListener("finnos:sync-state", syncState);
-    window.addEventListener("finnos:sync-success", syncSuccess);
-    window.addEventListener("finnos:sync-error", syncError);
     const offline = () => {
       setState("offline");
-      setReconnected(false);
+      setSyncing(false);
+      setPulse(true);
+      window.setTimeout(() => setPulse(false), 2200);
       toast.warning("Você está offline", {
-        description: "O FINNOS continuará usando os dados disponíveis neste aparelho.",
+        description: "Os dados disponíveis neste aparelho continuam funcionando.",
         id: "finnos-offline",
-        duration: Infinity,
+        duration: 3500,
       });
     };
     const online = async () => {
       setState("online");
+      setExpanded(false);
       setSyncing(true);
       toast.dismiss("finnos-offline");
-      setReconnected(true);
-      toast.success("Conexão restabelecida", {
-        description: "O FINNOS voltou a ficar online.",
-        id: "finnos-online",
-        duration: 3500,
-      });
-      try { await flushSyncQueue(); } finally { setSyncing(false); await refresh(); }
-      window.setTimeout(() => setReconnected(false), 4000);
+      try {
+        await flushSyncQueue();
+        toast.success("Conexão restabelecida", {
+          description: "O FINNOS voltou a ficar online.",
+          id: "finnos-online",
+          duration: 3000,
+        });
+      } finally {
+        setSyncing(false);
+        await refresh();
+      }
+    };
+    const visible = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) void online();
     };
     window.addEventListener("offline", offline);
     window.addEventListener("online", online);
+    window.addEventListener("finnos:sync-state", syncState);
+    window.addEventListener("finnos:sync-success", syncSuccess);
+    window.addEventListener("finnos:sync-error", syncError);
+    document.addEventListener("visibilitychange", visible);
     if (!navigator.onLine) offline();
+    else void flushSyncQueue().finally(refresh);
     return () => {
       window.removeEventListener("offline", offline);
       window.removeEventListener("online", online);
       window.removeEventListener("finnos:sync-state", syncState);
       window.removeEventListener("finnos:sync-success", syncSuccess);
       window.removeEventListener("finnos:sync-error", syncError);
+      document.removeEventListener("visibilitychange", visible);
     };
   }, [openTransaction]);
 
-  if (state === "offline" || pending > 0 || syncing) {
-    return (
-      <div className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-[70] flex -translate-x-1/2 items-center gap-2 rounded-full border border-amber-500/30 bg-background/95 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg backdrop-blur-md" role="status" aria-live="polite" data-testid="offline-status">
-        {syncing ? <Loader2 className="size-3.5 animate-spin" /> : state === "offline" ? <CloudOff className="size-3.5 text-amber-500" /> : <Cloud className="size-3.5 text-amber-500" />}
-        {syncing ? "Sincronizando…" : pending > 0 ? `${pending} aguardando sincronização` : "Sem conexão"}
-      </div>
-    );
-  }
+  if (state === "online" && pending === 0 && !syncing) return null;
 
-  if (reconnected) {
-    return (
-      <div className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-[70] flex -translate-x-1/2 items-center gap-2 rounded-full border border-emerald-500/30 bg-background/95 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg backdrop-blur-md" role="status" aria-live="polite">
-        <Cloud className="size-3.5 text-emerald-500" />
-        Online
-      </div>
-    );
-  }
+  const label = syncing ? "Sincronizando…" : state === "offline"
+    ? (pending ? `${pending} pendente${pending > 1 ? "s" : ""}` : "Sem conexão")
+    : `${pending} aguardando`;
 
-  return null;
+  return (
+    <button
+      type="button"
+      onClick={() => setExpanded((v) => !v)}
+      className={cn(
+        "fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-[70] flex -translate-x-1/2 items-center overflow-hidden rounded-full border bg-background/90 text-xs font-medium text-foreground shadow-md backdrop-blur-xl transition-all duration-500",
+        expanded ? "max-w-[88vw] gap-2 px-3 py-2" : "h-10 max-w-[11rem] gap-2 px-3",
+        state === "offline" ? "border-amber-500/35" : "border-primary/25",
+        pulse && "scale-105",
+      )}
+      role="status"
+      aria-live="polite"
+      aria-expanded={expanded}
+      data-testid="offline-status"
+    >
+      <span className="relative grid size-5 shrink-0 place-items-center">
+        {syncing ? <Loader2 className="size-4 animate-spin text-primary" /> :
+          state === "offline" ? <CloudOff className="size-4 text-amber-500 animate-[pulse_1.8s_ease-in-out_infinite]" /> :
+          <Cloud className="size-4 text-primary" />}
+      </span>
+      <span className={cn("whitespace-nowrap transition-all duration-500", !expanded && state === "offline" && "animate-[pulse_2.4s_ease-in-out_infinite]")}>
+        {expanded && state === "offline"
+          ? (pending ? `Sem conexão · ${pending} lançamento${pending > 1 ? "s" : ""} aguardando sincronização` : "Sem conexão · usando os dados salvos neste aparelho")
+          : label}
+      </span>
+    </button>
+  );
 }
 
 export function SyncStateLabel({ pending = 0, syncing = false, error = false }: { pending?: number; syncing?: boolean; error?: boolean }) {
