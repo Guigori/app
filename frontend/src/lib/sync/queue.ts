@@ -69,7 +69,7 @@ export async function listSyncOperations(): Promise<SyncOperation[]> {
   });
 }
 
-async function save(op: SyncOperation): Promise<void> {
+export async function saveSyncOperation(op: SyncOperation): Promise<void> {
   await transact<void>("readwrite", (store, resolve, reject) => {
     const req = store.put(op);
     req.onsuccess = () => resolve();
@@ -94,7 +94,7 @@ export async function flushSyncQueue(): Promise<void> {
     for (const op of await listSyncOperations()) {
       if (!navigator.onLine) break;
       const current = { ...op, status: "syncing" as const, attempts: op.attempts + 1, lastError: undefined };
-      await save(current);
+      await saveSyncOperation(current);
       window.dispatchEvent(new CustomEvent("finnos:sync-state"));
       try {
         if (op.kind === "transaction.create") {
@@ -103,8 +103,11 @@ export async function flushSyncQueue(): Promise<void> {
           await apiPut<Transaction>(`/transactions/${op.entityId}`, op.payload, { "X-FINNOS-Operation-ID": op.id, "X-FINNOS-Source": op.source });
         }
         await remove(op.id);
+        window.dispatchEvent(new CustomEvent("finnos:sync-success", { detail: { operation: op } }));
       } catch (error) {
-        await save({ ...current, status: "error", lastError: error instanceof Error ? error.message : "Falha ao sincronizar" });
+        const failed = { ...current, status: "error" as const, lastError: error instanceof Error ? error.message : "Falha ao sincronizar" };
+        await saveSyncOperation(failed);
+        window.dispatchEvent(new CustomEvent("finnos:sync-error", { detail: { operation: failed } }));
         break;
       }
     }
@@ -116,4 +119,20 @@ export async function flushSyncQueue(): Promise<void> {
 
 export async function syncQueueCount(): Promise<number> {
   return (await listSyncOperations()).length;
+}
+
+
+export async function getSyncOperation(id: string): Promise<SyncOperation | null> {
+  return transact<SyncOperation | null>("readonly", (store, resolve, reject) => {
+    const req = store.get(id);
+    req.onsuccess = () => resolve((req.result as SyncOperation | undefined) ?? null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function updateQueuedTransaction(id: string, payload: TransactionInput): Promise<void> {
+  const op = await getSyncOperation(id);
+  if (!op) throw new Error("Operação pendente não encontrada.");
+  await saveSyncOperation({ ...op, payload, status: "pending", lastError: undefined });
+  window.dispatchEvent(new CustomEvent("finnos:sync-state"));
 }
