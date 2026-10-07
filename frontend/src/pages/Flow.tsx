@@ -2,13 +2,12 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { fetchCalendar, fetchCategories, fetchFlow } from "@/lib/data";
+import { fetchCategories, fetchFlow } from "@/lib/data";
 import { useBalanceHidden } from "@/lib/balance";
 import { addMonth, currentMonth, formatBRL, formatHiddenBRL, monthLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MonthSelector } from "@/components/dashboard/MonthSelector";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
-import { FinancialHeatmapCalendar } from "@/components/analytics/FinancialHeatmapCalendar";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -67,10 +66,6 @@ export default function Flow() {
   const flowQuery = useQuery({
     queryKey: ["flow", flowParams],
     queryFn: () => fetchFlow(flowParams),
-  });
-  const calendarQuery = useQuery({
-    queryKey: ["flow-calendar", month],
-    queryFn: () => fetchCalendar(month),
   });
   const flow = flowQuery.data;
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
@@ -228,26 +223,6 @@ export default function Flow() {
               </div>
             </CardContent>
           </Card>
-
-          <section>
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Movimentação diária · {monthLabel(month)}
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">Mapa de calor financeiro do mês selecionado.</p>
-              </div>
-            </div>
-            <div className="mt-3 rounded-2xl border border-border bg-card p-4 sm:p-5">
-              {calendarQuery.isPending ? (
-                <div className="h-64 animate-pulse rounded-xl bg-muted/50" aria-label="Carregando mapa de calor" />
-              ) : calendarQuery.data ? (
-                <FinancialHeatmapCalendar month={month} days={calendarQuery.data.days} hidden={hidden} />
-              ) : (
-                <p className="py-8 text-center text-sm text-muted-foreground">Não foi possível carregar a movimentação diária.</p>
-              )}
-            </div>
-          </section>
 
           <section>
             <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
