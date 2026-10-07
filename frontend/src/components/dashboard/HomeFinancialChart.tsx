@@ -67,13 +67,14 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
   const [showResult, setShowResult] = useState(true);
   const [selectedMetric, setSelectedMetric] = useState<"Receitas" | "Despesas" | "Resultado" | null>(null);
   const [projectionMetric, setProjectionMetric] = useState<"balance" | "income" | "expense">("balance");
+  const [projectionMonth, setProjectionMonth] = useState(month);
   const [projectionDragX, setProjectionDragX] = useState<number | null>(null);
   const chartScrollerRef = useRef<HTMLDivElement | null>(null);
 
   const daily = period === "7d" || period === "1m";
   const calendarQuery = useQuery({
-    queryKey: ["home-financial-calendar", month],
-    queryFn: () => fetchCalendar(month),
+    queryKey: ["home-financial-calendar", view === "projection" ? projectionMonth : month],
+    queryFn: () => fetchCalendar(view === "projection" ? projectionMonth : month),
     enabled: daily,
   });
   const trendsQuery = useQuery({
@@ -105,16 +106,17 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
 
   const projectionData = useMemo(() => {
     const days = calendarQuery.data?.days ?? [];
-    const [year, monthNumber] = month.split("-").map(Number);
+    const activeMonth = projectionMonth;
+    const [year, monthNumber] = activeMonth.split("-").map(Number);
     const daysInMonth = new Date(year, monthNumber, 0).getDate();
     const today = todayISO();
     const currentMonth = today.slice(0, 7);
-    const cutoffDay = month === currentMonth ? Math.min(Number(today.slice(8, 10)), daysInMonth) : month < currentMonth ? daysInMonth : 0;
+    const cutoffDay = activeMonth === currentMonth ? Math.min(Number(today.slice(8, 10)), daysInMonth) : activeMonth < currentMonth ? daysInMonth : 0;
     const byDate = new Map(days.map((day) => [day.date, day]));
     let realisedIncome = 0;
     let realisedExpense = 0;
     for (let n = 1; n <= cutoffDay; n += 1) {
-      const day = byDate.get(`${month}-${String(n).padStart(2, "0")}`);
+      const day = byDate.get(`${activeMonth}-${String(n).padStart(2, "0")}`);
       realisedIncome += day?.income ?? 0;
       realisedExpense += day?.expense ?? 0;
     }
@@ -125,7 +127,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
     let forecastExpense = realisedExpense;
     return Array.from({ length: daysInMonth }, (_, index) => {
       const n = index + 1;
-      const day = byDate.get(`${month}-${String(n).padStart(2, "0")}`);
+      const day = byDate.get(`${activeMonth}-${String(n).padStart(2, "0")}`);
       if (n <= cutoffDay) {
         actualIncome += day?.income ?? 0;
         actualExpense += day?.expense ?? 0;
@@ -142,7 +144,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
         forecast: n >= cutoffDay && cutoffDay > 0 ? Math.round((n === cutoffDay ? actualValue : forecastValue) * 100) / 100 : null,
       };
     });
-  }, [calendarQuery.data?.days, month, projectionMetric, total]);
+  }, [calendarQuery.data?.days, projectionMonth, projectionMetric, total]);
 
   useEffect(() => {
     if (view !== "bars" || !daily || !chartScrollerRef.current) return;
@@ -184,7 +186,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
 
   const projectionColor = projectionMetric === "income" ? "var(--income)" : projectionMetric === "expense" ? "var(--expense)" : "var(--finnos-purple-live)";
   const projectionLabel = projectionMetric === "income" ? "Receitas" : projectionMetric === "expense" ? "Despesas" : "Saldo";
-  const shiftProjectionMonth = (direction: -1 | 1) => setMonth(addMonth(month, direction));
+  const shiftProjectionMonth = (direction: -1 | 1) => setProjectionMonth((current) => addMonth(current, direction));
 
   return (
     <div className="border-t border-border/70 pt-5" data-testid="home-financial-chart">
@@ -230,7 +232,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
         >
           <div className="mb-1 flex items-center justify-between">
             <button type="button" onClick={() => shiftProjectionMonth(-1)} className="rounded-full px-2 py-1 text-lg text-muted-foreground" aria-label="Mês anterior">‹</button>
-            <span className="text-xs font-medium capitalize text-muted-foreground">{monthLabel(month)}</span>
+            <span className="text-xs font-medium capitalize text-muted-foreground">{monthLabel(projectionMonth)}</span>
             <button type="button" onClick={() => shiftProjectionMonth(1)} className="rounded-full px-2 py-1 text-lg text-muted-foreground" aria-label="Próximo mês">›</button>
           </div>
           <div className="h-[300px] w-full sm:h-[330px]">
