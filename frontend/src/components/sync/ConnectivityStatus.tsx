@@ -39,11 +39,8 @@ export function ConnectivityStatus() {
       setSyncing(false);
       setPulse(true);
       window.setTimeout(() => setPulse(false), 2200);
-      toast.warning("Você está offline", {
-        description: "Os dados disponíveis neste aparelho continuam funcionando.",
-        id: "finnos-offline",
-        duration: 3500,
-      });
+      setExpanded(true);
+      window.setTimeout(() => setExpanded(false), 4200);
     };
     const online = async () => {
       setState("online");
@@ -51,12 +48,19 @@ export function ConnectivityStatus() {
       setSyncing(true);
       toast.dismiss("finnos-offline");
       try {
-        await flushSyncQueue();
         toast.success("Conexão restabelecida", {
-          description: "O FINNOS voltou a ficar online.",
+          description: pending > 0 ? "O FINNOS voltou a ficar online. Seus dados estão sendo sincronizados." : "O FINNOS voltou a ficar online.",
           id: "finnos-online",
-          duration: 3000,
+          duration: 3500,
         });
+        await flushSyncQueue();
+        const remaining = (await listSyncOperations()).length;
+        if (remaining === 0 && pending > 0) {
+          toast.success("Sincronização concluída", {
+            description: "Todos os dados pendentes foram sincronizados com sua conta FINNOS.",
+            duration: 3500,
+          });
+        }
       } finally {
         setSyncing(false);
         await refresh();
@@ -92,7 +96,7 @@ export function ConnectivityStatus() {
   return (
     <button
       type="button"
-      onClick={() => setExpanded((v) => !v)}
+      onClick={() => { setExpanded((v) => !v); if (!expanded) window.setTimeout(() => setExpanded(false), 5000); }}
       className={cn(
         "fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-[70] flex -translate-x-1/2 items-center overflow-hidden rounded-full border bg-background/90 text-xs font-medium text-foreground shadow-md backdrop-blur-xl transition-all duration-500",
         expanded ? "max-w-[88vw] gap-2 px-3 py-2" : "h-10 max-w-[11rem] gap-2 px-3",
@@ -111,7 +115,7 @@ export function ConnectivityStatus() {
       </span>
       <span className={cn("whitespace-nowrap transition-all duration-500", !expanded && state === "offline" && "animate-[pulse_2.4s_ease-in-out_infinite]")}>
         {expanded && state === "offline"
-          ? (pending ? `Sem conexão · ${pending} lançamento${pending > 1 ? "s" : ""} aguardando sincronização` : "Sem conexão · usando os dados salvos neste aparelho")
+          ? (pending ? `Você está offline · ${pending} lançamento${pending > 1 ? "s" : ""} salvo${pending > 1 ? "s" : ""} neste aparelho` : "Você está offline · os dados disponíveis neste aparelho continuam funcionando")
           : label}
       </span>
     </button>
