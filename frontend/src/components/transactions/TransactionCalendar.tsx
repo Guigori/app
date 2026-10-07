@@ -143,17 +143,17 @@ export function TransactionCalendar({
                   >
                     <span
                       className={cn(
-                        "relative flex h-9 w-9 items-center justify-center rounded-xl text-sm font-semibold tabular-nums transition-all duration-200",
+                        "relative flex h-full w-full min-h-11 items-center justify-center rounded-xl border border-border/25 text-sm font-semibold tabular-nums transition-all duration-200",
                         selected
-                          ? "ring-2 ring-white/90 ring-offset-2 ring-offset-card text-white"
+                          ? "ring-2 ring-white/90 ring-offset-2 ring-offset-card text-white shadow-sm"
                           : cell.outside
-                            ? "text-muted-foreground/45"
+                            ? "border-transparent bg-transparent text-muted-foreground/45"
                             : level >= 3
                               ? "text-white hover:brightness-110"
                               : "text-foreground hover:brightness-110",
                         !selected && cell.date === today ? "ring-1 ring-primary/70" : undefined,
                       )}
-                      style={!cell.outside && level > 0 ? { backgroundColor: heatBackground(level) } : undefined}
+                      style={!cell.outside ? { backgroundColor: level > 0 ? heatBackground(level) : "color-mix(in srgb, var(--finnos-app) 14%, var(--card))" } : undefined}
                     >
                       {Number(cell.date.slice(8, 10))}
                     </span>
