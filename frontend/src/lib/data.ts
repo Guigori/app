@@ -6,6 +6,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { localRadar } from "@/lib/local/radar";
 import { isLocalMode } from "@/lib/mode";
 import { queueTransaction, flushSyncQueue, type OperationSource } from "@/lib/sync/queue";
+import { cachedFetch } from "@/lib/offline/accountCache";
 import {
   localClearData,
   localCreateAccount,
@@ -118,7 +119,7 @@ export async function fetchMe(): Promise<User> {
       created_at: new Date().toISOString(),
     };
   }
-  return apiGet<User>("/auth/me");
+  return cachedFetch("me", () => apiGet<User>("/auth/me"));
 }
 
 export async function updateMyName(name: string): Promise<User> {
@@ -138,14 +139,14 @@ async function apiPatchName(name: string): Promise<User> {
 
 export async function fetchDashboard(month: string | null): Promise<Dashboard> {
   if (isLocalMode()) return localDashboard(month);
-  return apiGet<Dashboard>(month ? `/dashboard?month=${month}` : "/dashboard");
+  return cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(month ? `/dashboard?month=${month}` : "/dashboard"));
 }
 
 // --- Radar ------------------------------------------------------------------
 
 export async function fetchRadar(): Promise<Radar | null> {
   if (isLocalMode()) return localRadar();
-  return apiGet<Radar>("/radar");
+  return cachedFetch("radar", () => apiGet<Radar>("/radar"));
 }
 
 export async function updateRadarSignal(signalId: string, action: "view" | "dismiss" | "resolve") {
@@ -164,12 +165,12 @@ export async function fetchTrends(months: number, endMonth?: string): Promise<Tr
   if (isLocalMode()) return localTrends(months, endMonth);
   const params = new URLSearchParams({ months: String(months) });
   if (endMonth) params.set("end_month", endMonth);
-  return apiGet<Trends>(`/analytics/trends?${params.toString()}`);
+  return cachedFetch(`trends:${params.toString()}`, () => apiGet<Trends>(`/analytics/trends?${params.toString()}`));
 }
 
 export async function fetchBudget(month: string): Promise<BudgetSummary> {
   if (isLocalMode()) return localBudget(month);
-  return apiGet<BudgetSummary>(`/analytics/budget?month=${month}`);
+  return cachedFetch(`budget:${month}`, () => apiGet<BudgetSummary>(`/analytics/budget?month=${month}`));
 }
 
 export async function fetchFlow(params: FlowParams): Promise<Flow> {
@@ -178,12 +179,12 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
   for (const [key, value] of Object.entries(params)) {
     if (value) search.set(key, String(value));
   }
-  return apiGet<Flow>(`/analytics/flow?${search.toString()}`);
+  return cachedFetch(`flow:${search.toString()}`, () => apiGet<Flow>(`/analytics/flow?${search.toString()}`));
 }
 
 export async function fetchCalendar(month: string): Promise<CalendarMonth> {
   if (isLocalMode()) return localCalendar(month);
-  return apiGet<CalendarMonth>(`/analytics/calendar?month=${month}`);
+  return cachedFetch(`calendar:${month}`, () => apiGet<CalendarMonth>(`/analytics/calendar?month=${month}`));
 }
 
 
@@ -225,12 +226,12 @@ export async function updateBudgetCycle(id: string, payload: BudgetCyclePayload)
 
 export async function fetchAccounts(): Promise<Account[]> {
   if (isLocalMode()) return localListAccounts();
-  return apiGet<Account[]>("/accounts");
+  return cachedFetch("accounts", () => apiGet<Account[]>("/accounts"));
 }
 
 export async function fetchAccount(id: string): Promise<AccountDetail> {
   if (isLocalMode()) return localGetAccount(id);
-  return apiGet<AccountDetail>(`/accounts/${id}`);
+  return cachedFetch(`account:${id}`, () => apiGet<AccountDetail>(`/accounts/${id}`));
 }
 
 export async function createAccount(input: AccountInput): Promise<Account> {
@@ -252,7 +253,7 @@ export async function deleteAccount(id: string): Promise<void> {
 
 export async function fetchCategories(): Promise<Category[]> {
   if (isLocalMode()) return localListCategories();
-  return apiGet<Category[]>("/categories");
+  return cachedFetch("categories", () => apiGet<Category[]>("/categories"));
 }
 
 export async function createCategory(input: CategoryInput): Promise<Category> {
@@ -278,7 +279,7 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
   for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, String(value));
   }
-  return apiGet<Transaction[]>(`/transactions?${params.toString()}`);
+  return cachedFetch(`transactions:${params.toString()}`, () => apiGet<Transaction[]>(`/transactions?${params.toString()}`));
 }
 
 export async function createTransaction(input: TransactionInput, source: OperationSource = "manual"): Promise<Transaction> {
@@ -322,7 +323,7 @@ export async function clearMyData(): Promise<void> {
 
 export async function fetchCards(): Promise<CreditCard[]> {
   if (isLocalMode()) return localListCards();
-  return apiGet<CreditCard[]>("/cards");
+  return cachedFetch("cards", () => apiGet<CreditCard[]>("/cards"));
 }
 
 export async function createCard(input: CardInput): Promise<CreditCard> {
@@ -349,7 +350,7 @@ export async function fetchNotifications(): Promise<Notifications> {
     const items = local.items.filter((item) => !dismissed.has(item.id));
     return { items, count: items.length };
   }
-  return apiGet<Notifications>("/notifications");
+  return cachedFetch("notifications", () => apiGet<Notifications>("/notifications"));
 }
 
 export async function dismissNotification(id: string): Promise<void> {
@@ -376,7 +377,7 @@ export async function clearNotifications(ids: string[]): Promise<void> {
 
 export async function fetchInvoice(cardId: string): Promise<Invoice> {
   if (isLocalMode()) return localInvoice(cardId);
-  return apiGet<Invoice>(`/cards/${cardId}/invoice`);
+  return cachedFetch(`invoice:${cardId}`, () => apiGet<Invoice>(`/cards/${cardId}/invoice`));
 }
 
 export async function payInvoice(cardId: string, input: PayInvoiceInput): Promise<Invoice> {
@@ -386,7 +387,7 @@ export async function payInvoice(cardId: string, input: PayInvoiceInput): Promis
 
 export async function fetchSubscriptions(): Promise<Subscriptions> {
   if (isLocalMode()) return localSubscriptions();
-  return apiGet<Subscriptions>("/subscriptions");
+  return cachedFetch("subscriptions", () => apiGet<Subscriptions>("/subscriptions"));
 }
 
 /** Reminder settings live on the server, so local mode reports them as unavailable. */
