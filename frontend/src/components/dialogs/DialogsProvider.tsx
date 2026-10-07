@@ -8,8 +8,7 @@ export interface TransactionDialogInit {
   type?: TxType;
   transaction?: Transaction;
   /** Pre-fills the date — the calendar day the user has selected, for instance. */
-  date?: string;
-}
+  date?: string;\n  /** Pending offline operation being reviewed after a sync failure. */\n  syncOperationId?: string;\n  syncPayload?: import("@/types/finnos").TransactionInput;\n  firstAttemptAt?: string;\n}
 
 export interface CategoryDialogInit {
   category?: Category;
@@ -62,8 +61,7 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
         onOpenChange={(open) => setTx((prev) => ({ ...prev, open }))}
         initialType={tx.type}
         initialDate={tx.date}
-        transaction={tx.transaction}
-      />
+        transaction={tx.transaction}\n        syncOperationId={tx.syncOperationId}\n        syncPayload={tx.syncPayload}\n        firstAttemptAt={tx.firstAttemptAt}\n      />
       <AccountDialog
         open={account.open}
         onOpenChange={(open) => setAccount((prev) => ({ ...prev, open }))}
