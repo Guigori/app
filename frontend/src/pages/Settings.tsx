@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronUp, GitCommitHorizontal, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
+import { BarChart3, Check, ChevronDown, ChevronUp, GitCommitHorizontal, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -195,6 +195,21 @@ export default function Settings() {
               </button>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="settings-charts-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 font-heading">
+            <BarChart3 className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+            Gráficos FINNOS
+          </CardTitle>
+          <CardDescription>Conheça a biblioteca visual oficial, a semântica das cores e onde cada gráfico é usado.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link to="/configuracoes/graficos" className={buttonVariants({ variant: "outline" })} data-testid="settings-charts-link">
+            Ver biblioteca de gráficos
+          </Link>
         </CardContent>
       </Card>
 
