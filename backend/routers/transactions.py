@@ -160,20 +160,49 @@ async def list_transactions(
 
 
 @router.post("", response_model=TransactionOut, status_code=201)
-async def create_transaction(\n    payload: TransactionIn,\n    user: dict = Depends(require_user),\n    x_finnos_operation_id: Optional[str] = Header(default=None),\n    x_finnos_source: Optional[str] = Header(default="manual"),\n) -> TransactionOut:\n    if x_finnos_operation_id:\n        existing = await db.transactions.find_one({"user_id": user["id"], "operation_id": x_finnos_operation_id})\n        if existing:\n            accounts_by_id, categories_by_id = await _ref_maps(user["id"])\n            return enrich_transaction(existing, accounts_by_id, categories_by_id, await _cards_by_id(user["id"]))\n    await _validate(user["id"], payload)\n    doc = _document(user["id"], payload)\n    doc["operation_id"] = x_finnos_operation_id\n    doc["source"] = x_finnos_source or "manual"
+async def create_transaction(
+    payload: TransactionIn,
+    user: dict = Depends(require_user),
+    x_finnos_operation_id: Optional[str] = Header(default=None),
+    x_finnos_source: Optional[str] = Header(default="manual"),
+) -> TransactionOut:
+    if x_finnos_operation_id:
+        existing = await db.transactions.find_one({"user_id": user["id"], "operation_id": x_finnos_operation_id})
+        if existing:
+            accounts_by_id, categories_by_id = await _ref_maps(user["id"])
+            return enrich_transaction(existing, accounts_by_id, categories_by_id, await _cards_by_id(user["id"]))
+    await _validate(user["id"], payload)
+    doc = _document(user["id"], payload)
+    doc["operation_id"] = x_finnos_operation_id
+    doc["source"] = x_finnos_source or "manual"
     await db.transactions.insert_one(doc)
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
     return enrich_transaction(doc, accounts_by_id, categories_by_id, await _cards_by_id(user["id"]))
 
 
 @router.put("/{tx_id}", response_model=TransactionOut)
-async def update_transaction(\n    tx_id: str,\n    payload: TransactionIn,\n    user: dict = Depends(require_user),\n    x_finnos_operation_id: Optional[str] = Header(default=None),\n    x_finnos_source: Optional[str] = Header(default="manual"),\n) -> TransactionOut:\n    if x_finnos_operation_id:\n        replay = await db.transactions.find_one({"id": tx_id, "user_id": user["id"], "operation_id": x_finnos_operation_id})\n        if replay:\n            accounts_by_id, categories_by_id = await _ref_maps(user["id"])\n            return enrich_transaction(replay, accounts_by_id, categories_by_id, await _cards_by_id(user["id"]))\n    await _validate(user["id"], payload)
+async def update_transaction(
+    tx_id: str,
+    payload: TransactionIn,
+    user: dict = Depends(require_user),
+    x_finnos_operation_id: Optional[str] = Header(default=None),
+    x_finnos_source: Optional[str] = Header(default="manual"),
+) -> TransactionOut:
+    if x_finnos_operation_id:
+        replay = await db.transactions.find_one({"id": tx_id, "user_id": user["id"], "operation_id": x_finnos_operation_id})
+        if replay:
+            accounts_by_id, categories_by_id = await _ref_maps(user["id"])
+            return enrich_transaction(replay, accounts_by_id, categories_by_id, await _cards_by_id(user["id"]))
+    await _validate(user["id"], payload)
     existing = await db.transactions.find_one({"id": tx_id, "user_id": user["id"]})
     if not existing:
         raise HTTPException(status_code=404, detail="Transação não encontrada.")
     doc = _document(user["id"], payload)
     doc["id"] = tx_id  # the id is stable across edits — regenerating it orphans the record
-    doc["created_at"] = existing.get("created_at")\n    doc["operation_id"] = x_finnos_operation_id\n    doc["source"] = x_finnos_source or "manual"\n    await db.transactions.replace_one({"_id": existing["_id"]}, doc)
+    doc["created_at"] = existing.get("created_at")
+    doc["operation_id"] = x_finnos_operation_id
+    doc["source"] = x_finnos_source or "manual"
+    await db.transactions.replace_one({"_id": existing["_id"]}, doc)
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
     return enrich_transaction(doc, accounts_by_id, categories_by_id, await _cards_by_id(user["id"]))
 
