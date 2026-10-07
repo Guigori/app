@@ -48,6 +48,29 @@ export function TransactionCalendar({
 }: TransactionCalendarProps) {
   const byDate = new Map(days.map((d) => [d.date, d]));
   const today = todayISO();
+  const maxMovement = Math.max(
+    0,
+    ...days
+      .filter((day) => day.date.slice(0, 7) === month)
+      .map((day) => day.income + day.expense + day.projected_income + day.projected_expense),
+  );
+  const heatLevel = (movement: number) => {
+    if (movement <= 0 || maxMovement <= 0) return 0;
+    const ratio = movement / maxMovement;
+    if (ratio <= 0.2) return 1;
+    if (ratio <= 0.4) return 2;
+    if (ratio <= 0.65) return 3;
+    if (ratio <= 0.85) return 4;
+    return 5;
+  };
+  const heatBackground = (level: number) => {
+    if (level === 0) return undefined;
+    if (level === 1) return "color-mix(in srgb, var(--finnos-purple) 18%, var(--card))";
+    if (level === 2) return "color-mix(in srgb, var(--finnos-purple) 34%, var(--card))";
+    if (level === 3) return "color-mix(in srgb, var(--finnos-purple-live) 54%, var(--card))";
+    if (level === 4) return "color-mix(in srgb, var(--finnos-violet) 76%, var(--finnos-purple))";
+    return "var(--finnos-purple-live)";
+  };
   const cells = buildCells(month);
   const weeks: Cell[][] = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
@@ -106,6 +129,8 @@ export function TransactionCalendar({
                 const hasIncome = (flow?.income ?? 0) + (flow?.projected_income ?? 0) > 0;
                 const hasExpense = (flow?.expense ?? 0) + (flow?.projected_expense ?? 0) > 0;
                 const selected = cell.date === selectedDate;
+                const movement = (flow?.income ?? 0) + (flow?.expense ?? 0) + (flow?.projected_income ?? 0) + (flow?.projected_expense ?? 0);
+                const level = cell.outside ? 0 : heatLevel(movement);
                 return (
                   <button
                     key={cell.date}
@@ -118,14 +143,17 @@ export function TransactionCalendar({
                   >
                     <span
                       className={cn(
-                        "relative flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold tabular-nums transition-colors duration-200",
+                        "relative flex h-9 w-9 items-center justify-center rounded-xl text-sm font-semibold tabular-nums transition-all duration-200",
                         selected
-                          ? "bg-primary text-primary-foreground"
+                          ? "ring-2 ring-white/90 ring-offset-2 ring-offset-card text-white"
                           : cell.outside
                             ? "text-muted-foreground/45"
-                            : "text-foreground hover:bg-muted",
-                        !selected && cell.date === today ? "ring-1 ring-primary/60" : undefined,
+                            : level >= 3
+                              ? "text-white hover:brightness-110"
+                              : "text-foreground hover:brightness-110",
+                        !selected && cell.date === today ? "ring-1 ring-primary/70" : undefined,
                       )}
+                      style={!cell.outside && level > 0 ? { backgroundColor: heatBackground(level) } : undefined}
                     >
                       {Number(cell.date.slice(8, 10))}
                     </span>
@@ -140,6 +168,19 @@ export function TransactionCalendar({
           ))}
         </motion.div>
       </AnimatePresence>
+
+      <div className="mt-2 flex items-center justify-end gap-1.5 px-2 text-[10px] text-muted-foreground" data-testid="calendar-heatmap-legend">
+        <span>Menos</span>
+        {[1, 2, 3, 4, 5].map((level) => (
+          <span
+            key={level}
+            className="h-3 w-3 rounded-[4px] border border-border/20"
+            style={{ backgroundColor: heatBackground(level) }}
+            aria-hidden="true"
+          />
+        ))}
+        <span>Mais</span>
+      </div>
 
       {/* Drag the handle up to collapse to the week, down to show the whole month. */}
       <motion.button
