@@ -103,21 +103,18 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
         : 0;
     const byDate = new Map(days.map((day) => [day.date, day]));
 
-    let actualIncome = 0;
-    let actualExpense = 0;
+    let realisedNet = 0;
     for (let dayNumber = 1; dayNumber <= cutoffDay; dayNumber += 1) {
       const date = `${month}-${String(dayNumber).padStart(2, "0")}`;
       const day = byDate.get(date);
-      actualIncome += day?.income ?? 0;
-      actualExpense += day?.expense ?? 0;
+      realisedNet += (day?.income ?? 0) - (day?.expense ?? 0);
     }
 
-    const actualNetAtCutoff = actualIncome - actualExpense;
-    const openingBalance = total - actualNetAtCutoff;
-    let cumulativeIncome = 0;
-    let cumulativeExpense = 0;
-    let projectedIncome = actualIncome;
-    let projectedExpense = actualExpense;
+    // `total` is the current account balance shown by FINNOS. Back into the
+    // opening balance so the realised line ends exactly at today's displayed balance.
+    const openingBalance = total - realisedNet;
+    let actualBalance = openingBalance;
+    let forecastBalance = total;
 
     return Array.from({ length: daysInMonth }, (_, index) => {
       const dayNumber = index + 1;
@@ -125,27 +122,18 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
       const day = byDate.get(date);
 
       if (dayNumber <= cutoffDay) {
-        cumulativeIncome += day?.income ?? 0;
-        cumulativeExpense += day?.expense ?? 0;
+        actualBalance += (day?.income ?? 0) - (day?.expense ?? 0);
       }
       if (dayNumber > cutoffDay) {
-        projectedIncome += day?.projected_income ?? 0;
-        projectedExpense += day?.projected_expense ?? 0;
+        forecastBalance += (day?.projected_income ?? 0) - (day?.projected_expense ?? 0);
       }
-
-      const atOrBeforeToday = dayNumber <= cutoffDay;
-      const atOrAfterToday = dayNumber >= cutoffDay && cutoffDay > 0;
-      const actualBalance = openingBalance + cumulativeIncome - cumulativeExpense;
-      const projectedBalance = total + (projectedIncome - actualIncome) - (projectedExpense - actualExpense);
 
       return {
         label: String(dayNumber).padStart(2, "0"),
-        ReceitasReal: atOrBeforeToday ? Math.round(cumulativeIncome * 100) / 100 : null,
-        DespesasReal: atOrBeforeToday ? Math.round(cumulativeExpense * 100) / 100 : null,
-        SaldoReal: atOrBeforeToday ? Math.round(actualBalance * 100) / 100 : null,
-        ReceitasPrevistas: atOrAfterToday ? Math.round(projectedIncome * 100) / 100 : null,
-        DespesasPrevistas: atOrAfterToday ? Math.round(projectedExpense * 100) / 100 : null,
-        SaldoPrevisto: atOrAfterToday ? Math.round(projectedBalance * 100) / 100 : null,
+        actual: dayNumber <= cutoffDay ? Math.round(actualBalance * 100) / 100 : null,
+        forecast: dayNumber >= cutoffDay && cutoffDay > 0
+          ? Math.round((dayNumber === cutoffDay ? total : forecastBalance) * 100) / 100
+          : null,
       };
     });
   }, [calendarQuery.data?.days, month, total]);
@@ -221,48 +209,52 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
         <div className="w-full pb-1">
           <div className="h-[300px] w-full sm:h-[330px]">
             <ResponsiveContainer width="100%" height="100%">
-              <RechartsLineChart data={projectionData} margin={{ top: 14, right: 8, left: -8, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={18} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+              <RechartsLineChart data={projectionData} margin={{ top: 16, right: 12, left: -8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="finnosForecastBand" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--finnos-purple)" stopOpacity={0.16} />
+                    <stop offset="100%" stopColor="var(--finnos-purple)" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.42} strokeDasharray="4 6" />
+                <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: "var(--border)" }} minTickGap={42} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
                 <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
                 <Tooltip
                   contentStyle={tooltipStyle}
                   formatter={(value: number, name: string) => [
                     money(value),
-                    name
-                      .replace("Real", "")
-                      .replace("Previstas", " · previsto")
-                      .replace("Previsto", " · previsto"),
+                    name === "actual" ? "Saldo real" : "Estimativa",
                   ]}
                   labelFormatter={(label) => `Dia ${label}`}
                 />
-                {showResult && metricVisible("Resultado") && (
-                  <>
-                    <Line type="monotone" dataKey="SaldoReal" name="ResultadoReal" stroke="var(--finnos-purple)" strokeWidth={3.25} dot={{ r: 2.5, fill: "var(--finnos-purple)", strokeWidth: 0 }} activeDot={{ r: 5 }} connectNulls={false} />
-                    <Line type="monotone" dataKey="SaldoPrevisto" name="ResultadoPrevisto" stroke="var(--chart-3)" strokeWidth={3} strokeDasharray="8 7" dot={false} activeDot={{ r: 5 }} connectNulls={false} />
-                  </>
-                )}
-                {showIncome && metricVisible("Receitas") && (
-                  <>
-                    <Line type="monotone" dataKey="ReceitasReal" name="ReceitasReal" stroke="var(--income)" strokeWidth={2.1} dot={{ r: 2, fill: "var(--income)", strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls={false} />
-                    <Line type="monotone" dataKey="ReceitasPrevistas" name="ReceitasPrevistas" stroke="var(--income)" strokeOpacity={0.7} strokeWidth={2} strokeDasharray="6 7" dot={false} connectNulls={false} />
-                  </>
-                )}
-                {showExpense && metricVisible("Despesas") && (
-                  <>
-                    <Line type="monotone" dataKey="DespesasReal" name="DespesasReal" stroke="var(--expense)" strokeWidth={2.1} dot={{ r: 2, fill: "var(--expense)", strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls={false} />
-                    <Line type="monotone" dataKey="DespesasPrevistas" name="DespesasPrevistas" stroke="var(--expense)" strokeOpacity={0.7} strokeWidth={2} strokeDasharray="6 7" dot={false} connectNulls={false} />
-                  </>
-                )}
+                <Area type="monotone" dataKey="forecast" stroke="none" fill="url(#finnosForecastBand)" connectNulls={false} />
+                <Line
+                  type="monotone"
+                  dataKey="actual"
+                  name="actual"
+                  stroke="var(--finnos-purple-live)"
+                  strokeWidth={3.25}
+                  dot={false}
+                  activeDot={{ r: 5, fill: "var(--finnos-purple-live)", stroke: "var(--background)", strokeWidth: 2 }}
+                  connectNulls={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="forecast"
+                  name="forecast"
+                  stroke="var(--finnos-violet)"
+                  strokeWidth={2.75}
+                  strokeDasharray="8 7"
+                  dot={false}
+                  activeDot={{ r: 5, fill: "var(--background)", stroke: "var(--finnos-violet)", strokeWidth: 3 }}
+                  connectNulls={false}
+                />
               </RechartsLineChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs">
-            <button type="button" onClick={() => setSelectedMetric(null)} className={`rounded-full border px-3 py-1.5 font-medium transition-colors ${selectedMetric === null ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"}`}>Todos</button>
-            {showIncome && <button type="button" onClick={() => setSelectedMetric("Receitas")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium ${selectedMetric === "Receitas" ? "border-income bg-income/10 text-income" : "border-border text-muted-foreground"}`}><ArrowDownLeft className="h-3.5 w-3.5" />Receitas</button>}
-            {showExpense && <button type="button" onClick={() => setSelectedMetric("Despesas")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium ${selectedMetric === "Despesas" ? "border-expense bg-expense/10 text-expense" : "border-border text-muted-foreground"}`}><ArrowUpRight className="h-3.5 w-3.5" />Despesas</button>}
-            {showResult && <button type="button" onClick={() => setSelectedMetric("Resultado")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium ${selectedMetric === "Resultado" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}><Equal className="h-3.5 w-3.5" />Resultado</button>}
-            <span className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-muted-foreground"><span className="h-0 w-5 border-t-2 border-dashed border-[var(--chart-3)]" />Previsto</span>
+          <div className="mt-1 flex items-center justify-center gap-5 text-xs text-muted-foreground">
+            <span className="flex items-center gap-2"><span className="h-0 w-6 border-t-[3px] border-[var(--finnos-purple-live)]" />Saldo real</span>
+            <span className="flex items-center gap-2"><span className="h-0 w-6 border-t-[3px] border-dashed border-[var(--finnos-violet)]" />Estimativa</span>
           </div>
         </div>
       ) : view === "pie" ? (
@@ -383,7 +375,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
               <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Em 7 dias e 1 mês, o gráfico mostra a evolução dia a dia. Em 6 meses e 1 ano, compara os meses.</p>
             </fieldset>
             )}
-            {view !== "cards" && view !== "pie" && (
+            {view !== "cards" && view !== "pie" && view !== "projection" && (
               <fieldset>
                 <legend className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Exibir no gráfico</legend>
                 <div className="space-y-2.5">
