@@ -122,54 +122,42 @@ export function TransactionCalendar({
           transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
           className="mt-1"
         >
-          {visibleWeeks.map((week, weekIndex) => (
-            <div key={weekIndex} className="grid grid-cols-7">
-              {week.map((cell) => {
-                const flow = byDate.get(cell.date);
-                const hasIncome = (flow?.income ?? 0) + (flow?.projected_income ?? 0) > 0;
-                const hasExpense = (flow?.expense ?? 0) + (flow?.projected_expense ?? 0) > 0;
-                const selected = cell.date === selectedDate;
-                const movement = (flow?.income ?? 0) + (flow?.expense ?? 0) + (flow?.projected_income ?? 0) + (flow?.projected_expense ?? 0);
-                const level = cell.outside ? 0 : heatLevel(movement);
-                return (
-                  <button
-                    key={cell.date}
-                    type="button"
-                    onClick={() => onSelectDate(cell.date)}
-                    aria-label={`Ver lançamentos de ${cell.date}`}
-                    aria-current={selected ? "date" : undefined}
-                    className="flex flex-col items-center gap-1 py-1.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                    data-testid={`calendar-day-${cell.date}`}
-                  >
-                    <span
-                      className={cn(
-                        "relative flex h-full w-full min-h-11 items-center justify-center rounded-xl border border-border/25 text-sm font-semibold tabular-nums transition-all duration-200",
-                        selected
-                          ? "ring-2 ring-white/90 ring-offset-2 ring-offset-card text-white shadow-sm"
-                          : cell.outside
-                            ? "border-transparent bg-transparent text-muted-foreground/45"
-                            : level >= 3
-                              ? "text-white hover:brightness-110"
-                              : "text-foreground hover:brightness-110",
-                        !selected && cell.date === today ? "ring-1 ring-primary/70" : undefined,
-                      )}
-                      style={!cell.outside ? { backgroundColor: level > 0 ? heatBackground(level) : "color-mix(in srgb, var(--finnos-app) 14%, var(--card))" } : undefined}
-                    >
-                      {Number(cell.date.slice(8, 10))}
-                    </span>
-                    <span className="flex h-1.5 items-center gap-0.5" aria-hidden="true">
-                      {hasIncome ? <span className="h-1.5 w-1.5 rounded-full bg-income" /> : null}
-                      {hasExpense ? <span className="h-1.5 w-1.5 rounded-full bg-expense" /> : null}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+          {visibleWeeks.flat().map((cell) => {
+            const flow = byDate.get(cell.date);
+            const selected = cell.date === selectedDate;
+            const movement = (flow?.income ?? 0) + (flow?.expense ?? 0) + (flow?.projected_income ?? 0) + (flow?.projected_expense ?? 0);
+            const level = cell.outside ? 0 : heatLevel(movement);
+            return (
+              <button
+                key={cell.date}
+                type="button"
+                onClick={() => onSelectDate(cell.date)}
+                aria-label={`Ver lançamentos de ${cell.date}`}
+                aria-current={selected ? "date" : undefined}
+                className={cn(
+                  "relative flex aspect-square min-h-11 items-center justify-center rounded-xl border text-sm font-semibold tabular-nums transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  selected
+                    ? "border-white/80 ring-2 ring-white/90 ring-offset-2 ring-offset-card text-white shadow-sm"
+                    : cell.outside
+                      ? "border-transparent bg-transparent text-muted-foreground/35"
+                      : level >= 3
+                        ? "border-border/20 text-white hover:brightness-110"
+                        : "border-border/20 text-foreground hover:brightness-110",
+                  !selected && cell.date === today ? "ring-1 ring-primary/70" : undefined,
+                )}
+                style={!cell.outside ? { backgroundColor: level > 0 ? heatBackground(level) : "color-mix(in srgb, var(--finnos-app) 14%, var(--card))" } : undefined}
+                data-testid={`calendar-day-${cell.date}`}
+              >
+                {Number(cell.date.slice(8, 10))}
+              </button>
+            );
+          })}
+          </div>
         </motion.div>
       </AnimatePresence>
 
-      <div className="mt-2 flex items-center justify-end gap-1.5 px-2 text-[10px] text-muted-foreground" data-testid="calendar-heatmap-legend">
+      <div className="mt-3 flex items-center justify-end gap-1.5 px-2 text-[10px] text-muted-foreground" data-testid="calendar-heatmap-legend">
         <span>Menos</span>
         {[1, 2, 3, 4, 5].map((level) => (
           <span
@@ -181,6 +169,8 @@ export function TransactionCalendar({
         ))}
         <span>Mais</span>
       </div>
+
+      <p className="mt-2 px-2 text-[11px] leading-relaxed text-muted-foreground">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>
 
       {/* Drag the handle up to collapse to the week, down to show the whole month. */}
       <motion.button
