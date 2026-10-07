@@ -130,29 +130,43 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   const installments = installment ? parseInt(totalInstallments, 10) || 0 : 0;
   const installmentValue = installment && totalValue && installments >= 2 ? totalValue / installments : null;
 
+  const refreshFinancialViews = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["transactions"] }),
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+      queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+      queryClient.invalidateQueries({ queryKey: ["account"] }),
+      queryClient.invalidateQueries({ queryKey: ["budget"] }),
+      queryClient.invalidateQueries({ queryKey: ["trends"] }),
+      queryClient.invalidateQueries({ queryKey: ["calendar"] }),
+      queryClient.invalidateQueries({ queryKey: ["flow"] }),
+      queryClient.invalidateQueries({ queryKey: ["cards"] }),
+      queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+    ]);
+  };
+
   const mutation = useMutation({
-    mutationFn: (input: TransactionInput) =>
-      transaction ? updateTransaction(transaction.id, input) : createTransaction(input),
+    mutationFn: async (input: TransactionInput) => {
+      if (syncOperationId) {
+        await updateQueuedTransaction(syncOperationId, input);
+        if (navigator.onLine) await flushSyncQueue();
+        return undefined;
+      }
+      return transaction ? updateTransaction(transaction.id, input) : createTransaction(input);
+    },
     onSuccess: async () => {
-      toast.success(syncOperationId ? "Registro confirmado e sincronizado." : transaction ? "Transação atualizada." : "Transação registrada.");
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["transactions"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
-        queryClient.invalidateQueries({ queryKey: ["account"] }),
-        queryClient.invalidateQueries({ queryKey: ["budget"] }),
-        queryClient.invalidateQueries({ queryKey: ["trends"] }),
-        queryClient.invalidateQueries({ queryKey: ["calendar"] }),
-        queryClient.invalidateQueries({ queryKey: ["flow"] }),
-        queryClient.invalidateQueries({ queryKey: ["cards"] }),
-        queryClient.invalidateQueries({ queryKey: ["notifications"] }),
-      ]);
+      toast.success(syncOperationId ? "Registro confirmado e sincronizado." : transaction ? "Transação atualizada." : "Transação registrada.", { duration: 3000 });
+      await refreshFinancialViews();
       onOpenChange(false);
     },
-    onError: (error) => {
+    onError: async (error) => {
       if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
-        toast.info("Salvo neste aparelho", { description: "Aguardando conexão para sincronizar com sua conta FINNOS." });
         onOpenChange(false);
+        toast.info("Salvo neste aparelho", {
+          description: "Será sincronizado automaticamente quando a conexão voltar.",
+          duration: 3500,
+        });
+        await refreshFinancialViews();
         return;
       }
       setFormError(getApiErrorMessage(error));
