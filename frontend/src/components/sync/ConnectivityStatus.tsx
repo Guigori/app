@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Cloud, CloudOff, Loader2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { flushSyncQueue, listSyncOperations, type SyncOperation } from "@/lib/sync/queue";
@@ -13,111 +13,143 @@ export function ConnectivityStatus() {
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [pulse, setPulse] = useState(false);
-  const refresh = async () => setPending((await listSyncOperations()).length);
+  const collapseTimer = useRef<number | null>(null);
+
+  const collapseLater = useCallback((delay = 4200) => {
+    if (collapseTimer.current) window.clearTimeout(collapseTimer.current);
+    collapseTimer.current = window.setTimeout(() => setExpanded(false), delay);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const operations = await listSyncOperations();
+    setPending(operations.length);
+    return operations;
+  }, []);
+
+  const runSync = useCallback(async (announceReconnect = false) => {
+    if (!navigator.onLine) return;
+    setState("online");
+    const before = await listSyncOperations();
+    if (before.length === 0) {
+      setPending(0);
+      setSyncing(false);
+      setExpanded(false);
+      if (announceReconnect) {
+        toast.success("Conexão restabelecida", {
+          description: "O FINNOS voltou a ficar online.",
+          duration: 3000,
+        });
+      }
+      return;
+    }
+
+    setPending(before.length);
+    setSyncing(true);
+    setExpanded(true);
+    if (announceReconnect) {
+      toast.success("Conexão restabelecida", {
+        description: "O FINNOS voltou a ficar online. Seus dados estão sendo sincronizados.",
+        duration: 3200,
+      });
+    }
+
+    try {
+      await flushSyncQueue();
+      const after = await refresh();
+      if (after.length === 0) {
+        toast.success("Sincronização concluída", {
+          description: "Todos os dados pendentes foram sincronizados com sua conta FINNOS.",
+          duration: 3500,
+        });
+        setExpanded(false);
+      } else {
+        setExpanded(false);
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }, [refresh]);
 
   useEffect(() => {
-    void refresh();
     const syncState = () => void refresh();
-    const syncSuccess = (event: Event) => {
-      const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;
-      toast.success("Sincronizado", {
-        description: `Registro de ${new Date(op.createdAt).toLocaleString("pt-BR")} salvo na sua conta FINNOS.`,
-        duration: 3500,
-      });
-    };
     const syncError = (event: Event) => {
       const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;
+      setExpanded(false);
       toast.error("Não foi possível sincronizar", {
-        description: `O registro continua salvo neste aparelho. Primeira tentativa: ${new Date(op.createdAt).toLocaleString("pt-BR")}.`,
-        duration: 6500,
+        description: "O registro continua salvo neste aparelho e poderá ser revisado.",
+        duration: 5000,
         action: { label: "Revisar", onClick: () => openTransaction({ syncOperationId: op.id, syncPayload: op.payload, firstAttemptAt: op.createdAt }) },
       });
     };
     const offline = () => {
       setState("offline");
       setSyncing(false);
-      setPulse(true);
-      window.setTimeout(() => setPulse(false), 2200);
       setExpanded(true);
-      window.setTimeout(() => setExpanded(false), 4200);
+      collapseLater();
+      void refresh();
     };
-    const online = async () => {
-      setState("online");
-      setExpanded(false);
-      setSyncing(true);
-      toast.dismiss("finnos-offline");
-      try {
-        toast.success("Conexão restabelecida", {
-          description: pending > 0 ? "O FINNOS voltou a ficar online. Seus dados estão sendo sincronizados." : "O FINNOS voltou a ficar online.",
-          id: "finnos-online",
-          duration: 3500,
-        });
-        await flushSyncQueue();
-        const remaining = (await listSyncOperations()).length;
-        if (remaining === 0 && pending > 0) {
-          toast.success("Sincronização concluída", {
-            description: "Todos os dados pendentes foram sincronizados com sua conta FINNOS.",
-            duration: 3500,
-          });
-        }
-      } finally {
-        setSyncing(false);
-        await refresh();
-      }
-    };
+    const online = () => void runSync(true);
     const visible = () => {
-      if (document.visibilityState === "visible" && navigator.onLine) void online();
+      if (document.visibilityState === "visible" && navigator.onLine) void runSync(false);
     };
+
     window.addEventListener("offline", offline);
     window.addEventListener("online", online);
     window.addEventListener("finnos:sync-state", syncState);
-    window.addEventListener("finnos:sync-success", syncSuccess);
     window.addEventListener("finnos:sync-error", syncError);
     document.addEventListener("visibilitychange", visible);
+
     if (!navigator.onLine) offline();
-    else void flushSyncQueue().finally(refresh);
+    else void runSync(false);
+
     return () => {
       window.removeEventListener("offline", offline);
       window.removeEventListener("online", online);
       window.removeEventListener("finnos:sync-state", syncState);
-      window.removeEventListener("finnos:sync-success", syncSuccess);
       window.removeEventListener("finnos:sync-error", syncError);
       document.removeEventListener("visibilitychange", visible);
+      if (collapseTimer.current) window.clearTimeout(collapseTimer.current);
     };
-  }, [openTransaction]);
+  }, [collapseLater, openTransaction, refresh, runSync]);
 
   if (state === "online" && pending === 0 && !syncing) return null;
 
-  const label = syncing ? "Sincronizando…" : state === "offline"
-    ? (pending ? `${pending} pendente${pending > 1 ? "s" : ""}` : "Sem conexão")
-    : `${pending} aguardando`;
+  const expand = () => {
+    setExpanded(true);
+    collapseLater(5000);
+  };
 
   return (
     <button
       type="button"
-      onClick={() => { setExpanded((v) => !v); if (!expanded) window.setTimeout(() => setExpanded(false), 5000); }}
+      onClick={expanded ? () => setExpanded(false) : expand}
       className={cn(
-        "fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-[70] flex -translate-x-1/2 items-center overflow-hidden rounded-full border bg-background/90 text-xs font-medium text-foreground shadow-md backdrop-blur-xl transition-all duration-500",
-        expanded ? "max-w-[88vw] gap-2 px-3 py-2" : "h-10 max-w-[11rem] gap-2 px-3",
+        "fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-[70] flex -translate-x-1/2 select-none items-center justify-center overflow-hidden rounded-full border bg-background/92 text-xs font-medium text-foreground shadow-md backdrop-blur-xl transition-[width,padding,transform,opacity] duration-300 touch-manipulation",
+        expanded ? "w-auto max-w-[calc(100vw-2rem)] gap-2 px-4 py-2.5" : "size-10 p-0",
         state === "offline" ? "border-amber-500/35" : "border-primary/25",
-        pulse && "scale-105",
       )}
       role="status"
       aria-live="polite"
       aria-expanded={expanded}
+      aria-label={state === "offline" ? "Sem conexão" : syncing ? "Sincronizando" : "Sincronização pendente"}
       data-testid="offline-status"
     >
-      <span className="relative grid size-5 shrink-0 place-items-center">
+      <span className="grid size-5 shrink-0 place-items-center">
         {syncing ? <Loader2 className="size-4 animate-spin text-primary" /> :
-          state === "offline" ? <CloudOff className="size-4 text-amber-500 animate-[pulse_1.8s_ease-in-out_infinite]" /> :
+          state === "offline" ? <CloudOff className="size-4 text-amber-500" /> :
           <Cloud className="size-4 text-primary" />}
       </span>
-      <span className={cn("whitespace-nowrap transition-all duration-500", !expanded && state === "offline" && "animate-[pulse_2.4s_ease-in-out_infinite]")}>
-        {expanded && state === "offline"
-          ? (pending ? `Você está offline · ${pending} lançamento${pending > 1 ? "s" : ""} salvo${pending > 1 ? "s" : ""} neste aparelho` : "Você está offline · os dados disponíveis neste aparelho continuam funcionando")
-          : label}
-      </span>
+      {expanded && (
+        <span className="min-w-0 whitespace-normal text-left leading-snug">
+          {syncing
+            ? `Sincronizando ${pending} lançamento${pending === 1 ? "" : "s"}…`
+            : state === "offline"
+              ? (pending
+                ? `Você está offline · ${pending} lançamento${pending === 1 ? "" : "s"} salvo${pending === 1 ? "" : "s"} neste aparelho`
+                : "Você está offline · os dados disponíveis neste aparelho continuam funcionando")
+              : `${pending} lançamento${pending === 1 ? "" : "s"} aguardando sincronização`}
+        </span>
+      )}
     </button>
   );
 }
