@@ -5,7 +5,10 @@ import { queryClient } from "@/lib/queryClient";
 import { clearAccountCache } from "@/lib/offline/accountCache";
 
 /** After login/signup: drop stale cache so the app fetches the new session's data. */
-export async function beginSession(): Promise<void> {\n  queryClient.clear();\n  await clearAccountCache();\n}
+export async function beginSession(): Promise<void> {
+  queryClient.clear();
+  await clearAccountCache();
+}
 
 /** Every sign-out control must go through here — clearing only the server session
  *  would leak the previous account's cached data into the next login. */
@@ -13,4 +16,7 @@ export async function endSession(): Promise<void> {
   try {
     await apiPost("/auth/logout");
   } finally {
-    queryClient.clear();\n    await clearAccountCache();\n  }\n}
+    queryClient.clear();
+    await clearAccountCache();
+  }
+}
