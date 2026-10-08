@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -56,6 +56,8 @@ export function MobileNav() {
   const navigationPreferences = useNavigationPreferences();
   const mobileItems = navItemsFor(navigationPreferences.mobile);
   const navigate = useNavigate();
+  const location = useLocation();
+  const activeIndex = mobileItems.findIndex((item) => item.to === location.pathname || (item.to === "/" && location.pathname === "/"));
   const [quickOpen, setQuickOpen] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const [visible, setVisible] = useState(true);
@@ -131,7 +133,7 @@ export function MobileNav() {
         data-testid="mobile-nav"
       >
         <div className="flex w-full max-w-[28rem] items-center gap-2">
-          <div style={{ gridTemplateColumns: `repeat(${Math.max(mobileItems.length, 1)}, minmax(0, 1fr))` }}
+          <div style={{ gridTemplateColumns: mobileItems.map((_, index) => `${index === activeIndex ? 2.1 : 1}fr`).join(" ") || "1fr" }}
           className="grid min-w-0 flex-1 items-center rounded-full border border-[#070F52]/10 bg-[#eeeeef]/85 p-1 shadow-[0_8px_28px_rgba(3,8,31,.12),inset_0_1px_0_rgba(255,255,255,.85)] backdrop-blur-[28px] dark:border-white/15 dark:bg-[#161625]/80">
             {mobileItems.map((item) => (
               <MobileTab key={item.to} item={item} onNavigate={navigateFromDock} />
