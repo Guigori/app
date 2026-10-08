@@ -61,6 +61,9 @@ export function MobileNav() {
   const [quickOpen, setQuickOpen] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const [visible, setVisible] = useState(true);
+  const [compact, setCompact] = useState(false);
+  const lastScrollY = useRef(0);
+  const scrollDistance = useRef(0);
   const timer = useRef<number | null>(null);
   const transitionTimer = useRef<number | null>(null);
 
@@ -75,18 +78,40 @@ export function MobileNav() {
   };
 
   useEffect(() => {
-    const showAfterIdle = () => {
-      setVisible(false);
+    lastScrollY.current = window.scrollY;
+    const handleScroll = () => {
+      const current = window.scrollY;
+      const delta = current - lastScrollY.current;
+      lastScrollY.current = current;
+      if (quickOpen) return;
+      if (current < 24) {
+        setVisible(true);
+        setCompact(false);
+        scrollDistance.current = 0;
+      } else if (Math.abs(delta) > 1) {
+        scrollDistance.current = Math.max(0, scrollDistance.current + Math.abs(delta));
+        setCompact(true);
+        if (scrollDistance.current > 110) setVisible(false);
+      }
       if (timer.current) window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(() => setVisible(true), 220);
+      timer.current = window.setTimeout(() => {
+        setVisible(true);
+        setCompact(false);
+        scrollDistance.current = 0;
+      }, 320);
     };
-    window.addEventListener("scroll", showAfterIdle, { passive: true });
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
-      window.removeEventListener("scroll", showAfterIdle);
+      window.removeEventListener("scroll", handleScroll);
       if (timer.current) window.clearTimeout(timer.current);
-      if (transitionTimer.current) window.clearTimeout(transitionTimer.current);
     };
-  }, []);
+  }, [quickOpen]);
+
+  useEffect(() => {
+    setVisible(true);
+    setCompact(false);
+    scrollDistance.current = 0;
+  }, [location.pathname]);
 
   return (
     <>
@@ -124,8 +149,8 @@ export function MobileNav() {
 
       <motion.nav
         initial={false}
-        animate={{ opacity: visible ? 1 : 0, y: visible ? 0 : 18, scale: visible ? 1 : 0.97 }}
-        transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+        animate={{ opacity: visible ? 1 : 0, y: visible ? 0 : 90, scale: visible ? (compact ? 0.94 : 1) : 0.94 }}
+        transition={{ type: "spring", stiffness: 280, damping: 34, mass: 0.85 }}
         className={cn(
           "fixed inset-x-0 bottom-[max(0.7rem,env(safe-area-inset-bottom))] z-40 flex justify-center px-3 dashboard:hidden",
           !visible && "pointer-events-none"
@@ -134,7 +159,7 @@ export function MobileNav() {
       >
         <div className="flex w-full max-w-[28rem] items-center gap-2.5">
           <div style={{ gridTemplateColumns: mobileItems.map((_, index) => `${index === activeIndex ? 2.35 : 1}fr`).join(" ") || "1fr" }}
-          className="grid min-w-0 flex-1 items-center rounded-full border-2 border-[#D8D8D8] bg-[#EEEEEE]/95 p-[3px] shadow-none backdrop-blur-[20px] dark:border-white/15 dark:bg-[#161625]/80">
+          className={cn("grid min-w-0 flex-1 items-center rounded-full border border-white/50 bg-[#eeeeee]/75 p-[3px] shadow-[0_4px_22px_rgba(0,0,0,.08)] backdrop-blur-[28px] transition-[background-color,box-shadow] duration-300 dark:border-white/15 dark:bg-[#161625]/75", compact && "bg-[#eeeeee]/45 shadow-[0_2px_12px_rgba(0,0,0,.05)]")}>
             {mobileItems.map((item) => (
               <MobileTab key={item.to} item={item} onNavigate={navigateFromDock} />
             ))}
@@ -142,7 +167,7 @@ export function MobileNav() {
 
           <DropdownMenu open={quickOpen} onOpenChange={setQuickOpen}>
             <DropdownMenuTrigger
-              className={cn("flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-[#4B2CFF] text-white shadow-none transition-all active:scale-90", quickOpen && "scale-95 bg-[#5B35FF]")}
+              className={cn("flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-[#4B2CFF] text-white shadow-[0_4px_18px_rgba(75,44,255,.18)] transition-all duration-300 active:scale-95", quickOpen && "bg-[#5B35FF]")}
               aria-label="Adicionar lançamento"
               data-testid="mobile-quick-action-button"
             >
