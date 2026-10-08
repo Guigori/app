@@ -19,21 +19,32 @@ function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: strin
       }}
       className={({ isActive }) =>
         cn(
-          "flex h-14 min-w-14 items-center justify-center rounded-full transition-all duration-200",
+          "relative flex h-[3.55rem] min-w-0 items-center justify-center overflow-hidden rounded-full px-2 transition-colors duration-200",
           isActive
-            ? "text-primary"
-            : "text-muted-foreground"
+            ? "bg-white text-[#070F52] shadow-[0_2px_12px_rgba(3,8,31,.08)] dark:bg-white/95 dark:text-[#070F52]"
+            : "text-[#070F52]/65 dark:text-white/70"
         )
       }
       data-testid={`mobile-nav-${item.slug}`}
     >
       {({ isActive }) => (
         <motion.span
-          animate={{ scale: isActive ? 1.08 : 1 }}
-          transition={{ type: "spring", stiffness: 420, damping: 28 }}
+          layout
+          className="flex min-w-0 items-center justify-center gap-2"
+          transition={{ type: "spring", stiffness: 380, damping: 34 }}
         >
-          <item.icon className="h-6 w-6" aria-hidden="true" />
-          <span className="sr-only">{item.label}</span>
+          <item.icon className="h-[1.45rem] w-[1.45rem] shrink-0" aria-hidden="true" />
+          {isActive ? (
+            <motion.span
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: "auto" }}
+              className="overflow-hidden whitespace-nowrap text-[clamp(.65rem,2.5vw,.88rem)] font-semibold"
+            >
+              {item.label}
+            </motion.span>
+          ) : (
+            <span className="sr-only">{item.label}</span>
+          )}
         </motion.span>
       )}
     </NavLink>
@@ -121,7 +132,7 @@ export function MobileNav() {
       >
         <div className="flex w-full max-w-[28rem] items-center gap-2">
           <div style={{ gridTemplateColumns: `repeat(${Math.max(mobileItems.length, 1)}, minmax(0, 1fr))` }}
-          className="grid min-w-0 flex-1 items-center rounded-[2.15rem] border border-white/15 bg-background/55 p-1.5 shadow-[0_10px_35px_rgba(0,0,0,.24),inset_0_1px_0_rgba(255,255,255,.14)] backdrop-blur-[28px] supports-[backdrop-filter]:bg-background/45">
+          className="grid min-w-0 flex-1 items-center rounded-full border border-[#070F52]/10 bg-[#eeeeef]/85 p-1 shadow-[0_8px_28px_rgba(3,8,31,.12),inset_0_1px_0_rgba(255,255,255,.85)] backdrop-blur-[28px] dark:border-white/15 dark:bg-[#161625]/80">
             {mobileItems.map((item) => (
               <MobileTab key={item.to} item={item} onNavigate={navigateFromDock} />
             ))}
@@ -129,7 +140,7 @@ export function MobileNav() {
 
           <DropdownMenu open={quickOpen} onOpenChange={setQuickOpen}>
             <DropdownMenuTrigger
-              className={cn("flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full border border-white/15 bg-background/55 shadow-[0_10px_35px_rgba(0,0,0,.24),inset_0_1px_0_rgba(255,255,255,.16)] backdrop-blur-[28px] transition-all active:scale-90 supports-[backdrop-filter]:bg-background/45", quickOpen ? "text-primary" : "text-muted-foreground")}
+              className={cn("flex h-[4.05rem] w-[4.05rem] shrink-0 items-center justify-center rounded-full bg-[#4B2CFF] text-white shadow-[0_8px_26px_rgba(75,44,255,.28)] transition-all active:scale-90", quickOpen && "scale-95 bg-[#5B35FF]")}
               aria-label="Adicionar lançamento"
               data-testid="mobile-quick-action-button"
             >
