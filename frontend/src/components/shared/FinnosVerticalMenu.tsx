@@ -35,16 +35,15 @@ export function FinnosVerticalMenu({month,onMonthChange,hidden,onToggleHidden,vi
   const [localRange,setLocalRange]=useState(interval);
   const [localSeries,setLocalSeries]=useState<FinnosSeries[]>(series);
   const [localView,setLocalView]=useState<FinnosView>(view);
-  const [localMonth,setLocalMonth]=useState(month);
   const effectiveRange=onIntervalChange?interval:localRange;
   const effectiveSeries=onSeriesChange?series:localSeries;
   const effectiveView=onViewChange?view:localView;
-  const currentMonth=onMonthChange?month:localMonth;
+  const currentMonth=month;
   const [yearString,monthString]=currentMonth.split("-");
   const year=Number(yearString)||new Date().getFullYear();
   const monthIndex=Math.max(0,Math.min(11,(Number(monthString)||1)-1));
   const filterActive=effectiveRange!=="1 mês"||movement!=="Todos"||category!=="Todas"||search.trim()!==""||ALL_SERIES.some(s=>!effectiveSeries.includes(s));
-  const changeYear=(y:number)=>{const next=`${y}-${String(monthIndex+1).padStart(2,"0")}`;setLocalMonth(next);onMonthChange(next)};
+  const changeYear=(y:number)=>{const next=`${y}-${String(monthIndex+1).padStart(2,"0")}`;onMonthChange(next)};
   const changeMonth=(m:number)=>{const next=`${year}-${String(m+1).padStart(2,"0")}`;setLocalMonth(next);onMonthChange(next)};
   const changeView=(v:FinnosView)=>{setLocalView(v);onViewChange?.(v)};
   const changeRange=(v:string)=>{setLocalRange(v);onIntervalChange?.(v)};
