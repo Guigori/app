@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Eye, EyeOff, SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 import { useBalanceHidden } from "@/lib/balance";
 import { fetchAccounts, fetchDashboard, fetchMe, fetchRadar, fetchTransactions } from "@/lib/data";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
@@ -16,7 +16,7 @@ import { Budget503020Card } from "@/components/dashboard/Budget503020Card";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 
-import { MonthSelector } from "@/components/dashboard/MonthSelector";
+import { FinnosVerticalMenu } from "@/components/shared/FinnosVerticalMenu";
 import { RadarSection } from "@/components/dashboard/RadarSection";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -101,11 +101,8 @@ export default function Dashboard() {
             Visão geral de {monthLabel(activeMonth)}
           </p>
         </div>
-        <div className="absolute right-0 top-6 z-20 flex shrink-0 flex-col items-center gap-1 sm:right-0 sm:top-7" data-testid="dashboard-action-rail">
-          {data ? <MonthSelector month={data.month} onChange={setMonth} /> : null}
-          <Button variant="ghost" size="icon" onClick={toggleBalance} aria-label={balanceHidden ? "Exibir valores" : "Ocultar valores"} data-testid="dashboard-visibility-toggle" className="h-10 w-10 rounded-full hover:bg-muted/60">
-            {balanceHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-          </Button>
+        <div className="absolute right-0 top-6 z-30 sm:top-7" data-testid="dashboard-action-rail">
+          <FinnosVerticalMenu month={activeMonth} onMonthChange={setMonth} hidden={balanceHidden} onToggleHidden={toggleBalance} />
         </div>
       </div>
 
