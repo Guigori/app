@@ -6,13 +6,12 @@ import {
   Home,
   PieChart,
   ChartNoAxesCombined,
-  PiggyBank,
   Repeat,
   Radar,
   Settings,
   Sparkles,
   Tags,
-  TrendingUp,
+  Landmark,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -39,7 +38,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/", label: "Início", icon: Home, slug: "inicio" },
       { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
-      { to: "/contas", label: "Contas e cartões", icon: Wallet, slug: "contas" },
+      { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
       { to: "/configuracoes#ia", label: "FINNOS IA", icon: Sparkles, slug: "ia" },
     ],
   },
@@ -50,7 +49,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/fluxo", label: "Fluxo", icon: ArrowUpDown, slug: "fluxo" },
       { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
       { to: "/radar", label: "Radar", icon: Radar, slug: "radar" },
-      { to: "/metas", label: "Metas", icon: PiggyBank, soon: true, slug: "metas" },
+      { to: "/patrimonio", label: "Patrimônio", icon: Landmark, slug: "patrimonio" },
     ],
   },
   {
@@ -61,7 +60,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/categorias", label: "Categorias", icon: Tags, slug: "categorias" },
       { to: "/cartoes", label: "Cartões", icon: CreditCard, slug: "cartoes" },
       { to: "/assinaturas", label: "Assinaturas", icon: Repeat, slug: "assinaturas" },
-      { to: "/investimentos", label: "Investimentos", icon: TrendingUp, soon: true, slug: "investimentos" },
     ],
   },
   {
@@ -80,7 +78,7 @@ export const TOP_TABS: NavItem[] = [
   { to: "/fluxo", label: "Fluxo", icon: ArrowUpDown, slug: "fluxo" },
   { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
   { to: "/categorias", label: "Categorias", icon: Tags, slug: "categorias" },
-  { to: "/contas", label: "Contas", icon: Wallet, slug: "contas" },
+  { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
 ];
 
 /** Bottom bar on mobile — the central "+" sits between these two pairs. */
@@ -97,7 +95,7 @@ export const BOTTOM_RIGHT: NavItem[] = [
 export const PAGE_TITLES: Record<string, string> = {
   "/": "Início",
   "/transacoes": "Fluxo",
-  "/contas": "Contas",
+  "/contas": "Carteira",
   "/analise": "Análise",
   "/categorias": "Categorias",
   "/fluxo": "Fluxo",
@@ -105,7 +103,8 @@ export const PAGE_TITLES: Record<string, string> = {
   "/radar": "Radar",
   "/cartoes": "Cartões",
   "/assinaturas": "Assinaturas",
-  "/metas": "Metas",
-  "/investimentos": "Investimentos",
+  "/patrimonio": "Patrimônio",
+  "/metas": "Patrimônio",
+  "/investimentos": "Patrimônio",
   "/configuracoes": "Configurações",
 };
