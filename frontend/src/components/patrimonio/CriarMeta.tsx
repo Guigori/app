@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Sparkles, Target, Wallet, ShieldCheck, CalendarDays } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Sparkles, Target } from "lucide-react";
 
 type Mode = "tradicional" | "inteligente";
 type Props = { onClose: () => void };
