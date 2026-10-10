@@ -16,7 +16,7 @@ import { Budget503020Card } from "@/components/dashboard/Budget503020Card";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 
-import { FinnosVerticalMenu } from "@/components/shared/FinnosVerticalMenu";
+import { FinnosVerticalMenu, type FinnosView, type FinnosSeries } from "@/components/shared/FinnosVerticalMenu";
 import { RadarSection } from "@/components/dashboard/RadarSection";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -40,6 +40,9 @@ export default function Dashboard() {
     staleTime: 5 * 60 * 1000,
   });
   const [month, setMonth] = useState<string | null>(null);
+  const [menuView, setMenuView] = useState<FinnosView>("Projeção");
+  const [menuInterval, setMenuInterval] = useState("1 mês");
+  const [menuSeries, setMenuSeries] = useState<FinnosSeries[]>(["Receitas","Despesas","Resultado"]);
   const [selectedCategory, setSelectedCategory] = useState<CategorySlice | null>(null);
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", month],
@@ -102,7 +105,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="absolute right-0 top-6 z-30 sm:top-7" data-testid="dashboard-action-rail">
-          <FinnosVerticalMenu month={activeMonth} onMonthChange={setMonth} hidden={balanceHidden} onToggleHidden={toggleBalance} />
+          <FinnosVerticalMenu month={activeMonth} onMonthChange={setMonth} hidden={balanceHidden} onToggleHidden={toggleBalance} view={menuView} onViewChange={setMenuView} interval={menuInterval} onIntervalChange={setMenuInterval} series={menuSeries} onSeriesChange={setMenuSeries} />
         </div>
       </div>
 
@@ -120,6 +123,9 @@ export default function Dashboard() {
               expense={data.expense}
               result={data.month_balance}
               onOpenMetric={openFlow}
+              menuView={menuView}
+              menuInterval={menuInterval}
+              menuSeries={menuSeries}
             />
           </div>
         </div>
