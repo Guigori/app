@@ -44,7 +44,7 @@ export function FinnosVerticalMenu({month,onMonthChange,hidden,onToggleHidden,vi
   const monthIndex=Math.max(0,Math.min(11,(Number(monthString)||1)-1));
   const filterActive=effectiveRange!=="1 mês"||movement!=="Todos"||category!=="Todas"||search.trim()!==""||ALL_SERIES.some(s=>!effectiveSeries.includes(s));
   const changeYear=(y:number)=>{const next=`${y}-${String(monthIndex+1).padStart(2,"0")}`;onMonthChange(next)};
-  const changeMonth=(m:number)=>{const next=`${year}-${String(m+1).padStart(2,"0")}`;setLocalMonth(next);onMonthChange(next)};
+  const changeMonth=(m:number)=>{const next=`${year}-${String(m+1).padStart(2,"0")}`;onMonthChange(next)};
   const changeView=(v:FinnosView)=>{setLocalView(v);onViewChange?.(v)};
   const changeRange=(v:string)=>{setLocalRange(v);onIntervalChange?.(v)};
   const changeSeries=(v:FinnosSeries)=>{const next=effectiveSeries.includes(v)?effectiveSeries.filter(s=>s!==v):[...effectiveSeries,v];setLocalSeries(next);onSeriesChange?.(next)};
