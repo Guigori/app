@@ -4,17 +4,18 @@ import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart as RechartsLineChart, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { ArrowDownLeft, ArrowUpRight, BarChart3, ChartPie, Equal, LayoutGrid, LineChart, SlidersHorizontal } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Equal } from "lucide-react";
 import { fetchCalendar, fetchTrends } from "@/lib/data";
 import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatHiddenBRL, todayISO } from "@/lib/format";
 import { buildMonthlyCumulativeRows, defaultDailyTooltipIndex, selectVisibleDailyRows } from "@/lib/homeChart";
 import type { MetricKind } from "@/types/finnos";
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import type { FinnosView, FinnosSeries } from "@/components/shared/FinnosVerticalMenu";
 
 type ChartView = "cards" | "projection" | "line" | "pie" | "bars";
-type ChartPeriod = "7d" | "1m" | "6m" | "1y";
+type ChartPeriod = "7d" | "1m" | "3m" | "6m" | "1y";
+const VIEW_TO_CHART: Record<FinnosView, ChartView> = { Cards:"cards", "Projeção":"projection", Linhas:"line", Pizza:"pie", Barras:"bars" };
+const PERIOD_TO_CHART: Record<string, ChartPeriod> = { "7 dias":"7d", "1 mês":"1m", "3 meses":"3m", "6 meses":"6m", "1 ano":"1y" };
 
 interface HomeFinancialChartProps {
   month: string;
@@ -23,28 +24,16 @@ interface HomeFinancialChartProps {
   expense: number;
   result: number;
   onOpenMetric: (metric: MetricKind) => void;
+  menuView: FinnosView;
+  menuInterval: string;
+  menuSeries: FinnosSeries[];
 }
-
-const VIEW_OPTIONS: Array<{ key: ChartView; label: string; icon: typeof LayoutGrid }> = [
-  { key: "cards", label: "Cards", icon: LayoutGrid },
-  { key: "projection", label: "Projeção", icon: LineChart },
-  { key: "line", label: "Linhas", icon: LineChart },
-  { key: "pie", label: "Pizza", icon: ChartPie },
-  { key: "bars", label: "Barras", icon: BarChart3 },
-];
 
 const METRIC_UI = {
   Receitas: { icon: ArrowDownLeft, color: "var(--income)", soft: "bg-emerald-500/10 text-emerald-400" },
   Despesas: { icon: ArrowUpRight, color: "var(--expense)", soft: "bg-rose-500/10 text-rose-400" },
   Resultado: { icon: Equal, color: "var(--finnos-purple)", soft: "bg-violet-500/10 text-violet-400" },
 } as const;
-
-const PERIODS: Array<{ value: ChartPeriod; label: string }> = [
-  { value: "7d", label: "7 dias" },
-  { value: "1m", label: "1 mês" },
-  { value: "6m", label: "6 meses" },
-  { value: "1y", label: "1 ano" },
-];
 
 function addMonth(value: string, direction: -1 | 1): string {
   const [year, month] = value.split("-").map(Number);
@@ -57,14 +46,13 @@ function monthLabel(value: string): string {
   return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
 }
 
-export function HomeFinancialChart({ month, total, income, expense, result, onOpenMetric }: HomeFinancialChartProps) {
+export function HomeFinancialChart({ month, total, income, expense, result, onOpenMetric, menuView, menuInterval, menuSeries }: HomeFinancialChartProps) {
   const { hidden } = useBalanceHidden();
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [view, setView] = useState<ChartView>("projection");
-  const [period, setPeriod] = useState<ChartPeriod>("1m");
-  const [showIncome, setShowIncome] = useState(true);
-  const [showExpense, setShowExpense] = useState(true);
-  const [showResult, setShowResult] = useState(true);
+  const view = VIEW_TO_CHART[menuView];
+  const period = PERIOD_TO_CHART[menuInterval] ?? "1m";
+  const showIncome = menuSeries.includes("Receitas");
+  const showExpense = menuSeries.includes("Despesas");
+  const showResult = menuSeries.includes("Resultado");
   const [selectedMetric, setSelectedMetric] = useState<"Receitas" | "Despesas" | "Resultado" | null>(null);
   const [projectionMetric, setProjectionMetric] = useState<"balance" | "income" | "expense">("balance");
   const [projectionMonth, setProjectionMonth] = useState(month);
@@ -79,7 +67,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
   });
   const trendsQuery = useQuery({
     queryKey: ["home-financial-trends", period, month],
-    queryFn: () => fetchTrends(period === "1y" ? 12 : 6, month),
+    queryFn: () => fetchTrends(period === "1y" ? 12 : period === "3m" ? 3 : 6, month),
     enabled: !daily,
   });
 
@@ -182,7 +170,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
     color: "var(--popover-foreground)", boxShadow: "0 16px 40px rgba(0,0,0,.18)", fontSize: 12,
   };
   const isLoading = daily ? calendarQuery.isPending : trendsQuery.isPending;
-  const periodLabel = PERIODS.find((item) => item.value === period)?.label ?? "1 mês";
+  const periodLabel = menuInterval;
 
   const projectionColor = projectionMetric === "income" ? "var(--income)" : projectionMetric === "expense" ? "var(--expense)" : "var(--finnos-purple-live)";
   const projectionLabel = projectionMetric === "income" ? "Receitas" : projectionMetric === "expense" ? "Despesas" : "Saldo";
@@ -197,9 +185,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
             {view === "cards" ? "Resumo financeiro" : view === "pie" ? "Composição do período" : view === "projection" ? "Saldo real até hoje e estimativa até o fim do mês" : `Evolução · ${periodLabel}`}
           </p>
         </div>
-        <Button variant="outline" size="icon" className="absolute right-0 top-[7rem] z-20 h-10 w-10 rounded-full bg-background/70 shadow-sm sm:right-0 sm:top-[7.25rem]" onClick={() => setFiltersOpen(true)} aria-label="Personalizar gráfico" data-testid="home-chart-filter-button">
-          <SlidersHorizontal className="h-4 w-4" />
-        </Button>
+
       </div>
 
       {view === "cards" ? (
@@ -355,61 +341,6 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
         </div>
       )}
 
-      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
-        <SheetContent side="right" className="w-[94vw] max-w-md border-border/70 bg-background/95 backdrop-blur-xl">
-          <SheetHeader className="border-b border-border/70 px-6 py-6">
-            <SheetTitle className="text-xl font-semibold">Personalizar visualização</SheetTitle>
-            <SheetDescription className="mt-1">Ajuste o gráfico sem ocupar espaço na Home.</SheetDescription>
-          </SheetHeader>
-          <div className="flex-1 space-y-8 overflow-y-auto px-6 py-6">
-            <fieldset>
-              <legend className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Visualização</legend>
-              <div className="grid grid-cols-2 gap-3">
-                {VIEW_OPTIONS.map((option) => (
-                  <button key={option.key} type="button" onClick={() => { setView(option.key); setSelectedMetric(null); }} className={`flex min-h-12 items-center gap-2.5 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors ${view === option.key ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:bg-muted/60"}`}>
-                    <option.icon className="h-4 w-4" />{option.label}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-            {view !== "projection" && (
-            <fieldset>
-              <legend className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Período</legend>
-              <div className="grid grid-cols-2 gap-3">
-                {PERIODS.map((option) => (
-                  <button key={option.value} type="button" onClick={() => setPeriod(option.value)} className={`min-h-11 rounded-2xl border px-3 py-2.5 text-sm font-medium transition-colors ${period === option.value ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground hover:bg-muted/60"}`}>{option.label}</button>
-                ))}
-              </div>
-              <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Em 7 dias e 1 mês, o gráfico mostra a evolução dia a dia. Em 6 meses e 1 ano, compara os meses.</p>
-            </fieldset>
-            )}
-            {view !== "cards" && view !== "pie" && view !== "projection" && (
-              <fieldset>
-                <legend className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Exibir no gráfico</legend>
-                <div className="space-y-2.5">
-                  {[
-                    ["Receitas", showIncome, setShowIncome],
-                    ["Despesas", showExpense, setShowExpense],
-                    ["Resultado", showResult, setShowResult],
-                  ].map(([label, checked, setter]) => (
-                    <label key={String(label)} className="flex min-h-12 cursor-pointer items-center justify-between rounded-2xl border border-border bg-card px-4 py-3 text-sm">
-                      <span>{String(label)}</span>
-                      <input type="checkbox" checked={Boolean(checked)} onChange={(event) => {
-                        const checked = event.target.checked;
-                        (setter as (value: boolean) => void)(checked);
-                        if (!checked && selectedMetric === label) setSelectedMetric(null);
-                      }} className="h-4 w-4 accent-primary" />
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            )}
-          </div>
-          <SheetFooter className="border-t border-border/70 bg-background/90 p-6">
-            <Button className="h-11 w-full rounded-xl" onClick={() => setFiltersOpen(false)}>Aplicar</Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }
