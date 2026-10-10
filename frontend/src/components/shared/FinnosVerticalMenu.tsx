@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CalendarDays, Eye, EyeOff, SlidersHorizontal, LayoutGrid, ChartLine, ChartPie, ChartColumn, ChartNoAxesCombined, ChevronLeft, ChevronRight, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,16 @@ const RANGES = ["7 dias","1 mês","3 meses","6 meses","1 ano"];
 const ALL_SERIES: FinnosSeries[] = ["Receitas","Despesas","Resultado"];
 export function FinnosVerticalMenu({month,onMonthChange,hidden,onToggleHidden,view="Cards",onViewChange,interval="1 mês",onIntervalChange,series=ALL_SERIES,onSeriesChange,showPeriod=true,showVisualization=true,className}:FinnosVerticalMenuProps) {
   const [expanded,setExpanded]=useState(false);
+  const anchorRef=useRef<HTMLDivElement>(null);
+  const [anchor,setAnchor]=useState({top:0,right:16});
+  useEffect(()=>{
+    if(!expanded)return;
+    const update=()=>{const rect=anchorRef.current?.getBoundingClientRect();if(rect)setAnchor({top:Math.max(8,rect.top),right:Math.max(8,window.innerWidth-rect.right)});};
+    update();
+    window.addEventListener("resize",update);
+    window.addEventListener("scroll",update,true);
+    return ()=>{window.removeEventListener("resize",update);window.removeEventListener("scroll",update,true);};
+  },[expanded]);
   const [section,setSection]=useState("");
   const [movement,setMovement]=useState("Todos");
   const [category,setCategory]=useState("Todas");
@@ -55,13 +66,15 @@ export function FinnosVerticalMenu({month,onMonthChange,hidden,onToggleHidden,vi
   const pill=(active:boolean)=>cn("rounded-full border px-3 py-2 font-medium transition-colors",active?"border-[#8058ff] !bg-[#4B2CFF] !text-white":"border-[#d9d1f5] !bg-white !text-[#070F52] dark:border-[#302840] dark:!bg-[#080711] dark:!text-white");
   const iconCircle=(active:boolean)=>cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full border",active?"border-[#6744ff] bg-[#4B2CFF] text-white":"border-[#d9d1f5] bg-[#f4f0ff] text-[#070F52] dark:border-[#242035] dark:bg-[#0c0a17] dark:text-white");
   const openSection=(id:string)=>setSection(p=>p===id?"":id);
-  return <div className={cn("relative z-[60] flex justify-end",className)} data-testid="finnos-vertical-menu">
-    {expanded&&<button type="button" aria-label="Fechar menu" onClick={close} className="fixed inset-0 z-[-1] bg-[#070F52]/25 backdrop-blur-[3px]" />}
-    {!expanded?<div className="flex flex-col gap-2 rounded-full border border-[#8c5bff] bg-white p-2 shadow-xl dark:bg-[#080710]">
+  return <div ref={anchorRef} className={cn("relative z-30 flex justify-end",className)} data-testid="finnos-vertical-menu">
+    {!expanded?<div className="flex flex-col gap-2 rounded-full border border-[#8c5bff] bg-[#fbfaff] p-2 shadow-lg dark:bg-[#080710]">
       <button type="button" aria-label={hidden?"Mostrar valores":"Ocultar valores"} onClick={onToggleHidden} className={cn("rounded-full p-2 text-[#070F52] dark:text-white",hidden&&"bg-[#4B2CFF] !text-white")}>{hidden?<EyeOff size={20}/>:<Eye size={20}/>}</button>
       <button type="button" aria-label="Abrir filtros e menu vertical" onClick={()=>setExpanded(true)} className={cn("rounded-full p-2 text-[#070F52] dark:text-white",filterActive&&"bg-[#4B2CFF] !text-white")}><SlidersHorizontal size={20}/></button>
-    </div>:<div className="fixed right-4 top-[calc(env(safe-area-inset-top)+116px)] z-[70] max-h-[calc(100dvh-env(safe-area-inset-top)-230px)] w-[min(330px,calc(100vw-32px))] overflow-y-auto overscroll-contain rounded-[22px] border border-[#8c5bff] bg-white p-2 text-[#070F52] shadow-2xl [scrollbar-width:none] dark:bg-[#07060f] dark:text-white">
-      <div className="flex justify-end"><button type="button" aria-label="Recolher menu" onClick={close} className="rounded-lg p-1 text-[#62558d] dark:text-[#b7afc8]"><Minimize2 size={17}/></button></div>
+    </div>:null}
+    {expanded&&createPortal(<>
+      <button type="button" aria-label="Fechar menu" onClick={close} className="fixed inset-0 z-[9998] bg-[#070F52]/20 backdrop-blur-[3px]" />
+      <div style={{top:anchor.top,right:anchor.right,maxHeight:`calc(100dvh - ${anchor.top}px - 20px)`}} className="fixed z-[9999] w-[min(330px,calc(100vw-32px))] overflow-y-auto overscroll-contain rounded-[22px] border border-[#a58aff] bg-[#fbfaff] p-2 text-[#070F52] shadow-[0_16px_48px_rgba(7,15,82,0.16)] [scrollbar-width:none] dark:border-[#8c5bff] dark:bg-[#0b0917] dark:text-white">
+      <div className="sticky top-0 z-10 flex justify-end bg-[#fbfaff]/95 dark:bg-[#0b0917]/95"><button type="button" aria-label="Recolher menu" onClick={close} className="rounded-lg p-1 text-[#62558d] dark:text-[#b7afc8]"><Minimize2 size={17}/></button></div>
       {showPeriod&&<><button type="button" onClick={()=>openSection("period")} className={cn(button,section==="period"&&selectedRow)}><span className={iconCircle(section==="period")}><CalendarDays size={18}/></span><span className="flex-1"><span className="block">Período</span><span className="text-[11px] text-[#5b5d79] dark:text-[#b0a8c2]">{MONTHS[monthIndex]} de {year}</span></span></button>
       {section==="period"&&<div className="space-y-3 rounded-xl border border-[#e0d8fa] dark:border-[#201a32] bg-[#f8f6ff] dark:bg-[#0d0c18] p-3">
         <div className="flex items-center justify-between"><button aria-label="Ano anterior" onClick={()=>changeYear(year-1)}><ChevronLeft size={18}/></button><strong>{year}</strong><button aria-label="Próximo ano" onClick={()=>changeYear(year+1)}><ChevronRight size={18}/></button></div>
@@ -81,6 +94,7 @@ export function FinnosVerticalMenu({month,onMonthChange,hidden,onToggleHidden,vi
         <label className="block text-[#62558d] dark:text-[#afa7c0]">BUSCAR<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar transação" className="mt-2 w-full rounded-xl border border-[#d9d1f5] bg-white p-2.5 text-[#070F52] placeholder:text-[#88819d] dark:border-[#302840] dark:bg-[#080711] dark:text-white"/></label>
         <div className="flex items-center justify-between gap-2"><span className="text-[#4B2CFF] dark:text-[#a46dff]">{filterActive?"Filtros ativos":"Filtros padrão"}</span><button type="button" onClick={reset} className="rounded-xl border border-[#d9d1f5] px-3 py-2 text-[#070F52] dark:border-[#302840] dark:text-white">Limpar</button></div>
       </div>}
-    </div>}
+      </div>
+    </>,document.body)}
   </div>;
 }
