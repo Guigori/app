@@ -116,5 +116,80 @@ def test_missing_server_credential_reports_503(client, monkeypatch):
 def test_api_route_maps_to_python_function_and_preserves_spa():
     config = json.loads((ROOT / "frontend/vercel.json").read_text())
     assert config["framework"] == "vite"
-    assert config["routes"][0] == {"src": "/api/auth/(me|firebase-session|logout)", "dest": "/api"}
+    assert config["routes"][0] == {"src": "/api/auth/(me|firebase-session|logout|firestore-smoke)", "dest": "/api"}
     assert config["routes"][-1]["src"] == "/(?!api(?:/|$)).*"
+
+
+@pytest.fixture
+def smoke(client, firebase, monkeypatch):
+    monkeypatch.setenv("FIREBASE_LIVE_SMOKE", "1")
+    client.cookies.set(api.COOKIE, "signed-firebase-session")
+    from firebase_admin import firestore
+    doc = Mock()
+    doc.get.side_effect = [
+        SimpleNamespace(exists=True, to_dict=lambda: {"nonce": doc.create.call_args.args[0]["nonce"]}),
+        SimpleNamespace(exists=False),
+    ]
+    collection = Mock()
+    collection.document.return_value = doc
+    db = Mock(project="finnos-app")
+    db.collection.return_value = collection
+    monkeypatch.setattr(firestore, "client", Mock(return_value=db))
+    return db, collection, doc
+
+
+@pytest.mark.parametrize("environment", ["production", "development", "staging", ""])
+def test_smoke_never_runs_outside_preview(client, smoke, monkeypatch, environment):
+    monkeypatch.setenv("VERCEL_ENV", environment)
+    response = client.post("/api/auth/firestore-smoke", headers={"Origin": "https://preview.example.com"})
+    assert response.status_code == 404
+    smoke[0].collection.assert_not_called()
+
+
+def test_smoke_requires_opt_in(client, smoke, monkeypatch):
+    monkeypatch.delenv("FIREBASE_LIVE_SMOKE")
+    assert client.get("/api/auth/firestore-smoke").status_code == 404
+    assert client.post("/api/auth/firestore-smoke", headers={"Origin": "https://preview.example.com"}).status_code == 404
+    smoke[0].collection.assert_not_called()
+
+
+def test_smoke_requires_verified_session_and_origin(client, smoke, firebase):
+    assert client.post("/api/auth/firestore-smoke", headers={"Origin": "https://evil.example"}).status_code == 403
+    client.cookies.clear()
+    assert client.get("/api/auth/firestore-smoke").status_code == 401
+    assert client.post("/api/auth/firestore-smoke", headers={"Origin": "https://preview.example.com"}).status_code == 401
+    smoke[0].collection.assert_not_called()
+
+
+def test_smoke_get_is_read_only_and_post_cleans_up(client, smoke):
+    assert client.get("/api/auth/firestore-smoke").status_code == 200
+    smoke[0].collection.assert_not_called()
+    response = client.post("/api/auth/firestore-smoke", headers={"Origin": "https://preview.example.com"})
+    assert response.status_code == 200 and "APROVADO" in response.text
+    assert "no-store" in response.headers["cache-control"]
+    smoke[0].collection.assert_called_once_with("_migration_smoke")
+    assert smoke[1].document.call_args.args[0].startswith("smoke-")
+    smoke[2].create.assert_called_once()
+    smoke[2].delete.assert_called_once_with(timeout=10)
+    assert smoke[2].get.call_count == 2
+
+
+def test_smoke_rejects_wrong_project_before_write(client, smoke):
+    smoke[0].project = "other-project"
+    assert client.post("/api/auth/firestore-smoke", headers={"Origin": "https://preview.example.com"}).status_code == 503
+    smoke[0].collection.assert_not_called()
+
+
+def test_smoke_cleans_up_after_read_failure_without_leaking_details(client, smoke):
+    from google.api_core.exceptions import PermissionDenied
+    smoke[2].get.side_effect = PermissionDenied("private-detail")
+    response = client.post("/api/auth/firestore-smoke", headers={"Origin": "https://preview.example.com"})
+    assert response.status_code == 503 and "private-detail" not in response.text
+    smoke[2].delete.assert_called_once_with(timeout=10)
+
+
+def test_smoke_does_not_approve_failed_cleanup(client, smoke):
+    from google.api_core.exceptions import PermissionDenied
+    smoke[2].delete.side_effect = PermissionDenied("private-detail")
+    response = client.post("/api/auth/firestore-smoke", headers={"Origin": "https://preview.example.com"})
+    assert response.status_code == 503 and "APROVADO" not in response.text

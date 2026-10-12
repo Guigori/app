@@ -2,7 +2,8 @@
 
 Vercel's project root is frontend/. Importing backend/server.py would require
 Mongo credentials and run its index-creation lifespan. This entrypoint never
-imports that server or touches either database. Firestore rules stay unchanged.
+imports that server or touches MongoDB. The opt-in Firestore diagnostic touches
+only a random temporary document in _migration_smoke. Firestore rules stay unchanged.
 """
 import json
 import os
@@ -126,3 +127,78 @@ def me(request: Request):
 def logout(response: Response):
     response.delete_cookie(COOKIE, path="/", httponly=True,
                            secure=os.getenv("VERCEL_ENV") == "preview", samesite="lax")
+
+
+# Diagnostic is explicitly opt-in, Preview-only, and uses no Mongo imports.
+def smoke_claims(request: Request):
+    if os.getenv("VERCEL_ENV") != "preview" or os.getenv("FIREBASE_LIVE_SMOKE") != "1":
+        raise HTTPException(404, "Not found")
+    cookie = request.cookies.get(COOKIE)
+    if not cookie:
+        raise HTTPException(401, "Não autenticado. Entre novamente.")
+    return verified_claims(cookie, session=True)
+
+
+def smoke_page(message: str, *, status_code=200, form=False):
+    from fastapi.responses import HTMLResponse
+    from html import escape
+    content = '<form method="post"><button type="submit">Executar teste isolado do Firestore</button></form>' if form else ""
+    response = HTMLResponse(
+        '<!doctype html><html lang="pt-BR"><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<title>FINNOS — Diagnóstico Firestore Preview</title>'
+        '<body><main><h1>FINNOS — Diagnóstico Firestore Preview</h1><p>'
+        + escape(message) + '</p>' + content
+        + '<p><a href="/">Voltar ao FINNOS</a></p></main></body></html>',
+        status_code=status_code,
+    )
+    response.headers["Content-Security-Policy"] = "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@app.get("/api/auth/firestore-smoke")
+def firestore_smoke_form(request: Request):
+    smoke_claims(request)
+    return smoke_page(
+        "Teste exclusivo do Preview: cria um documento aleatório em _migration_smoke, "
+        "confere a leitura e remove o documento. Não acessa dados financeiros nem MongoDB.",
+        form=True,
+    )
+
+
+@app.post("/api/auth/firestore-smoke", dependencies=[Depends(same_origin)])
+def firestore_smoke(request: Request):
+    smoke_claims(request)
+    from firebase_admin import firestore
+    from google.api_core.exceptions import GoogleAPICallError
+    from uuid import uuid4
+    client = firestore.client(app=firebase_app())
+    if client.project != "finnos-app":
+        raise HTTPException(503, "Projeto Firestore inesperado; teste não executado.")
+    doc_id = "smoke-" + str(uuid4())
+    ref = client.collection("_migration_smoke").document(doc_id)
+    payload = {"source": "finnos-preview-diagnostic", "nonce": doc_id,
+               "created_at": datetime.now(timezone.utc)}
+    try:
+        try:
+            ref.create(payload, timeout=10)
+            snapshot = ref.get(timeout=10)
+            if not snapshot.exists or snapshot.to_dict().get("nonce") != doc_id:
+                raise RuntimeError("Firestore read-back mismatch")
+        finally:
+            # The unique random reference is the only document touched.
+            # Also clean up if a timed-out create reached the server.
+            ref.delete(timeout=10)
+        if ref.get(timeout=10).exists:
+            raise RuntimeError("Firestore cleanup mismatch")
+    except (GoogleAPICallError, RuntimeError):
+        return smoke_page(
+            "Teste Firestore falhou. A limpeza do documento temporário foi tentada. "
+            "Confira os logs do Preview; o resultado não foi aprovado.", status_code=503,
+        )
+    return smoke_page(
+        "APROVADO — projeto finnos-app. Escrita: OK. Leitura: OK. "
+        "Exclusão: OK. Ausência do documento após a limpeza: confirmada. "
+        "MongoDB e dados financeiros não foram acessados."
+    )

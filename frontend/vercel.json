@@ -2,7 +2,7 @@
   "framework": "vite",
   "routes": [
     {
-      "src": "/api/auth/(me|firebase-session|logout)",
+      "src": "/api/auth/(me|firebase-session|logout|firestore-smoke)",
       "dest": "/api"
     },
     {
