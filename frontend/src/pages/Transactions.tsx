@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, BellOff, CalendarDays, ChartPie, Filter, List, Penc
 import { toast } from "sonner";
 import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
+import { settledCents, settledTotals } from "@/lib/settledMoney";
 import { useBalanceHidden } from "@/lib/balance";
 import {
   currentMonth,
@@ -188,22 +189,14 @@ export default function Transactions() {
     return Array.from(groups.entries()).map(([date, items]) => ({
       date,
       items,
-      net: items.reduce((sum, item) => sum + signedValue(item), 0),
+      net: items.reduce((sum, item) => sum + (item.type === "receita" ? settledCents(item) : -settledCents(item)), 0) / 100,
     }));
   }, [transactions]);
 
   const dayFlow = calendar?.days.find((d) => d.date === selectedDate);
   const periodTotals = useMemo(() => {
     if (periodMode === "rolling30" && scope === "mes") {
-      return monthTransactions.reduce(
-        (totals, transaction) => {
-          if (transaction.status !== "pago") return totals;
-          if (transaction.type === "receita") totals.income += transaction.value;
-          if (transaction.type === "despesa") totals.expense += transaction.value;
-          return totals;
-        },
-        { income: 0, expense: 0 },
-      );
+      return settledTotals(monthTransactions);
     }
     return null;
   }, [periodMode, scope, monthTransactions]);
@@ -373,18 +366,19 @@ export default function Transactions() {
         expenseTransactions.forEach((transaction) => {
           const key = transaction.category_id ?? "__uncategorized__";
           const existing = categoryMap.get(key);
-          if (existing) existing.total += transaction.value;
+          if (existing) existing.total += settledCents(transaction);
           else categoryMap.set(key, {
             category_id: transaction.category_id ?? null,
             name: transaction.category_name ?? "Sem categoria",
             color: transaction.category_color ?? "#64748B",
             icon: transaction.category_icon ?? "more-horizontal",
-            total: transaction.value,
+            total: settledCents(transaction),
           });
         });
-        const totalExpense = expenseTransactions.reduce((sum, transaction) => sum + transaction.value, 0);
+        const totalExpenseCents = expenseTransactions.reduce((sum, transaction) => sum + settledCents(transaction), 0);
+        const totalExpense = totalExpenseCents / 100;
         const slices = Array.from(categoryMap.values())
-          .map((item) => ({ ...item, percent: totalExpense > 0 ? (item.total / totalExpense) * 100 : 0 }))
+          .map((item) => ({ ...item, total: item.total / 100, percent: totalExpenseCents > 0 ? (item.total / totalExpenseCents) * 100 : 0 }))
           .sort((a, b) => b.total - a.total);
         return (
           <ExpensesDonutChart
@@ -415,7 +409,7 @@ export default function Transactions() {
         const selectedCategory = categories.find((category) => category.id === categoryId);
         const categoryTotal = transactions
           .filter((transaction) => transaction.type === "despesa")
-          .reduce((sum, transaction) => sum + transaction.value, 0);
+          .reduce((sum, transaction) => sum + settledCents(transaction), 0) / 100;
         return (
           <div className="rounded-2xl border border-border bg-card px-4 py-3" data-testid="selected-category-summary">
             <p className="text-xs font-medium text-muted-foreground">
