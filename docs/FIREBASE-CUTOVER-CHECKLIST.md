@@ -17,6 +17,17 @@ python backend/scripts/configure_test_users.py --credential /caminho-protegido/c
 
 O script faz preflight das três identidades, verifica colisões de e-mail antes de alterar qualquer uma, solicita senhas de pelo menos 20 caracteres por entrada oculta e altera apenas a autenticação dos UIDs de teste. O proprietário gera e guarda as senhas no app Senhas da Apple. Os hashes dos documentos financeiros são comparados antes/depois; nenhum documento é escrito. Nenhuma senha é armazenada em texto puro. Testar login/logout, persistência, recuperação administrativa privada (os e-mails fictícios não recebem mensagens) e isolamento. Só então desativar o acesso especial de validação.
 
+## Backup Firestore atual
+
+`backup_firebase_users.py` lê somente o UID pessoal confirmado e os três UIDs sintéticos aprovados. Captura em duas leituras comparadas e criptografa o arquivo com AES-GCM; a chave temporária é encapsulada com a chave pública da credencial administrativa já existente. Nenhum documento é escrito. A recuperação depende de manter com segurança a mesma chave privada; a exclusão ou perda do arquivo privado impede a recuperação deste backup.
+
+```sh
+python backend/scripts/backup_firebase_users.py --credential /caminho-protegido/credencial.json --output /caminho-protegido/backup.enc.json
+python backend/scripts/backup_firebase_users.py --credential /caminho-protegido/credencial.json --output /caminho-protegido/backup.enc.json --verify-existing
+```
+
+Um backup real de 28 documentos foi gerado e recuperado criptograficamente em 12/10/2026. Não é um backup completo de todo o projeto, um snapshot transacional de coleções arbitrárias, nem um ensaio de restauração no Firestore. Não executar restauração sobre dados pessoais sem revisão e autorização.
+
 ## Histórico e recuperação
 
 A origem MongoDB ainda depende de conexão somente leitura ou dump BSON nativo, sem credenciais no chat. Inventariar coleções, contagens, índices, relacionamentos e propriedade. Criar backup nativo consistente e criptografado; validar restauração em MongoDB isolado antes de qualquer migração real.
