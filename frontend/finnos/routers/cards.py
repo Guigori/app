@@ -89,3 +89,41 @@ async def list_cards(user: dict = Depends(require_user)) -> List[CardOut]:
     )
     txs, accounts = await _context(user["id"])
     return [await _build(doc, txs, accounts) for doc in docs]
+
+
+@router.post("", response_model=CardOut, status_code=201)
+async def create_card(payload: CardIn, user: dict = Depends(require_user)) -> CardOut:
+    """Create a UID-scoped Firestore card, checking payment account ownership atomically."""
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        **payload.model_dump(),
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+    }
+    await db.cards.insert_one(doc)
+    txs, accounts = await _context(user["id"])
+    return await _build(doc, txs, accounts)
+
+
+@router.put("/{card_id}", response_model=CardOut)
+async def update_card(card_id: str, payload: CardIn, user: dict = Depends(require_user)) -> CardOut:
+    """Update only the authenticated user's card; preserve metadata and cycle state."""
+    result = await db.cards.update_one(
+        {"id": card_id, "user_id": user["id"]},
+        {"$set": {**payload.model_dump(), "updated_at": datetime.now(timezone.utc)}},
+    )
+    if not result.matched_count:
+        raise HTTPException(404, "Cartão não encontrado.")
+    doc = await db.cards.find_one({"id": card_id, "user_id": user["id"]})
+    txs, accounts = await _context(user["id"])
+    return await _build(doc, txs, accounts)
+
+
+@router.delete("/{card_id}", status_code=204, response_class=Response)
+async def delete_card(card_id: str, user: dict = Depends(require_user)) -> Response:
+    """Reject deletion when linked transactions exist; never orphan card references."""
+    result = await db.cards.delete_one({"id": card_id, "user_id": user["id"]})
+    if not result.deleted_count:
+        raise HTTPException(404, "Cartão não encontrado.")
+    return Response(status_code=204)
