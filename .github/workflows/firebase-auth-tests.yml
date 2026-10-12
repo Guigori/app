@@ -9,6 +9,7 @@ on:
       - "backend/lib/firebase_auth.py"
       - "backend/tests/test_firebase_auth.py"
       - "backend/tests/test_firestore_transactions.py"
+      - "backend/tests/test_firestore_http.py"
       - "backend/routers/firebase_transactions.py"
       - "backend/server.py"
       - ".github/workflows/firebase-auth-tests.yml"
@@ -35,4 +36,4 @@ jobs:
       - name: Run Firebase authentication contract tests
         env:
           PYTHONPATH: backend
-        run: python -m pytest backend/tests/test_firebase_auth.py backend/tests/test_firestore_transactions.py -v
+        run: python -m pytest backend/tests/test_firebase_auth.py backend/tests/test_firestore_transactions.py backend/tests/test_firestore_http.py -v
