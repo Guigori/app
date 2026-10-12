@@ -1,5 +1,5 @@
 // FINNOS offline-first service worker.
-const VERSION = "finnos-shell-v1";
+const VERSION = "finnos-shell-v2";
 const CORE = ["/", "/manifest.webmanifest", "/brand/finnos-icon.png", "/brand/finnos-logo.png", "/brand/finnos-logo-white.png"];
 
 self.addEventListener("install", (event) => {
@@ -19,13 +19,13 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   // Authenticated financial API responses are never stored in Cache Storage.
-  if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+  if (url.origin !== self.location.origin || url.pathname.startsWith("/api/") || url.pathname === "/manifest.webmanifest") return;
 
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) caches.open(VERSION).then((cache) => cache.put("/", response.clone()));
+          if (response.ok && response.type === "basic") { const copy = response.clone(); event.waitUntil(caches.open(VERSION).then((cache) => cache.put("/", copy))); }
           return response;
         })
         .catch(async () => (await caches.match(request)) || (await caches.match("/")) || Response.error()),
@@ -37,7 +37,7 @@ self.addEventListener("fetch", (event) => {
     caches.match(request).then((cached) => {
       const network = fetch(request)
         .then((response) => {
-          if (response.ok) caches.open(VERSION).then((cache) => cache.put(request, response.clone()));
+          if (response.ok && response.type === "basic") { const copy = response.clone(); event.waitUntil(caches.open(VERSION).then((cache) => cache.put(request, copy))); }
           return response;
         })
         .catch(() => cached || Response.error());
