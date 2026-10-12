@@ -96,6 +96,9 @@ async def main() -> None:
     parser.add_argument("--project-id", default=os.getenv("FIREBASE_PROJECT_ID"))
     args = parser.parse_args()
 
+    if args.execute:
+        raise SystemExit("Migração definitiva bloqueada: use finance_migration_plan.py para simulação e ensaio isolado com propriedade comprovada.")
+
     mongo_url = os.getenv("MONGO_URL")
     db_name = os.getenv("DB_NAME")
     if not mongo_url or not db_name:
