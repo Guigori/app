@@ -39,6 +39,7 @@ from routers import (
     simulation,
     subscriptions,
     transactions,
+    firebase_transactions,
 )
 
 
@@ -89,6 +90,7 @@ api_router.include_router(budgets.router)
 api_router.include_router(accounts.router)
 api_router.include_router(categories.router)
 api_router.include_router(transactions.router)
+api_router.include_router(firebase_transactions.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(fca.router)
 api_router.include_router(fac.router)
