@@ -372,3 +372,62 @@ def test_adapter_fails_closed_without_verified_scope():
             store.db.accounts.find({"user_id": "test-a"})
     finally:
         store.active_uid.reset(token)
+
+
+def test_live_validation_is_disabled_without_explicit_owner(finance, monkeypatch):
+    client, _, _ = finance
+    monkeypatch.delenv("FINNOS_PREVIEW_TEST_OWNER_UID", raising=False)
+    for method in ["GET", "POST"]:
+        assert client.request(method, "/api/validation/finance").status_code == 404
+
+
+@pytest.mark.parametrize("environment", ["production", "development", "staging"])
+def test_live_validation_never_runs_outside_preview(finance, monkeypatch, environment):
+    client, _, _ = finance
+    monkeypatch.setenv("FINNOS_PREVIEW_TEST_OWNER_UID", "test-a")
+    monkeypatch.setenv("VERCEL_ENV", environment)
+    assert client.post("/api/validation/finance").status_code == 404
+
+
+def test_live_validation_rejects_other_users_and_cross_origin(finance, monkeypatch):
+    client, _, _ = finance
+    monkeypatch.setenv("FINNOS_PREVIEW_TEST_OWNER_UID", "owner@example.invalid")
+    assert client.get("/api/validation/finance").status_code == 403
+    assert (
+        client.post("/api/validation/finance/token", json={"label": "A"}).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            "/api/validation/finance", headers={"Origin": "https://evil.example"}
+        ).status_code
+        == 403
+    )
+
+
+def test_live_validation_cannot_mint_arbitrary_user_tokens(finance, monkeypatch):
+    client, active, db = finance
+    monkeypatch.setenv("FINNOS_PREVIEW_TEST_OWNER_UID", active["uid"])
+    monkeypatch.setattr(api, "firebase_app", lambda: "app")
+    db.project = "finnos-app"
+    monkeypatch.setattr(
+        (
+            api.firestore
+            if hasattr(api, "firestore")
+            else __import__("firebase_admin", fromlist=["firestore"]).firestore
+        ),
+        "client",
+        lambda **kwargs: db,
+    )
+    assert (
+        client.post(
+            "/api/validation/finance/token", json={"label": "other-uid"}
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            "/api/validation/finance/token", json={"label": "A", "uid": "other-uid"}
+        ).status_code
+        == 422
+    )

@@ -206,3 +206,5 @@ def firestore_smoke(request: Request):
 
 from finnos.routes import mount
 mount(app, lambda: firebase_app(), lambda *args, **kwargs: verified_claims(*args, **kwargs), same_origin)
+from finnos.validation import mount_validation
+mount_validation(app, lambda: firebase_app(), lambda *args, **kwargs: verified_claims(*args, **kwargs), same_origin)

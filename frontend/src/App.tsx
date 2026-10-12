@@ -21,6 +21,7 @@ import RadarDetail from "@/pages/RadarDetail";
 import Onboarding from "@/pages/Onboarding";
 import Analysis from "@/pages/Analysis";
 import Patrimonio from "@/pages/Patrimonio";
+import PreviewValidation from "@/pages/PreviewValidation";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route index element={<Dashboard />} />
             <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/validacao-preview" element={<PreviewValidation />} />
             <Route path="/transacoes" element={<Transactions />} />
             <Route path="/contas" element={<Accounts />} />
             <Route path="/categorias" element={<Categories />} />
