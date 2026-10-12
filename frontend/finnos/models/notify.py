@@ -81,12 +81,14 @@ class Invoice(BaseModel):
     due_date: str
     total: Money
     paid: bool
+    outstanding: Money = 0
     paid_amount: Money
     paid_at: Optional[str] = None
     items: List[InvoiceItem]
 
 
 class PayInvoiceIn(BaseModel):
+    cycle: Optional[str] = None
     account_id: str
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     value: Optional[Money] = Field(default=None, gt=0)

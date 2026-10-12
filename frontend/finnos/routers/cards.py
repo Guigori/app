@@ -4,7 +4,7 @@ from finnos.lib.money import D, installment_portion
 import uuid
 from datetime import date, datetime, timezone
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Header, Query
 from finnos.lib.cards import best_purchase_day, cycle_bounds, due_date
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
@@ -27,27 +27,10 @@ async def _build(doc: dict, txs: List[dict], accounts: dict) -> CardOut:
     start, closing = cycle_bounds(today, doc["closing_day"])
     due = due_date(closing, doc["closing_day"], doc["due_day"])
     best = best_purchase_day(closing)
-    invoice = D("0.0")
-    future = D("0.0")
-    for tx in txs:
-        if tx.get("card_id") != doc["id"] or tx.get("type") != "despesa":
-            continue
-        value = _occurrence_value(tx)
-        tx_date = tx["date"]
-        if tx.get("installment"):
-            total = int(tx.get("total_installments") or 1)
-            offset = months_between(tx_date[:7], closing.strftime("%Y-%m"))
-            if 0 <= offset < total:
-                invoice += installment_portion(tx, offset)
-            remaining = max(total - max(offset + 1, 0), 0)
-            future += sum(
-                (installment_portion(tx, i) for i in range(max(offset + 1, 0), total)),
-                D(0),
-            )
-        elif start.isoformat() <= tx_date <= closing.isoformat():
-            invoice += value
+    from finnos.lib.invoices import commitment, invoice_state
+    current, future_cents, used_cents = commitment(doc, txs, closing.isoformat())
+    invoice, future, used = D(current)/100, D(future_cents)/100, D(used_cents)/100
     limit = D(doc["limit"])
-    used = round(invoice + future, 2)
     account = accounts.get(doc.get("payment_account_id") or "", {})
     return CardOut(
         id=doc["id"],
@@ -60,7 +43,7 @@ async def _build(doc: dict, txs: List[dict], accounts: dict) -> CardOut:
         payment_account_id=doc.get("payment_account_id"),
         payment_account_name=account.get("name") or None,
         active=doc.get("active", True),
-        invoice_paid=bool((doc.get("paid_cycles") or {}).get(closing.isoformat())),
+        invoice_paid=invoice_state(doc, txs, closing.isoformat())["paid"],
         current_invoice=round(invoice, 2),
         future_installments=round(future, 2),
         used=used,
@@ -127,3 +110,77 @@ async def delete_card(card_id: str, user: dict = Depends(require_user)) -> Respo
     if not result.deleted_count:
         raise HTTPException(404, "Cartão não encontrado.")
     return Response(status_code=204)
+
+
+@router.get("/{card_id}/invoice", response_model=Invoice)
+async def card_invoice(card_id: str, cycle: str | None = Query(None), user: dict = Depends(require_user)):
+    from finnos.lib.invoices import invoice_state, output
+    card = await db.cards.find_one({"id": card_id, "user_id": user["id"]})
+    if not card:
+        raise HTTPException(404, "Cartão não encontrado.")
+    closing = cycle or cycle_bounds(date.fromisoformat(today_iso()), card["closing_day"])[1].isoformat()
+    txs = await db.transactions.find({"user_id": user["id"], "card_id": card_id}).to_list(20000)
+    categories = {c["id"]: c for c in await db.categories.find({"user_id": user["id"]}).to_list(500)}
+    try:
+        return output(invoice_state(card, txs, closing, categories))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+
+@router.post("/{card_id}/pay", response_model=Invoice)
+async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(require_user), x_finnos_operation_id: str = Header(...)):
+    from finnos.lib import db as store
+    from finnos.lib.invoices import invoice_state, output
+    from finnos.lib.invoice_payments import allocate_payment, to_cents
+    from starlette.concurrency import run_in_threadpool
+    import hashlib
+    if not 1 <= len(x_finnos_operation_id) <= 200:
+        raise HTTPException(422, "Identificador de operação inválido.")
+    try:
+        paid_on = date.fromisoformat(payload.date)
+    except ValueError:
+        raise HTTPException(422, "Data inválida.")
+    if paid_on > date.fromisoformat(today_iso()):
+        raise HTTPException(422, "Pagamento realizado não pode ter data futura.")
+    uid = store.scoped({"user_id":user["id"]})
+    request_key = {"card_id":card_id, "account_id":payload.account_id, "date":payload.date, "cycle":payload.cycle, "value_cents":None if payload.value is None else to_cents(payload.value)}
+    identifier = hashlib.sha256(x_finnos_operation_id.encode()).hexdigest()
+    def execute():
+        instance = store.client()
+        def action(tr):
+            owner = store.root(instance,uid)
+            card_ref = owner.collection("cards").document(store.resource_id(card_id))
+            snapshot = card_ref.get(transaction=tr)
+            if not snapshot.exists:
+                raise HTTPException(404,"Cartão não encontrado.")
+            card = dict(store.decode(snapshot.to_dict()),id=card_id)
+            receipt_ref = owner.collection("invoice_payments").document(identifier)
+            receipt = receipt_ref.get(transaction=tr)
+            if receipt.exists:
+                saved = receipt.to_dict()
+                if saved["request"] != request_key:
+                    raise HTTPException(409,"Operação reutilizada com dados diferentes.")
+                return output(saved["state"])
+            acc = owner.collection("accounts").document(store.resource_id(payload.account_id)).get(transaction=tr)
+            if not acc.exists:
+                raise HTTPException(400,"Conta de pagamento inválida.")
+            txs = store.rows(instance,uid,"transactions",tr)
+            cats = {c['id']:c for c in store.rows(instance,uid,"categories",tr)}
+            cycle = payload.cycle or cycle_bounds(date.fromisoformat(today_iso()),card['closing_day'])[1].isoformat()
+            try:
+                state = invoice_state(card,txs,cycle,cats)
+                allocation = allocate_payment(state['total_cents'],[state['paid_cents']] if state['paid_cents'] else [],None if payload.value is None else to_cents(payload.value))
+            except ValueError as exc:
+                raise HTTPException(400,str(exc))
+            now = datetime.now(timezone.utc)
+            # Immutable bank debit; excluded from expense analytics to avoid counting the purchase twice.
+            debit = dict(id=identifier,user_id=uid,name=f"Fatura {card['name']}",value=D(allocation['payment_cents'])/100,type='despesa',status='pago',date=payload.date,account_id=payload.account_id,card_id=None,to_account_id=None,category_id=None,fixed=False,installment=False,invoice_payment=True,invoice_card_id=card_id,invoice_cycle=cycle,created_at=now,updated_at=now)
+            state.update(paid_cents=allocation['paid_cents'],paid=allocation['settled'],paid_at=payload.date)
+            card.setdefault('invoice_cycles',{})[cycle] = dict(items=state['items'],paid_cents=state['paid_cents'],paid_at=payload.date)
+            response = output(state)
+            tr.create(owner.collection('transactions').document(identifier),store.encode(debit))
+            tr.set(card_ref,store.encode(card))
+            tr.create(receipt_ref,dict(request=request_key,state=state,created_at=now))
+            return response
+        return store.atomic(instance,uid,action)
+    return await run_in_threadpool(execute)

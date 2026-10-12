@@ -51,7 +51,7 @@ def month_portion(tx: dict, month: str) -> float | None:
     month to the last installment — so future parcels never double-count in the
     current month. Pending/scheduled money and transfers count as zero.
     """
-    if tx.get("type") == "transferencia" or tx.get("status") != "pago":
+    if tx.get("invoice_payment") or tx.get("type") == "transferencia" or tx.get("status") != "pago":
         return None
     d: str = tx["date"]
     if tx.get("installment"):
@@ -70,7 +70,7 @@ def balance_effects(tx: dict, today: str) -> list[tuple[str, float]]:
     counts regardless of the date; "pendente"/"agendado" never move a balance.
     A parcelado purchase counts only the installments already come due.
     """
-    if tx.get("status") != "pago":
+    if tx.get("card_id") or tx.get("status") != "pago":
         return []
     v = D(tx["value"])
     if tx.get("installment"):

@@ -425,9 +425,9 @@ export async function fetchInvoice(cardId: string): Promise<Invoice> {
   return cachedFetch(`invoice:${cardId}`, () => apiGet<Invoice>(`/cards/${cardId}/invoice`));
 }
 
-export async function payInvoice(cardId: string, input: PayInvoiceInput): Promise<Invoice> {
+export async function payInvoice(cardId: string, input: PayInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
   if (isLocalMode()) return localPayInvoice(cardId, input);
-  return apiPost<Invoice>(`/cards/${cardId}/pay`, input);
+  return apiPost<Invoice>(`/cards/${cardId}/pay`, input, { "X-FINNOS-Operation-ID": operationId });
 }
 
 export async function fetchSubscriptions(): Promise<Subscriptions> {

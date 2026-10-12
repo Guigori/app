@@ -1,5 +1,5 @@
 """Card CRUD security regression tests for the isolated Firestore Preview API."""
-from test_firestore_finance import finance, account, tx
+from tests.test_firestore_finance import finance, account, tx
 
 
 def card(client, account_id=None, **changes):

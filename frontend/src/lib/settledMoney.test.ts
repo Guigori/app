@@ -19,3 +19,7 @@ it("reconciles even a one-cent purchase and honours the adjusted amount", () => 
   expect(settledCents({ ...base, value: 12.35, adjusted_value: 10.10 })).toBe(1010);
   expect(settledCents({ ...base, status: "pendente" })).toBe(0);
 });
+
+it("does not count the invoice bank debit as another expense", () => {
+  expect(settledTotals([base, { ...base, invoice_payment: true }])).toEqual({income:0,expense:100});
+});

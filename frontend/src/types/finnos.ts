@@ -63,6 +63,7 @@ export interface CategoryInput {
 }
 
 export interface Transaction {
+  invoice_payment?: boolean;
   id: string;
   name: string;
   value: number;
@@ -458,11 +459,13 @@ export interface Invoice {
   total: number;
   paid: boolean;
   paid_amount: number;
+  outstanding?: number;
   paid_at: string | null;
   items: InvoiceItem[];
 }
 
 export interface PayInvoiceInput {
+  cycle?: string;
   account_id: string;
   date: string;
   value: number | null;

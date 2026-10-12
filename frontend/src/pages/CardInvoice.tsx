@@ -32,6 +32,7 @@ export default function CardInvoice() {
   const [accountId, setAccountId] = useState("");
   const [payDate, setPayDate] = useState("");
   const [valueRaw, setValueRaw] = useState("");
+  const [operationId, setOperationId] = useState(() => crypto.randomUUID());
   const [formError, setFormError] = useState<string | null>(null);
 
   const invoiceQuery = useQuery({ queryKey: ["invoice", cardId], queryFn: () => fetchInvoice(cardId) });
@@ -44,8 +45,9 @@ export default function CardInvoice() {
   useEffect(() => {
     if (!payOpen || !invoice) return;
     setFormError(null);
-    setPayDate(invoice.due_date);
-    setValueRaw(String(invoice.total));
+    setPayDate(new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }));
+    setValueRaw(String(invoice.outstanding ?? invoice.total - invoice.paid_amount));
+    setOperationId(crypto.randomUUID());
     setAccountId((current) => current || accounts[0]?.id || "");
   }, [payOpen, invoice, accounts]);
 
@@ -55,9 +57,9 @@ export default function CardInvoice() {
   }, [invoice, search]);
 
   const payMutation = useMutation({
-    mutationFn: (input: PayInvoiceInput) => payInvoice(cardId, input),
+    mutationFn: (input: PayInvoiceInput) => payInvoice(cardId, input, operationId),
     onSuccess: async () => {
-      toast.success("Fatura marcada como paga e débito lançado na conta.");
+      toast.success("Pagamento registrado e débito lançado na conta.");
       setPayOpen(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["invoice", cardId] }),
@@ -108,7 +110,7 @@ export default function CardInvoice() {
           </Badge>
         ) : (
           <Button onClick={() => setPayOpen(true)} disabled={invoice.total <= 0} data-testid="pay-invoice-button">
-            Marcar como paga
+            Registrar pagamento
           </Button>
         )}
       </div>
@@ -118,9 +120,9 @@ export default function CardInvoice() {
         <p className="mt-1 font-heading text-3xl font-bold tabular-nums text-foreground" data-testid="invoice-total">
           {money(invoice.total)}
         </p>
-        {invoice.paid ? (
+        {invoice.paid_amount > 0 ? (
           <p className="mt-1 text-sm text-muted-foreground" data-testid="invoice-paid-amount">
-            Pago: {money(invoice.paid_amount)}
+            Pago: {money(invoice.paid_amount)} · Em aberto: {money(invoice.outstanding ?? invoice.total - invoice.paid_amount)}
           </p>
         ) : null}
       </div>
@@ -183,7 +185,7 @@ export default function CardInvoice() {
               const value = parseAmount(valueRaw);
               if (!accountId) return setFormError("Selecione a conta que vai pagar.");
               if (!value || value <= 0) return setFormError("Informe o valor pago.");
-              payMutation.mutate({ account_id: accountId, date: payDate, value });
+              payMutation.mutate({ account_id: accountId, date: payDate, value, cycle: invoice.cycle_end });
             }}
             data-testid="pay-invoice-form"
           >

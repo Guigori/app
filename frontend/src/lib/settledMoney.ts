@@ -1,9 +1,9 @@
 import type { Transaction } from "@/types/finnos";
-type FinancialTransaction = Pick<Transaction, "value" | "adjusted_value" | "type" | "status" | "date" | "installment" | "total_installments">;
+type FinancialTransaction = Pick<Transaction, "value" | "adjusted_value" | "type" | "status" | "date" | "installment" | "total_installments"> & { invoice_payment?: boolean };
 
 /** Same paid/transfer/parcel rules as the Firestore financial service. */
 export function settledCents(transaction: FinancialTransaction, month = transaction.date.slice(0, 7)): number {
-  if (transaction.status !== "pago" || transaction.type === "transferencia") return 0;
+  if (transaction.invoice_payment || transaction.status !== "pago" || transaction.type === "transferencia") return 0;
   const total = Math.round((transaction.adjusted_value ?? transaction.value) * 100);
   if (!Number.isSafeInteger(total)) throw new Error("Valor fora da precisão monetária suportada.");
   if (!transaction.installment) return transaction.date.slice(0, 7) === month ? total : 0;

@@ -147,6 +147,21 @@ def validate_refs(db, uid, name, doc, transaction):
         ]
     if name == "cards":
         fields = [("payment_account_id", "accounts")]
+    if name == "transactions":
+        if doc.get("invoice_payment"):
+            raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
+        cards = rows(db, uid, "cards", transaction)
+        if doc.get("card_id"):
+            from finnos.lib.invoices import occurrences
+            card = next((c for c in cards if c["id"] == doc["card_id"]), None)
+            if card and any(key in (card.get("invoice_cycles") or {}) for key, _, _ in occurrences(card, doc)):
+                raise HTTPException(409, "Ciclo com pagamentos está congelado; compra exige ajuste auditado.")
+        if any(any(item["id"] == doc["id"] for cycle in (card.get("invoice_cycles") or {}).values() for item in cycle["items"]) for card in cards):
+            raise HTTPException(409, "Compra pertence a uma fatura com pagamentos; alteração exige estorno auditado.")
+    if name == "cards":
+        old = root(db, uid).collection(name).document(doc["id"]).get(transaction=transaction)
+        if old.exists and old.to_dict().get("invoice_cycles") and any(doc.get(k) != old.to_dict().get(k) for k in ["closing_day", "due_day"]):
+            raise HTTPException(409, "Ciclo de cartão com pagamentos não pode ser alterado.")
     for field, collection in fields:
         identifier = doc.get(field)
         if (
@@ -283,6 +298,10 @@ class Collection:
                 if not docs:
                     return SimpleNamespace(deleted_count=0)
                 doc = docs[0]
+                if self.name == "transactions":
+                    validate_refs(db, uid, self.name, doc, tr)
+                if self.name == "cards" and doc.get("invoice_cycles"):
+                    raise HTTPException(409, "Cartão possui histórico de pagamentos.")
                 if self.name in {"accounts", "categories", "cards"}:
                     fields = {
                         "accounts": ["account_id", "to_account_id"],

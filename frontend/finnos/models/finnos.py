@@ -77,6 +77,7 @@ class CategoryIn(BaseModel):
 
 
 class TransactionOut(BaseModel):
+    invoice_payment: bool = False
     id: str
     name: str
     value: Money

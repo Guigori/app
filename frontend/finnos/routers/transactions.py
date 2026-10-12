@@ -35,6 +35,7 @@ def enrich_transaction(
     to_account = accounts_by_id.get(doc.get("to_account_id") or "", {})
     category = categories_by_id.get(doc.get("category_id") or "", {})
     return TransactionOut(
+        invoice_payment=doc.get("invoice_payment", False),
         id=doc["id"],
         name=doc["name"],
         value=D(doc["value"]),
