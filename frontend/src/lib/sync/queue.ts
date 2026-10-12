@@ -1,6 +1,7 @@
 import { firebaseAuth } from "@/lib/firebase";
+import { cachedFetch } from "@/lib/offline/accountCache";
 import type { Transaction, TransactionInput } from "@/types/finnos";
-import { apiPost, apiPut } from "@/lib/api";
+import { apiGet, apiPost, apiPut } from "@/lib/api";
 
 const DB_NAME = "finnos-sync";
 const DB_VERSION = 1;
@@ -14,6 +15,7 @@ export interface SyncOperation {
   uid: string;
   kind: OperationKind;
   entityId?: string;
+  baseVersion?: number;
   payload: TransactionInput;
   source: OperationSource;
   createdAt: string;
@@ -37,8 +39,10 @@ async function transact<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore,
   const db = await openDb();
   return new Promise<T>((resolve, reject) => {
     const tx = db.transaction(STORE, mode);
-    fn(tx.objectStore(STORE), resolve, reject);
-    tx.oncomplete = () => db.close();
+    let result: T;
+    fn(tx.objectStore(STORE), (value) => { result = value; }, reject);
+    tx.oncomplete = () => { db.close(); resolve(result); };
+    tx.onabort = () => { db.close(); reject(tx.error); };
     tx.onerror = () => { db.close(); reject(tx.error); };
   });
 }
@@ -51,6 +55,7 @@ export async function queueTransaction(input: TransactionInput, source: Operatio
     id: crypto.randomUUID(),
     kind: entityId ? "transaction.update" : "transaction.create",
     entityId,
+    baseVersion: entityId ? (await cachedFetch(`transaction:${entityId}`, () => apiGet<Transaction>(`/transactions/${entityId}`))).version ?? 1 : undefined,
     payload: input,
     source,
     createdAt: new Date().toISOString(),
@@ -107,7 +112,7 @@ export async function flushSyncQueue(): Promise<void> {
         if (op.kind === "transaction.create") {
           await apiPost<Transaction>("/transactions", op.payload, { "X-FINNOS-Operation-ID": op.id, "X-FINNOS-Source": op.source });
         } else if (op.entityId) {
-          await apiPut<Transaction>(`/transactions/${op.entityId}`, op.payload, { "X-FINNOS-Operation-ID": op.id, "X-FINNOS-Source": op.source });
+          await apiPut<Transaction>(`/transactions/${op.entityId}`, op.payload, { "X-FINNOS-Operation-ID": op.id, "X-FINNOS-Source": op.source, "X-FINNOS-Base-Version": String(op.baseVersion ?? 1) });
         }
         await remove(op.id);
         window.dispatchEvent(new CustomEvent("finnos:sync-success", { detail: { operation: op } }));

@@ -2,7 +2,7 @@
   "framework": "vite",
   "routes": [
     {
-      "src": "/api/(auth/(me|firebase-session|logout|firestore-smoke)|accounts(?:/.*)?|categories(?:/.*)?|transactions(?:/.*)?|dashboard|analytics(?:/.*)?|cards(?:/.*)?|notifications(?:/.*)?|subscriptions|validation/finance(?:/.*)?)",
+      "src": "/api/(auth/(me|firebase-session|logout|firestore-smoke)|accounts(?:/.*)?|categories(?:/.*)?|transactions(?:/.*)?|dashboard|analytics(?:/.*)?|cards(?:/.*)?|notifications(?:/.*)?|subscriptions|budgets(?:/.*)?|goals(?:/.*)?|radar(?:/.*)?|ai(?:/.*)?|simulate(?:/.*)?|validation/finance(?:/.*)?)",
       "dest": "/api"
     },
     {

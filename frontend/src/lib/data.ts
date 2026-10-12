@@ -1,3 +1,4 @@
+import { firebaseAuth } from "@/lib/firebase";
 // Single data boundary for the whole app. Every page/dialog calls these helpers so
 // "conta local" (browser-only) and "conta completa" (server) share one call shape:
 // in account mode they hit /api via src/lib/api.ts, in local mode the browser engine.
@@ -6,7 +7,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { localRadar } from "@/lib/local/radar";
 import { isLocalMode } from "@/lib/mode";
 import { queueTransaction, flushSyncQueue, listSyncOperations, type OperationSource } from "@/lib/sync/queue";
-import { cachedFetch } from "@/lib/offline/accountCache";
+import { cacheSet, cachedFetch } from "@/lib/offline/accountCache";
 import {
   localClearData,
   localCreateAccount,
@@ -119,7 +120,8 @@ export async function fetchMe(): Promise<User> {
       created_at: new Date().toISOString(),
     };
   }
-  return apiGet<User>("/auth/me");
+  await firebaseAuth?.authStateReady();
+  return cachedFetch("me", () => apiGet<User>("/auth/me"));
 }
 
 export async function updateMyName(name: string): Promise<User> {
@@ -315,7 +317,10 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
   }
   const key = `transactions:${params.toString()}`;
   const base = await cachedFetch(key, () => apiGet<Transaction[]>(`/transactions?${params.toString()}`));
-  const pending = (await listSyncOperations()).filter((o) => o.kind === "transaction.create");
+  if (navigator.onLine) await Promise.all(base.map(t => cacheSet(`firebase:${firebaseAuth?.currentUser?.uid}:transaction:${t.id}`, t)));
+  const operations = await listSyncOperations();
+  const pending = operations.filter((o) => o.kind === "transaction.create");
+  const updated = base.map(t => { const op = operations.filter(o => o.kind === "transaction.update" && o.entityId === t.id).at(-1); return op ? {...t,...op.payload} : t; });
   const optimistic: Transaction[] = pending
     .filter((o) => !filters.month || o.payload.date.slice(0, 7) === filters.month)
     .filter((o) => !filters.type || o.payload.type === filters.type)
@@ -324,7 +329,7 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
       to_account_name: null, category_name: null, category_color: null, category_icon: null,
       installment_value: o.payload.installment && o.payload.total_installments ? txAmount(o.payload) / o.payload.total_installments : null,
       created_at: o.createdAt }));
-  return [...optimistic, ...base];
+  return [...optimistic, ...updated];
 }
 
 export async function createTransaction(input: TransactionInput, source: OperationSource = "manual"): Promise<Transaction> {

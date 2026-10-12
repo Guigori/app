@@ -20,6 +20,7 @@ export class ApiError extends Error {
 type JsonBody = unknown;
 
 async function request<T>(method: string, path: string, body?: JsonBody, extraHeaders?: Record<string, string>): Promise<T> {
+  const requestUid = firebaseAuth?.currentUser?.uid;
   // Auth rides the httpOnly session cookie automatically — never add auth headers here.
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -27,6 +28,8 @@ async function request<T>(method: string, path: string, body?: JsonBody, extraHe
     headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...extraHeaders, ...(firebaseAuth?.currentUser ? { "X-FINNOS-User-ID": firebaseAuth.currentUser.uid } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+
+  if (requestUid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
 
   // FastAPI reports request-validation failures as 422 with a {detail: [...]} body.
   if (!res.ok) {

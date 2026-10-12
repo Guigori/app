@@ -64,6 +64,7 @@ export interface CategoryInput {
 
 export interface Transaction {
   invoice_payment?: boolean;
+  version?: number;
   id: string;
   name: string;
   value: number;

@@ -35,6 +35,7 @@ def enrich_transaction(
     to_account = accounts_by_id.get(doc.get("to_account_id") or "", {})
     category = categories_by_id.get(doc.get("category_id") or "", {})
     return TransactionOut(
+        version=doc.get("version", 1),
         invoice_payment=doc.get("invoice_payment", False),
         id=doc["id"],
         name=doc["name"],
@@ -210,18 +211,6 @@ async def create_transaction(
     x_finnos_operation_id: Optional[str] = Header(default=None),
     x_finnos_source: Optional[str] = Header(default="manual"),
 ) -> TransactionOut:
-    if x_finnos_operation_id:
-        existing = await db.transactions.find_one(
-            {"user_id": user["id"], "operation_id": x_finnos_operation_id}
-        )
-        if existing:
-            accounts_by_id, categories_by_id = await _ref_maps(user["id"])
-            return enrich_transaction(
-                existing,
-                accounts_by_id,
-                categories_by_id,
-                await _cards_by_id(user["id"]),
-            )
     await _validate(user["id"], payload)
     doc = _document(user["id"], payload)
     doc["operation_id"] = x_finnos_operation_id
@@ -239,17 +228,9 @@ async def update_transaction(
     payload: TransactionIn,
     user: dict = Depends(require_user),
     x_finnos_operation_id: Optional[str] = Header(default=None),
+    x_finnos_base_version: Optional[int] = Header(default=None),
     x_finnos_source: Optional[str] = Header(default="manual"),
 ) -> TransactionOut:
-    if x_finnos_operation_id:
-        replay = await db.transactions.find_one(
-            {"id": tx_id, "user_id": user["id"], "operation_id": x_finnos_operation_id}
-        )
-        if replay:
-            accounts_by_id, categories_by_id = await _ref_maps(user["id"])
-            return enrich_transaction(
-                replay, accounts_by_id, categories_by_id, await _cards_by_id(user["id"])
-            )
     existing = await db.transactions.find_one({"id": tx_id, "user_id": user["id"]})
     if not existing:
         raise HTTPException(status_code=404, detail="Transação não encontrada.")
@@ -258,8 +239,10 @@ async def update_transaction(
     doc["id"] = tx_id
     doc["created_at"] = existing.get("created_at")
     doc["operation_id"] = x_finnos_operation_id
+    doc["_expected_version"] = x_finnos_base_version
     doc["source"] = x_finnos_source or "manual"
     await db.transactions.replace_one({"id": tx_id, "user_id": user["id"]}, doc)
+    doc = await db.transactions.find_one({"id":tx_id,"user_id":user["id"]})
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
     return enrich_transaction(
         doc, accounts_by_id, categories_by_id, await _cards_by_id(user["id"])

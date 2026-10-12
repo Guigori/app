@@ -29,17 +29,17 @@ def invoice_state(card, txs, cycle, categories=None):
             if key != cycle:
                 continue
             cat = categories.get(tx.get('category_id'), {})
-            items.append(dict(id=tx['id'],name=tx['name'],date=tx['date'],value_cents=value,category_name=cat.get('name'),category_color=cat.get('color'),installment_label=label))
+            items.append(dict(id=tx['id'],name=tx['name'],date=tx['date'],purchase_cents=value,category_name=cat.get('name'),category_color=cat.get('color'),installment_label=label))
     saved = (card.get('invoice_cycles') or {}).get(cycle)
     if saved:
         items = saved['items']
-    total = sum(i['value_cents'] for i in items)
+    total = sum(i['purchase_cents'] for i in items)
     paid = (saved or {}).get('paid_cents', 0)
     return dict(card_id=card['id'],card_name=card['name'],cycle_start=start,cycle_end=cycle,due_date=due_date(closing,card['closing_day'],card['due_day']).isoformat(),total_cents=total,paid_cents=paid,paid=total > 0 and paid == total,paid_at=(saved or {}).get('paid_at'),items=items)
 
 
 def output(state):
-    return {**{k:v for k,v in state.items() if k not in {'total_cents','paid_cents','items'}},'total':state['total_cents']/100,'paid_amount':state['paid_cents']/100,'outstanding':(state['total_cents']-state['paid_cents'])/100,'items':[{**{k:v for k,v in i.items() if k != 'value_cents'},'value':i['value_cents']/100} for i in state['items']]}
+    return {**{k:v for k,v in state.items() if k not in {'total_cents','paid_cents','items'}},'total':state['total_cents']/100,'paid_amount':state['paid_cents']/100,'outstanding':(state['total_cents']-state['paid_cents'])/100,'items':[{**{k:v for k,v in i.items() if k != 'purchase_cents'},'value':i['purchase_cents']/100} for i in state['items']]}
 
 
 def commitment(card, txs, current):
@@ -48,6 +48,6 @@ def commitment(card, txs, current):
         for key, value, _ in occurrences(card, tx):
             totals[key] = totals.get(key, 0) + value
     for key, saved in (card.get('invoice_cycles') or {}).items():
-        totals[key] = sum(i['value_cents'] for i in saved['items'])
+        totals[key] = sum(i['purchase_cents'] for i in saved['items'])
     owed = {key:max(0,total-(card.get('invoice_cycles') or {}).get(key,{}).get('paid_cents',0)) for key,total in totals.items()}
     return owed.get(current,0),sum(v for k,v in owed.items() if k > current),sum(owed.values())

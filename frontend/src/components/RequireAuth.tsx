@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { apiGet } from "@/lib/api";
+import { fetchMe } from "@/lib/data";
 import { isLocalMode } from "@/lib/mode";
-import type { User } from "@/types/finnos";
+
 import { FinnosLoading } from "@/components/brand/FinnosLoading";
 
 /** Keep the brand intro brief and independent of video playback. Authentication
@@ -19,7 +19,7 @@ export function RequireAuth() {
   }, []);
   const { isPending, isError } = useQuery({
     queryKey: ["me"],
-    queryFn: () => apiGet<User>("/auth/me"),
+    queryFn: fetchMe,
     retry: false,
     enabled: !local,
     staleTime: 5 * 60 * 1000,

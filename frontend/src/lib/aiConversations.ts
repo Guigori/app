@@ -1,3 +1,4 @@
+import { firebaseAuth } from "@/lib/firebase";
 import { getMode } from "@/lib/mode";
 
 export type FinnVisual = {
@@ -9,7 +10,7 @@ export type FinnVisual = {
 export type FinnMessage = { id: string; role: "user" | "assistant"; content: string; createdAt: string; visual?: FinnVisual };
 export type FinnConversation = { id: string; title: string; updatedAt: string; messages: FinnMessage[] };
 
-const key = () => `finnos:ai-conversations:${getMode()}`;
+const key = () => `finnos:ai-conversations:${getMode()}:${getMode() === "account" ? firebaseAuth?.currentUser?.uid ?? "unauthenticated" : "device"}`;
 const MAX = 3;
 
 export function readFinnConversations(): FinnConversation[] {

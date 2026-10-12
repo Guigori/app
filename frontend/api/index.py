@@ -41,7 +41,7 @@ def firebase_app():
         try:
             payload = json.loads(raw)
             expected = os.getenv("FIREBASE_PROJECT_ID")
-            if expected and payload.get("project_id") != expected:
+            if not expected or payload.get("project_id") != expected:
                 raise ValueError("Project mismatch")
             credential = credentials.Certificate(payload)
             return firebase_admin.initialize_app(credential, name="finnos-preview-auth")

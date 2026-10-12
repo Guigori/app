@@ -6,7 +6,12 @@ No Motor, MongoDB, legacy auth or database startup is imported.
 """
 
 import re
+import os
 import uuid
+import hashlib
+import json
+from datetime import date, datetime
+from decimal import Decimal
 from contextvars import ContextVar
 from types import SimpleNamespace
 from firebase_admin import firestore
@@ -25,7 +30,7 @@ MONEY_FIELDS = {
     "monthly_budget",
     "monthly_goal",
     "limit",
-    "amount",
+    "amount", "planned", "expected_income", "target", "saved", "contribution",
 }
 
 
@@ -38,6 +43,12 @@ def encode(doc):
             result[key + "_cents"] = cents(value)
         elif isinstance(value, dict):
             result[key] = encode(value)
+        elif isinstance(value, list):
+            result[key] = [encode(x) if isinstance(x, dict) else x for x in value]
+        elif isinstance(value, date) and not isinstance(value, datetime):
+            result[key] = value.isoformat()
+        elif isinstance(value, Decimal):
+            result[key] = float(value)
         else:
             result[key] = value
     return result
@@ -50,6 +61,8 @@ def decode(doc):
             if not isinstance(value, int) or isinstance(value, bool):
                 raise HTTPException(503, "Registro financeiro inválido.")
             result[key[:-6]] = D(value) / 100
+        elif isinstance(value, list):
+            result[key] = [decode(x) if isinstance(x, dict) else x for x in value]
         elif key in MONEY_FIELDS and value is not None:
             # Existing Firestore records can be read without a Mongo migration.
             result[key] = D(value)
@@ -70,6 +83,10 @@ def matches(doc, query):
         if isinstance(expected, dict):
             for operator, operand in expected.items():
                 if operator == "$gte" and (actual is None or actual < operand):
+                    return False
+                if operator == "$gt" and (actual is None or actual <= operand):
+                    return False
+                if operator == "$lt" and (actual is None or actual >= operand):
                     return False
                 if operator == "$lte" and (actual is None or actual > operand):
                     return False
@@ -99,7 +116,10 @@ def resource_id(value):
 
 def client():
     instance = firestore.client(app=firebase_application())
-    if instance.project != "finnos-app":
+    expected = os.getenv("FIREBASE_PROJECT_ID")
+    if os.getenv("VERCEL_ENV") == "preview" and expected != "finnos-dev":
+        raise HTTPException(503, "Preview requer o projeto isolado finnos-dev.")
+    if not expected or instance.project != expected:
         raise HTTPException(503, "Projeto financeiro inesperado.")
     return instance
 
@@ -162,6 +182,19 @@ def validate_refs(db, uid, name, doc, transaction):
         old = root(db, uid).collection(name).document(doc["id"]).get(transaction=transaction)
         if old.exists and old.to_dict().get("invoice_cycles") and any(doc.get(k) != old.to_dict().get(k) for k in ["closing_day", "due_day"]):
             raise HTTPException(409, "Ciclo de cartão com pagamentos não pode ser alterado.")
+    if name == "budget_cycles":
+        ids = [a['category_id'] for a in doc.get('allocations', [])]
+        if len(ids) != len(set(ids)):
+            raise HTTPException(422, "Categoria duplicada no orçamento.")
+        fields = [("category_id", "categories")]
+        for identifier in ids:
+            if not root(db, uid).collection('categories').document(resource_id(identifier)).get(transaction=transaction).exists:
+                raise HTTPException(400, "Categoria de orçamento inválida.")
+        for cycle in rows(db, uid, 'budget_cycles', transaction):
+            if cycle['id'] != doc['id'] and not cycle.get('closed_at') and cycle['start_date'] <= doc['end_date'] and cycle['end_date'] >= doc['start_date']:
+                raise HTTPException(409, "Já existe orçamento nesse período.")
+    if name == "goals":
+        fields = [("account", "accounts")]
     for field, collection in fields:
         identifier = doc.get(field)
         if (
@@ -211,8 +244,10 @@ class Collection:
         scoped(query)
         return Cursor(self, query)
 
-    async def find_one(self, query):
-        docs = await self.find(query).to_list(20000)
+    async def find_one(self, query, sort=None):
+        cursor = self.find(query)
+        if sort: cursor.sort(sort)
+        docs = await cursor.to_list(20000)
         return docs[0] if docs else None
 
     async def count_documents(self, query):
@@ -239,6 +274,20 @@ class Collection:
                     .document(resource_id(identifier))
                 )
                 existing = ref.get(transaction=tr)
+                operation_ref = None
+                fingerprint = None
+                if doc.get("operation_id"):
+                    op = hashlib.sha256((self.name + ":create:" + doc["operation_id"]).encode()).hexdigest()
+                    operation_ref = root(db, uid).collection("sync_receipts").document(op)
+                    receipt = operation_ref.get(transaction=tr)
+                    fingerprint = hashlib.sha256(json.dumps(encode({k:v for k,v in doc.items() if k not in {"id", "created_at", "updated_at", "version"}}), default=str, sort_keys=True).encode()).hexdigest()
+                    if receipt.exists:
+                        if receipt.to_dict()["fingerprint"] != fingerprint:
+                            raise HTTPException(409, "Operação já utilizada com outros dados.")
+                        if not existing.exists:
+                            raise HTTPException(409, "A transação original foi removida.")
+                        doc.update(decode(existing.to_dict()))
+                        return
                 validate_refs(db, uid, self.name, doc, tr)
                 if existing.exists:
                     if (
@@ -249,7 +298,10 @@ class Collection:
                         doc.update(decode(existing.to_dict()))
                         return
                     raise HTTPException(409, "Registro já existe.")
+                if self.name == "transactions": doc["version"] = 1
                 tr.create(ref, encode(doc))
+                if operation_ref is not None:
+                    tr.create(operation_ref, {"fingerprint": fingerprint, "target_id": identifier})
 
             return atomic(db, uid, action)
 
@@ -275,12 +327,32 @@ class Collection:
                 ref = (
                     root(db, uid).collection(self.name).document(resource_id(doc["id"]))
                 )
+                previous_version = doc.get("version", 1)
+                expected_version = update.get("_expected_version")
+                operation_ref = None
+                if replace and update.get("operation_id"):
+                    op = hashlib.sha256((self.name + ":update:" + update["operation_id"]).encode()).hexdigest()
+                    operation_ref = root(db, uid).collection("sync_receipts").document(op)
+                    receipt = operation_ref.get(transaction=tr)
+                    fingerprint = hashlib.sha256(json.dumps(encode({k:v for k,v in update.items() if k not in {"created_at", "updated_at", "_expected_version"}}), default=str, sort_keys=True).encode()).hexdigest()
+                    if receipt.exists:
+                        if receipt.to_dict()['fingerprint'] != fingerprint:
+                            raise HTTPException(409, "Identificador de operação reutilizado.")
+                        return SimpleNamespace(matched_count=1)
+                if expected_version is not None and expected_version != previous_version:
+                    raise HTTPException(409, "Conflito: registro alterado desde a cópia offline. Revise antes de reenviar.")
                 if replace:
                     doc = dict(update, id=doc["id"], user_id=uid)
+                    doc.pop("_expected_version", None)
                 else:
+                    if not docs:
+                        doc.update(update.get("$setOnInsert", {}))
                     doc.update(update["$set"])
+                if self.name == 'transactions': doc['version'] = previous_version + 1
                 validate_refs(db, uid, self.name, doc, tr)
                 tr.set(ref, encode(doc))
+                if operation_ref is not None:
+                    tr.create(operation_ref, {'fingerprint':fingerprint, 'target_id':doc['id']})
                 return SimpleNamespace(matched_count=1)
 
             return atomic(db, uid, action)
@@ -344,7 +416,7 @@ db = SimpleNamespace(
             "categories",
             "transactions",
             "cards",
-            "notification_states",
+            "notification_states", "budget_cycles", "radar_states", "radar_feedback", "goals", "ai_keys", "ai_feedback",
         ]
     }
 )
