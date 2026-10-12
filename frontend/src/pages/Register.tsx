@@ -3,12 +3,11 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, MailCheck } from "lucide-react";
 import { toast } from "sonner";
-import { apiGet, apiPost } from "@/lib/api";
-import { getApiErrorMessage } from "@/lib/errors";
+import { apiGet } from "@/lib/api";
+import { createEmailAccount, completeEmailVerification, resendAccountVerification, emailSessionError } from "@/lib/emailSession";
 import { beginSession } from "@/lib/session";
 import { disableLocalMode, getMode } from "@/lib/mode";
-import { readDb } from "@/lib/local/store";
-import type { SignupResult, User } from "@/types/finnos";
+import type { User } from "@/types/finnos";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
 import { openGoogleSession, googleSessionError } from "@/lib/googleSession";
@@ -31,63 +30,35 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
-  const [code, setCode] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
   const signupMutation = useMutation({
-    mutationFn: () =>
-      apiPost<SignupResult>("/auth/signup", {
-        name: name.trim(),
-        email: email.trim(),
-        password,
-        password_confirm: passwordConfirm,
-      }),
-    onSuccess: () => {
-      setFormError(null);
+    mutationFn: () => createEmailAccount(name, email, password),
+    onSuccess: (result) => {
+      setPassword("");
+      setPasswordConfirm("");
+      setFormError(result.verificationSent ? null : "Conta criada, mas o envio falhou. Use Reenviar link.");
       setStep("code");
-      toast.success("Enviamos um código de 6 dígitos para o seu e-mail.");
+      if (result.verificationSent) toast.success("Enviamos um link de confirmação para o seu e-mail.");
     },
-    onError: (error) => setFormError(getApiErrorMessage(error, "Não foi possível criar sua conta.")),
+    onError: (error) => setFormError(emailSessionError(error)),
   });
 
   const verifyMutation = useMutation({
-    mutationFn: () => apiPost<User>("/auth/verify-email", { email: email.trim(), code: code.trim() }),
+    mutationFn: () => completeEmailVerification(signupMutation.data?.uid || ""),
     onSuccess: async () => {
-      // The verification response opens the secure account session. If signup
-      // started from local mode, migrate browser data before switching modes.
-      if (getMode() === "local") {
-        try {
-          const local = readDb();
-          const migrationKey = "finnos:local-migration-id";
-          let importId = window.localStorage.getItem(migrationKey);
-          if (!importId) {
-            importId = crypto.randomUUID();
-            window.localStorage.setItem(migrationKey, importId);
-          }
-          await apiPost("/migration/local", {
-            import_id: importId,
-            accounts: local.accounts,
-            categories: local.categories,
-            transactions: local.transactions,
-            cards: local.cards,
-          });
-          toast.success("Conta criada e seus dados locais foram preservados.");
-        } catch (error) {
-          setFormError(getApiErrorMessage(error, "Sua conta foi criada, mas não conseguimos importar os dados locais. Nada foi apagado deste aparelho."));
-          return;
-        }
-      }
+      if (getMode() === "local") toast.info("Seus dados locais continuam neste aparelho. A transferência para a conta ainda não está disponível.");
       disableLocalMode();
       await beginSession();
       navigate("/onboarding", { replace: true });
     },
-    onError: (error) => setFormError(getApiErrorMessage(error, "Código inválido.")),
+    onError: (error) => setFormError(emailSessionError(error)),
   });
 
   const resendMutation = useMutation({
-    mutationFn: () => apiPost<SignupResult>("/auth/resend-code", { email: email.trim() }),
-    onSuccess: () => toast.success("Novo código enviado."),
-    onError: (error) => toast.error(getApiErrorMessage(error)),
+    mutationFn: () => resendAccountVerification(signupMutation.data?.uid || ""),
+    onSuccess: () => toast.success("Novo link enviado."),
+    onError: (error) => toast.error(emailSessionError(error)),
   });
 
   if (meQuery.isSuccess) return <Navigate to="/" replace />;
@@ -117,7 +88,7 @@ export default function Register() {
                   Confirme seu e-mail
                 </CardTitle>
                 <CardDescription>
-                  Digite o código de 6 dígitos que enviamos para <strong>{email}</strong>. Ele expira em 15 minutos.
+                  Abra o link de confirmação enviado para <strong>{email}</strong> e volte para continuar.
                 </CardDescription>
               </>
             )}
@@ -196,32 +167,14 @@ export default function Register() {
                 }}
                 data-testid="verify-email-form"
               >
-                <div className="space-y-2">
-                  <Label htmlFor="verify-code">Código de confirmação</Label>
-                  <Input
-                    id="verify-code"
-                    className="h-12 rounded-2xl border-[#D9D7E8] bg-[#F8F8FC] px-4 text-center font-heading text-2xl tracking-[0.5em] text-slate-950 focus-visible:border-[#5B35FF] focus-visible:ring-[#5B35FF]/15"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    required
-                    pattern="\d{6}"
-                    maxLength={6}
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="000000"
-                    
-                    data-testid="verify-code-input"
-                  />
-                </div>
-
                 {formError ? (
                   <p role="alert" className="text-sm font-medium text-destructive" data-testid="verify-form-error">
                     {formError}
                   </p>
                 ) : null}
 
-                <Button type="submit" className="h-12 w-full rounded-xl" disabled={verifyMutation.isPending || code.length !== 6} data-testid="verify-submit-button">
-                  {verifyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : "Confirmar e entrar"}
+                <Button type="submit" className="h-12 w-full rounded-xl" disabled={verifyMutation.isPending} data-testid="verify-submit-button">
+                  {verifyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : "Já confirmei, entrar"}
                 </Button>
                 <div className="flex items-center justify-between text-sm">
                   <button type="button" onClick={() => setStep("form")} className="text-muted-foreground hover:underline" data-testid="verify-change-email-button">
@@ -234,7 +187,7 @@ export default function Register() {
                     className="font-semibold text-primary hover:underline disabled:opacity-60"
                     data-testid="verify-resend-button"
                   >
-                    Reenviar código
+                    Reenviar link
                   </button>
                 </div>
               </form>

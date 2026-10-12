@@ -103,7 +103,7 @@ def firebase_session(request: Request, response: Response):
     claims = verified_claims(token.strip())
     auth_time = claims.get("auth_time")
     if not isinstance(auth_time, (int, float)) or not 0 <= time.time() - auth_time <= 300:
-        raise HTTPException(401, "Entre novamente com Google para iniciar a sessão.")
+        raise HTTPException(401, "Entre novamente para iniciar a sessão.")
     user = user_out(claims)
     try:
         cookie = auth.create_session_cookie(token.strip(), expires_in=TTL, app=firebase_app())

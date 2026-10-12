@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, Eye, EyeOff, Loader2, MonitorSmartphone } from "lucide-react";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { beginSession } from "@/lib/session";
 import { disableLocalMode, enableLocalMode, enableDemoMode } from "@/lib/mode";
@@ -10,6 +10,7 @@ import type { User } from "@/types/finnos";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
 import { openGoogleSession, googleSessionError } from "@/lib/googleSession";
+import { openEmailSession, requestPasswordRecovery, emailSessionError } from "@/lib/emailSession";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,16 +32,21 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [forgotOpen, setForgotOpen] = useState(false);
+  const [recoverySent, setRecoverySent] = useState(false);
+  const recoveryMutation = useMutation({
+    mutationFn: () => requestPasswordRecovery(email),
+    onSuccess: () => setRecoverySent(true),
+  });
   const [loginSucceeded, setLoginSucceeded] = useState(false);
 
   const loginMutation = useMutation({
-    mutationFn: (credentials: { email: string; password: string }) => apiPost<User>("/auth/login", credentials),
+    mutationFn: (credentials: { email: string; password: string }) => openEmailSession(credentials.email, credentials.password),
     onSuccess: async () => {
       disableLocalMode();
       await beginSession();
       navigate("/", { replace: true });
     },
-    onError: (error) => { setLoginSucceeded(false); setFormError(getApiErrorMessage(error, "E-mail ou senha incorretos.")); },
+    onError: (error) => { setLoginSucceeded(false); setFormError(emailSessionError(error)); },
   });
 
   const demoMutation = useMutation({
@@ -200,13 +206,16 @@ export default function Login() {
           <DialogHeader>
             <DialogTitle className="font-heading">Recuperação de senha</DialogTitle>
             <DialogDescription>
-              Em breve: a recuperação de senha por e-mail chega em uma próxima entrega do FINNOS. Enquanto isso,
-              entre em contato com o suporte se precisar de ajuda.
+              Informe o e-mail da sua conta para receber um link do Firebase. Os endereços fictícios de teste não recebem mensagens.
             </DialogDescription>
           </DialogHeader>
-          <Button onClick={() => setForgotOpen(false)} data-testid="forgot-password-close-button">
-            Entendi
-          </Button>
+          {recoverySent ? <p role="status">Se houver uma conta para este e-mail, enviaremos o link de recuperação.</p> : <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); recoveryMutation.mutate(); }}>
+            <Label htmlFor="recovery-email">E-mail</Label>
+            <Input id="recovery-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
+            {recoveryMutation.isError ? <p role="alert">{emailSessionError(recoveryMutation.error)}</p> : null}
+            <Button type="submit" disabled={recoveryMutation.isPending}>Enviar link de recuperação</Button>
+          </form>}
+          <Button variant="outline" onClick={() => setForgotOpen(false)} data-testid="forgot-password-close-button">Fechar</Button>
         </DialogContent>
       </Dialog>
     </>
