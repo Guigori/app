@@ -117,8 +117,8 @@ def resource_id(value):
 def client():
     instance = firestore.client(app=firebase_application())
     expected = os.getenv("FIREBASE_PROJECT_ID")
-    if os.getenv("VERCEL_ENV") == "preview" and expected != "finnos-dev":
-        raise HTTPException(503, "Preview requer o projeto isolado finnos-dev.")
+    if os.getenv("VERCEL_ENV") == "preview" and expected != "finnos-app":
+        raise HTTPException(503, "Preview requer o projeto autorizado finnos-app.")
     if not expected or instance.project != expected:
         raise HTTPException(503, "Projeto financeiro inesperado.")
     return instance

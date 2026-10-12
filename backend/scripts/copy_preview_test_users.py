@@ -72,6 +72,7 @@ def execute(data,target_app):
 
 
 def main():
+    raise SystemExit("Deprecated: finnos-dev is inactive. Use configure_test_users.py to preserve identities in finnos-app.")
     parser=argparse.ArgumentParser();parser.add_argument('--execute',action='store_true');args=parser.parse_args()
     source=check_project(os.environ['FINNOS_SOURCE_ADMIN_FILE'],'finnos-app','test-source-readonly')
     data=inspect(source)
