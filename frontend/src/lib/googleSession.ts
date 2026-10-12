@@ -1,0 +1,32 @@
+import { signInWithPopup, signOut } from "firebase/auth";
+import { firebaseAuth, firebaseConfigurationError, googleProvider } from "./firebase";
+import { apiPostWithBearer } from "./api";
+import { getApiErrorMessage } from "./errors";
+import type { User } from "@/types/finnos";
+
+export async function openGoogleSession(): Promise<User> {
+  if (!firebaseAuth) throw new Error(firebaseConfigurationError || "Firebase não configurado neste ambiente.");
+  const result = await signInWithPopup(firebaseAuth, googleProvider);
+  try {
+    const idToken = await result.user.getIdToken();
+    return await apiPostWithBearer<User>("/auth/firebase-session", idToken);
+  } catch (error) {
+    // A successful popup is not a successful FINNOS server session.
+    await signOut(firebaseAuth).catch(() => undefined);
+    throw error;
+  }
+}
+
+export function googleSessionError(error: unknown): string {
+  if (!firebaseAuth) return firebaseConfigurationError || "Firebase não configurado neste ambiente.";
+  const code = typeof error === "object" && error !== null && "code" in error
+    && typeof error.code === "string" && error.code.startsWith("auth/") ? error.code : null;
+  if (code === "auth/api-key-not-valid" || code === "auth/invalid-api-key") {
+    return `A chave Firebase deste ambiente foi recusada (${code}). Confira a chave Web, o projeto e as restrições da API no Preview e gere um novo deploy.`;
+  }
+  if (code === "auth/unauthorized-domain") {
+    return "Este domínio de preview não está autorizado no Firebase (auth/unauthorized-domain).";
+  }
+  return code ? `Falha na autenticação Google (${code}).`
+    : getApiErrorMessage(error, "Não foi possível iniciar a sessão no servidor.");
+}

@@ -1,16 +1,15 @@
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Eye, EyeOff, Loader2, MonitorSmartphone, X } from "lucide-react";
-import { apiGet, apiPost, apiPostWithBearer } from "@/lib/api";
+import { Check, Eye, EyeOff, Loader2, MonitorSmartphone } from "lucide-react";
+import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { beginSession } from "@/lib/session";
 import { disableLocalMode, enableLocalMode, enableDemoMode } from "@/lib/mode";
 import type { User } from "@/types/finnos";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
-import { firebaseAuth, firebaseConfigured, googleProvider } from "@/lib/firebase";
-import { signInWithPopup } from "firebase/auth";
+import { openGoogleSession, googleSessionError } from "@/lib/googleSession";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -77,7 +76,17 @@ export default function Login() {
             <CardDescription>Entre para continuar acompanhando suas finanças.</CardDescription>
           </CardHeader>
           <CardContent>
-            <SocialAuthButtons onGoogle={async()=>{ setFormError(null); if(!firebaseConfigured||!firebaseAuth){setFormError("Firebase ainda não foi configurado neste ambiente.");return} try{const result=await signInWithPopup(firebaseAuth,googleProvider);const idToken=await result.user.getIdToken();await apiPostWithBearer<User>("/auth/firebase-session",idToken);disableLocalMode();await beginSession();navigate("/",{replace:true})}catch(error){const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" && error.code.startsWith("auth/") ? error.code : null; const apiMessage = error instanceof Error && error.name === "ApiError" ? getApiErrorMessage(error, "Não foi possível iniciar a sessão no servidor.") : null; setFormError(code ? `Falha na autenticação Google (${code}).` : apiMessage || getApiErrorMessage(error,"Não foi possível entrar com Google."))}}} />
+            <SocialAuthButtons onGoogle={async () => {
+                setFormError(null);
+                try {
+                  await openGoogleSession();
+                  disableLocalMode();
+                  await beginSession();
+                  navigate("/", { replace: true });
+                } catch (error) {
+                  setFormError(googleSessionError(error));
+                }
+              }} />
             <div className="my-4 flex items-center gap-3 text-xs text-slate-500 sm:my-5"><span className="h-px flex-1 bg-slate-200" />ou<span className="h-px flex-1 bg-slate-200" /></div>
             <form
               className="space-y-3 sm:space-y-4"

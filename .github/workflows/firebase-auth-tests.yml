@@ -1,6 +1,8 @@
 name: FINNOS Firebase Auth Tests
 
 on:
+  push:
+    branches: [feat/firebase-fastapi-migration-20261012]
   workflow_dispatch:
   pull_request:
     branches: [main]
@@ -14,6 +16,10 @@ on:
       - "backend/routers/firebase_diagnostics.py"
       - "backend/routers/firebase_transactions.py"
       - "backend/server.py"
+      - "backend/tests/test_vercel_firebase_session.py"
+      - "frontend/api/**"
+      - "frontend/requirements.txt"
+      - "frontend/vercel.json"
       - ".github/workflows/firebase-auth-tests.yml"
 
 permissions:
@@ -34,8 +40,8 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "pytest>=8,<10" "pytest-xdist>=3.6.0" "pytest-asyncio>=0.24.0" "fastapi==0.141.1" "firebase-admin>=6.5.0"
+          python -m pip install "pytest>=8,<10" "pytest-xdist>=3.6.0" "pytest-asyncio>=0.24.0" -r frontend/requirements.txt
       - name: Run Firebase authentication contract tests
         env:
           PYTHONPATH: backend
-        run: python -m pytest backend/tests/test_firebase_auth.py backend/tests/test_firestore_transactions.py backend/tests/test_firestore_http.py backend/tests/test_firebase_diagnostics.py -v
+        run: python -m pytest backend/tests/test_firebase_auth.py backend/tests/test_firestore_transactions.py backend/tests/test_firestore_http.py backend/tests/test_firebase_diagnostics.py backend/tests/test_vercel_firebase_session.py -v

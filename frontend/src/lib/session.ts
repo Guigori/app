@@ -3,6 +3,8 @@
 import { apiPost } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
 import { clearAccountCache } from "@/lib/offline/accountCache";
+import { firebaseAuth } from "@/lib/firebase";
+import { signOut } from "firebase/auth";
 
 /** After login/signup: drop stale cache so the app fetches the new session's data. */
 export async function beginSession(): Promise<void> {
@@ -16,6 +18,7 @@ export async function endSession(): Promise<void> {
   try {
     await apiPost("/auth/logout");
   } finally {
+    if (firebaseAuth) await signOut(firebaseAuth).catch(() => undefined);
     queryClient.clear();
     await clearAccountCache();
   }

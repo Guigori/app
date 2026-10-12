@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, MailCheck } from "lucide-react";
 import { toast } from "sonner";
-import { apiGet, apiPost, apiPostWithBearer } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { beginSession } from "@/lib/session";
 import { disableLocalMode, getMode } from "@/lib/mode";
@@ -11,8 +11,7 @@ import { readDb } from "@/lib/local/store";
 import type { SignupResult, User } from "@/types/finnos";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { SocialAuthButtons } from "@/components/auth/SocialAuthButtons";
-import { firebaseAuth, firebaseConfigured, googleProvider } from "@/lib/firebase";
-import { signInWithPopup } from "firebase/auth";
+import { openGoogleSession, googleSessionError } from "@/lib/googleSession";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -125,7 +124,17 @@ export default function Register() {
           </CardHeader>
           <CardContent>
             {step === "form" ? <>
-              <SocialAuthButtons onGoogle={async()=>{ setFormError(null); if(!firebaseConfigured||!firebaseAuth){setFormError("Firebase ainda não foi configurado neste ambiente.");return} try{const result=await signInWithPopup(firebaseAuth,googleProvider);const idToken=await result.user.getIdToken();await apiPostWithBearer<User>("/auth/firebase-session",idToken);disableLocalMode();await beginSession();navigate("/onboarding",{replace:true})}catch(error){setFormError(getApiErrorMessage(error,"Não foi possível entrar com Google."))}}} />
+              <SocialAuthButtons onGoogle={async () => {
+                setFormError(null);
+                try {
+                  await openGoogleSession();
+                  disableLocalMode();
+                  await beginSession();
+                  navigate("/onboarding", { replace: true });
+                } catch (error) {
+                  setFormError(googleSessionError(error));
+                }
+              }} />
               <div className="my-5 flex items-center gap-3 text-xs text-slate-500"><span className="h-px flex-1 bg-slate-200" />ou<span className="h-px flex-1 bg-slate-200" /></div>
               
               <form

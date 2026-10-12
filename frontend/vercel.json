@@ -1,5 +1,10 @@
 {
+  "framework": "vite",
   "routes": [
+    {
+      "src": "/api/auth/(me|firebase-session|logout)",
+      "dest": "/api"
+    },
     {
       "handle": "filesystem"
     },
