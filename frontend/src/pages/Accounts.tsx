@@ -55,6 +55,13 @@ export default function Accounts() {
 
       {accountsQuery.isPending ? (
         <FinnosPageLoading title="Carregando contas" description="Buscando seus saldos, entradas e saídas." />
+      ) : accountsQuery.isError ? (
+        <Card role="alert" data-testid="accounts-load-error">
+          <CardContent className="space-y-3 p-5">
+            <p>{getApiErrorMessage(accountsQuery.error, "Não foi possível carregar suas contas.")}</p>
+            <Button variant="outline" onClick={() => accountsQuery.refetch()}>Tentar novamente</Button>
+          </CardContent>
+        </Card>
       ) : accounts.length === 0 ? (
         <EmptyState
           icon={<Wallet className="h-5 w-5" aria-hidden="true" />}

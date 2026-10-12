@@ -2,8 +2,8 @@
 
 Vercel's project root is frontend/. Importing backend/server.py would require
 Mongo credentials and run its index-creation lifespan. This entrypoint never
-imports that server or touches MongoDB. The opt-in Firestore diagnostic touches
-only a random temporary document in _migration_smoke. Firestore rules stay unchanged.
+imports that server or touches MongoDB. Financial routes use UID-scoped Firestore subcollections. The diagnostic uses
+a temporary _migration_smoke document. Firestore rules stay unchanged.
 """
 import json
 import os
@@ -202,3 +202,7 @@ def firestore_smoke(request: Request):
         "Exclusão: OK. Ausência do documento após a limpeza: confirmada. "
         "MongoDB e dados financeiros não foram acessados."
     )
+
+
+from finnos.routes import mount
+mount(app, lambda: firebase_app(), lambda *args, **kwargs: verified_claims(*args, **kwargs), same_origin)

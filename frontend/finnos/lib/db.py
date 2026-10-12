@@ -1,0 +1,331 @@
+"""Small adapter for the existing router query contracts, backed only by Firestore.
+
+Every query requires the Firebase UID in the request context. All writes for a
+user share a transactional revision, so reference checks and deletes serialize.
+No Motor, MongoDB, legacy auth or database startup is imported.
+"""
+
+import re
+import uuid
+from contextvars import ContextVar
+from types import SimpleNamespace
+from firebase_admin import firestore
+from fastapi import HTTPException
+from google.api_core.exceptions import GoogleAPICallError
+from starlette.concurrency import run_in_threadpool
+from finnos.lib.money import D, cents
+
+active_uid = ContextVar("finnos_uid", default=None)
+firebase_application = None
+MONEY_FIELDS = {
+    "value",
+    "adjusted_value",
+    "installment_value",
+    "initial_balance",
+    "monthly_budget",
+    "monthly_goal",
+    "limit",
+    "amount",
+}
+
+
+def encode(doc):
+    result = {}
+    for key, value in doc.items():
+        if key == "_id":
+            continue
+        if key in MONEY_FIELDS and value is not None:
+            result[key + "_cents"] = cents(value)
+        elif isinstance(value, dict):
+            result[key] = encode(value)
+        else:
+            result[key] = value
+    return result
+
+
+def decode(doc):
+    result = {}
+    for key, value in doc.items():
+        if key.endswith("_cents") and key[:-6] in MONEY_FIELDS:
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise HTTPException(503, "Registro financeiro inválido.")
+            result[key[:-6]] = D(value) / 100
+        elif key in MONEY_FIELDS and value is not None:
+            # Existing Firestore records can be read without a Mongo migration.
+            result[key] = D(value)
+        elif isinstance(value, dict):
+            result[key] = decode(value)
+        else:
+            result[key] = value
+    return result
+
+
+def matches(doc, query):
+    for key, expected in query.items():
+        if key == "$or":
+            if not any(matches(doc, part) for part in expected):
+                return False
+            continue
+        actual = doc.get(key)
+        if isinstance(expected, dict):
+            for operator, operand in expected.items():
+                if operator == "$gte" and (actual is None or actual < operand):
+                    return False
+                if operator == "$lte" and (actual is None or actual > operand):
+                    return False
+                if operator == "$ne" and actual == operand:
+                    return False
+                if operator == "$in" and actual not in operand:
+                    return False
+                if operator == "$regex" and not re.search(operand, actual or "", re.I):
+                    return False
+        elif actual != expected:
+            return False
+    return True
+
+
+def scoped(query):
+    uid = active_uid.get()
+    if not uid or query.get("user_id") != uid:
+        raise HTTPException(403, "Identidade financeira inválida.")
+    return uid
+
+
+def resource_id(value):
+    if not isinstance(value, str) or not value or "/" in value or len(value) > 1500:
+        raise HTTPException(404, "Registro não encontrado.")
+    return value
+
+
+def client():
+    instance = firestore.client(app=firebase_application())
+    if instance.project != "finnos-app":
+        raise HTTPException(503, "Projeto financeiro inesperado.")
+    return instance
+
+
+def root(db, uid):
+    return db.collection("users").document(resource_id(uid))
+
+
+def rows(db, uid, name, transaction=None):
+    snapshots = (
+        root(db, uid)
+        .collection(name)
+        .limit(20001)
+        .stream(transaction=transaction, timeout=15)
+    )
+    docs = [dict(decode(s.to_dict()), id=s.id, user_id=uid) for s in snapshots]
+    if len(docs) > 20000:
+        raise HTTPException(
+            413, "Volume financeiro exige paginação; nenhum total parcial foi exibido."
+        )
+    return docs
+
+
+def atomic(db, uid, action):
+    @firestore.transactional
+    def execute(transaction):
+        revision = root(db, uid).collection("_meta").document("finance")
+        before = revision.get(transaction=transaction)
+        version = (before.to_dict() or {}).get("revision", 0)
+        result = action(transaction)
+        transaction.set(revision, {"revision": version + 1})
+        return result
+
+    return execute(db.transaction(max_attempts=5))
+
+
+def validate_refs(db, uid, name, doc, transaction):
+    fields = []
+    if name == "transactions":
+        fields = [
+            ("account_id", "accounts"),
+            ("to_account_id", "accounts"),
+            ("category_id", "categories"),
+            ("card_id", "cards"),
+        ]
+    if name == "cards":
+        fields = [("payment_account_id", "accounts")]
+    for field, collection in fields:
+        identifier = doc.get(field)
+        if (
+            identifier
+            and not root(db, uid)
+            .collection(collection)
+            .document(resource_id(identifier))
+            .get(transaction=transaction)
+            .exists
+        ):
+            raise HTTPException(
+                400, "Referência financeira inválida para este usuário."
+            )
+
+
+class Cursor:
+    def __init__(self, collection, query):
+        self.collection, self.query, self.order = collection, query, []
+
+    def sort(self, key, direction=None):
+        self.order = key if isinstance(key, list) else [(key, direction)]
+        return self
+
+    async def to_list(self, maximum):
+        uid = scoped(self.query)
+
+        def read():
+            docs = [
+                d
+                for d in rows(client(), uid, self.collection.name)
+                if matches(d, self.query)
+            ]
+            for key, direction in reversed(self.order):
+                docs.sort(key=lambda d: str(d.get(key) or ""), reverse=direction == -1)
+            if len(docs) > maximum and self.collection.name != "transactions":
+                raise HTTPException(413, "Volume financeiro exige paginação.")
+            return docs[:maximum]
+
+        return await run_in_threadpool(read)
+
+
+class Collection:
+    def __init__(self, name):
+        self.name = name
+
+    def find(self, query):
+        scoped(query)
+        return Cursor(self, query)
+
+    async def find_one(self, query):
+        docs = await self.find(query).to_list(20000)
+        return docs[0] if docs else None
+
+    async def count_documents(self, query):
+        return len(await self.find(query).to_list(20000))
+
+    async def insert_one(self, doc):
+        uid = scoped(doc)
+
+        def write():
+            db = client()
+
+            def action(tr):
+                if doc.get("operation_id"):
+                    identifier = str(
+                        uuid.uuid5(uuid.NAMESPACE_URL, uid + ":" + doc["operation_id"])
+                    )
+                    doc["id"] = identifier
+                else:
+                    identifier = doc.get("id") or str(uuid.uuid4())
+                doc["id"] = identifier
+                ref = (
+                    root(db, uid)
+                    .collection(self.name)
+                    .document(resource_id(identifier))
+                )
+                existing = ref.get(transaction=tr)
+                validate_refs(db, uid, self.name, doc, tr)
+                if existing.exists:
+                    if (
+                        doc.get("operation_id")
+                        and existing.to_dict().get("operation_id")
+                        == doc["operation_id"]
+                    ):
+                        doc.update(decode(existing.to_dict()))
+                        return
+                    raise HTTPException(409, "Registro já existe.")
+                tr.create(ref, encode(doc))
+
+            return atomic(db, uid, action)
+
+        return await run_in_threadpool(write)
+
+    async def update_one(self, query, update, upsert=False):
+        return await self._change(query, update, upsert=upsert)
+
+    async def replace_one(self, query, doc):
+        return await self._change(query, doc, replace=True)
+
+    async def _change(self, query, update, replace=False, upsert=False):
+        uid = scoped(query)
+
+        def write():
+            db = client()
+
+            def action(tr):
+                docs = [d for d in rows(db, uid, self.name, tr) if matches(d, query)]
+                if not docs and not upsert:
+                    return SimpleNamespace(matched_count=0)
+                doc = docs[0] if docs else dict(query, id=str(uuid.uuid4()))
+                ref = (
+                    root(db, uid).collection(self.name).document(resource_id(doc["id"]))
+                )
+                if replace:
+                    doc = dict(update, id=doc["id"], user_id=uid)
+                else:
+                    doc.update(update["$set"])
+                validate_refs(db, uid, self.name, doc, tr)
+                tr.set(ref, encode(doc))
+                return SimpleNamespace(matched_count=1)
+
+            return atomic(db, uid, action)
+
+        return await run_in_threadpool(write)
+
+    async def delete_one(self, query):
+        uid = scoped(query)
+
+        def write():
+            db = client()
+
+            def action(tr):
+                docs = [d for d in rows(db, uid, self.name, tr) if matches(d, query)]
+                if not docs:
+                    return SimpleNamespace(deleted_count=0)
+                doc = docs[0]
+                if self.name in {"accounts", "categories", "cards"}:
+                    fields = {
+                        "accounts": ["account_id", "to_account_id"],
+                        "categories": ["category_id"],
+                        "cards": ["card_id"],
+                    }[self.name]
+                    txs = rows(db, uid, "transactions", tr)
+                    if any(any(t.get(f) == doc["id"] for f in fields) for t in txs):
+                        raise HTTPException(
+                            409, "Registro possui transações vinculadas."
+                        )
+                    if self.name == "accounts" and any(
+                        c.get("payment_account_id") == doc["id"]
+                        for c in rows(db, uid, "cards", tr)
+                    ):
+                        raise HTTPException(409, "Conta possui cartão vinculado.")
+                tr.delete(
+                    root(db, uid).collection(self.name).document(resource_id(doc["id"]))
+                )
+                return SimpleNamespace(deleted_count=1)
+
+            return atomic(db, uid, action)
+
+        return await run_in_threadpool(write)
+
+    async def update_many(self, query, update, upsert=False):
+        for doc in await self.find(query).to_list(20000):
+            await self.update_one({"user_id": doc["user_id"], "id": doc["id"]}, update)
+
+    async def insert_many(self, docs):
+        for doc in docs:
+            await self.insert_one(doc)
+
+
+db = SimpleNamespace(
+    **{
+        name: Collection(name)
+        for name in [
+            "accounts",
+            "categories",
+            "transactions",
+            "cards",
+            "notification_states",
+        ]
+    }
+)

@@ -1,3 +1,4 @@
+import { firebaseAuth } from "@/lib/firebase";
 import type { Transaction, TransactionInput } from "@/types/finnos";
 import { apiPost, apiPut } from "@/lib/api";
 
@@ -10,6 +11,7 @@ type OperationKind = "transaction.create" | "transaction.update";
 
 export interface SyncOperation {
   id: string;
+  uid: string;
   kind: OperationKind;
   entityId?: string;
   payload: TransactionInput;
@@ -42,7 +44,10 @@ async function transact<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore,
 }
 
 export async function queueTransaction(input: TransactionInput, source: OperationSource = "manual", entityId?: string): Promise<SyncOperation> {
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (!uid) throw new Error("FINNOS_AUTH_REQUIRED");
   const op: SyncOperation = {
+    uid,
     id: crypto.randomUUID(),
     kind: entityId ? "transaction.update" : "transaction.create",
     entityId,
@@ -52,6 +57,7 @@ export async function queueTransaction(input: TransactionInput, source: Operatio
     attempts: 0,
     status: "pending",
   };
+  if (!op.uid || op.uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   await transact<void>("readwrite", (store, resolve, reject) => {
     const req = store.put(op);
     req.onsuccess = () => resolve();
@@ -64,12 +70,13 @@ export async function queueTransaction(input: TransactionInput, source: Operatio
 export async function listSyncOperations(): Promise<SyncOperation[]> {
   return transact<SyncOperation[]>("readonly", (store, resolve, reject) => {
     const req = store.getAll();
-    req.onsuccess = () => resolve((req.result as SyncOperation[]).sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
+    req.onsuccess = () => resolve((req.result as SyncOperation[]).filter(op => op.uid === firebaseAuth?.currentUser?.uid && Boolean(op.uid)).sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
     req.onerror = () => reject(req.error);
   });
 }
 
 export async function saveSyncOperation(op: SyncOperation): Promise<void> {
+  if (!op.uid || op.uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   await transact<void>("readwrite", (store, resolve, reject) => {
     const req = store.put(op);
     req.onsuccess = () => resolve();
@@ -92,7 +99,7 @@ export async function flushSyncQueue(): Promise<void> {
   window.dispatchEvent(new CustomEvent("finnos:sync-state"));
   try {
     for (const op of await listSyncOperations()) {
-      if (!navigator.onLine) break;
+      if (!navigator.onLine || op.uid !== firebaseAuth?.currentUser?.uid) break;
       const current = { ...op, status: "syncing" as const, attempts: op.attempts + 1, lastError: undefined };
       await saveSyncOperation(current);
       window.dispatchEvent(new CustomEvent("finnos:sync-state"));
@@ -125,7 +132,7 @@ export async function syncQueueCount(): Promise<number> {
 export async function getSyncOperation(id: string): Promise<SyncOperation | null> {
   return transact<SyncOperation | null>("readonly", (store, resolve, reject) => {
     const req = store.get(id);
-    req.onsuccess = () => resolve((req.result as SyncOperation | undefined) ?? null);
+    req.onsuccess = () => resolve(req.result?.uid === firebaseAuth?.currentUser?.uid ? (req.result as SyncOperation) : null);
     req.onerror = () => reject(req.error);
   });
 }

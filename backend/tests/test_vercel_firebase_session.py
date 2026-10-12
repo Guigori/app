@@ -116,7 +116,10 @@ def test_missing_server_credential_reports_503(client, monkeypatch):
 def test_api_route_maps_to_python_function_and_preserves_spa():
     config = json.loads((ROOT / "frontend/vercel.json").read_text())
     assert config["framework"] == "vite"
-    assert config["routes"][0] == {"src": "/api/auth/(me|firebase-session|logout|firestore-smoke)", "dest": "/api"}
+    assert config["routes"][0]["dest"] == "/api"
+    import re
+    for path in ["/api/auth/me", "/api/accounts", "/api/transactions/id", "/api/dashboard"]:
+        assert re.fullmatch(config["routes"][0]["src"], path)
     assert config["routes"][-1]["src"] == "/(?!api(?:/|$)).*"
 
 

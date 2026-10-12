@@ -1,3 +1,4 @@
+import { firebaseAuth } from "@/lib/firebase";
 // Typed fetch layer over the FastAPI backend. Base is the relative "/api" prefix so the
 // same code works in dev (Vite proxies /api → :8001) and behind a single origin in prod.
 const BASE = "/api";
@@ -22,7 +23,8 @@ async function request<T>(method: string, path: string, body?: JsonBody, extraHe
   // Auth rides the httpOnly session cookie automatically — never add auth headers here.
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...extraHeaders },
+    credentials: "same-origin",
+    headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...extraHeaders, ...(firebaseAuth?.currentUser ? { "X-FINNOS-User-ID": firebaseAuth.currentUser.uid } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 

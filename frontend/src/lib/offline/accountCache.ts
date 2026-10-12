@@ -1,3 +1,4 @@
+import { firebaseAuth } from "@/lib/firebase";
 const DB_NAME = "finnos-account-cache";
 const DB_VERSION = 1;
 const STORE = "snapshots";
@@ -45,16 +46,18 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 }
 
 export async function cachedFetch<T>(key: string, online: () => Promise<T>): Promise<T> {
+  const uid = firebaseAuth?.currentUser?.uid;
+  const scopedKey = uid ? `firebase:${uid}:${key}` : null;
   if (navigator.onLine) {
-    try {
-      return await cacheSet(key, await online());
-    } catch (error) {
-      const cached = await cacheGet<T>(key);
-      if (cached !== null) return cached;
-      throw error;
-    }
+    // Auth/server failures must remain visible; never substitute another snapshot.
+    const value = await online();
+    if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+    if (scopedKey) await cacheSet(scopedKey, value);
+    return value;
   }
-  const cached = await cacheGet<T>(key);
+  if (!scopedKey) throw new Error("FINNOS_OFFLINE_NO_CACHE");
+  const cached = await cacheGet<T>(scopedKey);
+  if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   if (cached !== null) return cached;
   throw new Error("FINNOS_OFFLINE_NO_CACHE");
 }

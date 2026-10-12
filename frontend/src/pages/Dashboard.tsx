@@ -56,7 +56,7 @@ export default function Dashboard() {
 
   const data = dashboardQuery.data;
   const error = dashboardQuery.error;
-  const noAccounts = !accountsQuery.isPending && (accountsQuery.data ?? []).length === 0;
+  const noAccounts = accountsQuery.isSuccess && accountsQuery.data.length === 0;
   const activeMonth = data?.month ?? currentMonth();
   useEffect(() => {
     setSelectedCategory(null);

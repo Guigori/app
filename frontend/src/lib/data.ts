@@ -6,7 +6,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { localRadar } from "@/lib/local/radar";
 import { isLocalMode } from "@/lib/mode";
 import { queueTransaction, flushSyncQueue, listSyncOperations, type OperationSource } from "@/lib/sync/queue";
-import { cachedFetch, cacheGet, cacheSet } from "@/lib/offline/accountCache";
+import { cachedFetch } from "@/lib/offline/accountCache";
 import {
   localClearData,
   localCreateAccount,
@@ -119,7 +119,7 @@ export async function fetchMe(): Promise<User> {
       created_at: new Date().toISOString(),
     };
   }
-  return cachedFetch("me", () => apiGet<User>("/auth/me"));
+  return apiGet<User>("/auth/me");
 }
 
 export async function updateMyName(name: string): Promise<User> {
