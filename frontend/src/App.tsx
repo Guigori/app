@@ -10,6 +10,7 @@ import Accounts from "@/pages/Accounts";
 import Categories from "@/pages/Categories";
 import Settings from "@/pages/Settings";
 import { SettingsHub } from "@/pages/SettingsHub";
+import SettingsIntegrations from "@/pages/SettingsIntegrations";
 import ChartSettings from "@/pages/ChartSettings";
 import Budget from "@/pages/Budget";
 import BudgetSettings from "@/pages/BudgetSettings";
@@ -41,7 +42,7 @@ export default function App() {
             <Route path="/categorias" element={<Categories />} />
             <Route path="/configuracoes" element={<SettingsHub />} />
             <Route path="/configuracoes/avancado" element={<Settings />} />
-            <Route path="/configuracoes/integracoes" element={<div className="mx-auto max-w-2xl space-y-3 pb-28"><h1 className="text-2xl font-bold">Integrações e automações</h1><p className="text-muted-foreground">Apple Pay, notificações da Carteira, Apple Atalhos e FINNOS IA.</p><span className="inline-flex rounded-full bg-muted px-3 py-1 text-sm text-muted-foreground">Em breve</span></div>} />
+            <Route path="/configuracoes/integracoes" element={<SettingsIntegrations />} />
             <Route path="/configuracoes/graficos" element={<ChartSettings />} />
             <Route path="/cartoes" element={<Cards />} />
             <Route path="/cartoes/:cardId" element={<CardInvoice />} />
