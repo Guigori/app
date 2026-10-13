@@ -159,7 +159,7 @@ function applyPendingToDashboard(base: Dashboard, pending: { id: string; payload
 export async function fetchDashboard(month: string | null): Promise<Dashboard> {
   if (isLocalMode()) return localDashboard(month);
   if (firebaseAuth?.currentUser) {
-    return firebaseGet<Dashboard>("/firebase/dashboard");
+    return firebaseGet<Dashboard>(month ? `/firebase/dashboard?month=${encodeURIComponent(month)}` : "/firebase/dashboard");
   }
   const base = await cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(month ? `/dashboard?month=${month}` : "/dashboard"));
   const pending = (await listSyncOperations()).filter((o) => o.kind === "transaction.create");
