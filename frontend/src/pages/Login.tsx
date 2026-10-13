@@ -38,6 +38,8 @@ export default function Login() {
     onSuccess: () => setRecoverySent(true),
   });
   const [loginSucceeded, setLoginSucceeded] = useState(false);
+  const [localIntroOpen, setLocalIntroOpen] = useState(false);
+  const [localStarting, setLocalStarting] = useState(false);
 
   const loginMutation = useMutation({
     mutationFn: (credentials: { email: string; password: string }) => openEmailSession(credentials.email, credentials.password),
@@ -62,10 +64,18 @@ export default function Login() {
   });
 
   const startLocalMode = async () => {
-    await endSession();
-    enableLocalMode();
-    await beginSession();
-    navigate("/", { replace: true });
+    setLocalStarting(true);
+    setFormError(null);
+    try {
+      await endSession();
+      enableLocalMode();
+      await beginSession();
+      navigate("/", { replace: true });
+    } catch (error) {
+      setFormError(getApiErrorMessage(error, "Não foi possível abrir o modo local."));
+    } finally {
+      setLocalStarting(false);
+    }
   };
 
   if (meQuery.isSuccess) return <Navigate to="/" replace />;
@@ -188,7 +198,7 @@ export default function Login() {
 
               <Button
                 className="h-11 min-w-0 rounded-xl border border-[#DCD6FF] bg-[#F1EDFF] px-2 text-xs font-semibold text-[#4B2CFF] shadow-none transition-colors hover:bg-[#5B35FF] hover:text-white active:bg-[#4B2CFF] sm:px-4 sm:text-sm"
-                onClick={startLocalMode}
+                onClick={() => { setFormError(null); setLocalIntroOpen(true); }}
                 disabled={loginMutation.isPending || demoMutation.isPending}
                 data-testid="local-mode-button"
               >
@@ -202,6 +212,35 @@ export default function Login() {
           </CardContent>
         </Card>
       </AuthLayout>
+
+      <Dialog open={localIntroOpen} onOpenChange={(open) => { if (!localStarting) setLocalIntroOpen(open); }}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Seu FINNOS neste aparelho</DialogTitle>
+            <DialogDescription>Organize suas finanças sem criar uma conta. Seus registros ficam no navegador que você está usando.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <section className="rounded-xl bg-muted/50 p-4">
+              <h2 className="font-semibold">Comece com suas próprias informações</h2>
+              <p className="mt-2 text-muted-foreground">Uma base nova começa sem contas, cartões ou movimentações. Cadastre sua primeira conta e depois registre receitas, despesas e transferências. As categorias iniciais podem ser personalizadas.</p>
+              <p className="mt-2 text-muted-foreground">Você também pode acompanhar saldos, cartões, faturas, parcelas e orçamentos. Nenhum dado de demonstração será carregado. Se já houver registros locais, eles serão preservados.</p>
+            </section>
+            <section className="rounded-xl border p-4">
+              <h2 className="font-semibold">O que você precisa saber</h2>
+              <ul className="mt-2 list-disc space-y-2 pl-5 text-muted-foreground">
+                <li>Seus dados ficam somente neste navegador, sem sincronização ou backup automático na nuvem.</li>
+                <li>Limpar os dados do navegador, usar uma janela anônima ou trocar de aparelho pode impedir o acesso aos seus registros.</li>
+                <li>Os registros locais funcionam sem conexão depois que o aplicativo estiver carregado. Recursos que dependem do servidor, como a FINNOS IA conectada a um provedor, exigem uma conta.</li>
+                <li>Entrar em uma conta Firebase não transfere seus registros locais automaticamente.</li>
+              </ul>
+            </section>
+            <p className="text-muted-foreground">Para experimentar dados fictícios, escolha “Ver demonstração” na tela de login. Esse ambiente é separado do seu modo local.</p>
+            {formError ? <p role="alert" className="text-destructive">{formError}</p> : null}
+          </div>
+          <Button onClick={startLocalMode} disabled={localStarting} data-testid="local-mode-confirm-button">{localStarting ? "Abrindo…" : "Usar neste aparelho"}</Button>
+          <Button variant="outline" onClick={() => setLocalIntroOpen(false)} disabled={localStarting}>Voltar ao login</Button>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
         <DialogContent className="max-w-sm">

@@ -2,6 +2,7 @@
 // the browser. Keep the two in sync — a rule change belongs in both places.
 
 import { addMonth, currentMonth, todayISO } from "@/lib/format";
+import { getMode } from "@/lib/mode";
 import { newId, readDb, writeDb, freshDb, wipeDb, type LocalCard, type LocalDb } from "@/lib/local/store";
 import type {
   Account,
@@ -511,7 +512,8 @@ function day(month: string, d: number): string {
 }
 
 export function localLoadDemo(): void {
-  const db = freshDb(readDb().profile.name);
+  if (getMode() !== "demo") throw new Error("Os dados fictícios só podem ser carregados no modo demonstração.");
+  const db = freshDb(readDb().profile.name, true);
   const m0 = currentMonth();
   const m1 = addMonth(m0, -1);
 
