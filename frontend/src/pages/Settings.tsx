@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Check, ChevronDown, ChevronUp, GitCommitHorizontal, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -30,6 +31,9 @@ const THEME_OPTIONS = [
 
 export default function Settings() {
   const navigate = useNavigate();
+  const { section } = useParams<{ section?: string }>();
+  const currentSection = section ?? "perfil";
+  const visible = (...names: string[]) => names.includes(currentSection);
   const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
   const { data: user } = useQuery({ queryKey: ["me"], queryFn: fetchMe, staleTime: 5 * 60 * 1000 });
@@ -123,13 +127,14 @@ export default function Settings() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 animate-fade-up">
+    <div className="mx-auto max-w-2xl space-y-6 pb-28 animate-fade-up">
       <div>
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Configurações</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Perfil, aparência e dados da sua conta.</p>
+        <Link to="/configuracoes" className="mb-3 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /> Configurações</Link>
+        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">{({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", painel: "Painel da Home", navegacao: "Barra de navegação", dados: "Dados e sincronização", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Gerencie suas preferências e informações com segurança.</p>
       </div>
 
-      <Card data-testid="settings-profile-card">
+      {visible("perfil", "seguranca") && (<>\n      <Card data-testid="settings-profile-card">
         <CardHeader>
           <CardTitle className="font-heading">Perfil</CardTitle>
           <CardDescription>{user?.email ?? ""}</CardDescription>
@@ -155,7 +160,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card data-testid="settings-version-card">
+      </>)}\n      {visible("versao") && (<>\n      <Card data-testid="settings-version-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading"><GitCommitHorizontal className="h-4.5 w-4.5 text-primary" aria-hidden="true" />Versão do FINNOS</CardTitle>
           <CardDescription>Identificação desta compilação para controle do beta, commits e deploys.</CardDescription>
@@ -171,7 +176,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card data-testid="settings-theme-card">
+      </>)}\n      {visible("aparencia") && (<>\n      <Card data-testid="settings-theme-card">
         <CardHeader>
           <CardTitle className="font-heading">Aparência</CardTitle>
           <CardDescription>Escolha claro, escuro ou siga o sistema.</CardDescription>
@@ -200,7 +205,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card data-testid="settings-charts-card">
+      </>)}\n      {visible("graficos") && (<>\n      <Card data-testid="settings-charts-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
             <BarChart3 className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
@@ -215,7 +220,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card id="home-panel" data-testid="settings-home-panel-card">
+      </>)}\n      {visible("painel") && (<>\n      <Card id="home-panel" data-testid="settings-home-panel-card">
         <CardHeader>
           <CardTitle className="font-heading">Painel da Home</CardTitle>
           <CardDescription>Escolha o que aparece e a ordem dos módulos. A mesma configuração vale para Web e Mobile.</CardDescription>
@@ -261,7 +266,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card id="navigation" data-testid="settings-navigation-card">
+      </>)}\n      {visible("navegacao") && (<>\n      <Card id="navigation" data-testid="settings-navigation-card">
         <CardHeader>
           <CardTitle className="font-heading">Barra de navegação</CardTitle>
           <CardDescription>Escolha e reordene os atalhos do mobile e da Web. Início é fixo e não pode ser removido.</CardDescription>
@@ -320,7 +325,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card data-testid="settings-budget-card">
+      </>)}\n      {visible("orcamento") && (<>\n      <Card data-testid="settings-budget-card">
         <CardHeader>
           <CardTitle className="font-heading">Orçamento</CardTitle>
           <CardDescription>Modelo, periodicidade, próximo ciclo, prioridades e regras do seu planejamento.</CardDescription>
@@ -344,7 +349,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card data-testid="settings-mode-card">
+      </>)}\n      {visible("dados") && (<>\n      <Card data-testid="settings-mode-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
             {local ? <Smartphone className="h-4.5 w-4.5 text-primary" aria-hidden="true" /> : null}
@@ -368,11 +373,11 @@ export default function Settings() {
         ) : null}
       </Card>
 
-      <NotificationsCard />
+      </>)}\n      {visible("notificacoes") && <NotificationsCard />}
 
-      {local ? null : <AiKeysCard />}
+      {visible("integracoes") && !local ? <AiKeysCard /> : null}
 
-      <Card data-testid="settings-demo-card">
+      {visible("desenvolvedor") && (<>\n      <Card data-testid="settings-demo-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
             Dados de demonstração
@@ -400,7 +405,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card data-testid="settings-session-card">
+      </>)}\n      {visible("perfil", "seguranca") && (<>\n      <Card data-testid="settings-session-card">
         <CardHeader>
           <CardTitle className="font-heading">Sessão</CardTitle>
           <CardDescription>Encerre a sessão neste dispositivo.</CardDescription>
@@ -413,7 +418,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <ConfirmDialog
+      </>)}\n      <ConfirmDialog
         open={confirmDemo}
         onOpenChange={setConfirmDemo}
         title="Carregar dados de demonstração?"
