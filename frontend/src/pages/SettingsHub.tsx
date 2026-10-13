@@ -11,20 +11,20 @@ const groups = [
     { label: "Assinaturas", description: "Serviços e cobranças", icon: Repeat2, href: "/assinaturas" },
   ] },
   { title: "Personalização", items: [
-    { label: "Aparência", description: "Tema claro, escuro ou sistema", icon: Palette, href: "/configuracoes/avancado#aparencia" },
-    { label: "Painel da Home", description: "Organize seus módulos", icon: LayoutDashboard, href: "/configuracoes/avancado#painel" },
-    { label: "Barra de navegação", description: "Atalhos mobile e web", icon: PanelBottom, href: "/configuracoes/avancado#navegacao" },
+    { label: "Aparência", description: "Tema claro, escuro ou sistema", icon: Palette, href: "/configuracoes/aparencia" },
+    { label: "Painel da Home", description: "Organize seus módulos", icon: LayoutDashboard, href: "/configuracoes/painel" },
+    { label: "Barra de navegação", description: "Atalhos mobile e web", icon: PanelBottom, href: "/configuracoes/navegacao" },
     { label: "Gráficos", description: "Biblioteca visual e preferências", icon: BarChart3, href: "/configuracoes/graficos" },
   ] },
   { title: "Aplicativo e privacidade", items: [
-    { label: "Segurança e privacidade", description: "Conta e proteção de acesso", icon: ShieldCheck, href: "/configuracoes/avancado#perfil" },
-    { label: "Dados e sincronização", description: "Armazenamento, importação e offline", icon: Cloud, href: "/configuracoes/avancado#dados" },
-    { label: "Notificações", description: "Vencimentos e lembretes", icon: Bell, href: "/configuracoes/avancado#notificacoes" },
+    { label: "Segurança e privacidade", description: "Conta e proteção de acesso", icon: ShieldCheck, href: "/configuracoes/perfil" },
+    { label: "Dados e sincronização", description: "Armazenamento, importação e offline", icon: Cloud, href: "/configuracoes/dados" },
+    { label: "Notificações", description: "Vencimentos e lembretes", icon: Bell, href: "/configuracoes/notificacoes" },
     { label: "Integrações e automações", description: "Apple Pay, Atalhos e FINNOS IA", icon: Zap, href: "/configuracoes/integracoes", soon: true },
   ] },
   { title: "Informações", items: [
-    { label: "Ajuda e suporte", description: "Informações e feedback do beta", icon: CircleHelp, href: "/configuracoes/avancado#suporte" },
-    { label: "Sobre o FINNOS", description: "Versão e informações técnicas", icon: Info, href: "/configuracoes/avancado#versao" },
+    { label: "Ajuda e suporte", description: "Informações e feedback do beta", icon: CircleHelp, href: "/configuracoes/suporte" },
+    { label: "Sobre o FINNOS", description: "Versão e informações técnicas", icon: Info, href: "/configuracoes/versao" },
   ] },
 ];
 
@@ -36,7 +36,7 @@ export function SettingsHub() {
         <div className="flex items-center gap-2"><Settings2 className="h-5 w-5 text-primary" /><h1 className="font-heading text-2xl font-bold">Configurações</h1></div>
         <p className="text-sm text-muted-foreground">Tudo do seu jeito, em um só lugar.</p>
       </header>
-      <Link to="/configuracoes/avancado#perfil" className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 text-card-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary" data-testid="settings-profile-link">
+      <Link to="/configuracoes/perfil" className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 text-card-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary" data-testid="settings-profile-link">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><UserRound className="h-6 w-6" /></span>
         <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{user?.name || "Meu perfil"}</span><span className="block truncate text-xs text-muted-foreground">{user?.email || "Conta e informações pessoais"}</span></span>
         <ChevronRight className="h-4 w-4 text-muted-foreground" />
