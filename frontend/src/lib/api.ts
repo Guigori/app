@@ -66,3 +66,19 @@ export async function apiPostWithBearer<T>(path: string, token: string, body?: J
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+
+/** Firebase-only financial API. Never fall back to a legacy cookie or MongoDB. */
+export async function firebaseGet<T>(path: string): Promise<T> {
+  const user = firebaseAuth?.currentUser;
+  if (!user || !user.emailVerified) throw new Error("FINNOS_FIREBASE_AUTH_REQUIRED");
+  const token = await user.getIdToken();
+  const response = await fetch(`${BASE}${path}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (firebaseAuth?.currentUser?.uid !== user.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  if (!response.ok) throw new ApiError(response.status, await response.json().catch(() => null));
+  return response.json() as Promise<T>;
+}

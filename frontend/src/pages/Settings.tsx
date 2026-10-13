@@ -362,7 +362,7 @@ export default function Settings() {
               Criar conta completa
             </Link>
             <p className="mt-2 text-xs text-muted-foreground">
-              Ao criar sua conta, o FINNOS importa com segurança os dados deste aparelho para a nova conta. Os dados locais só deixam de ser usados depois que a importação for confirmada.
+              Seus registros locais permanecem neste navegador. Criar ou acessar uma conta não os transfere automaticamente para a nuvem.
             </p>
           </CardContent>
         ) : null}
@@ -375,18 +375,17 @@ export default function Settings() {
       <Card data-testid="settings-demo-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
-            Dados de demonstração
-            <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+            {getMode() === "local" ? "Dados deste aparelho" : "Dados de demonstração"}
+            {getMode() === "local" ? null : <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />}
           </CardTitle>
           <CardDescription>
-            Carregue um conjunto fictício (contas Nubank, Inter e Itaú, assinaturas, um parcelamento e dois meses de
-            histórico) para explorar a interface. Atenção: isso substitui todos os seus registros atuais.
+            {getMode() === "local" ? "Seus registros locais são separados da demonstração e da conta Firebase. Nenhum dado fictício é carregado aqui." : "Carregue um conjunto fictício para explorar a interface. Atenção: isso substitui todos os seus registros atuais."}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setConfirmDemo(true)} disabled={demoLoadMutation.isPending} data-testid="load-demo-data-button">
+          {getMode() !== "local" ? <Button variant="outline" onClick={() => setConfirmDemo(true)} disabled={demoLoadMutation.isPending} data-testid="load-demo-data-button">
             Carregar dados demo
-          </Button>
+          </Button> : null}
           <Button
             variant="ghost"
             className="text-destructive hover:text-destructive"

@@ -25,4 +25,16 @@ test("demo opens with sample finances and preserves the personal local database"
   enableLocalMode();
   expect(readDb().profile.name).toBe("Igor");
   expect(readDb().accounts).toHaveLength(0);
+  const preserved = JSON.stringify(readDb());
+  expect(() => localLoadDemo()).toThrow("modo demonstração");
+  expect(JSON.stringify(readDb())).toBe(preserved);
+});
+
+test("a new personal local database has no sample financial amounts", () => {
+  const db = freshDb();
+  expect(db.accounts).toHaveLength(0);
+  expect(db.cards).toHaveLength(0);
+  expect(db.transactions).toHaveLength(0);
+  expect(db.categories.every((category) => category.monthly_budget === 0 && category.monthly_goal === 0)).toBe(true);
+  expect(freshDb("Demonstração", true).categories.some((category) => category.monthly_budget > 0)).toBe(true);
 });

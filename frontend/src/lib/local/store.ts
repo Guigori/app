@@ -50,14 +50,14 @@ export function newId(): string {
   return crypto.randomUUID();
 }
 
-export function freshDb(name = "Você"): LocalDb {
+export function freshDb(name = "Você", demo = false): LocalDb {
   const now = new Date().toISOString();
   return {
     profile: { name },
     accounts: [],
     transactions: [],
     cards: [],
-    categories: DEFAULT_CATEGORIES.map((c) => ({ ...c, id: newId(), created_at: now })),
+    categories: DEFAULT_CATEGORIES.map((c) => ({ ...c, monthly_budget: demo ? c.monthly_budget : 0, id: newId(), created_at: now })),
   };
 }
 
