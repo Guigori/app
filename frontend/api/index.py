@@ -94,6 +94,9 @@ def user_out(claims):
         "created_at": datetime.fromtimestamp(
             user.user_metadata.creation_timestamp / 1000, timezone.utc
         ).isoformat(),
+        "session_mode": "account",
+        "auth_provider": claims.get("firebase", {}).get("sign_in_provider") or "firebase",
+        "auth_providers": [p.provider_id for p in getattr(user, "provider_data", [])],
     }
 
 
@@ -122,7 +125,10 @@ def me(request: Request):
     cookie = request.cookies.get(COOKIE)
     if not cookie:
         raise HTTPException(401, "Não autenticado. Entre novamente.")
-    return user_out(verified_claims(cookie, session=True))
+    claims = verified_claims(cookie, session=True)
+    if request.headers.get("x-finnos-user-id") and request.headers["x-finnos-user-id"] != claims["uid"]:
+        raise HTTPException(401, "A identidade da sessão mudou.")
+    return user_out(claims)
 
 
 @app.post("/api/auth/logout", status_code=204, dependencies=[Depends(same_origin)])

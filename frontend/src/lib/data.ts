@@ -5,7 +5,8 @@ import { firebaseAuth } from "@/lib/firebase";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { localRadar } from "@/lib/local/radar";
-import { isLocalMode } from "@/lib/mode";
+import { isLocalMode, getMode } from "@/lib/mode";
+import { loadSessionProfile } from "@/lib/profileIdentity";
 import { queueTransaction, flushSyncQueue, listSyncOperations, type OperationSource } from "@/lib/sync/queue";
 import { cacheSet, cachedFetch } from "@/lib/offline/accountCache";
 import {
@@ -112,16 +113,14 @@ function saveLocalDismissedNotificationIds(ids: Set<string>): void {
 
 /** The signed-in identity, or the synthetic local-mode profile. */
 export async function fetchMe(): Promise<User> {
-  if (isLocalMode()) {
-    return {
+  return loadSessionProfile(() => ({
       id: LOCAL_USER_ID,
       name: localGetProfile().name,
       email: "conta local (neste aparelho)",
       created_at: new Date().toISOString(),
-    };
-  }
-  await firebaseAuth?.authStateReady();
-  return cachedFetch("me", () => apiGet<User>("/auth/me"));
+      session_mode: getMode(),
+      auth_provider: getMode(),
+    }));
 }
 
 export async function updateMyName(name: string): Promise<User> {

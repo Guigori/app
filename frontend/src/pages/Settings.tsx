@@ -7,6 +7,7 @@ import { useTheme } from "next-themes";
 import { getApiErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { endSession } from "@/lib/session";
+import { authenticationLabel } from "@/lib/profileIdentity";
 import { clearMyData, fetchMe, loadDemoData, updateMyName } from "@/lib/data";
 import { disableLocalMode, getMode, isLocalMode } from "@/lib/mode";
 import { AiKeysCard } from "@/components/ai/AiKeysCard";
@@ -31,8 +32,8 @@ export default function Settings() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
-  const local = isLocalMode();
   const { data: user } = useQuery({ queryKey: ["me"], queryFn: fetchMe, staleTime: 5 * 60 * 1000 });
+  const local = user ? user.session_mode === "local" || user.session_mode === "demo" : isLocalMode();
 
   const savedNavigation = useNavigationPreferences();
   const savedHome = useHomePreferences();
@@ -132,6 +133,7 @@ export default function Settings() {
         <CardHeader>
           <CardTitle className="font-heading">Perfil</CardTitle>
           <CardDescription>{user?.email ?? ""}</CardDescription>
+          <p className="text-sm text-muted-foreground" data-testid="settings-auth-provider">{authenticationLabel(user)}</p>
         </CardHeader>
         <CardContent>
           <form

@@ -21,12 +21,11 @@ export function RequireAuth() {
     queryKey: ["me"],
     queryFn: fetchMe,
     retry: false,
-    enabled: !local,
     staleTime: 5 * 60 * 1000,
   });
 
-  if (!local && isError) return <Navigate to="/login" replace />;
-  if (showIntro || (!local && isPending)) {
+  if (isError) return <Navigate to="/login" replace />;
+  if (showIntro || isPending) {
     return (
       <FinnosLoading
         fullscreen

@@ -4,11 +4,16 @@
 //  - "demo": browser-only sample data, separate from personal local records.
 // The flag below is the single switch the data layer reads.
 
+import { firebaseAuth } from "./firebase";
+
 const KEY = "finnos:mode";
 
 export type AppMode = "account" | "local" | "demo";
 
 export function getMode(): AppMode {
+  // An old device flag must never route an authenticated Firebase user to
+  // the local financial database. Explicit local entry signs out first.
+  if (firebaseAuth?.currentUser) return "account";
   const mode = window.localStorage.getItem(KEY);
   return mode === "local" || mode === "demo" ? mode : "account";
 }

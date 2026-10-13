@@ -12,6 +12,9 @@ export interface User {
   name: string;
   email: string;
   created_at: string;
+  session_mode?: "account" | "local" | "demo";
+  auth_provider?: string;
+  auth_providers?: string[];
 }
 
 export interface Account {

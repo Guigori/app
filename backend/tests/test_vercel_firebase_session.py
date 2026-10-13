@@ -208,3 +208,27 @@ def test_production_requires_explicit_activation_and_keeps_secure_cookie(client,
     assert all(flag in response.headers["set-cookie"] for flag in ["HttpOnly", "Secure", "SameSite=lax"])
     assert client.post("/api/auth/firebase-session", headers={"Origin":"http://preview.example.com","Authorization":"Bearer signed-id-token"}).status_code == 403
     assert client.get("/api/validation/finance").status_code == 404
+
+
+def test_profile_identifies_verified_firebase_provider_and_never_local_profile(client, firebase):
+    firebase[0]['firebase'] = {'sign_in_provider': 'google.com'}
+    api.auth.get_user.return_value.provider_data = [SimpleNamespace(provider_id='google.com')]
+    login(client)
+    profile = client.get('/api/auth/me', headers={'X-FINNOS-User-ID': 'user-a'}).json()
+    assert profile['name'] == 'Test'
+    assert profile['email'] == 'test@example.com'
+    assert profile['session_mode'] == 'account'
+    assert profile['auth_provider'] == 'google.com'
+    assert profile['auth_providers'] == ['google.com']
+
+
+def test_profile_rejects_sdk_uid_that_differs_from_verified_cookie(client, firebase):
+    login(client)
+    response = client.get('/api/auth/me', headers={'X-FINNOS-User-ID': 'different-user'})
+    assert response.status_code == 401
+
+
+def test_profile_identifies_password_provider(client, firebase):
+    firebase[0]['firebase'] = {'sign_in_provider': 'password'}
+    login(client)
+    assert client.get('/api/auth/me').json()['auth_provider'] == 'password'

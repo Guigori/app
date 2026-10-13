@@ -19,7 +19,7 @@ import { Label } from "@/components/ui/label";
 export default function Register() {
   const navigate = useNavigate();
   const meQuery = useQuery({
-    queryKey: ["me"],
+    queryKey: ["server-me"],
     queryFn: () => apiGet<User>("/auth/me"),
     retry: false,
     staleTime: 5 * 60 * 1000,
