@@ -42,6 +42,7 @@ export default function App() {
             <Route path="/categorias" element={<Categories />} />
             <Route path="/configuracoes" element={<SettingsHub />} />
             <Route path="/configuracoes/avancado" element={<Settings />} />
+            <Route path="/configuracoes/:section" element={<Settings />} />
             <Route path="/configuracoes/integracoes" element={<SettingsIntegrations />} />
             <Route path="/configuracoes/graficos" element={<ChartSettings />} />
             <Route path="/cartoes" element={<Cards />} />
