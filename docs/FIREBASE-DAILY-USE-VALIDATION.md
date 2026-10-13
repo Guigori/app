@@ -53,6 +53,13 @@ salva da lista. O cliente agora permite leitura local offline e execução imedi
 que a fila seja gravada em IndexedDB; `sync-success` invalida as consultas para atualizar os dados.
 A nova regressão executa MutationObserver offline e verifica a gravação durável, sem pausa em memória.
 
+No Preview corrigido, um segundo lançamento temporário foi exibido offline com
+“Aguardando sincronização”; havia zero registros no Firestore. Ao reconectar, persistiu
+exatamente uma vez e continuou visível após reload, sem indicação de pendência.
+Os dois lançamentos temporários foram removidos por identificador exato.
+O resumo da tela de transações passou a ocupar a largura disponível em mobile,
+corrigindo a sobreposição de Entrada/Saída/Saldo encontrada no viewport de iPhone.
+
 ## Segurança e implantação preparada
 
 As regras reais de Firestore foram lidas via API administrativa: `allow read, write: if false`.

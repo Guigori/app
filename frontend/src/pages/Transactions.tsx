@@ -255,7 +255,7 @@ export default function Transactions() {
           <p className="mt-1 text-sm text-muted-foreground">Acompanhe o que entrou, saiu e o que vem pela frente.</p>
         </div>
 
-        <div className="row-span-2 flex justify-end self-start" data-testid="flow-view-rail">
+        <div className="flex justify-end self-start sm:row-span-2" data-testid="flow-view-rail">
           <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
             {([
               { key: "calendario" as const, label: "Calendário", icon: CalendarDays },
@@ -280,7 +280,7 @@ export default function Transactions() {
           </div>
         </div>
 
-        <div className="min-w-0 rounded-3xl border border-border bg-background/95 px-5 py-5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85">
+        <div className="col-span-2 min-w-0 rounded-3xl border border-border bg-background/95 px-5 py-5 shadow-sm backdrop-blur sm:col-span-1 supports-[backdrop-filter]:bg-background/85">
           <div className="grid grid-cols-3 items-center gap-3">
             <div className="contents" data-testid="flow-strip-real">
               <div className="min-w-0">
