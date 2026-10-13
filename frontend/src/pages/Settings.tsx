@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Check, ChevronDown, ChevronUp, GitCommitHorizontal, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -30,6 +31,9 @@ const THEME_OPTIONS = [
 
 export default function Settings() {
   const navigate = useNavigate();
+  const { section } = useParams<{ section?: string }>();
+  const currentSection = section ?? "perfil";
+  const visible = (...names: string[]) => names.includes(currentSection);
   const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
   const { data: user } = useQuery({ queryKey: ["me"], queryFn: fetchMe, staleTime: 5 * 60 * 1000 });
@@ -123,12 +127,14 @@ export default function Settings() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 animate-fade-up">
+    <div className="mx-auto max-w-2xl space-y-6 pb-28 animate-fade-up">
       <div>
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Configurações</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Perfil, aparência e dados da sua conta.</p>
+        <Link to="/configuracoes" className="mb-3 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /> Configurações</Link>
+        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">{({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", painel: "Painel da Home", navegacao: "Barra de navegação", dados: "Dados e sincronização", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Gerencie suas preferências e informações com segurança.</p>
       </div>
 
+      {visible("perfil", "seguranca") && (<>
       <Card data-testid="settings-profile-card">
         <CardHeader>
           <CardTitle className="font-heading">Perfil</CardTitle>
@@ -155,6 +161,8 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      </>)}
+      {visible("versao") && (<>
       <Card data-testid="settings-version-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading"><GitCommitHorizontal className="h-4.5 w-4.5 text-primary" aria-hidden="true" />Versão do FINNOS</CardTitle>
@@ -171,6 +179,8 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      </>)}
+      {visible("aparencia") && (<>
       <Card data-testid="settings-theme-card">
         <CardHeader>
           <CardTitle className="font-heading">Aparência</CardTitle>
@@ -200,6 +210,8 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      </>)}
+      {visible("graficos") && (<>
       <Card data-testid="settings-charts-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
@@ -215,6 +227,8 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      </>)}
+      {visible("painel") && (<>
       <Card id="home-panel" data-testid="settings-home-panel-card">
         <CardHeader>
           <CardTitle className="font-heading">Painel da Home</CardTitle>
@@ -261,6 +275,8 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      </>)}
+      {visible("navegacao") && (<>
       <Card id="navigation" data-testid="settings-navigation-card">
         <CardHeader>
           <CardTitle className="font-heading">Barra de navegação</CardTitle>
@@ -320,6 +336,8 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      </>)}
+      {visible("orcamento") && (<>
       <Card data-testid="settings-budget-card">
         <CardHeader>
           <CardTitle className="font-heading">Orçamento</CardTitle>
@@ -344,6 +362,8 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      </>)}
+      {visible("dados") && (<>
       <Card data-testid="settings-mode-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
@@ -368,10 +388,12 @@ export default function Settings() {
         ) : null}
       </Card>
 
-      <NotificationsCard />
+      </>)}
+      {visible("notificacoes") && <NotificationsCard />}
 
-      {local ? null : <AiKeysCard />}
+      {visible("integracoes") && !local ? <AiKeysCard /> : null}
 
+      {visible("desenvolvedor") && (<>
       <Card data-testid="settings-demo-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
@@ -400,6 +422,8 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      </>)}
+      {visible("perfil", "seguranca") && (<>
       <Card data-testid="settings-session-card">
         <CardHeader>
           <CardTitle className="font-heading">Sessão</CardTitle>
@@ -413,6 +437,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      </>)}
       <ConfirmDialog
         open={confirmDemo}
         onOpenChange={setConfirmDemo}

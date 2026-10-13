@@ -9,6 +9,8 @@ import Transactions from "@/pages/Transactions";
 import Accounts from "@/pages/Accounts";
 import Categories from "@/pages/Categories";
 import Settings from "@/pages/Settings";
+import { SettingsHub } from "@/pages/SettingsHub";
+import SettingsIntegrations from "@/pages/SettingsIntegrations";
 import ChartSettings from "@/pages/ChartSettings";
 import Budget from "@/pages/Budget";
 import BudgetSettings from "@/pages/BudgetSettings";
@@ -38,7 +40,10 @@ export default function App() {
             <Route path="/transacoes" element={<Transactions />} />
             <Route path="/contas" element={<Accounts />} />
             <Route path="/categorias" element={<Categories />} />
-            <Route path="/configuracoes" element={<Settings />} />
+            <Route path="/configuracoes" element={<SettingsHub />} />
+            <Route path="/configuracoes/avancado" element={<Settings />} />
+            <Route path="/configuracoes/:section" element={<Settings />} />
+            <Route path="/configuracoes/integracoes" element={<SettingsIntegrations />} />
             <Route path="/configuracoes/graficos" element={<ChartSettings />} />
             <Route path="/cartoes" element={<Cards />} />
             <Route path="/cartoes/:cardId" element={<CardInvoice />} />
