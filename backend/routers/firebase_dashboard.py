@@ -13,9 +13,11 @@ async def dashboard(month: str | None = Query(default=None, pattern=r"^\d{4}-\d{
     uid = user["uid"]
     def read():
         root = get_firestore().collection("users").document(uid)
-        return [s.to_dict() or {} for s in root.collection("transactions").stream()]
-    txs = await run_in_threadpool(read)
-    income = expense = balance = Decimal(0)
+        return ([s.to_dict() or {} for s in root.collection("transactions").stream()],
+                [s.to_dict() or {} for s in root.collection("accounts").stream()])
+    txs, accounts = await run_in_threadpool(read)
+    income = expense = Decimal(0)
+    balance = sum((Decimal(str(a.get("initial_balance_cents", 0))) / 100 for a in accounts), Decimal(0))
     month = month or datetime.now(timezone.utc).strftime("%Y-%m")
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     for tx in txs:
