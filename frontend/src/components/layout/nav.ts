@@ -37,7 +37,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: null,
     items: [
       { to: "/", label: "Início", icon: Home, slug: "inicio" },
-      { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
+      { to: "/transacoes", label: "Lançamentos", icon: GitCompareArrows, slug: "transacoes" },
       { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
       { to: "/configuracoes#ia", label: "FINNOS IA", icon: Sparkles, slug: "ia" },
     ],

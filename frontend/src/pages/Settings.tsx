@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Check, ChevronDown, ChevronUp, GitCommitHorizontal, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -46,8 +45,8 @@ export default function Settings() {
   const [navigation, setNavigation] = useState<NavigationPreferences>(savedNavigation);
   useEffect(() => setNavigation(savedNavigation), [JSON.stringify(savedNavigation)]);
 
-  const mobileNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia");
-  const webNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia");
+  const mobileNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia" && item.slug !== "transacoes");
+  const webNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia" && item.slug !== "transacoes");
   const updateNavigation = (target: "mobile" | "web", slug: string, enabled: boolean) => {
     setNavigation((current) => {
       const list = current[target];
@@ -127,9 +126,8 @@ export default function Settings() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 pb-28 animate-fade-up">
+    <div className="mx-auto max-w-2xl space-y-5 pb-44 sm:pb-32 animate-fade-up">
       <div>
-        <Link to="/configuracoes" className="mb-3 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /> Configurações</Link>
         <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">{({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", painel: "Painel da Home", navegacao: "Barra de navegação", dados: "Dados e sincronização", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"}</h1>
         <p className="mt-1 text-sm text-muted-foreground">Gerencie suas preferências e informações com segurança.</p>
       </div>
@@ -276,22 +274,46 @@ export default function Settings() {
       </Card>
 
       </>)}
+      {visible("navegacao") && (
+        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm" aria-label="Prévia da navegação">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div><h2 className="font-semibold">Prévia em tempo real</h2><p className="text-xs text-muted-foreground">As mudanças aparecem aqui e são salvas automaticamente.</p></div>
+          </div>
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <p className="mb-3 text-xs font-medium text-muted-foreground">iPhone · Barra inferior</p>
+            <div className="flex items-center justify-around gap-2 rounded-2xl border border-border bg-card px-3 py-3">
+              {navigation.mobile.map((slug) => {
+                const item = MAIN_NAV.find((entry) => entry.slug === slug);
+                return item ? <div key={slug} className="flex min-w-0 flex-1 flex-col items-center gap-1 text-primary"><item.icon className="h-5 w-5" /><span className="max-w-full truncate text-[10px]">{item.label}</span></div> : null;
+              })}
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl" aria-label="Botão de adicionar">+</span>
+            </div>
+            <p className="mb-3 mt-5 text-xs font-medium text-muted-foreground">Web · Navegação principal</p>
+            <div className="flex flex-wrap gap-2">
+              {navigation.web.map((slug) => {
+                const item = MAIN_NAV.find((entry) => entry.slug === slug);
+                return item ? <span key={slug} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs"><item.icon className="h-4 w-4 text-primary" />{item.label}</span> : null;
+              })}
+            </div>
+          </div>
+        </section>
+      )}
       {visible("navegacao") && (<>
       <Card id="navigation" data-testid="settings-navigation-card">
         <CardHeader>
           <CardTitle className="font-heading">Barra de navegação</CardTitle>
           <CardDescription>Escolha e reordene os atalhos do mobile e da Web. Início é fixo e não pode ser removido.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4">
           {(["mobile", "web"] as const).map((target) => (
-            <div key={target} className="space-y-3">
+            <div key={target} className="space-y-2">
               <div>
                 <h3 className="text-sm font-semibold">{target === "mobile" ? "Mobile" : "Web"}</h3>
                 <p className="text-xs text-muted-foreground">{target === "mobile" ? "Até 4 atalhos, incluindo Início. O botão + continua separado." : "Escolha os itens exibidos na navegação principal."}</p>
               </div>
-              <label className="flex items-center gap-3 rounded-[1.35rem] border border-white/20 bg-background/55 px-4 py-3.5 shadow-[0_10px_32px_rgba(0,0,0,.10),inset_0_1px_0_rgba(255,255,255,.22)] backdrop-blur-[24px] supports-[backdrop-filter]:bg-background/45">
+              <label className="flex items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5 shadow-[0_10px_32px_rgba(0,0,0,.10),inset_0_1px_0_rgba(255,255,255,.22)] backdrop-blur-[24px] supports-[backdrop-filter]:bg-background/45">
                 <Sparkles className="h-4 w-4 text-primary" />
-                <span className="flex-1 text-sm font-medium">FINNOS IA — desmarque para remover</span>
+                <span className="flex-1 text-sm font-medium">Mostrar FINNOS IA</span>
                 <input
                   type="checkbox"
                   checked={target === "mobile" ? navigation.aiMobile : navigation.aiWeb}
@@ -303,8 +325,8 @@ export default function Settings() {
                   className="h-4 w-4 accent-primary"
                 />
               </label>
-              <div className="overflow-hidden rounded-[1.6rem] border border-white/20 bg-background/55 shadow-[0_12px_36px_rgba(0,0,0,.10),inset_0_1px_0_rgba(255,255,255,.22)] backdrop-blur-[26px] supports-[backdrop-filter]:bg-background/45">
-                <div className="flex items-center gap-3 border-b border-border/55 px-4 py-3.5">
+              <div className="overflow-hidden rounded-xl border border-border bg-background shadow-[0_12px_36px_rgba(0,0,0,.10),inset_0_1px_0_rgba(255,255,255,.22)] backdrop-blur-[26px] supports-[backdrop-filter]:bg-background/45">
+                <div className="flex items-center gap-3 border-b border-border/55 px-3 py-2.5">
                   <Check className="h-4 w-4 text-primary" />
                   <span className="flex-1 text-sm font-medium">Início</span>
                   <span className="text-xs text-muted-foreground">Fixo</span>
@@ -314,7 +336,7 @@ export default function Settings() {
                   const position = navigation[target].indexOf(item.slug);
                   const mobileFull = target === "mobile" && navigation.mobile.length >= 4;
                   return (
-                    <div key={item.slug} className="flex items-center gap-2 border-b border-border/55 px-4 py-3 last:border-b-0 transition-colors hover:bg-background/35">
+                    <div key={item.slug} className="flex items-center gap-2 border-b border-border/55 px-3 py-2 last:border-b-0 transition-colors hover:bg-background/35">
                       <item.icon className="h-4 w-4 text-muted-foreground" />
                       <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
                       {enabled ? (
