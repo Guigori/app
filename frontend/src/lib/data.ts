@@ -315,10 +315,13 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
   for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, String(value));
   }
+  const uid = firebaseAuth?.currentUser?.uid;
   const key = `transactions:${params.toString()}`;
   const base = await cachedFetch(key, () => apiGet<Transaction[]>(`/transactions?${params.toString()}`));
-  if (navigator.onLine) await Promise.all(base.map(t => cacheSet(`firebase:${firebaseAuth?.currentUser?.uid}:transaction:${t.id}`, t)));
+  if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  if (navigator.onLine && uid) await Promise.all(base.map(t => cacheSet(`firebase:${uid}:transaction:${t.id}`, t)));
   const operations = await listSyncOperations();
+  if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   const pending = operations.filter((o) => o.kind === "transaction.create");
   const updated = base.map(t => { const op = operations.filter(o => o.kind === "transaction.update" && o.entityId === t.id).at(-1); return op ? {...t,...op.payload} : t; });
   const optimistic: Transaction[] = pending

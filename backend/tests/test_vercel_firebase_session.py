@@ -196,3 +196,15 @@ def test_smoke_does_not_approve_failed_cleanup(client, smoke):
     smoke[2].delete.side_effect = PermissionDenied("private-detail")
     response = client.post("/api/auth/firestore-smoke", headers={"Origin": "https://preview.example.com"})
     assert response.status_code == 503 and "APROVADO" not in response.text
+
+
+def test_production_requires_explicit_activation_and_keeps_secure_cookie(client, firebase, monkeypatch):
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    monkeypatch.delenv("FINNOS_FIREBASE_PRODUCTION_ENABLED", raising=False)
+    assert login(client).status_code == 404
+    monkeypatch.setenv("FINNOS_FIREBASE_PRODUCTION_ENABLED", "1")
+    response = login(client)
+    assert response.status_code == 200
+    assert all(flag in response.headers["set-cookie"] for flag in ["HttpOnly", "Secure", "SameSite=lax"])
+    assert client.post("/api/auth/firebase-session", headers={"Origin":"http://preview.example.com","Authorization":"Bearer signed-id-token"}).status_code == 403
+    assert client.get("/api/validation/finance").status_code == 404

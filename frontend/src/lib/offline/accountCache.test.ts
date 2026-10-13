@@ -4,8 +4,10 @@ vi.mock("@/lib/firebase", () => ({ firebaseAuth: auth }));
 import { cachedFetch } from "./accountCache";
 
 const snapshots = new Map<string, unknown>();
+let duringCommit: (() => void) | null = null;
 beforeEach(() => {
   snapshots.clear();
+  duringCommit = null;
   auth.currentUser = { uid: "user-a" };
   vi.stubGlobal("navigator", { onLine: true });
   vi.stubGlobal("indexedDB", {
@@ -17,6 +19,7 @@ beforeEach(() => {
             return {
               put(value: { key: string }) {
                 snapshots.set(value.key, value);
+                duringCommit?.();
                 queueMicrotask(() => transaction.oncomplete?.());
               },
               get(key: string) {
@@ -63,4 +66,12 @@ it("does not recover legacy unscoped snapshots or offline data without identity"
   await expect(cachedFetch("accounts", vi.fn())).rejects.toThrow("FINNOS_OFFLINE_NO_CACHE");
   auth.currentUser = null;
   await expect(cachedFetch("accounts", vi.fn())).rejects.toThrow("FINNOS_OFFLINE_NO_CACHE");
+});
+
+
+it("rejects a response if UID changes while IndexedDB commits, keeping the old UID key", async () => {
+  duringCommit = () => { auth.currentUser = { uid: "user-b" }; };
+  await expect(cachedFetch("accounts", async () => [{ name: "Conta A" }])).rejects.toThrow("FINNOS_SESSION_CHANGED");
+  expect(snapshots.has("firebase:user-a:accounts")).toBe(true);
+  expect(snapshots.has("firebase:user-b:accounts")).toBe(false);
 });

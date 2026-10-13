@@ -392,16 +392,16 @@ def test_live_validation_never_runs_outside_preview(finance, monkeypatch, enviro
 def test_live_validation_rejects_other_users_and_cross_origin(finance, monkeypatch):
     client, _, _ = finance
     monkeypatch.setenv("FINNOS_PREVIEW_TEST_OWNER_UID", "owner@example.invalid")
-    assert client.get("/api/validation/finance").status_code == 403
+    assert client.get("/api/validation/finance").status_code == 404
     assert (
         client.post("/api/validation/finance/token", json={"label": "A"}).status_code
-        == 403
+        == 404
     )
     assert (
         client.post(
             "/api/validation/finance", headers={"Origin": "https://evil.example"}
         ).status_code
-        == 403
+        == 404
     )
 
 
@@ -429,5 +429,5 @@ def test_live_validation_cannot_mint_arbitrary_user_tokens(finance, monkeypatch)
         client.post(
             "/api/validation/finance/token", json={"label": "A", "uid": "other-uid"}
         ).status_code
-        == 422
+        == 404
     )

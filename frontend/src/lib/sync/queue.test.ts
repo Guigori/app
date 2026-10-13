@@ -34,3 +34,22 @@ it("does not share an IndexedDB financial snapshot with another UID",async()=>{
   vi.stubGlobal("navigator",{onLine:false});expect(await cachedFetch("accounts",vi.fn())).toEqual([{name:"A"}]);
   mocks.auth.currentUser={uid:"B"};await expect(cachedFetch("accounts",vi.fn())).rejects.toThrow("FINNOS_OFFLINE_NO_CACHE");
 });
+
+
+it("commits an offline React Query mutation durably instead of pausing it in memory", async () => {
+  const { MutationObserver, onlineManager } = await import("@tanstack/react-query");
+  const { queryClient } = await import("@/lib/queryClient");
+  onlineManager.setOnline(false);
+  try {
+    const observer = new MutationObserver(queryClient, { mutationFn: () => queueTransaction(input) });
+    const operation = await observer.mutate();
+    expect(observer.getCurrentResult().isPaused).toBe(false);
+    expect((await listSyncOperations())[0].id).toBe(operation.id);
+    let reads = 0;
+    await queryClient.fetchQuery({ queryKey: ["offline-real-cache-reader"], queryFn: async () => { reads++; return "cached"; } });
+    expect(reads).toBe(1);
+  } finally {
+    onlineManager.setOnline(true);
+    queryClient.clear();
+  }
+});

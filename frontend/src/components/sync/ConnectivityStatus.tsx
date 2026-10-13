@@ -3,6 +3,7 @@ import { Cloud, CloudOff, Loader2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { flushSyncQueue, listSyncOperations, type SyncOperation } from "@/lib/sync/queue";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
+import { queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
 type NetworkState = "online" | "offline";
@@ -72,6 +73,7 @@ export function ConnectivityStatus() {
 
   useEffect(() => {
     const syncState = () => void refresh();
+    const syncSuccess = () => { void queryClient.invalidateQueries(); };
     const syncError = (event: Event) => {
       const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;
       setExpanded(false);
@@ -96,6 +98,7 @@ export function ConnectivityStatus() {
     window.addEventListener("offline", offline);
     window.addEventListener("online", online);
     window.addEventListener("finnos:sync-state", syncState);
+    window.addEventListener("finnos:sync-success", syncSuccess);
     window.addEventListener("finnos:sync-error", syncError);
     document.addEventListener("visibilitychange", visible);
 
@@ -106,6 +109,7 @@ export function ConnectivityStatus() {
       window.removeEventListener("offline", offline);
       window.removeEventListener("online", online);
       window.removeEventListener("finnos:sync-state", syncState);
+      window.removeEventListener("finnos:sync-success", syncSuccess);
       window.removeEventListener("finnos:sync-error", syncError);
       document.removeEventListener("visibilitychange", visible);
       if (collapseTimer.current) window.clearTimeout(collapseTimer.current);

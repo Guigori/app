@@ -53,6 +53,7 @@ export async function cachedFetch<T>(key: string, online: () => Promise<T>): Pro
     const value = await online();
     if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
     if (scopedKey) await cacheSet(scopedKey, value);
+    if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
     return value;
   }
   if (!scopedKey) throw new Error("FINNOS_OFFLINE_NO_CACHE");

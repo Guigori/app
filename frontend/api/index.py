@@ -23,7 +23,9 @@ TTL = timedelta(days=5)
 @app.middleware("http")
 async def preview_only(request: Request, call_next):
     # Fail closed outside the explicitly selected preview or local test runtime.
-    if os.getenv("VERCEL_ENV", "development") not in {"preview", "development"}:
+    environment = os.getenv("VERCEL_ENV", "development")
+    production_approved = environment == "production" and os.getenv("FINNOS_FIREBASE_PRODUCTION_ENABLED") == "1"
+    if environment not in {"preview", "development"} and not production_approved:
         from fastapi.responses import JSONResponse
         return JSONResponse({"detail": "Not found"}, status_code=404)
     response = await call_next(request)
@@ -110,7 +112,7 @@ def firebase_session(request: Request, response: Response):
     except exceptions.FirebaseError as exc:
         raise HTTPException(503, "Não foi possível iniciar a sessão Firebase.") from exc
     response.set_cookie(COOKIE, cookie, max_age=int(TTL.total_seconds()),
-                        httponly=True, secure=os.getenv("VERCEL_ENV") == "preview",
+                        httponly=True, secure=os.getenv("VERCEL_ENV") in {"preview", "production"},
                         samesite="lax", path="/")
     return user
 
@@ -126,7 +128,7 @@ def me(request: Request):
 @app.post("/api/auth/logout", status_code=204, dependencies=[Depends(same_origin)])
 def logout(response: Response):
     response.delete_cookie(COOKIE, path="/", httponly=True,
-                           secure=os.getenv("VERCEL_ENV") == "preview", samesite="lax")
+                           secure=os.getenv("VERCEL_ENV") in {"preview", "production"}, samesite="lax")
 
 
 # Diagnostic is explicitly opt-in, Preview-only, and uses no Mongo imports.
@@ -206,5 +208,5 @@ def firestore_smoke(request: Request):
 
 from finnos.routes import mount
 mount(app, lambda: firebase_app(), lambda *args, **kwargs: verified_claims(*args, **kwargs), same_origin)
-from finnos.validation import mount_validation
-mount_validation(app, lambda: firebase_app(), lambda *args, **kwargs: verified_claims(*args, **kwargs), same_origin)
+# Passwordless validation bootstrap retired after conventional A/B/C login passed.
+# No route may create test identities or mint validation login tokens.
