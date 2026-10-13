@@ -1,7 +1,7 @@
 """Firestore-only account dashboard; no legacy data fallback."""
 from datetime import datetime, timezone
 from decimal import Decimal
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from starlette.concurrency import run_in_threadpool
 from lib.firebase import get_firestore
 from lib.firebase_auth import require_verified_firebase_user
@@ -9,14 +9,14 @@ from lib.firebase_auth import require_verified_firebase_user
 router = APIRouter(prefix="/firebase/dashboard", tags=["firebase-dashboard"])
 
 @router.get("")
-async def dashboard(user: dict = Depends(require_verified_firebase_user)):
+async def dashboard(month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"), user: dict = Depends(require_verified_firebase_user)):
     uid = user["uid"]
     def read():
         root = get_firestore().collection("users").document(uid)
         return [s.to_dict() or {} for s in root.collection("transactions").stream()]
     txs = await run_in_threadpool(read)
     income = expense = balance = Decimal(0)
-    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    month = month or datetime.now(timezone.utc).strftime("%Y-%m")
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     for tx in txs:
         if tx.get("status") != "pago":
