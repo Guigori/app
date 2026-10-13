@@ -274,30 +274,6 @@ export default function Settings() {
       </Card>
 
       </>)}
-      {visible("navegacao") && (
-        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm" aria-label="Prévia da navegação">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div><h2 className="font-semibold">Prévia em tempo real</h2><p className="text-xs text-muted-foreground">As mudanças aparecem aqui e são salvas automaticamente.</p></div>
-          </div>
-          <div className="rounded-2xl border border-border bg-background p-4">
-            <p className="mb-3 text-xs font-medium text-muted-foreground">iPhone · Barra inferior</p>
-            <div className="flex items-center justify-around gap-2 rounded-2xl border border-border bg-card px-3 py-3">
-              {navigation.mobile.map((slug) => {
-                const item = MAIN_NAV.find((entry) => entry.slug === slug);
-                return item ? <div key={slug} className="flex min-w-0 flex-1 flex-col items-center gap-1 text-primary"><item.icon className="h-5 w-5" /><span className="max-w-full truncate text-[10px]">{item.label}</span></div> : null;
-              })}
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl" aria-label="Botão de adicionar">+</span>
-            </div>
-            <p className="mb-3 mt-5 text-xs font-medium text-muted-foreground">Web · Navegação principal</p>
-            <div className="flex flex-wrap gap-2">
-              {navigation.web.map((slug) => {
-                const item = MAIN_NAV.find((entry) => entry.slug === slug);
-                return item ? <span key={slug} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs"><item.icon className="h-4 w-4 text-primary" />{item.label}</span> : null;
-              })}
-            </div>
-          </div>
-        </section>
-      )}
       {visible("navegacao") && (<>
       <Card id="navigation" data-testid="settings-navigation-card">
         <CardHeader>
@@ -310,6 +286,45 @@ export default function Settings() {
               <div>
                 <h3 className="text-sm font-semibold">{target === "mobile" ? "Mobile" : "Web"}</h3>
                 <p className="text-xs text-muted-foreground">{target === "mobile" ? "Até 4 atalhos, incluindo Início. O botão + continua separado." : "Escolha os itens exibidos na navegação principal."}</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-card p-3" aria-label={`Prévia da navegação ${target}`}>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-semibold">Prévia · {target === "mobile" ? "iPhone" : "Web"}</h4>
+                    <p className="text-xs text-muted-foreground">Atualiza imediatamente ao adicionar, remover ou reordenar.</p>
+                  </div>
+                  <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">Ao vivo</span>
+                </div>
+                {target === "mobile" ? (
+                  <div className="flex items-center gap-2 rounded-2xl bg-background p-2" data-testid="settings-mobile-dock-preview">
+                    <div className="grid min-w-0 flex-1 items-center rounded-full border border-white/50 bg-[#eeeeee]/75 p-[3px] shadow-[0_4px_22px_rgba(0,0,0,.08)] backdrop-blur-[28px] dark:border-white/15 dark:bg-[#161625]/75"
+                      style={{ gridTemplateColumns: navigation.mobile.map((_, index) => index === 0 ? "2.35fr" : "1fr").join(" ") }}>
+                      {navigation.mobile.map((slug, index) => {
+                        const item = MAIN_NAV.find((entry) => entry.slug === slug);
+                        return item ? <div key={slug} className={cn("flex h-[3.75rem] min-w-0 items-center justify-center overflow-hidden rounded-full px-1", index === 0 ? "bg-white text-[#080808] shadow-[0_1px_4px_rgba(0,0,0,.035)] dark:bg-white dark:text-black" : "text-[#626262] dark:text-white/70")}>
+                          <item.icon className="h-[1.55rem] w-[1.55rem] shrink-0" />
+                          {index === 0 ? <span className="ml-1 truncate text-[11px] font-semibold">{item.label}</span> : null}
+                        </div> : null;
+                      })}
+                    </div>
+                    <div className="flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-[#4B2CFF] text-white shadow-[0_4px_18px_rgba(75,44,255,.18)]" aria-label="Prévia do botão adicionar">
+                      <span className="text-3xl font-light">+</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-[1.65rem] border border-white/20 bg-background/55 px-2 shadow-[0_10px_32px_rgba(0,0,0,.10)] backdrop-blur-[26px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-testid="settings-web-tabs-preview">
+                    <div className="flex w-max min-w-full items-center gap-1">
+                      {navigation.web.map((slug, index) => {
+                        const item = MAIN_NAV.find((entry) => entry.slug === slug);
+                        return item ? <div key={slug} className={cn("relative flex shrink-0 items-center gap-2 rounded-full px-3 py-3 text-sm font-medium", index === 0 ? "bg-primary/[.07] text-primary" : "text-muted-foreground")}>
+                          <item.icon className="h-[1.125rem] w-[1.125rem]" />{item.label}
+                          {index === 0 ? <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" /> : null}
+                        </div> : null;
+                      })}
+                    </div>
+                  </div>
+                )}
+                <p className="mt-2 text-[11px] text-muted-foreground">Prévia ilustrativa do estado inicial; no app, o item ativo acompanha a página aberta.</p>
               </div>
               <label className="flex items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5 shadow-[0_10px_32px_rgba(0,0,0,.10),inset_0_1px_0_rgba(255,255,255,.22)] backdrop-blur-[24px] supports-[backdrop-filter]:bg-background/45">
                 <Sparkles className="h-4 w-4 text-primary" />
