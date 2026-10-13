@@ -26,7 +26,7 @@ export function AppShell() {
           <Header onOpenMenu={() => setMenuOpen(true)} />
           <TopTabs />
           <main className="mx-auto w-full max-w-7xl px-4 py-5 pb-32 sm:px-6 lg:px-10 dashboard:pb-28">
-            {/^\/radar\/[^/]+$/.test(location.pathname) ? null : <BackButton />}
+            {/^\/radar\/[^/]+$/.test(location.pathname) || location.pathname === "/configuracoes" ? null : <BackButton />}
             {/* Each route fades/slides in, so navigation feels continuous instead of a jump. */}
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
