@@ -3,7 +3,7 @@ import { firebaseAuth } from "@/lib/firebase";
 // "conta local" (browser-only) and "conta completa" (server) share one call shape:
 // in account mode they hit /api via src/lib/api.ts, in local mode the browser engine.
 
-import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
+import { apiDelete, apiGet, apiPost, apiPut, firebaseGet } from "@/lib/api";
 import { localRadar } from "@/lib/local/radar";
 import { isLocalMode, getMode } from "@/lib/mode";
 import { loadSessionProfile } from "@/lib/profileIdentity";
@@ -158,6 +158,9 @@ function applyPendingToDashboard(base: Dashboard, pending: { id: string; payload
 
 export async function fetchDashboard(month: string | null): Promise<Dashboard> {
   if (isLocalMode()) return localDashboard(month);
+  if (firebaseAuth?.currentUser) {
+    return firebaseGet<Dashboard>("/firebase/dashboard");
+  }
   const base = await cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(month ? `/dashboard?month=${month}` : "/dashboard"));
   const pending = (await listSyncOperations()).filter((o) => o.kind === "transaction.create");
   return applyPendingToDashboard(base, pending);
