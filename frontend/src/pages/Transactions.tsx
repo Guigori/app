@@ -285,15 +285,15 @@ export default function Transactions() {
             <div className="contents" data-testid="flow-strip-real">
               <div className="min-w-0">
                 <p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Entrada</p>
-                <p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.78rem,3vw,1rem)] font-bold tabular-nums text-income sm:text-base">{money(strip.income)}</p>
+                <p className="mt-1 break-words font-heading text-[12px] font-bold tabular-nums text-income sm:text-base">{money(strip.income)}</p>
               </div>
               <div className="min-w-0">
                 <p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saída</p>
-                <p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.78rem,3vw,1rem)] font-bold tabular-nums text-expense sm:text-base">{money(strip.expense)}</p>
+                <p className="mt-1 break-words font-heading text-[12px] font-bold tabular-nums text-expense sm:text-base">{money(strip.expense)}</p>
               </div>
               <div className="min-w-0">
                 <p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saldo</p>
-                <p className="mt-1 whitespace-nowrap font-heading text-[clamp(0.78rem,3vw,1rem)] font-bold tabular-nums text-foreground sm:text-base">{money(strip.income - strip.expense)}</p>
+                <p className="mt-1 break-words font-heading text-[12px] font-bold tabular-nums text-foreground sm:text-base">{money(strip.income - strip.expense)}</p>
               </div>
             </div>
           </div>
