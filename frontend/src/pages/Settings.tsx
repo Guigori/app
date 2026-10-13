@@ -134,7 +134,8 @@ export default function Settings() {
         <p className="mt-1 text-sm text-muted-foreground">Gerencie suas preferências e informações com segurança.</p>
       </div>
 
-      {visible("perfil", "seguranca") && (<>\n      <Card data-testid="settings-profile-card">
+      {visible("perfil", "seguranca") && (<>
+      <Card data-testid="settings-profile-card">
         <CardHeader>
           <CardTitle className="font-heading">Perfil</CardTitle>
           <CardDescription>{user?.email ?? ""}</CardDescription>
@@ -160,7 +161,9 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      </>)}\n      {visible("versao") && (<>\n      <Card data-testid="settings-version-card">
+      </>)}
+      {visible("versao") && (<>
+      <Card data-testid="settings-version-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading"><GitCommitHorizontal className="h-4.5 w-4.5 text-primary" aria-hidden="true" />Versão do FINNOS</CardTitle>
           <CardDescription>Identificação desta compilação para controle do beta, commits e deploys.</CardDescription>
@@ -176,7 +179,9 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      </>)}\n      {visible("aparencia") && (<>\n      <Card data-testid="settings-theme-card">
+      </>)}
+      {visible("aparencia") && (<>
+      <Card data-testid="settings-theme-card">
         <CardHeader>
           <CardTitle className="font-heading">Aparência</CardTitle>
           <CardDescription>Escolha claro, escuro ou siga o sistema.</CardDescription>
@@ -205,7 +210,9 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      </>)}\n      {visible("graficos") && (<>\n      <Card data-testid="settings-charts-card">
+      </>)}
+      {visible("graficos") && (<>
+      <Card data-testid="settings-charts-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
             <BarChart3 className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
@@ -220,7 +227,9 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      </>)}\n      {visible("painel") && (<>\n      <Card id="home-panel" data-testid="settings-home-panel-card">
+      </>)}
+      {visible("painel") && (<>
+      <Card id="home-panel" data-testid="settings-home-panel-card">
         <CardHeader>
           <CardTitle className="font-heading">Painel da Home</CardTitle>
           <CardDescription>Escolha o que aparece e a ordem dos módulos. A mesma configuração vale para Web e Mobile.</CardDescription>
@@ -266,7 +275,9 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      </>)}\n      {visible("navegacao") && (<>\n      <Card id="navigation" data-testid="settings-navigation-card">
+      </>)}
+      {visible("navegacao") && (<>
+      <Card id="navigation" data-testid="settings-navigation-card">
         <CardHeader>
           <CardTitle className="font-heading">Barra de navegação</CardTitle>
           <CardDescription>Escolha e reordene os atalhos do mobile e da Web. Início é fixo e não pode ser removido.</CardDescription>
@@ -325,7 +336,9 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      </>)}\n      {visible("orcamento") && (<>\n      <Card data-testid="settings-budget-card">
+      </>)}
+      {visible("orcamento") && (<>
+      <Card data-testid="settings-budget-card">
         <CardHeader>
           <CardTitle className="font-heading">Orçamento</CardTitle>
           <CardDescription>Modelo, periodicidade, próximo ciclo, prioridades e regras do seu planejamento.</CardDescription>
@@ -349,7 +362,9 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      </>)}\n      {visible("dados") && (<>\n      <Card data-testid="settings-mode-card">
+      </>)}
+      {visible("dados") && (<>
+      <Card data-testid="settings-mode-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
             {local ? <Smartphone className="h-4.5 w-4.5 text-primary" aria-hidden="true" /> : null}
@@ -373,11 +388,13 @@ export default function Settings() {
         ) : null}
       </Card>
 
-      </>)}\n      {visible("notificacoes") && <NotificationsCard />}
+      </>)}
+      {visible("notificacoes") && <NotificationsCard />}
 
       {visible("integracoes") && !local ? <AiKeysCard /> : null}
 
-      {visible("desenvolvedor") && (<>\n      <Card data-testid="settings-demo-card">
+      {visible("desenvolvedor") && (<>
+      <Card data-testid="settings-demo-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
             Dados de demonstração
@@ -405,7 +422,9 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      </>)}\n      {visible("perfil", "seguranca") && (<>\n      <Card data-testid="settings-session-card">
+      </>)}
+      {visible("perfil", "seguranca") && (<>
+      <Card data-testid="settings-session-card">
         <CardHeader>
           <CardTitle className="font-heading">Sessão</CardTitle>
           <CardDescription>Encerre a sessão neste dispositivo.</CardDescription>
@@ -418,7 +437,8 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      </>)}\n      <ConfirmDialog
+      </>)}
+      <ConfirmDialog
         open={confirmDemo}
         onOpenChange={setConfirmDemo}
         title="Carregar dados de demonstração?"
