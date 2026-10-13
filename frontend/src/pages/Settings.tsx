@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Check, ChevronDown, ChevronUp, GitCommitHorizontal, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -46,8 +45,8 @@ export default function Settings() {
   const [navigation, setNavigation] = useState<NavigationPreferences>(savedNavigation);
   useEffect(() => setNavigation(savedNavigation), [JSON.stringify(savedNavigation)]);
 
-  const mobileNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia");
-  const webNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia");
+  const mobileNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia" && item.slug !== "transacoes");
+  const webNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia" && item.slug !== "transacoes");
   const updateNavigation = (target: "mobile" | "web", slug: string, enabled: boolean) => {
     setNavigation((current) => {
       const list = current[target];
@@ -129,7 +128,6 @@ export default function Settings() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 pb-28 animate-fade-up">
       <div>
-        <Link to="/configuracoes" className="mb-3 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /> Configurações</Link>
         <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">{({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", painel: "Painel da Home", navegacao: "Barra de navegação", dados: "Dados e sincronização", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"}</h1>
         <p className="mt-1 text-sm text-muted-foreground">Gerencie suas preferências e informações com segurança.</p>
       </div>
@@ -276,6 +274,30 @@ export default function Settings() {
       </Card>
 
       </>)}
+      {visible("navegacao") && (
+        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm" aria-label="Prévia da navegação">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div><h2 className="font-semibold">Prévia em tempo real</h2><p className="text-xs text-muted-foreground">As mudanças aparecem aqui e são salvas automaticamente.</p></div>
+          </div>
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <p className="mb-3 text-xs font-medium text-muted-foreground">iPhone · Barra inferior</p>
+            <div className="flex items-center justify-around gap-2 rounded-2xl border border-border bg-card px-3 py-3">
+              {navigation.mobile.map((slug) => {
+                const item = MAIN_NAV.find((entry) => entry.slug === slug);
+                return item ? <div key={slug} className="flex min-w-0 flex-1 flex-col items-center gap-1 text-primary"><item.icon className="h-5 w-5" /><span className="max-w-full truncate text-[10px]">{item.label}</span></div> : null;
+              })}
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl" aria-label="Botão de adicionar">+</span>
+            </div>
+            <p className="mb-3 mt-5 text-xs font-medium text-muted-foreground">Web · Navegação principal</p>
+            <div className="flex flex-wrap gap-2">
+              {navigation.web.map((slug) => {
+                const item = MAIN_NAV.find((entry) => entry.slug === slug);
+                return item ? <span key={slug} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs"><item.icon className="h-4 w-4 text-primary" />{item.label}</span> : null;
+              })}
+            </div>
+          </div>
+        </section>
+      )}
       {visible("navegacao") && (<>
       <Card id="navigation" data-testid="settings-navigation-card">
         <CardHeader>
