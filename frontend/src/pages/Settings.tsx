@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Check, ChevronDown, ChevronUp, GitCommitHorizontal, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
+import { BarChart3, Check, ChevronDown, ChevronUp, GitCommitHorizontal, Loader2, LogOut, Smartphone, Sparkles, Trash2, ShieldCheck, Cloud, CircleHelp, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -426,6 +426,50 @@ export default function Settings() {
       </Card>
 
       </>)}
+      {visible("seguranca") && (
+        <Card data-testid="settings-security-information">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 font-heading"><ShieldCheck className="h-5 w-5 text-primary" />Proteção da conta</CardTitle>
+            <CardDescription>Confira a identidade utilizada e gerencie sua sessão neste dispositivo.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="rounded-xl border border-border bg-background p-3">
+              <p className="font-medium">Conta conectada</p>
+              <p className="mt-1 break-all text-muted-foreground">{user?.email || "Informações indisponíveis"}</p>
+              <p className="mt-1 text-muted-foreground">{authenticationLabel(user)}</p>
+            </div>
+            <p className="text-xs text-muted-foreground">Não compartilhe códigos de verificação. Para encerrar o acesso neste aparelho, utilize “Sair da conta” abaixo. Esta página não altera as políticas de segurança do servidor.</p>
+          </CardContent>
+        </Card>
+      )}
+      {visible("dados") && (
+        <Card data-testid="settings-data-information">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 font-heading"><Cloud className="h-5 w-5 text-primary" />Dados e sincronização</CardTitle>
+            <CardDescription>Entenda o modo de armazenamento da sua sessão.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="rounded-xl border border-border bg-background p-3">
+              <p className="font-medium">{local ? "Dados locais" : "Conta conectada"}</p>
+              <p className="mt-1 text-muted-foreground">{local ? "Os dados deste modo dependem do armazenamento deste navegador. Evite limpar os dados do site antes de exportar ou migrar." : "A sincronização depende de conexão e da disponibilidade do serviço. Aguarde a confirmação de sincronização antes de trocar de aparelho."}</p>
+            </div>
+            <p className="text-xs text-muted-foreground">Esta página é informativa. O estado real de conexão e sincronização é indicado pelo componente de conectividade do FINNOS.</p>
+          </CardContent>
+        </Card>
+      )}
+      {visible("suporte") && (
+        <Card data-testid="settings-support-information">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 font-heading"><CircleHelp className="h-5 w-5 text-primary" />Ajuda e suporte</CardTitle>
+            <CardDescription>Informações úteis para reportar problemas no Beta.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p>Ao comunicar um problema, informe o que estava fazendo, a página, o dispositivo e se estava online ou offline. Não envie senhas, códigos de autenticação nem extratos completos.</p>
+            <Link to="/configuracoes/versao" className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 font-medium text-primary hover:bg-accent"><ExternalLink className="h-4 w-4" />Consultar versão e commit</Link>
+            <p className="text-xs text-muted-foreground">Os canais de atendimento serão divulgados oficialmente durante o Beta.</p>
+          </CardContent>
+        </Card>
+      )}
       {visible("notificacoes") && <NotificationsCard />}
 
       {visible("integracoes") && !local ? <AiKeysCard /> : null}
