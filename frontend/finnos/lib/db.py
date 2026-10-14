@@ -229,8 +229,8 @@ class Cursor:
             ]
             for key, direction in reversed(self.order):
                 docs.sort(key=lambda d: str(d.get(key) or ""), reverse=direction == -1)
-            if len(docs) > maximum and self.collection.name != "transactions":
-                raise HTTPException(413, "Volume financeiro exige paginação.")
+            if len(docs) > maximum:
+                raise HTTPException(413, "Consulta financeira excedeu o limite; paginação necessária.")
             return docs[:maximum]
 
         return await run_in_threadpool(read)
@@ -390,6 +390,17 @@ class Collection:
                         for c in rows(db, uid, "cards", tr)
                     ):
                         raise HTTPException(409, "Conta possui cartão vinculado.")
+                    if self.name == "accounts" and any(
+                        goal.get("account") == doc["id"]
+                        for goal in rows(db, uid, "goals", tr)
+                    ):
+                        raise HTTPException(409, "Conta possui metas vinculadas.")
+                    if self.name == "categories" and any(
+                        allocation.get("category_id") == doc["id"]
+                        for budget in rows(db, uid, "budget_cycles", tr)
+                        for allocation in budget.get("allocations", [])
+                    ):
+                        raise HTTPException(409, "Categoria pertence a um orçamento.")
                 tr.delete(
                     root(db, uid).collection(self.name).document(resource_id(doc["id"]))
                 )
