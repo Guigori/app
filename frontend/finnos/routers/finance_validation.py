@@ -4,7 +4,7 @@ from finnos.lib.db import db
 from finnos.lib.finance_audit import KINDS, audit_finance
 from finnos.routers.auth import require_user
 
-router = APIRouter(prefix="/validation", tags=["finance-validation"])
+router = APIRouter(prefix="/finance", tags=["finance-validation"])
 
 
 @router.get("/finance")
