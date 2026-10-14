@@ -24,7 +24,7 @@ def _collection(uid: str):
 def _to_doc(payload: TransactionIn, tx_id: str) -> dict:
     data = payload.model_dump()
     # Canonical storage uses integer cents, not binary floating point.
-    amount = Decimal(str(payload.value))
+    amount = Decimal(str(payload.adjusted_value if payload.adjusted_value is not None else payload.value))
     cents = int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
     if cents <= 0:
         raise HTTPException(status_code=422, detail="Valor deve ser maior que zero.")
