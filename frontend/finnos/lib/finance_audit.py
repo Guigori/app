@@ -1,0 +1,66 @@
+"""Pure checks for the active Firestore financial data model.
+
+Passing this audit does NOT prove that an earlier MongoDB account has been
+migrated. Legacy reconciliation is an independent operator-controlled step.
+"""
+from collections import Counter
+from finnos.lib.money import D
+from finnos.lib.stats import balance_effects
+from finnos.lib.dates import today_iso
+
+KINDS = ("accounts", "categories", "cards", "transactions", "goals", "budget_cycles")
+
+
+def audit_finance(records):
+    accounts = {row["id"] for row in records["accounts"]}
+    categories = {row["id"] for row in records["categories"]}
+    cards = {row["id"] for row in records["cards"]}
+    problems = Counter()
+
+    for card in records["cards"]:
+        if card.get("payment_account_id") and card["payment_account_id"] not in accounts:
+            problems["card_payment_account_missing"] += 1
+
+    for tx in records["transactions"]:
+        if tx.get("account_id") not in accounts:
+            problems["transaction_source_account_missing"] += 1
+        if tx.get("to_account_id") and tx["to_account_id"] not in accounts:
+            problems["transaction_target_account_missing"] += 1
+        if tx.get("category_id") and tx["category_id"] not in categories:
+            problems["transaction_category_missing"] += 1
+        if tx.get("card_id") and tx["card_id"] not in cards:
+            problems["transaction_card_missing"] += 1
+        if tx.get("type") == "transferencia" and (
+            not tx.get("to_account_id") or tx["to_account_id"] == tx.get("account_id")
+        ):
+            problems["transaction_transfer_invalid"] += 1
+        if tx.get("invoice_payment") and tx.get("invoice_card_id") not in cards:
+            problems["invoice_payment_card_missing"] += 1
+
+    for goal in records["goals"]:
+        if goal.get("account") not in accounts:
+            problems["goal_account_missing"] += 1
+
+    for budget in records["budget_cycles"]:
+        for allocation in budget.get("allocations", []):
+            if allocation.get("category_id") not in categories:
+                problems["budget_category_missing"] += 1
+
+    total_balance = sum((D(acc.get("initial_balance") or 0) for acc in records["accounts"]), D(0))
+    # Only compute a total when all account references exist; otherwise it
+    # would conceal missing destinations or generate a misleading balance.
+    if not problems:
+        for tx in records["transactions"]:
+            for _, amount in balance_effects(tx, today_iso()):
+                total_balance += amount
+
+    counts = {kind: len(records[kind]) for kind in KINDS}
+    return {
+        "storage": "firestore",
+        "integrity_ok": not problems,
+        "issues": dict(sorted(problems.items())),
+        "counts": counts,
+        "has_financial_records": any(counts[k] for k in ("accounts", "cards", "transactions")),
+        "total_account_balance": float(round(total_balance, 2)) if not problems else None,
+        "legacy_reconciliation": "not_verified",
+    }
