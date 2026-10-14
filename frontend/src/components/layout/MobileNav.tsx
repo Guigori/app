@@ -5,8 +5,8 @@ import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type NavItem } from "@/components/layout/nav";
 import { navItemsFor, useNavigationPreferences } from "@/lib/navigationPreferences";
-import { useQuickActions } from "@/components/layout/QuickActions";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+
+
 
 function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: string) => void }) {
   return (
@@ -52,13 +52,13 @@ function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: strin
 }
 
 export function MobileNav() {
-  const { actions, run } = useQuickActions();
+
   const navigationPreferences = useNavigationPreferences();
   const mobileItems = navItemsFor(navigationPreferences.mobile);
   const navigate = useNavigate();
   const location = useLocation();
   const activeIndex = mobileItems.findIndex((item) => item.to === location.pathname || (item.to === "/" && location.pathname === "/"));
-  const [quickOpen, setQuickOpen] = useState(false);
+
   const [transitioning, setTransitioning] = useState(false);
   const [visible, setVisible] = useState(true);
   const [compact, setCompact] = useState(false);
@@ -83,7 +83,7 @@ export function MobileNav() {
       const current = window.scrollY;
       const delta = current - lastScrollY.current;
       lastScrollY.current = current;
-      if (quickOpen) return;
+
       if (current < 24) {
         setVisible(true);
         setCompact(false);
@@ -105,7 +105,7 @@ export function MobileNav() {
       window.removeEventListener("scroll", handleScroll);
       if (timer.current) window.clearTimeout(timer.current);
     };
-  }, [quickOpen]);
+  }, []);
 
   useEffect(() => {
     setVisible(true);
@@ -133,20 +133,6 @@ export function MobileNav() {
         ) : null}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {quickOpen ? (
-          <motion.div
-            key="quick-actions-backdrop"
-            className="fixed inset-0 z-[39] bg-black/20 backdrop-blur-[5px] dashboard:hidden"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.22 }}
-            aria-hidden="true"
-          />
-        ) : null}
-      </AnimatePresence>
-
       <motion.nav
         initial={false}
         animate={{ opacity: visible ? 1 : 0, y: visible ? 0 : 90, scale: visible ? (compact ? 0.94 : 1) : 0.94 }}
@@ -165,34 +151,15 @@ export function MobileNav() {
             ))}
           </div>
 
-          <DropdownMenu open={quickOpen} onOpenChange={setQuickOpen}>
-            <DropdownMenuTrigger
-              className={cn("flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-[#4B2CFF] text-white shadow-[0_4px_18px_rgba(75,44,255,.18)] transition-all duration-300 active:scale-95", quickOpen && "bg-[#5B35FF]")}
-              aria-label="Adicionar lançamento"
-              data-testid="mobile-quick-action-button"
-            >
-              <Plus className="h-8 w-8" aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              side="top"
-              align="end"
-              sideOffset={12}
-              className="mb-2 w-60 rounded-[1.7rem] border border-white/15 bg-background/65 p-2 shadow-[0_18px_55px_rgba(0,0,0,.35),inset_0_1px_0_rgba(255,255,255,.16)] backdrop-blur-[30px] supports-[backdrop-filter]:bg-background/55 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
-              data-testid="mobile-quick-action-menu"
-            >
-              {actions.map((action) => (
-                <DropdownMenuItem
-                  key={action.testid}
-                  onClick={() => run(action)}
-                  className="gap-3 rounded-xl px-3 py-2.5 text-sm font-medium"
-                  data-testid={`mobile-${action.testid}`}
-                >
-                  <action.icon className="h-4.5 w-4.5 shrink-0" aria-hidden="true" />
-                  {action.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <button
+            type="button"
+            onClick={() => navigate("/registro-inteligente")}
+            className="flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-[#4B2CFF] text-white shadow-[0_4px_18px_rgba(75,44,255,.18)] transition-all duration-300 active:scale-95"
+            aria-label="Abrir Registro Inteligente"
+            data-testid="mobile-quick-action-button"
+          >
+            <Plus className="h-8 w-8" aria-hidden="true" />
+          </button>
         </div>
       </motion.nav>
     </>
