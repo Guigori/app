@@ -4,6 +4,7 @@ No LLM, OCR, or audio is claimed. Ambiguous fields remain unset and must be
 confirmed by the user before the existing transaction creation API is called.
 """
 import re
+from lib.fiint.registration_helpers import amount_from_text, date_from_text, accounts_from_text, installments_from_text
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -37,10 +38,11 @@ def interpret(text: str, *, today: date, accounts: list[dict], categories: list[
     tx_type = ("transferencia" if TRANSFER.search(clean) else
                "receita" if INCOME.search(clean) else
                "despesa" if EXPENSE.search(clean) else None)
-    amount = parse_amount(clean)
-    account_matches = [a for a in accounts if a.get("name") and re.search(
-        r"(?<!\w)" + re.escape(a["name"]) + r"(?!\w)", clean, re.I)]
-    account_id = account_matches[0]["id"] if len(account_matches) == 1 else None
+    amount = amount_from_text(clean)
+    account_id, to_account_id = accounts_from_text(clean, accounts, tx_type == "transferencia")
+    installment, total_installments = installments_from_text(clean)
+    if tx_type != "despesa":
+        installment, total_installments = False, None
     hints = {"padaria": "aliment", "mercado": "aliment", "supermercado": "aliment",
              "farmácia": "saúde", "farmacia": "saúde", "uber": "transporte"}
     category_id = None
@@ -58,12 +60,13 @@ def interpret(text: str, *, today: date, accounts: list[dict], categories: list[
         missing.append("value")
     if account_id is None:
         missing.append("account_id")
-    if tx_type == "transferencia":
+    if tx_type == "transferencia" and to_account_id is None:
         missing.append("to_account_id")
     return {
         "type": tx_type, "value": amount, "name": clean,
         "date": today.isoformat() if re.search(r"\bhoje\b", clean, re.I) else None,
-        "account_id": account_id, "to_account_id": None,
+        "account_id": account_id, "to_account_id": to_account_id,
+        "installment": installment, "total_installments": total_installments,
         "category_id": category_id, "missing_fields": missing,
-        "requires_confirmation": True, "source": "fiint_text_rules_v1",
+        "requires_confirmation": True, "source": "fiint_text_rules_v2",
     }
