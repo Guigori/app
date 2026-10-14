@@ -55,9 +55,9 @@ def _public(doc: dict) -> dict:
 @router.get("")
 async def list_transactions(
     limit: int = Query(default=100, ge=1, le=500),
-    month: str | None = Query(default=None, pattern=r"^\\d{4}-\\d{2}$"),
-    start_date: str | None = Query(default=None, pattern=r"^\\d{4}-\\d{2}-\\d{2}$"),
-    end_date: str | None = Query(default=None, pattern=r"^\\d{4}-\\d{2}-\\d{2}$"),
+    month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    start_date: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    end_date: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     type: str | None = None,
     status: str | None = None,
     category_id: str | None = None,
