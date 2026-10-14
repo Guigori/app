@@ -60,13 +60,20 @@ def interpret(text: str, *, today: date, accounts: list[dict], categories: list[
         missing.append("value")
     if account_id is None:
         missing.append("account_id")
+    if date_from_text(clean, today) is None:
+        missing.append("date")
     if tx_type == "transferencia" and to_account_id is None:
         missing.append("to_account_id")
+    if installment and amount is not None:
+        installment_value = round(amount / total_installments, 2)
+    else:
+        installment_value = None
     return {
+        "installment_value": installment_value,
         "type": tx_type, "value": amount, "name": clean,
-        "date": today.isoformat() if re.search(r"\bhoje\b", clean, re.I) else None,
+        "date": date_from_text(clean, today),
         "account_id": account_id, "to_account_id": to_account_id,
         "installment": installment, "total_installments": total_installments,
         "category_id": category_id, "missing_fields": missing,
-        "requires_confirmation": True, "source": "fiint_text_rules_v2",
+        "requires_confirmation": True, "source": "fiint_text_rules_v3",
     }
