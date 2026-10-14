@@ -66,3 +66,29 @@ export async function apiPostWithBearer<T>(path: string, token: string, body?: J
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+
+/** Firebase routes are opt-in during migration. Identity comes from the signed ID token,
+ * never from X-FINNOS-User-ID or a browser-provided UID. */
+export async function firebaseApi<T>(
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  path: string,
+  body?: JsonBody,
+  operationId?: string,
+): Promise<T> {
+  const user = firebaseAuth?.currentUser;
+  if (!user) throw new Error("FINNOS_AUTH_REQUIRED");
+  const token = await user.getIdToken();
+  const res = await fetch(`${BASE}/firebase${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      ...(operationId ? { "X-FINNOS-Operation-ID": operationId } : {}),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (user.uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => null));
+  return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
+}
