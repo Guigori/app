@@ -1,0 +1,36 @@
+name: FINNOS Active Firestore Adapter
+
+on:
+  push:
+    paths:
+      - "frontend/finnos/**"
+      - ".github/workflows/firestore-adapter-tests.yml"
+  pull_request:
+    paths:
+      - "frontend/finnos/**"
+      - ".github/workflows/firestore-adapter-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  firestore-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: frontend/requirements.txt
+      - name: Install isolated API test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r frontend/requirements.txt pytest httpx
+      - name: Compile active Firestore API
+        run: python -m compileall -q frontend/finnos frontend/api
+      - name: Verify active Firestore adapter integrity
+        env:
+          PYTHONPATH: frontend
+        run: python -m pytest -q frontend/finnos/tests/test_firestore_integrity.py
