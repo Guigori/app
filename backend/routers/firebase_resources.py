@@ -24,7 +24,10 @@ async def list_resources(kind: str, user: dict = Depends(require_verified_fireba
 @router.post("/{kind}", status_code=201)
 async def create_resource(kind: str, payload: dict, user: dict = Depends(require_verified_firebase_user)):
     ref = collection(user["uid"], kind)
-    validated = MODELS[kind](**payload)
+    resource_type = MODELS.get(kind)
+    if resource_type is None:
+        raise HTTPException(status_code=404, detail="Recurso não encontrado.")
+    validated = resource_type(**payload)
     if kind == "cards" and validated.payment_account_id:
         account = await run_in_threadpool(lambda: collection(user["uid"], "accounts").document(validated.payment_account_id).get())
         if not account.exists:
