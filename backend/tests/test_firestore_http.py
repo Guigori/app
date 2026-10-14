@@ -114,3 +114,24 @@ def test_three_users_cannot_read_edit_or_delete_each_others_records(api):
 def test_bad_uuid_rejected(api):
     client, _, _ = api
     assert client.get("/api/firebase/transactions/not-a-uuid").status_code == 422
+
+def test_filtered_list_is_scoped_and_sorted(api):
+    client, identity, _ = api
+    older = dict(payload(), date="2026-09-14", type="receita", name="Salário")
+    latest = dict(payload(), date="2026-10-12", category_id="food", name="Mercado")
+    assert client.post("/api/firebase/transactions", json=older).status_code == 201
+    assert client.post("/api/firebase/transactions", json=latest).status_code == 201
+    identity["uid"] = "user-b"
+    assert client.post("/api/firebase/transactions", json=latest).status_code == 201
+    identity["uid"] = "user-a"
+    response = client.get("/api/firebase/transactions?month=2026-10&type=despesa&category_id=food")
+    assert response.status_code == 200, response.text
+    assert [item["name"] for item in response.json()] == ["Mercado"]
+    assert [item["name"] for item in client.get("/api/firebase/transactions").json()] == ["Mercado", "Salário"]
+
+
+def test_invalid_filters_rejected(api):
+    client, _, _ = api
+    assert client.get("/api/firebase/transactions?month=2026-1").status_code == 422
+    assert client.get("/api/firebase/transactions?type=unknown").status_code == 422
+    assert client.get("/api/firebase/transactions?start_date=2026-10-13&end_date=2026-10-12").status_code == 422
