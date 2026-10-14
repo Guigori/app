@@ -47,7 +47,10 @@ async def get_resource(kind: str, identifier: str, user: dict = Depends(require_
 
 @router.put("/{kind}/{identifier}")
 async def update_resource(kind: str, identifier: str, payload: dict, user: dict = Depends(require_verified_firebase_user)):
-    validated = MODELS[kind](**payload)
+    resource_type = MODELS.get(kind)
+    if resource_type is None:
+        raise HTTPException(status_code=404, detail="Recurso não encontrado.")
+    validated = resource_type(**payload)
     if kind == "cards" and validated.payment_account_id:
         account = await run_in_threadpool(lambda: collection(user["uid"], "accounts").document(validated.payment_account_id).get())
         if not account.exists:
