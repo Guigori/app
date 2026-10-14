@@ -45,3 +45,11 @@ Este documento é um plano de migração. Não indica que todas as capacidades j
 - **Critérios de aceite:** testar iOS Safari/PWA, falta de conexão durante o lançamento, reenvio após reconexão, operações duplicadas, conflitos entre dispositivos, expiração de sessão, limpeza de armazenamento, alternância de contas e isolamento entre usuários.
 
 Essa decisão substitui a proposta anterior de executar FIINT Python offline via Pyodide no beta. O offline é uma camada de continuidade; o processamento de inteligência permanece no backend.
+
+## Progresso da API canônica (2026-10-14)
+
+- `GET /api/fiint/analyses`: endpoint autenticado que retorna `engine: "FIINT"`, data de referência, quantidade e análises estruturadas.
+- `GET /api/fiint/analyses/{analysis_id}`: detalhe autenticado, restrito às análises calculadas para o usuário atual; retorna 404 se não houver correspondência.
+- `/api/fac/*` e `/api/fca/*` permanecem ativos para evitar quebra de clientes.
+- **Limitação conhecida:** o novo endpoint reutiliza o adaptador FAC e ainda lê dados do MongoDB. A implementação central FIINT ainda delega o algoritmo ao FAC. Radar, FCA, Finn, aprendizado e reconhecimento ainda precisam de migração e testes próprios.
+- Testes unitários do contrato do roteador adicionados, mas execução de CI e homologação são condições para merge. Não remover MongoDB ou endpoints legados nesta etapa.
