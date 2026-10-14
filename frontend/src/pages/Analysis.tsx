@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { CalendarDays, ChevronRight, Eye, EyeOff, LayoutGrid, ChartPie, SlidersHorizontal, Sparkles, TrendingUp, WalletCards } from "lucide-react";
 import { fetchBudget, fetchDashboard, fetchTrends } from "@/lib/data";
+import { OfflineSnapshotNotice } from "@/components/offline/OfflineSnapshotNotice";
 import { currentMonth, monthLabel } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,6 +36,10 @@ export default function Analysis() {
   },[d,top]);
 
   return <div className="mx-auto w-full max-w-5xl space-y-4 pb-8 animate-fade-up">
+    <OfflineSnapshotNotice cacheKeys={[`dashboard:${month}`, `trends:months=6&end_month=${month}`, `budget:${month}`]} />
+    {dashboard.isError && !d && <div role="alert" className="rounded-2xl border bg-card p-4 text-sm text-muted-foreground">Não foi possível carregar as análises deste período. Sem dados armazenados, não exibiremos valores fictícios ou zerados como resultados.</div>}
+    {dashboard.isPending && !d && <p className="text-sm text-muted-foreground">Carregando análises disponíveis…</p>}
+    {!d ? null : <>
     <header className="flex items-start justify-between gap-3">
       <div><h1 className="font-heading text-3xl font-bold tracking-tight">Análise</h1><p className="text-sm text-muted-foreground">{yearMode ? month.slice(0,4) : monthLabel(month)}</p></div>
       <div className="relative z-20 flex flex-col items-center gap-2 rounded-full border border-[#E5E0FF] bg-white p-1.5 shadow-[0_5px_18px_rgba(7,15,82,.09)] dark:bg-[#03081F]" aria-label="Menu vertical FINNOS">
@@ -82,6 +87,7 @@ export default function Analysis() {
     <AnalysisRow title="O que mais pesou neste mês" value={hidden?"••••••":top ? `${top.name} · ${money(top.total)} · ${pct(top.percent)}` : "Sem dados suficientes"} icon={<TrendingUp className="h-5 w-5"/>}/>
 
     <Button variant="outline" className="h-12 w-full rounded-2xl border-primary/20 font-semibold"><SlidersHorizontal className="mr-2 h-4 w-4"/>Modificar painel</Button>
+    </>}
   </div>
 }
 
