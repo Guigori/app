@@ -83,7 +83,7 @@ def test_validation_endpoint_only_queries_authenticated_uid(monkeypatch):
     app.include_router(finance_validation.router, prefix="/api")
     app.dependency_overrides[require_user] = lambda: {"id": "uid-owner"}
     with TestClient(app) as client:
-        response = client.get("/api/validation/finance")
+        response = client.get("/api/finance/integrity")
     assert response.status_code == 200, response.text
     assert response.json()["counts"]["accounts"] == 2
     assert response.json()["integrity_ok"] is True
