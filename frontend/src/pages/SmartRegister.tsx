@@ -17,7 +17,6 @@ export default function SmartRegister({ embedded = false }: { embedded?: boolean
   const cards = (cardsQuery.data ?? []).filter(c => c.active);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const selectedCard = cards.find(c => c.id === selectedCardId);
-  const selectedAccount = accounts.find(a => a.id === account);
   const [page, setPage] = useState<Page>("start");
   const [history, setHistory] = useState<Page[]>([]);
   const [text, setText] = useState("");
@@ -26,6 +25,7 @@ export default function SmartRegister({ embedded = false }: { embedded?: boolean
   const [kind, setKind] = useState<Kind>("Despesa");
   const [category, setCategory] = useState("");
   const [account, setAccount] = useState("");
+  const selectedAccount = accounts.find(a => a.id === account);
   const [destination, setDestination] = useState("");
   const [installments, setInstallments] = useState(1);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
