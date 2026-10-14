@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getAccountPaymentMethods, setAccountPaymentMethods, PAYMENT_METHODS, type PaymentMethod } from "@/lib/accountPaymentPreferences";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PlusCircle, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
@@ -25,6 +26,20 @@ export default function Accounts() {
 
   const [selected, setSelected] = useState<Account | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Account | null>(null);
+  const [configuring, setConfiguring] = useState<Account | null>(null);
+  const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  const [savingMethods, setSavingMethods] = useState(false);
+  const [loadingMethods, setLoadingMethods] = useState(false);
+  const openPaymentMethods = async (account: Account) => {
+    setConfiguring(account); setLoadingMethods(true);
+    try { setMethods(await getAccountPaymentMethods(account)); } catch (error) { toast.error(getApiErrorMessage(error)); setConfiguring(null); } finally { setLoadingMethods(false); }
+  };
+  const savePaymentMethods = async () => {
+    if (!configuring) return;
+    setSavingMethods(true);
+    try { await setAccountPaymentMethods(configuring, methods); toast.success("Formas de pagamento atualizadas."); setConfiguring(null); }
+    catch (error) { toast.error(getApiErrorMessage(error)); } finally { setSavingMethods(false); }
+  };
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteAccount(id),
@@ -112,6 +127,7 @@ export default function Accounts() {
                   <span className="text-rose-600 dark:text-rose-400">Saídas {formatBRL(account.total_expense)}</span>
                 </div>
                 <div className="mt-3 flex justify-end gap-1 border-t border-border pt-3">
+                  <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); void openPaymentMethods(account); }}>Pagamentos</Button>
                   <Button
                     size="sm"
                     variant="ghost"
@@ -142,6 +158,7 @@ export default function Accounts() {
         </div>
       )}
 
+      {configuring && <div role="dialog" aria-modal="true" aria-label="Formas de pagamento" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"><div className="w-full max-w-md space-y-4 rounded-3xl bg-background p-6 text-foreground shadow-xl"><h2 className="text-xl font-semibold">Formas de pagamento · {configuring.name}</h2><p className="text-sm text-muted-foreground">Escolha as formas disponíveis para esta conta. Cartões de crédito são administrados separadamente.</p>{loadingMethods ? <p>Carregando...</p> : PAYMENT_METHODS.map(method => <label key={method} className="flex items-center gap-3 rounded-xl border p-3"><input type="checkbox" checked={methods.includes(method)} onChange={e => setMethods(current => e.target.checked ? [...current,method] : current.filter(x => x !== method))}/>{method}</label>)}<p className="text-xs text-muted-foreground">As configurações da conta autenticada são armazenadas no Firebase. No modo local, permanecem neste dispositivo.</p><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setConfiguring(null)}>Cancelar</Button><Button disabled={savingMethods || loadingMethods} onClick={() => void savePaymentMethods()}>{savingMethods ? "Salvando..." : "Salvar"}</Button></div></div></div>}
       <AccountDetailDialog
         open={selected !== null}
         onOpenChange={(open) => {
