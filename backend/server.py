@@ -30,6 +30,7 @@ from routers import (
     dashboard,
     fca,
     fac,
+    fiint,
     demo,
     notifications,
     migration,
@@ -96,6 +97,7 @@ api_router.include_router(firebase_diagnostics.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(fca.router)
 api_router.include_router(fac.router)
+api_router.include_router(fiint.router)
 api_router.include_router(demo.router)
 api_router.include_router(ai.router)
 api_router.include_router(ai_feedback.router)
