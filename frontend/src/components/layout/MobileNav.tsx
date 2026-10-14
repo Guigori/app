@@ -121,8 +121,10 @@ export function MobileNav() {
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setRegisterOpen(false); };
     window.addEventListener("keydown", onKey);
     const previousOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = previousOverflow; };
+    document.documentElement.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = previousOverflow; document.documentElement.style.overflow = previousHtmlOverflow; };
   }, [registerOpen]);
 
   return (
@@ -152,11 +154,11 @@ export function MobileNav() {
               className="fixed inset-0 z-[39] bg-black/40 backdrop-blur-[12px] dashboard:hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} />
             <motion.section role="dialog" aria-modal="true" aria-label="Novo registro"
-              className="fixed inset-x-0 bottom-[calc(5.9rem+env(safe-area-inset-bottom))] z-[40] mx-auto max-h-[calc(100dvh-7rem)] w-[calc(100%-1.5rem)] max-w-[28rem] overflow-hidden rounded-[30px] border border-violet-500/25 bg-[#090911] shadow-2xl dashboard:hidden"
+              className="fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[40] mx-auto flex max-w-[28rem] flex-col overflow-hidden rounded-[30px] border border-violet-500/25 bg-[#090911] shadow-2xl dashboard:hidden"
               initial={{ y: "110%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "110%", opacity: 0 }}
               transition={{ type: "spring", stiffness: 330, damping: 34 }}>
               <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/25" aria-hidden="true" />
-              <div className="max-h-[calc(100dvh-8rem)] overflow-y-auto"><SmartRegister /></div>
+              <div className="min-h-0 flex-1 overflow-hidden"><SmartRegister embedded /></div>
             </motion.section>
           </>
         )}
@@ -174,7 +176,7 @@ export function MobileNav() {
       >
         <div className="flex w-full max-w-[28rem] items-center gap-2.5">
           <div style={{ gridTemplateColumns: mobileItems.map((_, index) => `${index === activeIndex ? 2.35 : 1}fr`).join(" ") || "1fr" }}
-          className={cn("grid min-w-0 flex-1 items-center rounded-full border border-white/50 bg-[#eeeeee]/75 p-[3px] shadow-[0_4px_22px_rgba(0,0,0,.08)] backdrop-blur-[28px] transition-[background-color,box-shadow] duration-300 dark:border-white/15 dark:bg-[#161625]/75", compact && "bg-[#eeeeee]/45 shadow-[0_2px_12px_rgba(0,0,0,.05)]")}>
+          className={cn("grid min-w-0 flex-1 items-center rounded-full border border-white/50 bg-[#eeeeee]/75 p-[3px] shadow-[0_4px_22px_rgba(0,0,0,.08)] backdrop-blur-[28px] transition-[background-color,box-shadow] duration-300 dark:border-white/15 dark:bg-[#161625]/75", compact && "bg-[#eeeeee]/45 shadow-[0_2px_12px_rgba(0,0,0,.05)]", registerOpen && "invisible pointer-events-none opacity-0")}>
             {mobileItems.map((item) => (
               <MobileTab key={item.to} item={item} onNavigate={navigateFromDock} />
             ))}
