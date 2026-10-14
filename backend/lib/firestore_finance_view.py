@@ -33,7 +33,7 @@ def enriched_transaction(tx, view):
     card = cards.get(tx.get("card_id"), {})
     return TransactionOut(
         **{key: value for key, value in tx.items() if key in TransactionOut.model_fields
-           and key not in {"account_name", "to_account_name", "category_name", "category_color", "category_icon", "card_name"}},
+           and key not in {"account_name", "to_account_name", "category_name", "category_color", "category_icon", "card_name", "created_at"}},
         account_name=account.get("name", ""),
         to_account_name=target.get("name"),
         category_name=category.get("name"),
