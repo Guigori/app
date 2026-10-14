@@ -159,3 +159,115 @@ async def get_budget(
                          percent=round(budgeted / planned * 100, 1) if planned else 0,
                          income=round(income, 2),
                          unbudgeted_spent=round(total - budgeted, 2), rows=rows)
+
+# Flow and calendar use the same pure monthly allocation algorithms as MongoDB.
+from lib.stats import months_between
+from models.analytics import FlowOut, FlowPoint, FlowCategory, CalendarOut, DayFlow
+from routers.analytics import _projection, _amount, _label
+
+
+@router.get("/analytics/flow", response_model=FlowOut)
+async def get_flow(
+    month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    months: int = Query(default=12, ge=2, le=24),
+    from_month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    to_month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    category_id: str | None = None,
+    user: dict = Depends(require_verified_firebase_user),
+):
+    view = await view_for(user)
+    focus = month or today_iso()[:7]
+    if from_month and to_month:
+        start, end = sorted((from_month, to_month))
+        window = [add_months(start, i) for i in range(min(months_between(start, end), 35) + 1)]
+    else:
+        window = [add_months(focus, -i) for i in range(months - 1, -1, -1)]
+        window.extend((add_months(focus, 1), add_months(focus, 2)))
+    txs = [tx for tx in view["transactions"] if not category_id or tx.get("category_id") == category_id]
+    cats = {cat["id"]: cat for cat in view["categories"]}
+    settled_keys = {(tx["name"].strip().lower(), tx["date"][:7]) for tx in txs}
+    current = today_iso()[:7]
+    series = []
+    for m in window:
+        income = expense = future_income = future_expense = 0.0
+        for tx in txs:
+            paid = month_portion(tx, m)
+            if paid is not None:
+                if tx["type"] == "receita":
+                    income += paid
+                else:
+                    expense += paid
+            projected = _projection(tx, m, settled_keys)
+            if projected is not None:
+                if tx["type"] == "receita":
+                    future_income += projected
+                else:
+                    future_expense += projected
+        series.append(FlowPoint(
+            month=m, label=_label(m), year=f"'{m[2:4]}",
+            income=round(income, 2), expense=round(expense, 2), net=round(income - expense, 2),
+            projected_income=round(future_income, 2), projected_expense=round(future_expense, 2),
+            projected_net=round(future_income - future_expense, 2), future=m > current))
+    cat_total = {}
+    for tx in txs:
+        portion = month_portion(tx, focus)
+        if portion is not None and tx["type"] == "despesa":
+            cat_id = tx.get("category_id")
+            cat_total[cat_id] = cat_total.get(cat_id, 0) + portion
+    total = sum(cat_total.values())
+    breakdown = [FlowCategory(
+        category_id=key,
+        name=cats.get(key, {}).get("name", "Sem categoria") if key else "Sem categoria",
+        color=cats.get(key, {}).get("color", "#94A3B8") if key else "#94A3B8",
+        icon=cats.get(key, {}).get("icon", "more-horizontal") if key else "more-horizontal",
+        total=round(value, 2), percent=round(value / total * 100, 1) if total else 0,
+    ) for key, value in sorted(cat_total.items(), key=lambda item: -item[1])]
+    point = next((p for p in series if p.month == focus), None)
+    return FlowOut(
+        month=focus, from_month=window[0], to_month=window[-1],
+        income=point.income if point else 0, expense=point.expense if point else 0,
+        net=point.net if point else 0, projected_income=point.projected_income if point else 0,
+        projected_expense=point.projected_expense if point else 0,
+        projected_net=point.projected_net if point else 0,
+        total_income=round(sum(p.income for p in series), 2),
+        total_expense=round(sum(p.expense for p in series), 2),
+        total_net=round(sum(p.net for p in series), 2),
+        series=series, categories=breakdown)
+
+
+@router.get("/analytics/calendar", response_model=CalendarOut)
+async def get_calendar(
+    month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    user: dict = Depends(require_verified_firebase_user),
+):
+    view = await view_for(user)
+    m = month or today_iso()[:7]
+    buckets = {}
+    for tx in view["transactions"]:
+        if not tx["date"].startswith(m):
+            continue
+        day = buckets.setdefault(tx["date"], DayFlow(
+            date=tx["date"], income=0, expense=0,
+            projected_income=0, projected_expense=0, count=0))
+        day.count += 1
+        if tx["type"] == "transferencia":
+            continue
+        amount = _amount(tx)
+        if tx["status"] == "pago":
+            if tx["type"] == "receita":
+                day.income = round(day.income + amount, 2)
+            else:
+                day.expense = round(day.expense + amount, 2)
+        elif tx["type"] == "receita":
+            day.projected_income = round(day.projected_income + amount, 2)
+        else:
+            day.projected_expense = round(day.projected_expense + amount, 2)
+    days = sorted(buckets.values(), key=lambda day: day.date)
+    income = round(sum(day.income for day in days), 2)
+    expense = round(sum(day.expense for day in days), 2)
+    projected_income = round(sum(day.projected_income for day in days), 2)
+    projected_expense = round(sum(day.projected_expense for day in days), 2)
+    return CalendarOut(month=m, days=days, income=income, expense=expense,
+        net=round(income - expense, 2),
+        projected_income=projected_income, projected_expense=projected_expense,
+        projected_balance=round(income - expense + projected_income - projected_expense, 2))
