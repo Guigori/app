@@ -271,3 +271,90 @@ async def get_calendar(
         net=round(income - expense, 2),
         projected_income=projected_income, projected_expense=projected_expense,
         projected_balance=round(income - expense + projected_income - projected_expense, 2))
+
+# Invoice read path is Firestore-only. Payments must be atomic, not a separate
+# debit insert followed by a non-atomic paid-cycle update.
+from datetime import date, datetime, timezone
+import uuid
+from decimal import Decimal
+from google.cloud import firestore
+from lib.firebase import get_firestore
+from lib.cards import cycle_bounds, due_date
+from models.notify import Invoice, PayInvoiceIn
+from routers.cards import _cycle_items
+
+
+def make_invoice(view, card_id):
+    card = next((c for c in view["cards"] if c["id"] == card_id), None)
+    if card is None:
+        raise HTTPException(404, "Cartão não encontrado.")
+    today = date.fromisoformat(today_iso())
+    start, closing = cycle_bounds(today, card["closing_day"])
+    due = due_date(closing, card["closing_day"], card["due_day"])
+    categories = {c["id"]: c for c in view["categories"]}
+    items = _cycle_items(card, view["transactions"], categories, start.isoformat(), closing.isoformat())
+    paid = (card.get("paid_cycles") or {}).get(closing.isoformat())
+    return Invoice(
+        card_id=card_id, card_name=card["name"], cycle_start=start.isoformat(),
+        cycle_end=closing.isoformat(), due_date=due.isoformat(),
+        total=round(sum(item.value for item in items), 2),
+        paid=bool(paid), paid_amount=round(float((paid or {}).get("amount", 0.0)), 2),
+        paid_at=(paid or {}).get("paid_at"), items=items)
+
+
+@router.get("/cards/{card_id}/invoice", response_model=Invoice)
+async def get_invoice(card_id: str, user: dict = Depends(require_verified_firebase_user)):
+    return make_invoice(await view_for(user), card_id)
+
+
+@router.post("/cards/{card_id}/pay", response_model=Invoice)
+async def pay_invoice(card_id: str, payload: PayInvoiceIn,
+                      user: dict = Depends(require_verified_firebase_user)):
+    view = await view_for(user)
+    invoice = make_invoice(view, card_id)
+    if invoice.paid:
+        raise HTTPException(409, "Esta fatura já está paga.")
+    if payload.account_id not in {acc["id"] for acc in view["accounts"]}:
+        raise HTTPException(400, "Conta de pagamento inválida.")
+    amount = round(float(payload.value if payload.value is not None else invoice.total), 2)
+    if amount <= 0 or not Decimal(str(amount)).is_finite():
+        raise HTTPException(400, "Valor de pagamento inválido.")
+    db = get_firestore()
+    root = db.collection("users").document(user["uid"])
+    card_ref = root.collection("cards").document(card_id)
+    transaction_id = str(uuid.uuid5(uuid.NAMESPACE_URL,
+        f"finnos:card-payment:{user['uid']}:{card_id}:{invoice.cycle_end}"))
+    debit_ref = root.collection("transactions").document(transaction_id)
+    now = datetime.now(timezone.utc)
+    debit = {
+        "id": transaction_id, "name": f"Fatura {invoice.card_name}",
+        "value_cents": int((Decimal(str(amount)) * 100).quantize(Decimal("1"))),
+        "type": "despesa", "status": "pago", "date": payload.date,
+        "account_id": payload.account_id, "card_id": None,
+        "to_account_id": None, "category_id": None,
+        "fixed": False, "recurrence": None, "installment": False,
+        "total_installments": None, "current_installment": None,
+        "installment_value": None, "adjusted_value": None,
+        "attachment": None, "notes": f"Pagamento da fatura fechada em {invoice.cycle_end}.",
+        "notify_enabled": True, "invoice_payment": True,
+        "created_at": now, "updated_at": now,
+    }
+
+    def commit():
+        transaction = db.transaction()
+
+        @firestore.transactional
+        def record(transaction):
+            snapshot = card_ref.get(transaction=transaction)
+            if not snapshot.exists:
+                raise HTTPException(404, "Cartão não encontrado.")
+            if (snapshot.to_dict().get("paid_cycles") or {}).get(invoice.cycle_end):
+                raise HTTPException(409, "Esta fatura já está paga.")
+            transaction.create(debit_ref, debit)
+            transaction.update(card_ref, {f"paid_cycles.{invoice.cycle_end}": {
+                "amount": amount, "transaction_id": transaction_id,
+                "paid_at": payload.date}})
+        record(transaction)
+
+    await run_in_threadpool(commit)
+    return make_invoice(await view_for(user), card_id)
