@@ -18,6 +18,7 @@ import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 
 import { FinnosVerticalMenu, type FinnosView, type FinnosSeries } from "@/components/shared/FinnosVerticalMenu";
 import { RadarSection } from "@/components/dashboard/RadarSection";
+import { OfflineSnapshotNotice } from "@/components/offline/OfflineSnapshotNotice";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -91,6 +92,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-w-0 space-y-5 overflow-x-hidden animate-fade-up sm:space-y-6">
+      <OfflineSnapshotNotice cacheKeys={[`dashboard:${month ?? "current"}`, "radar", "accounts"]} />
       <section className="dashboard-hero-surface relative min-w-0 rounded-[24px] border border-border/70 px-4 pb-6 pt-6 shadow-sm sm:rounded-[28px] sm:px-6 sm:pb-7 sm:pt-7" data-testid="dashboard-financial-header">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 pr-12 sm:pr-14">
