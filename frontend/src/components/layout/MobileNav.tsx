@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Plus } from "lucide-react";
+import SmartRegister from "@/pages/SmartRegister";
 import { cn } from "@/lib/utils";
 import { type NavItem } from "@/components/layout/nav";
 import { navItemsFor, useNavigationPreferences } from "@/lib/navigationPreferences";
@@ -59,6 +60,7 @@ export function MobileNav() {
   const location = useLocation();
   const activeIndex = mobileItems.findIndex((item) => item.to === location.pathname || (item.to === "/" && location.pathname === "/"));
 
+  const [registerOpen, setRegisterOpen] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const [visible, setVisible] = useState(true);
   const [compact, setCompact] = useState(false);
@@ -69,6 +71,7 @@ export function MobileNav() {
 
   const navigateFromDock = (to: string) => {
     if (transitioning) return;
+    setRegisterOpen(false);
     setTransitioning(true);
     if (transitionTimer.current) window.clearTimeout(transitionTimer.current);
     transitionTimer.current = window.setTimeout(() => {
@@ -113,6 +116,15 @@ export function MobileNav() {
     scrollDistance.current = 0;
   }, [location.pathname]);
 
+  useEffect(() => {
+    if (!registerOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setRegisterOpen(false); };
+    window.addEventListener("keydown", onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = previousOverflow; };
+  }, [registerOpen]);
+
   return (
     <>
       <AnimatePresence>
@@ -133,13 +145,30 @@ export function MobileNav() {
         ) : null}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {registerOpen && (
+          <>
+            <motion.button type="button" aria-label="Fechar registro" onClick={() => setRegisterOpen(false)}
+              className="fixed inset-0 z-[39] bg-black/40 backdrop-blur-[12px] dashboard:hidden"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} />
+            <motion.section role="dialog" aria-modal="true" aria-label="Novo registro"
+              className="fixed inset-x-0 bottom-[calc(5.9rem+env(safe-area-inset-bottom))] z-[40] mx-auto max-h-[calc(100dvh-7rem)] w-[calc(100%-1.5rem)] max-w-[28rem] overflow-hidden rounded-[30px] border border-violet-500/25 bg-[#090911] shadow-2xl dashboard:hidden"
+              initial={{ y: "110%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "110%", opacity: 0 }}
+              transition={{ type: "spring", stiffness: 330, damping: 34 }}>
+              <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/25" aria-hidden="true" />
+              <div className="max-h-[calc(100dvh-8rem)] overflow-y-auto"><SmartRegister /></div>
+            </motion.section>
+          </>
+        )}
+      </AnimatePresence>
+
       <motion.nav
         initial={false}
-        animate={{ opacity: visible ? 1 : 0, y: visible ? 0 : 90, scale: visible ? (compact ? 0.94 : 1) : 0.94 }}
+        animate={{ opacity: registerOpen || visible ? 1 : 0, y: registerOpen || visible ? 0 : 90, scale: registerOpen ? 1 : visible ? (compact ? 0.94 : 1) : 0.94 }}
         transition={{ type: "spring", stiffness: 280, damping: 34, mass: 0.85 }}
         className={cn(
           "fixed inset-x-0 bottom-[max(0.7rem,env(safe-area-inset-bottom))] z-40 flex justify-center px-3 dashboard:hidden",
-          !visible && "pointer-events-none"
+          !visible && !registerOpen && "pointer-events-none"
         )}
         data-testid="mobile-nav"
       >
@@ -153,12 +182,13 @@ export function MobileNav() {
 
           <button
             type="button"
-            onClick={() => navigate("/registro-inteligente")}
+            onClick={() => setRegisterOpen(open => !open)}
             className="flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-[#4B2CFF] text-white shadow-[0_4px_18px_rgba(75,44,255,.18)] transition-all duration-300 active:scale-95"
-            aria-label="Abrir Registro Inteligente"
+            aria-label={registerOpen ? "Fechar Registro Inteligente" : "Abrir Registro Inteligente"}
+            aria-expanded={registerOpen}
             data-testid="mobile-quick-action-button"
           >
-            <Plus className="h-8 w-8" aria-hidden="true" />
+            <Plus className={cn("h-8 w-8 transition-transform duration-300", registerOpen && "rotate-45")} aria-hidden="true" />
           </button>
         </div>
       </motion.nav>
