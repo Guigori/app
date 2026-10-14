@@ -45,6 +45,22 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
   return result?.value ?? null;
 }
 
+/** Timestamp of the last successfully cached response for the signed-in account. */
+export async function cacheSavedAt(key: string): Promise<string | null> {
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (!uid) return null;
+  const db = await openDb();
+  try {
+    const record = await new Promise<Snapshot | undefined>((resolve, reject) => {
+      const req = db.transaction(STORE, "readonly").objectStore(STORE).get(`firebase:${uid}:${key}`);
+      req.onsuccess = () => resolve(req.result as Snapshot | undefined);
+      req.onerror = () => reject(req.error);
+    });
+    if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+    return record?.savedAt ?? null;
+  } finally { db.close(); }
+}
+
 export async function cachedFetch<T>(key: string, online: () => Promise<T>): Promise<T> {
   const uid = firebaseAuth?.currentUser?.uid;
   const scopedKey = uid ? `firebase:${uid}:${key}` : null;

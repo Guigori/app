@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { ArrowDown, ArrowUp, BellOff, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
+import { OfflineSnapshotNotice } from "@/components/offline/OfflineSnapshotNotice";
 import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { settledCents, settledTotals } from "@/lib/settledMoney";
@@ -249,6 +250,7 @@ export default function Transactions() {
 
   return (
     <div className="relative flex flex-col gap-4 animate-fade-up">
+      <OfflineSnapshotNotice cacheKeys={["categories", "accounts"]} />
       <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-start gap-x-3 gap-y-3" data-testid="flow-header-grid">
         <div className="min-w-0 pt-1">
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo</h1>
