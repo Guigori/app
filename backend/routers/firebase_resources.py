@@ -61,3 +61,29 @@ async def update_resource(kind: str, identifier: str, payload: dict, user: dict 
     if result is None:
         raise HTTPException(status_code=404, detail="Recurso não encontrado.")
     return result
+
+@router.delete("/{kind}/{identifier}", status_code=204)
+async def delete_resource(kind: str, identifier: str, user: dict = Depends(require_verified_firebase_user)):
+    ref = collection(user["uid"], kind).document(identifier)
+    def remove():
+        if not ref.get().exists:
+            return "missing"
+        root = get_firestore().collection("users").document(user["uid"])
+        transactions = root.collection("transactions")
+        fields = {
+            "accounts": ("account_id", "to_account_id"),
+            "categories": ("category_id",),
+            "cards": ("card_id",),
+        }
+        for field in fields[kind]:
+            if any(transactions.where(field, "==", identifier).limit(1).stream()):
+                return "referenced"
+        if kind == "accounts" and any(root.collection("cards").where("payment_account_id", "==", identifier).limit(1).stream()):
+            return "referenced"
+        ref.delete()
+        return "deleted"
+    outcome = await run_in_threadpool(remove)
+    if outcome == "missing":
+        raise HTTPException(status_code=404, detail="Recurso não encontrado.")
+    if outcome == "referenced":
+        raise HTTPException(status_code=409, detail="Existem registros vinculados.")
