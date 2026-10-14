@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, status
 from starlette.concurrency import run_in_threadpool
 
 from lib.firebase import get_firestore
@@ -60,14 +60,29 @@ async def list_transactions(
 async def create_transaction(
     payload: TransactionIn,
     user: dict = Depends(require_verified_firebase_user),
+    x_finnos_operation_id: str | None = Header(default=None),
 ):
-    tx_id = str(uuid.uuid4())
+    tx_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"finnos:{user['uid']}:{x_finnos_operation_id}")) if x_finnos_operation_id else str(uuid.uuid4())
     doc = _to_doc(payload, tx_id)
     now = datetime.now(timezone.utc)
     doc["created_at"] = now
     doc["updated_at"] = now
-    await run_in_threadpool(lambda: _collection(user["uid"]).document(tx_id).create(doc))
-    return _public(doc)
+    if x_finnos_operation_id:
+        doc["operation_id"] = x_finnos_operation_id
+    def create_once():
+        ref = _collection(user["uid"]).document(tx_id)
+        try:
+            ref.create(doc)
+            return doc
+        except Exception as exc:
+            from google.api_core.exceptions import Conflict
+            if not isinstance(exc, Conflict):
+                raise
+            existing = ref.get()
+            if not existing.exists or existing.to_dict().get("operation_id") != x_finnos_operation_id:
+                raise
+            return existing.to_dict()
+    return _public(await run_in_threadpool(create_once))
 
 @router.get("/{tx_id}")
 async def get_transaction(
