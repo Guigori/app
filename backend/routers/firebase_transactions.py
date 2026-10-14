@@ -38,6 +38,11 @@ def _to_doc(payload: TransactionIn, tx_id: str) -> dict:
         )
         data.pop("adjusted_value")
     data["id"] = tx_id
+    data["name"] = payload.name.strip()
+    data["installment_value"] = (round(float(amount / payload.total_installments), 2) if payload.installment and payload.total_installments else None)
+    data["current_installment"] = (payload.current_installment or 1) if payload.installment else None
+    data["to_account_id"] = payload.to_account_id if payload.type == "transferencia" else None
+    data["card_id"] = payload.card_id if payload.type == "despesa" else None
     return data
 
 def _public(doc: dict) -> dict:
