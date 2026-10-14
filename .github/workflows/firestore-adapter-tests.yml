@@ -33,4 +33,4 @@ jobs:
       - name: Verify active Firestore adapter integrity
         env:
           PYTHONPATH: frontend
-        run: python -m pytest -q frontend/finnos/tests/test_firestore_integrity.py
+        run: python -m pytest -q frontend/finnos/tests
