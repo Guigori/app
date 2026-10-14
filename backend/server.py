@@ -41,6 +41,7 @@ from routers import (
     transactions,
     firebase_transactions,
     firebase_resources,
+    firebase_finance,
     firebase_diagnostics,
 )
 
@@ -94,6 +95,7 @@ api_router.include_router(categories.router)
 api_router.include_router(transactions.router)
 api_router.include_router(firebase_transactions.router)
 api_router.include_router(firebase_resources.router)
+api_router.include_router(firebase_finance.router)
 api_router.include_router(firebase_diagnostics.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(fca.router)
