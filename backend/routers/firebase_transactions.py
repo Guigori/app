@@ -55,11 +55,50 @@ def _public(doc: dict) -> dict:
 @router.get("")
 async def list_transactions(
     limit: int = Query(default=100, ge=1, le=500),
+    month: str | None = Query(default=None, pattern=r"^\\d{4}-\\d{2}$"),
+    start_date: str | None = Query(default=None, pattern=r"^\\d{4}-\\d{2}-\\d{2}$"),
+    end_date: str | None = Query(default=None, pattern=r"^\\d{4}-\\d{2}-\\d{2}$"),
+    type: str | None = None,
+    status: str | None = None,
+    category_id: str | None = None,
+    account_id: str | None = None,
+    search: str | None = Query(default=None, max_length=80),
     user: dict = Depends(require_verified_firebase_user),
 ):
+    if type is not None and type not in {"receita", "despesa", "transferencia"}:
+        raise HTTPException(status_code=422, detail="Tipo inválido.")
+    if status is not None and status not in {"pago", "pendente", "agendado"}:
+        raise HTTPException(status_code=422, detail="Status inválido.")
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=422, detail="Intervalo de datas inválido.")
     def read():
-        snapshots = _collection(user["uid"]).limit(limit).stream()
-        return [_public(s.to_dict()) for s in snapshots]
+        # Temporary migration read path. Reject truncated results rather than
+        # silently omitting transactions from financial summaries.
+        snapshots = list(_collection(user["uid"]).limit(2001).stream())
+        if len(snapshots) > 2000:
+            raise HTTPException(status_code=409, detail="Limite de migração atingido; paginação necessária.")
+        rows = [_public(s.to_dict()) for s in snapshots]
+        def match(tx):
+            date = tx.get("date", "")
+            if start_date or end_date:
+                if start_date and date < start_date:
+                    return False
+                if end_date and date > end_date:
+                    return False
+            elif month and not date.startswith(month):
+                return False
+            if type and tx.get("type") != type:
+                return False
+            if status and tx.get("status") != status:
+                return False
+            if category_id and tx.get("category_id") != category_id:
+                return False
+            if account_id and account_id not in (tx.get("account_id"), tx.get("to_account_id")):
+                return False
+            return not search or search.casefold() in tx.get("name", "").casefold()
+        rows = [tx for tx in rows if match(tx)]
+        rows.sort(key=lambda tx: (tx.get("date", ""), str(tx.get("created_at", ""))), reverse=True)
+        return rows[:limit]
     return await run_in_threadpool(read)
 
 @router.post("", status_code=status.HTTP_201_CREATED)
