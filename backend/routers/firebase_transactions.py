@@ -13,7 +13,6 @@ from starlette.concurrency import run_in_threadpool
 from lib.firebase import get_firestore
 from lib.firebase_auth import require_verified_firebase_user
 from models.finnos import TransactionIn
-from lib.firestore_references import validate_transaction_refs
 
 router = APIRouter(prefix="/firebase/transactions", tags=["firebase-transactions"])
 
