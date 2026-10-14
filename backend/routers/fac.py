@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from lib.db import db
-from lib.fac.analysis import category_change_analyses
+from lib.fiint.analysis import category_change_analyses
 from lib.fac.clock import financial_today
 from models.fac import FACAnalysis, FACHomeOut
 from routers.auth import require_user
