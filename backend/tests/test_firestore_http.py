@@ -57,6 +57,8 @@ class Firestore:
 def api(monkeypatch):
     db = Firestore()
     monkeypatch.setattr(module, "get_firestore", lambda: db)
+    # Reference validation is exercised separately with ownership-specific tests.
+    monkeypatch.setattr(module, "validate", lambda uid, payload: None)
     app = FastAPI()
     app.include_router(module.router, prefix="/api")
     active = {"uid": "user-a", "email_verified": True}
