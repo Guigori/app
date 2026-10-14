@@ -4,6 +4,9 @@ All reads pass through the existing authenticated, user-scoped FAC data adapter.
 No new database or unverified learning model is introduced.
 """
 from datetime import date
+from pydantic import BaseModel, Field
+from lib.db import db
+from lib.fiint.registration import interpret
 from fastapi import APIRouter, Depends, HTTPException, Query
 from lib.fac.clock import financial_today
 from models.fac import FACAnalysis
@@ -41,3 +44,25 @@ async def analysis_detail(
     if row is None:
         raise HTTPException(status_code=404, detail="Análise FIINT não encontrada.")
     return FACAnalysis(**row)
+
+
+class RegistrationPreviewIn(BaseModel):
+    text: str = Field(min_length=1, max_length=1000)
+
+
+@router.post("/registration/preview")
+async def registration_preview(
+    payload: RegistrationPreviewIn,
+    user: dict = Depends(require_user),
+):
+    """Draft only: no database writes, no transaction creation."""
+    accounts = await db.accounts.find({"user_id": user["id"]}).to_list(500)
+    categories = await db.categories.find({"user_id": user["id"]}).to_list(500)
+    try:
+        draft = interpret(
+            payload.text, today=financial_today(),
+            accounts=accounts, categories=categories,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"engine": "FIINT", "draft": draft}
