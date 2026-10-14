@@ -250,7 +250,7 @@ export default function Transactions() {
 
   return (
     <div className="relative flex flex-col gap-4 animate-fade-up">
-      <OfflineSnapshotNotice cacheKeys={["transactions:", "categories", "accounts"]} />
+      <OfflineSnapshotNotice cacheKeys={["categories", "accounts"]} />
       <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-start gap-x-3 gap-y-3" data-testid="flow-header-grid">
         <div className="min-w-0 pt-1">
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo</h1>
