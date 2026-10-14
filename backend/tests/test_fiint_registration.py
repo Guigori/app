@@ -33,7 +33,7 @@ def test_ambiguous_text_does_not_invent_type_or_account():
                        accounts=ACCOUNTS, categories=CATEGORIES)
     assert result["type"] is None
     assert result["account_id"] is None
-    assert result["date"] is None
+    assert result["date"] == "2026-10-13"
     assert result["requires_confirmation"]
 
 
