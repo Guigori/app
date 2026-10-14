@@ -7,7 +7,7 @@ from finnos.routers.auth import require_user
 router = APIRouter(prefix="/finance", tags=["finance-validation"])
 
 
-@router.get("/finance")
+@router.get("/integrity")
 async def validation(user: dict = Depends(require_user)):
     uid = user["id"]
     records = {}
