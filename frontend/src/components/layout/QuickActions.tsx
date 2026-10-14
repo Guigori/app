@@ -1,4 +1,4 @@
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowDownCircle, ArrowLeftRight, ArrowUpCircle, Repeat, Target, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { getSelectedDay } from "@/lib/selectedDay";
@@ -16,12 +16,13 @@ export interface QuickAction {
 export function useQuickActions(): { actions: QuickAction[]; run: (action: QuickAction) => void } {
   const dialogs = useDialogs();
   const location = useLocation();
+  const navigate = useNavigate();
   // Read at click time, not at render: the selected day changes without remounting this.
   const pickedDate = () =>
     location.pathname === "/transacoes" ? (getSelectedDay() ?? undefined) : undefined;
 
   const actions: QuickAction[] = [
-    { label: "Nova transação", icon: ArrowLeftRight, testid: "fab-new-transaction", onClick: () => dialogs.openTransaction({ date: pickedDate() }) },
+    { label: "Nova transação", icon: ArrowLeftRight, testid: "fab-new-transaction", onClick: () => navigate("/registro-inteligente") },
     { label: "Nova receita", icon: ArrowUpCircle, testid: "fab-new-income", onClick: () => dialogs.openTransaction({ type: "receita", date: pickedDate() }) },
     { label: "Nova despesa", icon: ArrowDownCircle, testid: "fab-new-expense", onClick: () => dialogs.openTransaction({ type: "despesa", date: pickedDate() }) },
     {
