@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 from lib.firebase import get_firestore
 from lib.firebase_auth import require_verified_firebase_user
 from models.finnos import TransactionIn
+from lib.firestore_refcheck import validate
 
 router = APIRouter(prefix="/firebase/transactions", tags=["firebase-transactions"])
 
@@ -63,6 +64,7 @@ async def create_transaction(
     x_finnos_operation_id: str | None = Header(default=None),
 ):
     tx_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"finnos:{user['uid']}:{x_finnos_operation_id}")) if x_finnos_operation_id else str(uuid.uuid4())
+    await run_in_threadpool(lambda: validate(user["uid"], payload))
     doc = _to_doc(payload, tx_id)
     now = datetime.now(timezone.utc)
     doc["created_at"] = now
@@ -102,6 +104,7 @@ async def update_transaction(
     payload: TransactionIn,
     user: dict = Depends(require_verified_firebase_user),
 ):
+    await run_in_threadpool(lambda: validate(user["uid"], payload))
     ref = _collection(user["uid"]).document(str(tx_id))
     def replace():
         snapshot = ref.get()
