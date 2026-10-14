@@ -7,6 +7,7 @@ from datetime import date
 from pydantic import BaseModel, Field
 from lib.db import db
 from lib.fiint.registration import interpret
+from lib.fiint.memory import merchant_key, learned_category
 from fastapi import APIRouter, Depends, HTTPException, Query
 from lib.fac.clock import financial_today
 from models.fac import FACAnalysis
@@ -65,4 +66,37 @@ async def registration_preview(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if draft["type"] == "despesa":
+        memories = await db.fiint_merchant_memory.find({"user_id": user["id"]}).to_list(500)
+        learned = learned_category(payload.text, memories, categories)
+        if learned:
+            draft["category_id"] = learned
+            draft["category_source"] = "user_confirmed_memory"
     return {"engine": "FIINT", "draft": draft}
+
+class MerchantCorrectionIn(BaseModel):
+    merchant: str = Field(min_length=2, max_length=80)
+    category_id: str = Field(min_length=1, max_length=120)
+
+
+@router.post("/registration/learn-category")
+async def learn_category(payload: MerchantCorrectionIn, user: dict = Depends(require_user)):
+    key = merchant_key(payload.merchant)
+    if len(key) < 2:
+        raise HTTPException(status_code=422, detail="Estabelecimento inválido.")
+    category = await db.categories.find_one({"id": payload.category_id, "user_id": user["id"]})
+    if not category:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada.")
+    await db.fiint_merchant_memory.update_one(
+        {"user_id": user["id"], "merchant": key},
+        {"$set": {"category_id": payload.category_id}},
+        upsert=True,
+    )
+    return {"learned": True, "merchant": key, "category_id": payload.category_id}
+
+
+@router.delete("/registration/learn-category/{merchant}")
+async def forget_category(merchant: str, user: dict = Depends(require_user)):
+    key = merchant_key(merchant)
+    await db.fiint_merchant_memory.delete_one({"user_id": user["id"], "merchant": key})
+    return {"removed": True}
