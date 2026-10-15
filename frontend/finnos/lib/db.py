@@ -218,7 +218,7 @@ class Cursor:
         self.order = key if isinstance(key, list) else [(key, direction)]
         return self
 
-    async def to_list(self, maximum):
+    async def to_list(self, maximum, *, allow_truncate=False):
         uid = scoped(self.query)
 
         def read():
@@ -229,7 +229,7 @@ class Cursor:
             ]
             for key, direction in reversed(self.order):
                 docs.sort(key=lambda d: str(d.get(key) or ""), reverse=direction == -1)
-            if len(docs) > maximum:
+            if len(docs) > maximum and not allow_truncate:
                 raise HTTPException(413, "Consulta financeira excedeu o limite; paginação necessária.")
             return docs[:maximum]
 
