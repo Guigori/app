@@ -1,4 +1,4 @@
-from finnos.lib.money import D
+from finnos.lib.money import D, cents, installment_portion
 
 """Transactions CRUD — filters, installment math and server-side enrichment."""
 import re
@@ -112,6 +112,8 @@ async def _validate(user_id: str, payload: TransactionIn) -> None:
             raise HTTPException(
                 status_code=400, detail="Informe o número total de parcelas (mínimo 2)."
             )
+        if cents(payload.adjusted_value if payload.adjusted_value is not None else payload.value) < payload.total_installments:
+            raise HTTPException(422, "Cada parcela deve valer ao menos R$ 0,01.")
 
 
 def _document(user_id: str, payload: TransactionIn) -> dict:
@@ -142,9 +144,7 @@ def _document(user_id: str, payload: TransactionIn) -> dict:
             payload.current_installment or 1 if payload.installment else None
         ),
         "installment_value": (
-            (total / payload.total_installments).quantize(
-                D("0.01"), rounding="ROUND_HALF_UP"
-            )
+            installment_portion({"value": total, "total_installments": payload.total_installments}, 0)
             if payload.installment
             else None
         ),
