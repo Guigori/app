@@ -53,6 +53,8 @@ O Radar somava diretamente receitas e despesas e não aplicava transferências/c
 
 ## Pendências demonstradas pelo código
 
+**P1 — Desenvolvimento local ainda pode executar o backend MongoDB, diferente da produção.** `frontend/vite.config.ts:108-115` envia `/api` para `localhost:8001`; as instruções do repositório iniciam `backend/server.py`, que importa `lib.db`/MongoDB e chama `ensure_indexes()` (`backend/server.py:18-20,48-52`). Já a Vercel monta `frontend/api/index.py` e o adaptador Firestore. Isso pode produzir comportamento e resultados diferentes entre `yarn dev` e produção; é necessário unificar o servidor local com o entrypoint Firestore antes de remover a arquitetura legada. Não pressupõe que o usuário tenha conta MongoDB própria.
+
 **P1 — Módulo Assinaturas não corresponde ao cadastro independente esperado.** `frontend/finnos/routers/subscriptions.py:28-83` deriva itens automaticamente de `transactions` com `fixed=True` e não oferece criar/editar/excluir uma assinatura como entidade própria. A contagem de assinaturas pode incluir despesas fixas comuns.
 
 **P1 — Metas não têm edição e exclusão na API analisada.** `frontend/finnos/routers/goals.py:38-68` registra somente GET lista, POST criar e GET sugestão. A conta vinculada é validada no adaptador. O frontend pode possuir UI adicional, porém a API não disponibiliza atualização ou remoção de metas nessa rota.
