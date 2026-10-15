@@ -26,6 +26,7 @@ import type {
   InvoiceItem,
   NotificationItem,
   PayInvoiceInput,
+  SubscriptionInput,
   SubscriptionItem,
   Subscriptions,
   Notifications,
@@ -169,6 +170,7 @@ export function localDeleteAccount(id: string): void {
       "Esta conta tem transações vinculadas. Exclua ou mova as transações antes de excluir a conta.",
     );
   }
+  if (db.subscriptions.some(sub => sub.account_id === id)) throw new Error("Conta vinculada a uma assinatura.");
   db.accounts = db.accounts.filter((a) => a.id !== id);
   writeDb(db);
 }
@@ -203,6 +205,7 @@ export function localDeleteCategory(id: string): void {
       "Esta categoria tem transações vinculadas. Mova-as para outra categoria antes de excluir.",
     );
   }
+  if (db.subscriptions.some(sub => sub.category_id === id)) throw new Error("Categoria vinculada a uma assinatura.");
   db.categories = db.categories.filter((c) => c.id !== id);
   writeDb(db);
 }
@@ -840,6 +843,7 @@ export function localUpdateCard(id: string, input: CardInput): CreditCard {
 
 export function localDeleteCard(id: string): void {
   const db = readDb();
+  if (db.subscriptions.some(sub => sub.card_id === id)) throw new Error("Cartão vinculado a uma assinatura.");
   db.cards = db.cards.filter((c) => c.id !== id);
   db.transactions = db.transactions.map((t) => (t.card_id === id ? { ...t, card_id: null, card_name: null } : t));
   writeDb(db);
@@ -991,47 +995,89 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   return localInvoice(cardId);
 }
 
+/** Subscriptions are independent from fixed transactions in local and demo mode. */
+function nextSubscriptionCharge(anchor: string, recurrence: "mensal" | "anual"): string {
+  const today = todayISO();
+  if (anchor >= today) return anchor;
+  const [year, month, day] = anchor.split("-").map(Number);
+  if (recurrence === "anual") {
+    let current = clampDay(Number(today.slice(0, 4)), month, day);
+    if (current < today) current = clampDay(Number(today.slice(0, 4)) + 1, month, day);
+    return current;
+  }
+  const offset = Math.max(0, (Number(today.slice(0, 4)) - year) * 12 + Number(today.slice(5, 7)) - month);
+  const dateAt = (i: number) => {
+    const index = year * 12 + month - 1 + i;
+    return clampDay(Math.floor(index / 12), index % 12 + 1, day);
+  };
+  const current = dateAt(offset);
+  return current < today ? dateAt(offset + 1) : current;
+}
+
+function validateLocalSubscription(input: SubscriptionInput): void {
+  const db = readDb();
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(input.next_charge) && !Number.isNaN(Date.parse(input.next_charge + "T12:00:00"));
+  if (!input.name.trim() || !Number.isFinite(input.value) || input.value <= 0 || !validDate) {
+    throw new Error("Nome, valor e data da assinatura são obrigatórios.");
+  }
+  if (!db.accounts.some(account => account.id === input.account_id)) throw new Error("Conta inválida.");
+  if (input.category_id && !db.categories.some(category => category.id === input.category_id)) throw new Error("Categoria inválida.");
+  if (input.card_id && !db.cards.some(card => card.id === input.card_id)) throw new Error("Cartão inválido.");
+}
+
+function buildLocalSubscription(id: string, input: SubscriptionInput): SubscriptionItem {
+  const db = readDb();
+  const category = db.categories.find(item => item.id === input.category_id);
+  const card = db.cards.find(item => item.id === input.card_id);
+  return {
+    ...input, id,
+    name: input.name.trim(),
+    account_name: db.accounts.find(item => item.id === input.account_id)?.name ?? "",
+    category_name: category?.name ?? null,
+    category_color: category?.color ?? null,
+    card_name: card?.name ?? null,
+  };
+}
+
+export function localCreateSubscription(input: SubscriptionInput): SubscriptionItem {
+  validateLocalSubscription(input);
+  const db = readDb();
+  const item = buildLocalSubscription(newId(), input);
+  db.subscriptions = [...db.subscriptions, item];
+  writeDb(db);
+  return item;
+}
+
+export function localUpdateSubscription(id: string, input: SubscriptionInput): SubscriptionItem {
+  validateLocalSubscription(input);
+  const db = readDb();
+  if (!db.subscriptions.some(sub => sub.id === id)) throw new Error("Assinatura não encontrada.");
+  const item = buildLocalSubscription(id, input);
+  db.subscriptions = db.subscriptions.map(sub => sub.id === id ? item : sub);
+  writeDb(db);
+  return item;
+}
+
+export function localDeleteSubscription(id: string): void {
+  const db = readDb();
+  if (!db.subscriptions.some(sub => sub.id === id)) throw new Error("Assinatura não encontrada.");
+  db.subscriptions = db.subscriptions.filter(sub => sub.id !== id);
+  writeDb(db);
+}
+
 export function localSubscriptions(): Subscriptions {
   const db = readDb();
-  const today = todayISO();
-  const seen = new Map<string, SubscriptionItem>();
-  const ordered = db.transactions
-    .filter((t) => t.type === "despesa" && t.fixed)
-    .slice()
-    .sort((a, b) => b.date.localeCompare(a.date));
-  for (const tx of ordered) {
-    const key = tx.name.trim().toLowerCase();
-    if (seen.has(key)) continue;
-    const category = db.categories.find((c) => c.id === tx.category_id);
-    const card = db.cards.find((c) => c.id === tx.card_id);
-    const day = Number(tx.date.slice(8, 10));
-    const thisMonth = clampDay(Number(today.slice(0, 4)), Number(today.slice(5, 7)), day);
-    seen.set(key, {
-      id: tx.id,
-      name: tx.name,
-      value: round2(tx.value),
-      category_id: tx.category_id,
-      category_name: category?.name ?? null,
-      category_color: category?.color ?? null,
-      account_id: tx.account_id,
-      account_name: db.accounts.find((a) => a.id === tx.account_id)?.name ?? "",
-      card_id: tx.card_id,
-      card_name: card?.name ?? null,
-      recurrence: tx.recurrence ?? "mensal",
-      next_charge: thisMonth >= today ? thisMonth : shiftMonths(thisMonth, 1),
-      active: true,
-    });
-  }
-  const items = [...seen.values()].sort((a, b) => b.value - a.value);
-  const monthly = round2(items.reduce((s, i) => s + i.value, 0));
-  const month = today.slice(0, 7);
-  const income = round2(
-    db.transactions.filter((t) => t.type === "receita" && t.date.startsWith(month)).reduce((s, t) => s + t.value, 0),
-  );
+  const items = db.subscriptions.map(sub => buildLocalSubscription(sub.id, sub))
+    .map(sub => ({...sub, next_charge: nextSubscriptionCharge(sub.next_charge, sub.recurrence as "mensal" | "anual")}))
+    .sort((a, b) => Number(b.active) - Number(a.active) || a.next_charge.localeCompare(b.next_charge));
+  const yearly = round2(items.reduce((sum, sub) => sum + (sub.active ? sub.value * (sub.recurrence === "mensal" ? 12 : 1) : 0), 0));
+  const monthly = round2(yearly / 12);
+  const month = todayISO().slice(0, 7);
+  const income = round2(db.transactions.filter(tx =>
+    tx.type === "receita" && tx.status === "pago" && tx.date.startsWith(month)
+  ).reduce((sum, tx) => sum + tx.value, 0));
   return {
-    items,
-    monthly_total: monthly,
-    yearly_total: round2(monthly * 12),
-    income_percent: income ? Math.round((monthly / income) * 1000) / 10 : 0,
+    items, monthly_total: monthly, yearly_total: yearly,
+    income_percent: income ? round2(monthly / income * 100) : 0,
   };
 }
