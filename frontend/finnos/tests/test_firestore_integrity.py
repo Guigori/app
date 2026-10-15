@@ -26,6 +26,24 @@ def test_query_does_not_silently_truncate_transactions(monkeypatch):
         adapter.active_uid.reset(token)
 
 
+def test_recent_previews_are_explicitly_bounded(monkeypatch):
+    token = _with_uid()
+    try:
+        monkeypatch.setattr(adapter, "client", lambda: object())
+        monkeypatch.setattr(adapter, "rows", lambda db, uid, kind: [
+            {"id": str(i), "user_id": uid, "date": f"2026-10-{i:02d}"}
+            for i in range(1, 11)
+        ])
+        query = adapter.db.transactions.find({"user_id": "uid-alpha"})
+        with pytest.raises(HTTPException) as error:
+            asyncio.run(query.to_list(6))
+        assert error.value.status_code == 413
+        assert len(asyncio.run(query.to_list(6, allow_truncate=True))) == 6
+        assert len(asyncio.run(query.to_list(8, allow_truncate=True))) == 8
+    finally:
+        adapter.active_uid.reset(token)
+
+
 def _mock_delete(monkeypatch, records):
     monkeypatch.setattr(adapter, "client", lambda: object())
     monkeypatch.setattr(adapter, "atomic", lambda db, uid, action: action(SimpleNamespace()))
