@@ -305,7 +305,8 @@ async def calendar_month(
             ),
         )
         day.count += 1
-        if tx["type"] == "transferencia":
+        # Invoice payment is a bank movement, not a second purchase expense.
+        if tx["type"] == "transferencia" or tx.get("invoice_payment"):
             continue
         value = _amount(tx)
         if tx.get("status") == "pago":
