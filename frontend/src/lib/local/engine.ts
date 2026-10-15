@@ -953,63 +953,63 @@ export function localInvoice(cardId: string): Invoice {
   const db = readDb();
   const card = db.cards.find((c) => c.id === cardId);
   if (!card) throw new Error("Cartão não encontrado.");
-  const today = todayISO();
-  const [start, closing] = cycleBounds(today, card.closing_day);
+  const [start, closing] = cycleBounds(todayISO(), card.closing_day);
   const items = cycleItems(card, db.transactions, start, closing, db.categories);
-  const paid = (card as LocalCard & { paid_cycles?: Record<string, { amount: number; paid_at: string }> }).paid_cycles?.[closing];
+  const payment = card.paid_cycles?.[closing];
+  const total = round2(items.reduce((sum, item) => sum + item.value, 0));
+  const paidAmount = round2(payment?.amount ?? 0);
   return {
     card_id: cardId,
     card_name: card.name,
     cycle_start: start,
     cycle_end: closing,
     due_date: dueDate(closing, card.closing_day, card.due_day),
-    total: round2(items.reduce((s, i) => s + i.value, 0)),
-    paid: Boolean(paid),
-    paid_amount: round2(paid?.amount ?? 0),
-    paid_at: paid?.paid_at ?? null,
+    total,
+    paid: total > 0 && paidAmount === total,
+    outstanding: round2(Math.max(0, total - paidAmount)),
+    paid_amount: paidAmount,
+    paid_at: payment?.paid_at ?? null,
     items,
   };
 }
 
 export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice {
   const db = readDb();
-  const card = db.cards.find((c) => c.id === cardId) as
-    | (LocalCard & { paid_cycles?: Record<string, { amount: number; paid_at: string }> })
-    | undefined;
+  const card = db.cards.find((c) => c.id === cardId);
   if (!card) throw new Error("Cartão não encontrado.");
   if (!db.accounts.some((a) => a.id === input.account_id)) throw new Error("Conta inválida.");
-  const today = todayISO();
-  const [start, closing] = cycleBounds(today, card.closing_day);
-  if (card.paid_cycles?.[closing]) throw new Error("Esta fatura já está marcada como paga.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || Number.isNaN(Date.parse(input.date + "T12:00:00")) || input.date > todayISO()) {
+    throw new Error("A data do pagamento precisa ser válida e não pode estar no futuro.");
+  }
+  const currentClosing = cycleBounds(todayISO(), card.closing_day)[1];
+  const closing = input.cycle ?? currentClosing;
+  if (closing !== configuredDayInMonth(closing, 0, card.closing_day)) throw new Error("Ciclo de fatura inválido.");
+  const first = configuredDayInMonth(closing, -1, card.closing_day);
+  const start = addDays(first, 1);
   const items = cycleItems(card, db.transactions, start, closing, db.categories);
-  const amount = round2(input.value ?? items.reduce((s, i) => s + i.value, 0));
-  if (amount <= 0) throw new Error("Não há valor em aberto nesta fatura.");
+  const total = round2(items.reduce((sum, item) => sum + item.value, 0));
+  const previous = card.paid_cycles?.[closing]?.amount ?? 0;
+  const outstanding = round2(total - previous);
+  const amount = round2(input.value ?? outstanding);
+  if (outstanding <= 0) throw new Error("Esta fatura já foi quitada ou não possui compras.");
+  if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding) throw new Error("Pagamento deve ser positivo e não ultrapassar o saldo da fatura.");
 
-  // The debit carries no card tag, so it never re-enters a fatura.
-  db.transactions = [
-    ...db.transactions,
-    buildTransaction(db, {
-      name: `Fatura ${card.name}`,
-      value: amount,
-      type: "despesa",
-      status: "pago",
-      date: input.date,
-      account_id: input.account_id,
-      card_id: null,
-      to_account_id: null,
-      category_id: null,
-      fixed: false,
-      recurrence: null,
-      installment: false,
-      total_installments: null,
-      current_installment: null,
-      adjusted_value: null,
-      attachment: null,
-      notes: `Pagamento da fatura fechada em ${closing}.`,
-    }),
-  ];
-  card.paid_cycles = { ...(card.paid_cycles ?? {}), [closing]: { amount, paid_at: input.date } };
-  db.cards = db.cards.map((c) => (c.id === cardId ? card : c));
+  // A settlement is a bank debit; never add a duplicate category expense.
+  const debit = buildTransaction(db, {
+    name: `Fatura ${card.name}`, value: amount,
+    type: "despesa", status: "pago", date: input.date,
+    account_id: input.account_id, card_id: null, to_account_id: null,
+    category_id: null, fixed: false, recurrence: null, installment: false,
+    total_installments: null, current_installment: null, adjusted_value: null,
+    attachment: null, notes: `Pagamento da fatura fechada em ${closing}.`,
+  });
+  debit.invoice_payment = true;
+  db.transactions = [...db.transactions, debit];
+  card.paid_cycles = {
+    ...card.paid_cycles,
+    [closing]: { amount: round2(previous + amount), paid_at: input.date, items },
+  };
+  db.cards = db.cards.map((c) => c.id === cardId ? card : c);
   writeDb(db);
   return localInvoice(cardId);
 }
