@@ -28,8 +28,15 @@ def cents(value):
 
 
 def installment_portion(tx, offset):
+    """Exact nonnegative installment in reais, adding remaining cents at the end.
+
+    For R$ 100.00 in 3 installments: 33.33, 33.33, 33.34.
+    A transaction with fewer cents than installments is invalid: zero-value
+    installments must be rejected at creation, not silently persisted.
+    """
     n = int(tx.get("total_installments") or 1)
     total = cents(tx["value"])
-    base = int((D(total) / n).quantize(D(1), rounding=ROUND_HALF_UP))
-    # Preserve the existing rounded parcel; reconcile the residual on the last.
-    return D(total - base * (n - 1) if offset == n - 1 else base) / 100
+    if n < 1 or not 0 <= offset < n or total < n:
+        raise ValueError("Parcelamento inválido: cada parcela deve valer ao menos R$ 0,01.")
+    base, remaining = divmod(total, n)
+    return D(base + (1 if offset >= n - remaining else 0)) / 100
