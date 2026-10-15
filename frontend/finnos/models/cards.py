@@ -17,8 +17,8 @@ class CardIn(BaseModel):
     institution: str = Field(default="", max_length=60)
     color: str = Field(default="#5B3FE4", pattern=HEX_PATTERN)
     limit: Money = Field(gt=0)
-    closing_day: int = Field(ge=1, le=28)
-    due_day: int = Field(ge=1, le=28)
+    closing_day: int = Field(ge=1, le=31)
+    due_day: int = Field(ge=1, le=31)
     payment_account_id: Optional[str] = None
     active: bool = True
 
