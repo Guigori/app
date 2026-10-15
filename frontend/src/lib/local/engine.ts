@@ -803,32 +803,36 @@ function dueDate(nextClosing: string, closingDay: number, dueDay: number): strin
   return dueDay > closingDay ? sameMonth : configuredDayInMonth(nextClosing, 1, dueDay);
 }
 
+/** Match Firestore: credit spending affects the card limit, not the bank balance. */
 function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): CreditCard {
   const today = todayISO();
   const [start, closing] = cycleBounds(today, doc.closing_day);
-  let invoice = 0;
-  let future = 0;
+  const totals = new Map<string, number>();
   for (const tx of txs) {
     if (tx.card_id !== doc.id || tx.type !== "despesa") continue;
-    const value = round2(tx.installment ? tx.installment_value ?? 0 : tx.value);
-    if (tx.installment) {
-      const total = tx.total_installments ?? 1;
-      const offset = monthsBetween(tx.date.slice(0, 7), closing.slice(0, 7));
-      if (offset >= 0 && offset < total) invoice += value;
-      future += value * Math.max(total - Math.max(offset + 1, 0), 0);
-    } else if (tx.date >= start && tx.date <= closing) {
-      invoice += value;
+    const firstClosing = cycleBounds(tx.date, doc.closing_day)[1];
+    const n = tx.installment ? (tx.total_installments ?? 1) : 1;
+    for (let i = 0; i < n; i++) {
+      const key = configuredDayInMonth(firstClosing, i, doc.closing_day);
+      const value = tx.installment ? installmentPortion(tx.value, n, i) : tx.value;
+      totals.set(key, round2((totals.get(key) ?? 0) + value));
     }
   }
-  const used = round2(invoice + future);
+  const paidCycles = doc.paid_cycles ?? {};
+  let used = 0, future = 0;
+  for (const [cycle, total] of totals) {
+    const outstanding = round2(Math.max(0, total - (paidCycles[cycle]?.amount ?? 0)));
+    used = round2(used + outstanding);
+    if (cycle > closing) future = round2(future + outstanding);
+  }
+  const invoice = round2(Math.max(0, (totals.get(closing) ?? 0) - (paidCycles[closing]?.amount ?? 0)));
   const account = accounts.find((a) => a.id === doc.payment_account_id);
-  const paidCycles = (doc as LocalCard & { paid_cycles?: Record<string, unknown> }).paid_cycles ?? {};
   return {
     ...doc,
     payment_account_name: account?.name ?? null,
-    invoice_paid: Boolean(paidCycles[closing]),
-    current_invoice: round2(invoice),
-    future_installments: round2(future),
+    invoice_paid: (totals.get(closing) ?? 0) > 0 && invoice === 0,
+    current_invoice: invoice,
+    future_installments: future,
     used,
     available: round2(Math.max(doc.limit - used, 0)),
     used_percent: doc.limit ? Math.round((used / doc.limit) * 1000) / 10 : 0,
@@ -838,7 +842,6 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
     best_purchase_day: addDays(closing, 1),
   };
 }
-
 export function localListCards(): CreditCard[] {
   const db = readDb();
   return db.cards.map((card) => buildCard(card, db.transactions, db.accounts));
