@@ -101,7 +101,7 @@ async def dashboard(
             {"user_id": user_id, "date": {"$gte": start, "$lte": end}}
         )
         .sort([("date", -1), ("created_at", -1)])
-        .to_list(6)
+        .to_list(6, allow_truncate=True)
     )
     accounts_by_id, categories_by_id = await _ref_maps(user_id)
     return DashboardOut(
