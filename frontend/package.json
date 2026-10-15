@@ -57,7 +57,7 @@
     "@babel/generator": "7.29.7",
     "@babel/parser": "7.29.7",
     "@babel/traverse": "7.29.7",
-    "@babel/types": "7.29.7",
+    "@babel/types": "8.0.6",
     "@emergentbase/overlay": "https://assets.emergent.sh/npm/emergentbase-overlay-0.1.31.tgz",
     "@emergentbase/visual-edits": "https://assets.emergent.sh/npm/emergentbase-visual-edits-1.0.15.tgz",
     "@tailwindcss/vite": "4.3.3",
