@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Check, Trash2 } from "lucide-react";
 import { fetchAccounts } from "@/lib/data";
@@ -31,7 +31,7 @@ export default function EditarMeta({ goal, userId, onClose, onSaved }: Props) {
     draft.contribution >= 0 && draft.account,
   );
 
-  async function save(event: React.FormEvent<HTMLFormElement>) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!valid || busy) return;
     setBusy(true);
