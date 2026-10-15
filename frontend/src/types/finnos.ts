@@ -443,7 +443,7 @@ export interface SubscriptionItem {
   account_name: string;
   card_id: string | null;
   card_name: string | null;
-  recurrence: string;
+  recurrence: "mensal" | "anual";
   next_charge: string;
   active: boolean;
   notes?: string | null;
