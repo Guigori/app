@@ -368,12 +368,12 @@ export async function deleteTransaction(id: string): Promise<void> {
 
 export async function loadDemoData(): Promise<void> {
   if (isLocalMode()) return localLoadDemo();
-  await apiPost<{ ok: boolean }>("/demo/load");
+  throw new Error("Demonstração disponível apenas no modo local. Nenhuma conta Firebase foi alterada.");
 }
 
 export async function clearMyData(): Promise<void> {
   if (isLocalMode()) return localClearData();
-  await apiPost<{ ok: boolean }>("/demo/clear");
+  throw new Error("A exclusão de dados da conta online exige um fluxo de recuperação e confirmação específico.");
 }
 
 // --- Cartões ---------------------------------------------------------------
