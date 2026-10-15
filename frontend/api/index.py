@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 import firebase_admin
 from firebase_admin import auth, credentials, exceptions
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from pydantic import BaseModel, Field
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 COOKIE = "finnos_firebase_session"
@@ -128,6 +129,29 @@ def me(request: Request):
     claims = verified_claims(cookie, session=True)
     if request.headers.get("x-finnos-user-id") and request.headers["x-finnos-user-id"] != claims["uid"]:
         raise HTTPException(401, "A identidade da sessão mudou.")
+    return user_out(claims)
+
+
+class ProfileNameIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+@app.patch("/api/auth/me", dependencies=[Depends(same_origin)])
+def update_profile_name(payload: ProfileNameIn, request: Request):
+    """The display name belongs to the Firebase identity, not to Firestore."""
+    session_cookie = request.cookies.get(COOKIE)
+    if not session_cookie:
+        raise HTTPException(401, "Não autenticado. Entre novamente.")
+    claims = verified_claims(session_cookie, session=True)
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(422, "Informe um nome válido.")
+    try:
+        auth.update_user(claims["uid"], display_name=name, app=firebase_app())
+    except auth.UserNotFoundError as exc:
+        raise HTTPException(401, "Conta Firebase não encontrada.") from exc
+    except exceptions.FirebaseError as exc:
+        raise HTTPException(503, "Não foi possível atualizar o perfil.") from exc
     return user_out(claims)
 
 

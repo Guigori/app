@@ -71,13 +71,20 @@ export function NotificationsCard() {
         Avisos de vencimento
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Escolha quais tipos de aviso o FINNOS pode enviar para este aparelho.
+        Escolha suas preferências de avisos financeiros.
       </p>
+      {!local && prefs?.push_supported === false && (
+        <p role="status" className="mt-3 rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+          Preferências armazenadas no Firebase. O envio automático por push e e-mail
+          ainda não está disponível na infraestrutura desta versão; não haverá disparos remotos.
+        </p>
+      )}
 
       <div className="mt-4 space-y-3">
         <label className="flex items-start gap-3 text-sm text-foreground">
           <Checkbox
             checked={form.push_enabled}
+            disabled={!local && prefs?.push_supported !== true}
             onCheckedChange={(v) => setForm((f) => ({ ...f, push_enabled: v === true }))}
             data-testid="notify-push-checkbox"
           />
@@ -91,6 +98,7 @@ export function NotificationsCard() {
         <label className="flex items-start gap-3 text-sm text-foreground">
           <Checkbox
             checked={form.email_enabled}
+            disabled={!local}
             onCheckedChange={(v) => setForm((f) => ({ ...f, email_enabled: v === true }))}
             data-testid="notify-email-checkbox"
           />
@@ -169,7 +177,7 @@ export function NotificationsCard() {
         </Button>
         <Button
           variant="outline"
-          disabled={working || !pushAvailable()}
+          disabled={working || !pushAvailable() || (!local && prefs?.push_supported !== true)}
           onClick={async () => {
             setWorking(true);
             try {
@@ -196,7 +204,7 @@ export function NotificationsCard() {
         </Button>
         <Button
           variant="ghost"
-          disabled={working}
+          disabled={working || (!local && prefs?.push_supported !== true)}
           onClick={async () => {
             setWorking(true);
             try {

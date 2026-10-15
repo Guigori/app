@@ -88,8 +88,8 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
     const due = parseInt(dueDay, 10);
     if (!name.trim()) return setFormError("Dê um nome ao cartão.");
     if (!limit || limit <= 0) return setFormError("Informe o limite do cartão.");
-    if (!closing || closing < 1 || closing > 28) return setFormError("O dia de fechamento deve ficar entre 1 e 28.");
-    if (!due || due < 1 || due > 28) return setFormError("O dia de vencimento deve ficar entre 1 e 28.");
+    if (!closing || closing < 1 || closing > 31) return setFormError("O dia de fechamento deve ficar entre 1 e 31.");
+    if (!due || due < 1 || due > 31) return setFormError("O dia de vencimento deve ficar entre 1 e 31.");
     mutation.mutate({
       name: name.trim(),
       institution: institution.trim(),

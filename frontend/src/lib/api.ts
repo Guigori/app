@@ -1,6 +1,6 @@
 import { firebaseAuth } from "@/lib/firebase";
 // Typed fetch layer over the FastAPI backend. Base is the relative "/api" prefix so the
-// same code works in dev (Vite proxies /api → :8001) and behind a single origin in prod.
+// same code works in dev (Vite proxies /api → the Firestore API on :8002) and behind a single origin in prod.
 const BASE = "/api";
 
 // Fields are declared, not constructor parameter properties: tsconfig sets

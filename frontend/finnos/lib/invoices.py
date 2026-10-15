@@ -4,7 +4,7 @@ Purchases represent expenses; payments represent bank movement only. All money
 in this module is integer cents. Historical unpaid invoices retain the limit.
 """
 from datetime import date
-from finnos.lib.cards import cycle_bounds, due_date, _shift
+from finnos.lib.cards import cycle_bounds, due_date, _clamp_day
 from finnos.lib.money import cents, installment_portion
 
 
@@ -14,12 +14,19 @@ def occurrences(card, tx):
     purchase = date.fromisoformat(tx['date'])
     first = cycle_bounds(purchase, card['closing_day'])[1]
     n = int(tx.get('total_installments') or 1) if tx.get('installment') else 1
-    return [(_shift(first, i).isoformat(), cents(installment_portion(tx, i)) if tx.get('installment') else cents(tx['value']), f'{i+1}/{n}' if n > 1 else None) for i in range(n)]
+    first_index = first.year * 12 + (first.month - 1)
+    results = []
+    for i in range(n):
+        year, month_index = divmod(first_index + i, 12)
+        closing = _clamp_day(year, month_index + 1, card['closing_day'])
+        value = cents(installment_portion(tx, i)) if tx.get('installment') else cents(tx['value'])
+        results.append((closing.isoformat(), value, f'{i+1}/{n}' if n > 1 else None))
+    return results
 
 
 def invoice_state(card, txs, cycle, categories=None):
     closing = date.fromisoformat(cycle)
-    if closing.day != card['closing_day']:
+    if closing != _clamp_day(closing.year, closing.month, card['closing_day']):
         raise ValueError('Ciclo deve indicar a data de fechamento do cartão.')
     start = cycle_bounds(closing, card['closing_day'])[0].isoformat()
     categories = categories or {}

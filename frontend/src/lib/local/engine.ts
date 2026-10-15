@@ -41,6 +41,18 @@ import type {
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
+/** Mirror of finnos.lib.money.installment_portion: no negative/zero installments. */
+function installmentPortion(value: number, count: number, offset: number): number {
+  const cents = Math.round(value * 100);
+  if (!Number.isSafeInteger(cents) || !Number.isInteger(count) || count < 1
+      || cents < 0 || offset < 0 || offset >= count) {
+    throw new Error("Parcelamento inválido: cada parcela deve valer ao menos R$ 0,01.");
+  }
+  const base = Math.floor(cents / count);
+  const remaining = cents % count;
+  return (base + (offset >= count - remaining ? 1 : 0)) / 100;
+}
+
 function monthsBetween(a: string, b: string): number {
   const [ya, ma] = [Number(a.slice(0, 4)), Number(a.slice(5, 7))];
   const [yb, mb] = [Number(b.slice(0, 4)), Number(b.slice(5, 7))];
@@ -56,23 +68,23 @@ function monthBounds(month: string): [string, string] {
 
 /** Positive amount the transaction contributes to `month`'s income/expense stats. */
 function monthPortion(tx: Transaction, month: string): number | null {
-  if (tx.type === "transferencia" || tx.status !== "pago") return null;
+  if (tx.invoice_payment || tx.type === "transferencia" || tx.status !== "pago") return null;
   if (tx.installment) {
     const n = tx.total_installments ?? 1;
     const offset = monthsBetween(tx.date.slice(0, 7), month);
-    return offset >= 0 && offset < n ? round2(tx.installment_value ?? 0) : null;
+    return offset >= 0 && offset < n ? installmentPortion(tx.value, n, offset) : null;
   }
   return tx.date.slice(0, 7) === month ? round2(tx.value) : null;
 }
 
 /** Signed effect on each account balance — "pago" moves money, pending/scheduled never does. */
 function balanceEffects(tx: Transaction, today: string): [string, number][] {
-  if (tx.status !== "pago") return [];
+  if (tx.card_id || tx.status !== "pago") return [];
   let v = tx.value;
   if (tx.installment) {
     const n = tx.total_installments ?? 1;
     const due = monthsBetween(tx.date.slice(0, 7), today.slice(0, 7)) + 1;
-    v = round2((tx.installment_value ?? 0) * Math.max(0, Math.min(due, n)));
+    v = round2(Array.from({ length: Math.max(0, Math.min(due, n)) }, (_, i) => installmentPortion(tx.value, n, i)).reduce((total, amount) => total + amount, 0));
   }
   if (tx.type === "receita") return [[tx.account_id, round2(v)]];
   if (tx.type === "despesa") return [[tx.account_id, round2(-v)]];
@@ -257,8 +269,11 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
   }
   if (input.installment) {
     if (input.type !== "despesa") throw new Error("Somente despesas podem ser parceladas.");
-    if (!input.total_installments || input.total_installments < 2) {
-      throw new Error("Informe o número total de parcelas (mínimo 2).");
+    if (!input.total_installments || input.total_installments < 2 || input.total_installments > 120) {
+      throw new Error("Informe de 2 a 120 parcelas.");
+    }
+    if (Math.round((input.adjusted_value ?? input.value) * 100) < input.total_installments) {
+      throw new Error("Cada parcela deve valer ao menos R$ 0,01.");
     }
   }
   const total = round2(input.adjusted_value ?? input.value);
@@ -284,7 +299,7 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
     installment: input.installment,
     total_installments: input.installment ? input.total_installments : null,
     current_installment: input.installment ? input.current_installment ?? 1 : null,
-    installment_value: input.installment && input.total_installments ? round2(total / input.total_installments) : null,
+    installment_value: input.installment && input.total_installments ? installmentPortion(total, input.total_installments, 0) : null,
     adjusted_value: input.adjusted_value,
     attachment: input.attachment,
     notes: input.notes,
@@ -301,10 +316,25 @@ export function localCreateTransaction(input: TransactionInput): Transaction {
   return enrich(db, tx);
 }
 
+/** A paid invoice locks its purchase breakdown until an audited refund exists. */
+function assertPurchaseNotSettled(db: LocalDb, transaction: Transaction): void {
+  if (transaction.invoice_payment) throw new Error("Pagamento de fatura não pode ser alterado manualmente.");
+  if (!transaction.card_id) return;
+  const card = db.cards.find(c => c.id === transaction.card_id);
+  if (!card?.paid_cycles) return;
+  const firstClosing = cycleBounds(transaction.date, card.closing_day)[1];
+  const count = transaction.installment ? transaction.total_installments ?? 1 : 1;
+  for (let i = 0; i < count; i++) {
+    const cycle = configuredDayInMonth(firstClosing, i, card.closing_day);
+    if (card.paid_cycles[cycle]?.amount) throw new Error("Compra pertence a uma fatura com pagamento; faça um estorno auditado.");
+  }
+}
+
 export function localUpdateTransaction(id: string, input: TransactionInput): Transaction {
   const db = readDb();
   const index = db.transactions.findIndex((t) => t.id === id);
   if (index < 0) throw new Error("Transação não encontrada.");
+  assertPurchaseNotSettled(db, db.transactions[index]);
   const tx = buildTransaction(db, input, db.transactions[index]);
   db.transactions[index] = tx;
   writeDb(db);
@@ -313,6 +343,8 @@ export function localUpdateTransaction(id: string, input: TransactionInput): Tra
 
 export function localDeleteTransaction(id: string): void {
   const db = readDb();
+  const existing = db.transactions.find(t => t.id === id);
+  if (existing) assertPurchaseNotSettled(db, existing);
   db.transactions = db.transactions.filter((t) => t.id !== id);
   writeDb(db);
 }
@@ -719,8 +751,8 @@ export function localCalendar(month: string): CalendarMonth {
       buckets.get(tx.date) ??
       { date: tx.date, income: 0, expense: 0, projected_income: 0, projected_expense: 0, count: 0, active_count: 0 };
     day.count += 1;
-    if (tx.type !== "transferencia") {
-      const value = round2(tx.installment ? tx.installment_value ?? 0 : tx.value);
+    if (tx.type !== "transferencia" && !tx.invoice_payment) {
+      const value = round2(tx.installment ? installmentPortion(tx.value, tx.total_installments ?? 1, 0) : tx.value);
       if (tx.status === "pago") {
         if (tx.type === "receita") day.income = round2(day.income + value);
         else day.expense = round2(day.expense + value);
@@ -770,44 +802,54 @@ function addDays(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Open invoice window: day after the last closing through the next closing. */
+/** Advance from a configured closing/day, preserving 29–31 through February. */
+function configuredDayInMonth(iso: string, months: number, day: number): string {
+  const index = Number(iso.slice(0, 4)) * 12 + Number(iso.slice(5, 7)) - 1 + months;
+  return clampDay(Math.floor(index / 12), index % 12 + 1, day);
+}
+
+/** Open invoice window: day after last closing through next closing. */
 function cycleBounds(today: string, closingDay: number): [string, string] {
-  const thisClosing = clampDay(Number(today.slice(0, 4)), Number(today.slice(5, 7)), closingDay);
-  if (today <= thisClosing) return [addDays(shiftMonths(thisClosing, -1), 1), thisClosing];
-  return [addDays(thisClosing, 1), shiftMonths(thisClosing, 1)];
+  const thisClosing = configuredDayInMonth(today, 0, closingDay);
+  if (today <= thisClosing) return [addDays(configuredDayInMonth(today, -1, closingDay), 1), thisClosing];
+  return [addDays(thisClosing, 1), configuredDayInMonth(today, 1, closingDay)];
 }
 
 function dueDate(nextClosing: string, closingDay: number, dueDay: number): string {
   const sameMonth = clampDay(Number(nextClosing.slice(0, 4)), Number(nextClosing.slice(5, 7)), dueDay);
-  return dueDay > closingDay ? sameMonth : shiftMonths(sameMonth, 1);
+  return dueDay > closingDay ? sameMonth : configuredDayInMonth(nextClosing, 1, dueDay);
 }
 
+/** Match Firestore: credit spending affects the card limit, not the bank balance. */
 function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): CreditCard {
   const today = todayISO();
   const [start, closing] = cycleBounds(today, doc.closing_day);
-  let invoice = 0;
-  let future = 0;
+  const totals = new Map<string, number>();
   for (const tx of txs) {
     if (tx.card_id !== doc.id || tx.type !== "despesa") continue;
-    const value = round2(tx.installment ? tx.installment_value ?? 0 : tx.value);
-    if (tx.installment) {
-      const total = tx.total_installments ?? 1;
-      const offset = monthsBetween(tx.date.slice(0, 7), closing.slice(0, 7));
-      if (offset >= 0 && offset < total) invoice += value;
-      future += value * Math.max(total - Math.max(offset + 1, 0), 0);
-    } else if (tx.date >= start && tx.date <= closing) {
-      invoice += value;
+    const firstClosing = cycleBounds(tx.date, doc.closing_day)[1];
+    const n = tx.installment ? (tx.total_installments ?? 1) : 1;
+    for (let i = 0; i < n; i++) {
+      const key = configuredDayInMonth(firstClosing, i, doc.closing_day);
+      const value = tx.installment ? installmentPortion(tx.value, n, i) : tx.value;
+      totals.set(key, round2((totals.get(key) ?? 0) + value));
     }
   }
-  const used = round2(invoice + future);
+  const paidCycles = doc.paid_cycles ?? {};
+  let used = 0, future = 0;
+  for (const [cycle, total] of totals) {
+    const outstanding = round2(Math.max(0, total - (paidCycles[cycle]?.amount ?? 0)));
+    used = round2(used + outstanding);
+    if (cycle > closing) future = round2(future + outstanding);
+  }
+  const invoice = round2(Math.max(0, (totals.get(closing) ?? 0) - (paidCycles[closing]?.amount ?? 0)));
   const account = accounts.find((a) => a.id === doc.payment_account_id);
-  const paidCycles = (doc as LocalCard & { paid_cycles?: Record<string, unknown> }).paid_cycles ?? {};
   return {
     ...doc,
     payment_account_name: account?.name ?? null,
-    invoice_paid: Boolean(paidCycles[closing]),
-    current_invoice: round2(invoice),
-    future_installments: round2(future),
+    invoice_paid: (totals.get(closing) ?? 0) > 0 && invoice === 0,
+    current_invoice: invoice,
+    future_installments: future,
     used,
     available: round2(Math.max(doc.limit - used, 0)),
     used_percent: doc.limit ? Math.round((used / doc.limit) * 1000) / 10 : 0,
@@ -817,7 +859,6 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
     best_purchase_day: addDays(closing, 1),
   };
 }
-
 export function localListCards(): CreditCard[] {
   const db = readDb();
   return db.cards.map((card) => buildCard(card, db.transactions, db.accounts));
@@ -835,6 +876,9 @@ export function localUpdateCard(id: string, input: CardInput): CreditCard {
   const db = readDb();
   const existing = db.cards.find((c) => c.id === id);
   if (!existing) throw new Error("Cartão não encontrado.");
+  if (existing.paid_cycles && Object.keys(existing.paid_cycles).length && (existing.closing_day !== input.closing_day || existing.due_day !== input.due_day)) {
+    throw new Error("Não é possível mudar o ciclo de um cartão com pagamentos registrados.");
+  }
   const card: LocalCard = { ...existing, ...input };
   db.cards = db.cards.map((c) => (c.id === id ? card : c));
   writeDb(db);
@@ -844,8 +888,14 @@ export function localUpdateCard(id: string, input: CardInput): CreditCard {
 export function localDeleteCard(id: string): void {
   const db = readDb();
   if (db.subscriptions.some(sub => sub.card_id === id)) throw new Error("Cartão vinculado a uma assinatura.");
+  if (db.transactions.some(tx => tx.card_id === id || (tx.invoice_payment && tx.notes?.includes(id)))) {
+    throw new Error("Cartão possui compras vinculadas. Não é permitido perder o histórico da fatura.");
+  }
+  const card = db.cards.find(c => c.id === id);
+  if (card?.paid_cycles && Object.keys(card.paid_cycles).length) {
+    throw new Error("Cartão possui histórico de pagamentos.");
+  }
   db.cards = db.cards.filter((c) => c.id !== id);
-  db.transactions = db.transactions.map((t) => (t.card_id === id ? { ...t, card_id: null, card_name: null } : t));
   writeDb(db);
 }
 
@@ -901,96 +951,91 @@ export function localNotifications(windowDays = 7): Notifications {
 
 // --- Fatura detalhada / pagamento / assinaturas (modo local) ----------------
 
+/** Invoice occurrences mirror finnos.lib.invoices.occurrences, including after-closing purchases. */
 function cycleItems(card: LocalCard, txs: Transaction[], start: string, closing: string, cats: Category[]): InvoiceItem[] {
+  const frozen = card.paid_cycles?.[closing]?.items;
+  if (frozen) return frozen;
   const items: InvoiceItem[] = [];
   for (const tx of txs) {
     if (tx.card_id !== card.id || tx.type !== "despesa") continue;
-    const value = round2(tx.installment ? tx.installment_value ?? 0 : tx.value);
+    const firstClosing = cycleBounds(tx.date, card.closing_day)[1];
+    const total = tx.installment ? tx.total_installments ?? 1 : 1;
+    const offset = monthsBetween(firstClosing.slice(0, 7), closing.slice(0, 7));
+    if (offset < 0 || offset >= total || configuredDayInMonth(firstClosing, offset, card.closing_day) !== closing) continue;
     const category = cats.find((c) => c.id === tx.category_id);
-    let label: string | null = null;
-    if (tx.installment) {
-      const total = tx.total_installments ?? 1;
-      const offset = monthsBetween(tx.date.slice(0, 7), closing.slice(0, 7));
-      if (offset < 0 || offset >= total) continue;
-      const current = (((tx.current_installment ?? 1) - 1 + offset) % Math.max(total, 1)) + 1;
-      label = `${Math.min(current, total)}/${total}`;
-    } else if (!(tx.date >= start && tx.date <= closing)) {
-      continue;
-    }
     items.push({
       id: tx.id,
       name: tx.name,
       date: tx.date,
-      value,
+      value: tx.installment ? installmentPortion(tx.value, total, offset) : tx.value,
       category_name: category?.name ?? null,
       category_color: category?.color ?? null,
-      installment_label: label,
+      installment_label: total > 1 ? `${offset + 1}/${total}` : null,
     });
   }
   return items.sort((a, b) => b.date.localeCompare(a.date));
 }
-
 export function localInvoice(cardId: string): Invoice {
   const db = readDb();
   const card = db.cards.find((c) => c.id === cardId);
   if (!card) throw new Error("Cartão não encontrado.");
-  const today = todayISO();
-  const [start, closing] = cycleBounds(today, card.closing_day);
+  const [start, closing] = cycleBounds(todayISO(), card.closing_day);
   const items = cycleItems(card, db.transactions, start, closing, db.categories);
-  const paid = (card as LocalCard & { paid_cycles?: Record<string, { amount: number; paid_at: string }> }).paid_cycles?.[closing];
+  const payment = card.paid_cycles?.[closing];
+  const total = round2(items.reduce((sum, item) => sum + item.value, 0));
+  const paidAmount = round2(payment?.amount ?? 0);
   return {
     card_id: cardId,
     card_name: card.name,
     cycle_start: start,
     cycle_end: closing,
     due_date: dueDate(closing, card.closing_day, card.due_day),
-    total: round2(items.reduce((s, i) => s + i.value, 0)),
-    paid: Boolean(paid),
-    paid_amount: round2(paid?.amount ?? 0),
-    paid_at: paid?.paid_at ?? null,
+    total,
+    paid: total > 0 && paidAmount === total,
+    outstanding: round2(Math.max(0, total - paidAmount)),
+    paid_amount: paidAmount,
+    paid_at: payment?.paid_at ?? null,
     items,
   };
 }
 
 export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice {
   const db = readDb();
-  const card = db.cards.find((c) => c.id === cardId) as
-    | (LocalCard & { paid_cycles?: Record<string, { amount: number; paid_at: string }> })
-    | undefined;
+  const card = db.cards.find((c) => c.id === cardId);
   if (!card) throw new Error("Cartão não encontrado.");
   if (!db.accounts.some((a) => a.id === input.account_id)) throw new Error("Conta inválida.");
-  const today = todayISO();
-  const [start, closing] = cycleBounds(today, card.closing_day);
-  if (card.paid_cycles?.[closing]) throw new Error("Esta fatura já está marcada como paga.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || Number.isNaN(Date.parse(input.date + "T12:00:00")) || input.date > todayISO()) {
+    throw new Error("A data do pagamento precisa ser válida e não pode estar no futuro.");
+  }
+  const currentClosing = cycleBounds(todayISO(), card.closing_day)[1];
+  const closing = input.cycle ?? currentClosing;
+  if (closing !== configuredDayInMonth(closing, 0, card.closing_day)) throw new Error("Ciclo de fatura inválido.");
+  const first = configuredDayInMonth(closing, -1, card.closing_day);
+  const start = addDays(first, 1);
   const items = cycleItems(card, db.transactions, start, closing, db.categories);
-  const amount = round2(input.value ?? items.reduce((s, i) => s + i.value, 0));
-  if (amount <= 0) throw new Error("Não há valor em aberto nesta fatura.");
+  const total = round2(items.reduce((sum, item) => sum + item.value, 0));
+  const previous = card.paid_cycles?.[closing]?.amount ?? 0;
+  const outstanding = round2(total - previous);
+  const amount = round2(input.value ?? outstanding);
+  if (outstanding <= 0) throw new Error("Esta fatura já foi quitada ou não possui compras.");
+  if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding) throw new Error("Pagamento deve ser positivo e não ultrapassar o saldo da fatura.");
 
-  // The debit carries no card tag, so it never re-enters a fatura.
-  db.transactions = [
-    ...db.transactions,
-    buildTransaction(db, {
-      name: `Fatura ${card.name}`,
-      value: amount,
-      type: "despesa",
-      status: "pago",
-      date: input.date,
-      account_id: input.account_id,
-      card_id: null,
-      to_account_id: null,
-      category_id: null,
-      fixed: false,
-      recurrence: null,
-      installment: false,
-      total_installments: null,
-      current_installment: null,
-      adjusted_value: null,
-      attachment: null,
-      notes: `Pagamento da fatura fechada em ${closing}.`,
-    }),
-  ];
-  card.paid_cycles = { ...(card.paid_cycles ?? {}), [closing]: { amount, paid_at: input.date } };
-  db.cards = db.cards.map((c) => (c.id === cardId ? card : c));
+  // A settlement is a bank debit; never add a duplicate category expense.
+  const debit = buildTransaction(db, {
+    name: `Fatura ${card.name}`, value: amount,
+    type: "despesa", status: "pago", date: input.date,
+    account_id: input.account_id, card_id: null, to_account_id: null,
+    category_id: null, fixed: false, recurrence: null, installment: false,
+    total_installments: null, current_installment: null, adjusted_value: null,
+    attachment: null, notes: `Pagamento da fatura fechada em ${closing}.`,
+  });
+  debit.invoice_payment = true;
+  db.transactions = [...db.transactions, debit];
+  card.paid_cycles = {
+    ...card.paid_cycles,
+    [closing]: { amount: round2(previous + amount), paid_at: input.date, items },
+  };
+  db.cards = db.cards.map((c) => c.id === cardId ? card : c);
   writeDb(db);
   return localInvoice(cardId);
 }

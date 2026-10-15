@@ -12,8 +12,12 @@ export function settledCents(transaction: FinancialTransaction, month = transact
   const [targetYear, targetMonth] = month.split("-").map(Number);
   const offset = (targetYear - year) * 12 + targetMonth - startMonth;
   if (offset < 0 || offset >= n) return 0;
-  const base = Math.round(total / n);
-  return offset === n - 1 ? total - base * (n - 1) : base;
+  if (!Number.isInteger(n) || n < 1 || total < 0) {
+    throw new Error("Parcelamento inválido: cada parcela deve valer ao menos R$ 0,01.");
+  }
+  const base = Math.floor(total / n);
+  const remainder = total % n;
+  return base + (offset >= n - remainder ? 1 : 0);
 }
 
 export function settledTotals(transactions: FinancialTransaction[]) {

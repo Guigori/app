@@ -23,9 +23,11 @@ def cycle_bounds(today: date, closing_day: int) -> tuple[date, date]:
     this_closing = _clamp_day(today.year, today.month, closing_day)
     if today <= this_closing:
         next_closing = this_closing
-        prev_closing = _shift(_clamp_day(today.year, today.month, closing_day), -1)
+        previous_index = today.year * 12 + (today.month - 1) - 1
+        prev_closing = _clamp_day(previous_index // 12, previous_index % 12 + 1, closing_day)
     else:
-        next_closing = _shift(this_closing, 1)
+        next_index = today.year * 12 + (today.month - 1) + 1
+        next_closing = _clamp_day(next_index // 12, next_index % 12 + 1, closing_day)
         prev_closing = this_closing
     return (prev_closing + timedelta(days=1), next_closing)
 
@@ -34,7 +36,8 @@ def due_date(next_closing: date, closing_day: int, due_day: int) -> date:
     """The payment date of the invoice that closes on `next_closing`."""
     if due_day > closing_day:
         return _clamp_day(next_closing.year, next_closing.month, due_day)
-    return _shift(_clamp_day(next_closing.year, next_closing.month, due_day), 1)
+    next_index = next_closing.year * 12 + (next_closing.month - 1) + 1
+    return _clamp_day(next_index // 12, next_index % 12 + 1, due_day)
 
 
 def best_purchase_day(next_closing: date) -> date:

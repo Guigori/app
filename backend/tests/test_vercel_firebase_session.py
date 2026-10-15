@@ -29,6 +29,10 @@ def firebase(monkeypatch):
                                disabled=False, email_verified=True,
                                user_metadata=SimpleNamespace(creation_timestamp=1700000000000))
     monkeypatch.setattr(api, "firebase_app", lambda: "app")
+    # Other test modules may remount the shared router; bind the verified helper
+    # to this exact API module for a deterministic authentication contract.
+    from finnos.routers import auth as route_auth
+    monkeypatch.setattr(route_auth, "verify", api.verified_claims)
     verify = Mock(return_value=claims)
     verify_cookie = Mock(return_value=claims)
     create = Mock(return_value="signed-firebase-session")
@@ -118,7 +122,7 @@ def test_api_route_maps_to_python_function_and_preserves_spa():
     assert config["framework"] == "vite"
     assert config["routes"][0]["dest"] == "/api"
     import re
-    for path in ["/api/auth/me", "/api/accounts", "/api/transactions/id", "/api/dashboard"]:
+    for path in ["/api/auth/me", "/api/accounts", "/api/transactions/id", "/api/dashboard", "/api/push/prefs", "/api/push/public-key", "/api/push/subscribe"]:
         assert re.fullmatch(config["routes"][0]["src"], path)
     assert config["routes"][-1]["src"] == "/(?!api(?:/|$)).*"
 
@@ -272,3 +276,37 @@ def test_non_api_paths_cannot_fall_through_to_html_as_api():
     matcher = config["routes"][-1]["src"]
     assert not re.fullmatch(matcher, "/api/subscriptions/item")
     assert re.fullmatch(matcher, "/assinaturas")
+
+
+def test_profile_name_update_requires_verified_session_and_same_origin(client, firebase, monkeypatch):
+    assert client.patch("/api/auth/me", json={"name": "Novo nome"}, headers={
+        "Origin": "https://preview.example.com"
+    }).status_code == 401
+
+    client.cookies.set(api.COOKIE, "signed-firebase-session")
+    assert client.patch("/api/auth/me", json={"name": "Inválido"}, headers={
+        "Origin": "https://evil.example"
+    }).status_code == 403
+
+    updated = Mock()
+    monkeypatch.setattr(api.auth, "update_user", updated)
+    response = client.patch("/api/auth/me", json={"name": "  FINNOS Teste  "}, headers={
+        "Origin": "https://preview.example.com"
+    })
+    assert response.status_code == 200, response.text
+    updated.assert_called_once_with("user-a", display_name="FINNOS Teste", app="app")
+    assert client.patch("/api/auth/me", json={"name": "  "}, headers={
+        "Origin": "https://preview.example.com"
+    }).status_code == 422
+
+
+def test_push_api_routes_fail_closed_without_user_and_without_csrf(client, firebase):
+    assert client.get("/api/push/prefs").status_code == 401
+    assert client.get("/api/push/public-key").status_code == 401
+    client.cookies.set(api.COOKIE, "signed-firebase-session")
+    assert client.put("/api/push/prefs", json={}).status_code == 403
+    assert client.post("/api/push/test").status_code == 403
+    assert client.post("/api/push/subscribe").status_code == 403
+    valid_headers = {"Origin": "https://preview.example.com"}
+    assert client.get("/api/push/public-key").json() == {"public_key": "", "supported": False}
+    assert client.post("/api/push/test", headers=valid_headers).status_code == 503

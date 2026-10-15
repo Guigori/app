@@ -2,9 +2,10 @@ import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, CheckCircle2, FileSpreadsheet, Keyboard, Landmark, ReceiptText, ShieldCheck, Sparkles, Upload } from "lucide-react";
-import { createTransaction, fetchAccounts, fetchCategories } from "@/lib/data";
+import { createTransaction, fetchAccounts, fetchCards, fetchCategories } from "@/lib/data";
 import { apiPost } from "@/lib/api";
 import { isLocalMode } from "@/lib/mode";
+import type { TransactionInput } from "@/types/finnos";
 import { parseFinancialFile, type ImportRow } from "@/lib/importFinancial";
 import { ImportReview } from "@/components/onboarding/ImportReview";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
@@ -32,11 +33,15 @@ export default function Onboarding() {
   const accounts = accountsQuery.data ?? [];
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
   const categories = categoriesQuery.data ?? [];
+  const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: fetchCards });
+  const cards = cardsQuery.data ?? [];
   const [method, setMethod] = useState<Method>(null);
   const [fileName, setFileName] = useState("");
   const [preview, setPreview] = useState<{ rows: number; recurring: number } | null>(null);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [accountId, setAccountId] = useState("");
+  const [cardId, setCardId] = useState("");
+  const [importError, setImportError] = useState("");
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const hasAccount = accounts.length > 0;
@@ -49,6 +54,7 @@ export default function Onboarding() {
 
   const readFile = async (file: File) => {
     setFileName(file.name);
+    setImportError("");
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (ext === "csv" || ext === "ofx" || ext === "qfx" || ext === "txt") {
       const text = await file.text();
@@ -62,16 +68,41 @@ export default function Onboarding() {
   };
 
   const confirmImport = async () => {
-    if(!targetAccountId)return;
+    if(!targetAccountId || (method==="invoice" && !cardId)){
+      setImportError("Selecione a conta e o cartão antes de confirmar.");
+      return;
+    }
     setBusy(true);
+    setImportError("");
     try{
       const selected=importRows.filter(r=>r.selected);
-      if(isLocalMode()){
-        for(const row of selected) await createTransaction({name:row.description,value:row.value,type:row.type,status:"pago",date:row.date,account_id:targetAccountId,card_id:null,to_account_id:null,category_id:row.category_id,fixed:false,recurrence:null,installment:false,total_installments:null,current_installment:null,adjusted_value:null,attachment:fileName||null,notes:"Importado durante o onboarding após revisão do usuário."});
-      }else{
-        await apiPost("/imports/confirm",{account_id:targetAccountId,card_id:null,kind:method==="invoice"?"invoice":"statement",filename:fileName||null,rows:selected.map(r=>({date:r.date,description:r.description,value:r.value,type:r.type,category_id:r.category_id,selected:true}))});
+      // Validate the complete batch before writes. Retrying signed-in imports
+      // reuses each row's operation ID and cannot duplicate successful rows.
+      for(const row of selected){
+        const validDate = /^\d{4}-\d{2}-\d{2}$/.test(row.date) && !Number.isNaN(Date.parse(row.date+"T12:00:00"));
+        if(!validDate || !row.description.trim() || !Number.isFinite(row.value) || row.value<=0)
+          throw new Error("Revise datas, nomes e valores antes da importação.");
+      }
+      for(const row of selected){
+        const input: TransactionInput = {
+          name:row.description.trim(), value:row.value, type:row.type,
+          status:"pago", date:row.date, account_id:targetAccountId,
+          card_id:method==="invoice"?cardId:null,
+          to_account_id:null, category_id:row.category_id,
+          fixed:false, recurrence:null, installment:false,
+          total_installments:null, current_installment:null,
+          adjusted_value:null, attachment:fileName.slice(0,300)||null,
+          notes:"Importado durante o onboarding após revisão do usuário.",
+        };
+        if(isLocalMode()) await createTransaction(input);
+        else await apiPost("/transactions",input,{
+          "X-FINNOS-Operation-ID":`onboarding-import-${row.id}`,
+          "X-FINNOS-Source":"import",
+        });
       }
       finish();
+    }catch(error){
+      setImportError(error instanceof Error ? error.message : "Falha na importação. Revise o arquivo e tente novamente.");
     }finally{setBusy(false)}
   };
 
@@ -114,10 +145,18 @@ export default function Onboarding() {
         {method === "manual" ? <div className="mt-5 flex flex-col gap-3 rounded-2xl bg-muted/50 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">Tudo certo para começar.</p><p className="text-sm text-muted-foreground">Você poderá importar arquivos depois, sem perder o que registrar manualmente.</p></div><Button onClick={finish}>Entrar no FINNOS <ArrowRight className="h-4 w-4" /></Button></div> : null}
 
         {method === "statement" || method === "invoice" ? <div className="mt-5 rounded-2xl border border-dashed border-border p-5">
-          <input ref={inputRef} className="hidden" type="file" accept=".csv,.ofx,.qfx,.txt,.pdf" onChange={(e) => { const file=e.target.files?.[0]; if(file) void readFile(file); }} />
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{method === "statement" ? "Anexar extrato" : "Anexar fatura"}</p><p className="text-sm text-muted-foreground">CSV/OFX/QFX têm pré-análise local. PDF fica anexado para a etapa de extração do backend, sem gravação automática.</p></div><Button variant="outline" onClick={() => inputRef.current?.click()}><Upload className="h-4 w-4" /> Selecionar arquivo</Button></div>
+          <input ref={inputRef} className="hidden" type="file" accept=".csv,.ofx,.qfx,.txt" onChange={(e) => { const file=e.target.files?.[0]; if(file) void readFile(file); }} />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{method === "statement" ? "Anexar extrato" : "Anexar fatura"}</p><p className="text-sm text-muted-foreground">CSV, OFX e QFX são analisados localmente. PDF ainda não é suportado nesta versão.</p></div><Button variant="outline" onClick={() => inputRef.current?.click()}><Upload className="h-4 w-4" /> Selecionar arquivo</Button></div>
           {fileName ? <div className="mt-4 rounded-xl bg-muted/60 p-4"><p className="font-semibold">{fileName}</p>{preview && preview.rows > 0 ? <p className="mt-1 text-sm text-muted-foreground">Pré-análise: {preview.rows} linhas financeiras encontradas · {preview.recurring} possíveis padrões recorrentes. A importação definitiva exige revisão.</p> : <p className="mt-1 text-sm text-muted-foreground">Arquivo recebido. Nenhum dado será lançado sem revisão e confirmação.</p>}</div> : null}
-          {importRows.length ? <ImportReview rows={importRows} setRows={setImportRows} accounts={accounts} categories={categories} accountId={targetAccountId} setAccountId={setAccountId} onConfirm={confirmImport} busy={busy} /> : null}
+          {method==="invoice" && <label className="mt-4 block text-sm font-medium">Cartão da fatura
+            <select className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-3" value={cardId} onChange={e=>setCardId(e.target.value)}>
+              <option value="">Selecione o cartão antes de importar</option>
+              {cards.map(card=><option key={card.id} value={card.id}>{card.name}</option>)}
+            </select>
+            {!cards.length && <span className="mt-2 block text-xs text-muted-foreground">Cadastre um cartão na aba Cartões para importar faturas.</span>}
+          </label>}
+          {importError && <p role="alert" className="mt-3 text-sm text-destructive">{importError}</p>}
+          {importRows.length && (method!=="invoice" || cardId) ? <ImportReview rows={importRows} setRows={setImportRows} accounts={accounts} categories={categories} accountId={targetAccountId} setAccountId={setAccountId} onConfirm={confirmImport} busy={busy} /> : null}
         </div> : null}
       </section> : null}
     </div>
