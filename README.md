@@ -1,3 +1,10 @@
+> **FINNOS (atual):** A API financeira da Vercel usa Firebase Auth + Firestore.
+> O guia abaixo descreve o starter **legado** MongoDB e não deve ser usado
+> para rodar FINNOS atual. Consulte [Desenvolvimento Firebase](docs/DEVELOPMENT_FIREBASE.md)
+> para iniciar a API correta sem MongoDB. Não configure MongoDB para FINNOS novo.
+
+---
+
 # farm-ts
 
 Minimal split backend/frontend starter: **FastAPI + MongoDB** behind a

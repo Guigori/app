@@ -57,8 +57,8 @@ export default function App() {
             <Route path="/assinaturas" element={<Subscriptions />} />
             <Route path="/analise" element={<Analysis />} />
             <Route path="/patrimonio" element={<Patrimonio />} />
-            <Route path="/metas" element={<Navigate to="/patrimonio" replace />} />
-            <Route path="/investimentos" element={<Navigate to="/patrimonio" replace />} />
+            <Route path="/metas" element={<Patrimonio />} />
+            <Route path="/investimentos" element={<Patrimonio />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Route>
