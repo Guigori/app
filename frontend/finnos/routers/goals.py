@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import Field, model_validator
 from finnos.lib.money import FinanceModel, Money, D, cents
 from finnos.lib.db import db
@@ -65,3 +65,44 @@ async def suggestion(user=Depends(require_user)):
     reserved=sum(cents(g['contribution'])*(52 if g['frequency']=='Semanal' else 26 if g['frequency']=='Quinzenal' else 12)//12 for g in goals if g['saved'] < g['target'])
     capacity=max(income-expense-reserved,0)
     return dict(income=income/100,expense=expense/100,reserved=reserved/100,capacity=capacity/100,months_observed=len(observed),writes_data=False,method='media_realizada_menos_aportes_planejados',strategies=[dict(id='acelerado',label='Acelerado',amount=capacity/100),dict(id='equilibrado',label='Equilibrado',amount=(capacity*75//100)/100),dict(id='seguro',label='Seguro',amount=(capacity//2)/100)])
+
+
+def _goal_out(record: dict) -> GoalOut:
+    """Never expose tenant IDs or internal revision metadata."""
+    return GoalOut(**{
+        key: value for key, value in record.items()
+        if key not in {"user_id", "updated_at", "version"}
+    })
+
+
+@router.get('/{goal_id}', response_model=GoalOut)
+async def get_goal(goal_id: str, user=Depends(require_user)):
+    goal = await db.goals.find_one({'id': goal_id, 'user_id': user['id']})
+    if not goal:
+        raise HTTPException(status_code=404, detail='Meta não encontrada.')
+    return _goal_out(goal)
+
+
+@router.put('/{goal_id}', response_model=GoalOut)
+async def update_goal(goal_id: str, payload: GoalIn, user=Depends(require_user)):
+    # Preserve ID and createdAt. The account relationship is revalidated by
+    # the Firestore adapter inside the atomic update.
+    result = await db.goals.update_one(
+        {'id': goal_id, 'user_id': user['id']},
+        {'$set': {**payload.model_dump(), 'updated_at': datetime.now(timezone.utc)}},
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail='Meta não encontrada.')
+    updated = await db.goals.find_one({'id': goal_id, 'user_id': user['id']})
+    if not updated:
+        raise HTTPException(status_code=409, detail='A meta mudou durante a edição.')
+    return _goal_out(updated)
+
+
+@router.delete('/{goal_id}', status_code=204)
+async def delete_goal(goal_id: str, user=Depends(require_user)) -> Response:
+    # Removing a planning goal never moves money from the linked bank account.
+    result = await db.goals.delete_one({'id': goal_id, 'user_id': user['id']})
+    if not result.deleted_count:
+        raise HTTPException(status_code=404, detail='Meta não encontrada.')
+    return Response(status_code=204)
