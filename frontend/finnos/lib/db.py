@@ -195,6 +195,8 @@ def validate_refs(db, uid, name, doc, transaction):
                 raise HTTPException(409, "Já existe orçamento nesse período.")
     if name == "goals":
         fields = [("account", "accounts")]
+    if name == "subscriptions":
+        fields = [("account_id", "accounts"), ("category_id", "categories"), ("card_id", "cards")]
     for field, collection in fields:
         identifier = doc.get(field)
         if (
@@ -401,6 +403,14 @@ class Collection:
                         for allocation in budget.get("allocations", [])
                     ):
                         raise HTTPException(409, "Categoria pertence a um orçamento.")
+                    subscriptions = rows(db, uid, "subscriptions", tr)
+                    subscription_field = {
+                        "accounts": "account_id",
+                        "categories": "category_id",
+                        "cards": "card_id",
+                    }[self.name]
+                    if any(sub.get(subscription_field) == doc["id"] for sub in subscriptions):
+                        raise HTTPException(409, "Registro possui assinatura vinculada.")
                 tr.delete(
                     root(db, uid).collection(self.name).document(resource_id(doc["id"]))
                 )
@@ -427,7 +437,7 @@ db = SimpleNamespace(
             "categories",
             "transactions",
             "cards",
-            "notification_states", "budget_cycles", "radar_states", "radar_feedback", "goals", "ai_keys", "ai_feedback",
+            "notification_states", "budget_cycles", "radar_states", "radar_feedback", "goals", "subscriptions", "ai_keys", "ai_feedback",
         ]
     }
 )
