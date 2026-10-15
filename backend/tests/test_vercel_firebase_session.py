@@ -232,3 +232,43 @@ def test_profile_identifies_password_provider(client, firebase):
     firebase[0]['firebase'] = {'sign_in_provider': 'password'}
     login(client)
     assert client.get('/api/auth/me').json()['auth_provider'] == 'password'
+
+
+def test_subscription_detail_and_financial_endpoints_are_routed_to_firestore_function():
+    """Vercel must not return the SPA shell for subscription IDs or writes."""
+    config = json.loads((ROOT / "frontend/vercel.json").read_text())
+    import re
+    matcher = config["routes"][0]["src"]
+    for route in (
+        "/api/subscriptions", "/api/subscriptions/xyz-123",
+        "/api/accounts/abc", "/api/cards/abc/invoice",
+        "/api/finance/integrity", "/api/goals/goal-1",
+    ):
+        assert re.fullmatch(matcher, route), route
+    assert not re.fullmatch(matcher, "/api/unknown")
+
+
+@pytest.mark.parametrize("method,route", [
+    ("POST", "/api/subscriptions"),
+    ("PUT", "/api/subscriptions/test-id"),
+    ("DELETE", "/api/subscriptions/test-id"),
+])
+def test_subscription_mutations_reject_foreign_or_missing_origin(client, method, route):
+    """Cookie auth alone must not authorize cross-site financial writes."""
+    client.cookies.set(api.COOKIE, "signed-firebase-session")
+    for origin in (None, "https://attacker.example", "http://preview.example.com"):
+        headers = {"Origin": origin} if origin else {}
+        response = client.request(method, route, headers=headers, json={} if method != "DELETE" else None)
+        assert response.status_code == 403, (method, route, origin, response.text)
+    # A valid same-origin request still requires a verified Firebase account.
+    response = client.request(method, route, headers={"Origin": "https://preview.example.com"},
+                              json={} if method != "DELETE" else None)
+    assert response.status_code in (401, 422, 503), response.text
+
+
+def test_non_api_paths_cannot_fall_through_to_html_as_api():
+    config = json.loads((ROOT / "frontend/vercel.json").read_text())
+    import re
+    matcher = config["routes"][-1]["src"]
+    assert not re.fullmatch(matcher, "/api/subscriptions/item")
+    assert re.fullmatch(matcher, "/assinaturas")
