@@ -132,6 +132,13 @@ export default function Settings() {
         <p className="mt-1 text-sm text-muted-foreground">Gerencie suas preferências e informações com segurança.</p>
       </div>
 
+      {visible("desenvolvedor") && !local && (
+        <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+          Os controles de demonstração e limpeza deste aparelho são exclusivos do modo local.
+          A exclusão de dados da conta Firebase precisa de confirmação e recuperação específicas.
+          Nenhum dado online será apagado por esses botões.
+        </p>
+      )}
       {visible("perfil", "seguranca") && (<>
       <Card data-testid="settings-profile-card">
         <CardHeader>
@@ -430,7 +437,7 @@ export default function Settings() {
 
       {visible("integracoes") && !local ? <AiKeysCard /> : null}
 
-      {visible("desenvolvedor") && (<>
+      {visible("desenvolvedor") && local && (<>
       <Card data-testid="settings-demo-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
