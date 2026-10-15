@@ -105,12 +105,13 @@ export default defineConfig(async () => {
       // Build-error rendering: emergent-overlay when it loaded, else Vite's own overlay.
       hmr: hotReloadDisabled ? false : { overlay: !emergentOverlay },
       watch: hotReloadDisabled ? null : { usePolling: true, interval: 300 },
-      // The /api proxy convention: frontend code calls relative /api/*, never an
-      // absolute backend URL. Target is the FastAPI dev server (supervisor: backend).
+      // Use the SAME Firestore API as Vercel. The legacy Mongo server on :8001
+      // is intentionally not a fallback. Start `npm run dev:api` in another terminal.
       proxy: {
         "/api": {
-          target: "http://localhost:8001",
-          changeOrigin: true,
+          target: process.env.FINNOS_DEV_API_TARGET || "http://127.0.0.1:8002",
+          // Keep the browser's Host so same-origin CSRF checks match Origin.
+          changeOrigin: false,
         },
       },
     },
