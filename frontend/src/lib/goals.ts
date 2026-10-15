@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "@/lib/api";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { isLocalMode } from "@/lib/mode";
 import { cachedFetch } from "@/lib/offline/accountCache";
 export type FinnosGoal = {
@@ -41,4 +41,26 @@ export async function listGoals(userId: string): Promise<FinnosGoal[]> {
 export type GoalSuggestion = { income:number; expense:number; reserved:number; capacity:number; months_observed:number; strategies:{id:string;label:string;amount:number}[] };
 export function fetchGoalSuggestion(): Promise<GoalSuggestion> {
   return apiGet<GoalSuggestion>("/goals/suggestion");
+}
+
+/** Editing a plan changes only the goal document, never its linked bank balance. */
+export async function updateGoal(userId: string, goal: FinnosGoal): Promise<void> {
+  if (!isLocalMode()) {
+    const { id, createdAt, ...input } = goal;
+    void createdAt;
+    await apiPut<FinnosGoal>(`/goals/${encodeURIComponent(id)}`, input);
+    return;
+  }
+  const current = localGoals(userId);
+  if (!current.some(item => item.id === goal.id)) throw new Error("Meta não encontrada.");
+  localStorage.setItem(key(userId), JSON.stringify(current.map(item => item.id === goal.id ? goal : item)));
+}
+
+/** Deletion is explicit. Local-mode goals stay isolated by the local user's ID. */
+export async function deleteGoal(userId: string, goalId: string): Promise<void> {
+  if (!isLocalMode()) {
+    await apiDelete<void>(`/goals/${encodeURIComponent(goalId)}`);
+    return;
+  }
+  localStorage.setItem(key(userId), JSON.stringify(localGoals(userId).filter(item => item.id !== goalId)));
 }
