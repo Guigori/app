@@ -87,3 +87,13 @@ def test_validation_endpoint_only_queries_authenticated_uid(monkeypatch):
     assert response.status_code == 200, response.text
     assert response.json()["counts"]["accounts"] == 2
     assert response.json()["integrity_ok"] is True
+
+
+def test_standalone_subscription_orphan_blocks_audited_balance():
+    data = records()
+    data["subscriptions"] = [{"id": "sub", "account_id": "missing-account",
+                              "category_id": "food", "card_id": "card"}]
+    audited = audit_finance(data)
+    assert audited["integrity_ok"] is False
+    assert audited["issues"]["subscription_account_missing"] == 1
+    assert audited["total_account_balance"] is None
