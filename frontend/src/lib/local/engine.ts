@@ -41,6 +41,18 @@ import type {
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
+/** Mirror of finnos.lib.money.installment_portion: no negative/zero installments. */
+function installmentPortion(value: number, count: number, offset: number): number {
+  const cents = Math.round(value * 100);
+  if (!Number.isSafeInteger(cents) || !Number.isInteger(count) || count < 1
+      || cents < count || offset < 0 || offset >= count) {
+    throw new Error("Parcelamento inválido: cada parcela deve valer ao menos R$ 0,01.");
+  }
+  const base = Math.floor(cents / count);
+  const remaining = cents % count;
+  return (base + (offset >= count - remaining ? 1 : 0)) / 100;
+}
+
 function monthsBetween(a: string, b: string): number {
   const [ya, ma] = [Number(a.slice(0, 4)), Number(a.slice(5, 7))];
   const [yb, mb] = [Number(b.slice(0, 4)), Number(b.slice(5, 7))];
@@ -56,23 +68,23 @@ function monthBounds(month: string): [string, string] {
 
 /** Positive amount the transaction contributes to `month`'s income/expense stats. */
 function monthPortion(tx: Transaction, month: string): number | null {
-  if (tx.type === "transferencia" || tx.status !== "pago") return null;
+  if (tx.invoice_payment || tx.type === "transferencia" || tx.status !== "pago") return null;
   if (tx.installment) {
     const n = tx.total_installments ?? 1;
     const offset = monthsBetween(tx.date.slice(0, 7), month);
-    return offset >= 0 && offset < n ? round2(tx.installment_value ?? 0) : null;
+    return offset >= 0 && offset < n ? installmentPortion(tx.value, n, offset) : null;
   }
   return tx.date.slice(0, 7) === month ? round2(tx.value) : null;
 }
 
 /** Signed effect on each account balance — "pago" moves money, pending/scheduled never does. */
 function balanceEffects(tx: Transaction, today: string): [string, number][] {
-  if (tx.status !== "pago") return [];
+  if (tx.card_id || tx.status !== "pago") return [];
   let v = tx.value;
   if (tx.installment) {
     const n = tx.total_installments ?? 1;
     const due = monthsBetween(tx.date.slice(0, 7), today.slice(0, 7)) + 1;
-    v = round2((tx.installment_value ?? 0) * Math.max(0, Math.min(due, n)));
+    v = round2(Array.from({ length: Math.max(0, Math.min(due, n)) }, (_, i) => installmentPortion(tx.value, n, i)).reduce((total, amount) => total + amount, 0));
   }
   if (tx.type === "receita") return [[tx.account_id, round2(v)]];
   if (tx.type === "despesa") return [[tx.account_id, round2(-v)]];
@@ -257,8 +269,11 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
   }
   if (input.installment) {
     if (input.type !== "despesa") throw new Error("Somente despesas podem ser parceladas.");
-    if (!input.total_installments || input.total_installments < 2) {
-      throw new Error("Informe o número total de parcelas (mínimo 2).");
+    if (!input.total_installments || input.total_installments < 2 || input.total_installments > 120) {
+      throw new Error("Informe de 2 a 120 parcelas.");
+    }
+    if (Math.round((input.adjusted_value ?? input.value) * 100) < input.total_installments) {
+      throw new Error("Cada parcela deve valer ao menos R$ 0,01.");
     }
   }
   const total = round2(input.adjusted_value ?? input.value);
@@ -284,7 +299,7 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
     installment: input.installment,
     total_installments: input.installment ? input.total_installments : null,
     current_installment: input.installment ? input.current_installment ?? 1 : null,
-    installment_value: input.installment && input.total_installments ? round2(total / input.total_installments) : null,
+    installment_value: input.installment && input.total_installments ? installmentPortion(total, input.total_installments, 0) : null,
     adjusted_value: input.adjusted_value,
     attachment: input.attachment,
     notes: input.notes,
@@ -719,8 +734,8 @@ export function localCalendar(month: string): CalendarMonth {
       buckets.get(tx.date) ??
       { date: tx.date, income: 0, expense: 0, projected_income: 0, projected_expense: 0, count: 0, active_count: 0 };
     day.count += 1;
-    if (tx.type !== "transferencia") {
-      const value = round2(tx.installment ? tx.installment_value ?? 0 : tx.value);
+    if (tx.type !== "transferencia" && !tx.invoice_payment) {
+      const value = round2(tx.installment ? installmentPortion(tx.value, tx.total_installments ?? 1, 0) : tx.value);
       if (tx.status === "pago") {
         if (tx.type === "receita") day.income = round2(day.income + value);
         else day.expense = round2(day.expense + value);
