@@ -925,35 +925,30 @@ export function localNotifications(windowDays = 7): Notifications {
 
 // --- Fatura detalhada / pagamento / assinaturas (modo local) ----------------
 
+/** Invoice occurrences mirror finnos.lib.invoices.occurrences, including after-closing purchases. */
 function cycleItems(card: LocalCard, txs: Transaction[], start: string, closing: string, cats: Category[]): InvoiceItem[] {
+  const frozen = card.paid_cycles?.[closing]?.items;
+  if (frozen) return frozen;
   const items: InvoiceItem[] = [];
   for (const tx of txs) {
     if (tx.card_id !== card.id || tx.type !== "despesa") continue;
-    const value = round2(tx.installment ? tx.installment_value ?? 0 : tx.value);
+    const firstClosing = cycleBounds(tx.date, card.closing_day)[1];
+    const total = tx.installment ? tx.total_installments ?? 1 : 1;
+    const offset = monthsBetween(firstClosing.slice(0, 7), closing.slice(0, 7));
+    if (offset < 0 || offset >= total || configuredDayInMonth(firstClosing, offset, card.closing_day) !== closing) continue;
     const category = cats.find((c) => c.id === tx.category_id);
-    let label: string | null = null;
-    if (tx.installment) {
-      const total = tx.total_installments ?? 1;
-      const offset = monthsBetween(tx.date.slice(0, 7), closing.slice(0, 7));
-      if (offset < 0 || offset >= total) continue;
-      const current = (((tx.current_installment ?? 1) - 1 + offset) % Math.max(total, 1)) + 1;
-      label = `${Math.min(current, total)}/${total}`;
-    } else if (!(tx.date >= start && tx.date <= closing)) {
-      continue;
-    }
     items.push({
       id: tx.id,
       name: tx.name,
       date: tx.date,
-      value,
+      value: tx.installment ? installmentPortion(tx.value, total, offset) : tx.value,
       category_name: category?.name ?? null,
       category_color: category?.color ?? null,
-      installment_label: label,
+      installment_label: total > 1 ? `${offset + 1}/${total}` : null,
     });
   }
   return items.sort((a, b) => b.date.localeCompare(a.date));
 }
-
 export function localInvoice(cardId: string): Invoice {
   const db = readDb();
   const card = db.cards.find((c) => c.id === cardId);
