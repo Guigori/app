@@ -785,16 +785,22 @@ function addDays(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Open invoice window: day after the last closing through the next closing. */
+/** Advance from a configured closing/day, preserving 29–31 through February. */
+function configuredDayInMonth(iso: string, months: number, day: number): string {
+  const index = Number(iso.slice(0, 4)) * 12 + Number(iso.slice(5, 7)) - 1 + months;
+  return clampDay(Math.floor(index / 12), index % 12 + 1, day);
+}
+
+/** Open invoice window: day after last closing through next closing. */
 function cycleBounds(today: string, closingDay: number): [string, string] {
-  const thisClosing = clampDay(Number(today.slice(0, 4)), Number(today.slice(5, 7)), closingDay);
-  if (today <= thisClosing) return [addDays(shiftMonths(thisClosing, -1), 1), thisClosing];
-  return [addDays(thisClosing, 1), shiftMonths(thisClosing, 1)];
+  const thisClosing = configuredDayInMonth(today, 0, closingDay);
+  if (today <= thisClosing) return [addDays(configuredDayInMonth(today, -1, closingDay), 1), thisClosing];
+  return [addDays(thisClosing, 1), configuredDayInMonth(today, 1, closingDay)];
 }
 
 function dueDate(nextClosing: string, closingDay: number, dueDay: number): string {
   const sameMonth = clampDay(Number(nextClosing.slice(0, 4)), Number(nextClosing.slice(5, 7)), dueDay);
-  return dueDay > closingDay ? sameMonth : shiftMonths(sameMonth, 1);
+  return dueDay > closingDay ? sameMonth : configuredDayInMonth(nextClosing, 1, dueDay);
 }
 
 function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): CreditCard {
