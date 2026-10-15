@@ -8,7 +8,7 @@ from finnos.lib.money import D
 from finnos.lib.stats import balance_effects
 from finnos.lib.dates import today_iso
 
-KINDS = ("accounts", "categories", "cards", "transactions", "goals", "budget_cycles")
+KINDS = ("accounts", "categories", "cards", "transactions", "goals", "budget_cycles", "subscriptions")
 
 
 def audit_finance(records):
@@ -36,6 +36,14 @@ def audit_finance(records):
             problems["transaction_transfer_invalid"] += 1
         if tx.get("invoice_payment") and tx.get("invoice_card_id") not in cards:
             problems["invoice_payment_card_missing"] += 1
+
+    for subscription in records["subscriptions"]:
+        if subscription.get("account_id") not in accounts:
+            problems["subscription_account_missing"] += 1
+        if subscription.get("category_id") and subscription["category_id"] not in categories:
+            problems["subscription_category_missing"] += 1
+        if subscription.get("card_id") and subscription["card_id"] not in cards:
+            problems["subscription_card_missing"] += 1
 
     for goal in records["goals"]:
         if goal.get("account") not in accounts:
