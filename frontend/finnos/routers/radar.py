@@ -13,7 +13,7 @@ from statistics import mean
 from fastapi import APIRouter, Depends, HTTPException
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
-from finnos.lib.stats import add_months, month_portion
+from finnos.lib.stats import add_months, month_portion, balance_effects
 from finnos.lib.radar_patterns import recurring_signals
 from finnos.models.radar import RadarActionIn, RadarFeedbackIn, RadarOut, RadarSignalOut
 from finnos.routers.auth import require_user
@@ -31,6 +31,15 @@ def month_end(m: str) -> str:
 
 def days_until(iso: str) -> int:
     return (date.fromisoformat(iso) - date.fromisoformat(today_iso())).days
+
+def _settled_cash_balance(accounts: list[dict], txs: list[dict], today: str):
+    """Same effective bank balance as Home; card purchases are not bank debits."""
+    balance = sum((D(a.get('initial_balance') or 0) for a in accounts), D(0))
+    for tx in txs:
+        for _, amount in balance_effects(tx, today):
+            balance += amount
+    return balance
+
 
 async def _state_map(user_id: str) -> dict:
     docs = await db.radar_states.find({'user_id': user_id}).to_list(5000)
@@ -112,17 +121,10 @@ async def _signals(user_id: str) -> list[dict]:
         late = (today - date.fromisoformat(t['date'])).days
         signals.append(dict(id=f"overdue-{t['id']}", type='risk', severity='critical' if late >= 7 else 'high', title=f"Pagamento em atraso: {t.get('name', 'Despesa')}", description=f"{brl(value)} venceu há {late} dia{('s' if late != 1 else '')}", explanation='Este compromisso está cadastrado como pendente ou agendado e a data prevista já passou. Confirme o pagamento ou revise o lançamento.', metric=brl(value), score=99 if late >= 7 else 94, related_entity_type='transaction', related_entity_id=t['id'], expires_at=None, evidence=[{'label': 'Vencimento', 'value': t['date']}, {'label': 'Dias em atraso', 'value': str(late)}, {'label': 'Valor', 'value': brl(value)}]))
     accounts = await db.accounts.find({'user_id': user_id}).to_list(500)
-    balance = sum((D(a.get('initial_balance') or 0) for a in accounts))
-    for t in txs:
-        if t.get('status') == 'pago' and t['date'] <= today_s:
-            v = D(t.get('adjusted_value') or t['value'])
-            if t['type'] == 'receita':
-                balance += v
-            elif t['type'] == 'despesa':
-                balance -= v
+    balance = _settled_cash_balance(accounts, txs, today_s)
     projected = balance
     negative_date = None
-    future = sorted([t for t in txs if t.get('status') in ('pendente', 'agendado') and today_s <= t['date'] <= (today + timedelta(days=30)).isoformat()], key=lambda x: x['date'])
+    future = sorted([t for t in txs if t.get('status') in ('pendente', 'agendado') and not t.get('card_id') and today_s <= t['date'] <= (today + timedelta(days=30)).isoformat()], key=lambda x: x['date'])
     for t in future:
         v = D(t.get('adjusted_value') or t['value'])
         projected += v if t['type'] == 'receita' else -v if t['type'] == 'despesa' else 0
