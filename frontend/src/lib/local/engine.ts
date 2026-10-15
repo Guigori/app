@@ -1025,13 +1025,14 @@ function validateLocalSubscription(input: SubscriptionInput): void {
   if (input.card_id && !db.cards.some(card => card.id === input.card_id)) throw new Error("Cartão inválido.");
 }
 
-function buildLocalSubscription(id: string, input: SubscriptionInput): SubscriptionItem {
+function buildLocalSubscription(id: string, input: SubscriptionInput | SubscriptionItem): SubscriptionItem {
   const db = readDb();
   const category = db.categories.find(item => item.id === input.category_id);
   const card = db.cards.find(item => item.id === input.card_id);
   return {
     ...input, id,
     name: input.name.trim(),
+    notes: input.notes ?? null,
     account_name: db.accounts.find(item => item.id === input.account_id)?.name ?? "",
     category_name: category?.name ?? null,
     category_color: category?.color ?? null,
