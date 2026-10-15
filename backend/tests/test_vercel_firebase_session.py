@@ -29,6 +29,10 @@ def firebase(monkeypatch):
                                disabled=False, email_verified=True,
                                user_metadata=SimpleNamespace(creation_timestamp=1700000000000))
     monkeypatch.setattr(api, "firebase_app", lambda: "app")
+    # Other test modules may remount the shared router; bind the verified helper
+    # to this exact API module for a deterministic authentication contract.
+    from finnos.routers import auth as route_auth
+    monkeypatch.setattr(route_auth, "verify", api.verified_claims)
     verify = Mock(return_value=claims)
     verify_cookie = Mock(return_value=claims)
     create = Mock(return_value="signed-firebase-session")
