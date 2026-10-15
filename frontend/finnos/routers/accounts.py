@@ -78,7 +78,7 @@ async def get_account(
             }
         )
         .sort([("date", -1), ("created_at", -1)])
-        .to_list(8)
+        .to_list(8, allow_truncate=True)
     )
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
     transactions = [
