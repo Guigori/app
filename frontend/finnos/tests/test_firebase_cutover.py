@@ -23,7 +23,11 @@ def test_deprecated_backend_server_is_the_canonical_firebase_app(monkeypatch):
     assert isinstance(module.app, FastAPI)
     assert module.app is firebase_app
     assert any(getattr(route, "path", None) == "/api/auth/me" for route in module.app.routes)
-    assert any(getattr(route, "path", None) == "/api/finance/integrity" for route in module.app.routes)
+    # Finance routes are mounted through FastAPI's included-router container.
+    # A 401 (rather than 404) proves the endpoint exists without credentials.
+    from fastapi.testclient import TestClient
+    with TestClient(module.app) as client:
+        assert client.get("/api/finance/integrity").status_code == 401
 
 
 def test_active_runtime_never_imports_motor_or_mongo():
