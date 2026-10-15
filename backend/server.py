@@ -1,129 +1,21 @@
-import asyncio
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, APIRouter
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-import os
-import logging
+"""FINNOS compatibility entrypoint — Firebase/Firestore only.
+
+The original MongoDB FastAPI server is retired. Git history preserves the old
+source for forensic review, but there is no longer a runnable MongoDB HTTP
+entrypoint in this location.
+
+Use `cd frontend && python -m uvicorn api.index:app --port 8002` for development.
+Existing `cd backend && uvicorn server:app` launches that same Firebase API,
+never the legacy MongoDB routes. No Mongo environment variables are read.
+"""
 from pathlib import Path
-from pydantic import BaseModel, Field
-from typing import List
-import uuid
-from datetime import datetime
+import sys
 
+frontend_root = Path(__file__).resolve().parent.parent / "frontend"
+if not frontend_root.is_dir():
+    raise RuntimeError("FINNOS Firebase API missing: frontend/ directory is required.")
 
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+if str(frontend_root) not in sys.path:
+    sys.path.insert(0, str(frontend_root))
 
-# MongoDB connection
-from lib.db import client, db, ensure_indexes
-from routers import (
-    accounts,
-    ai,
-    ai_feedback,
-    analytics,
-    auth,
-    budgets,
-    cards,
-    categories,
-    cron,
-    dashboard,
-    fca,
-    fac,
-    demo,
-    notifications,
-    migration,
-    imports,
-    push,
-    radar,
-    simulation,
-    subscriptions,
-    transactions,
-    firebase_transactions,
-    firebase_diagnostics,
-)
-
-
-# Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
-    yield
-    client.close()
-
-
-# Create the main app without a prefix
-app = FastAPI(lifespan=lifespan)
-
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
-
-
-# Define Models
-class StatusCheck(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-class StatusCheckCreate(BaseModel):
-    client_name: str
-
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
-
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.model_dump())
-    return status_obj
-
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    status_checks = await db.status_checks.find().to_list(1000)
-    return [StatusCheck(**status_check) for status_check in status_checks]
-
-# Resource routers — every route hangs off api_router, never off app.
-api_router.include_router(auth.router)
-api_router.include_router(budgets.router)
-api_router.include_router(accounts.router)
-api_router.include_router(categories.router)
-api_router.include_router(transactions.router)
-api_router.include_router(firebase_transactions.router)
-api_router.include_router(firebase_diagnostics.router)
-api_router.include_router(dashboard.router)
-api_router.include_router(fca.router)
-api_router.include_router(fac.router)
-api_router.include_router(demo.router)
-api_router.include_router(ai.router)
-api_router.include_router(ai_feedback.router)
-api_router.include_router(analytics.router)
-api_router.include_router(cards.router)
-api_router.include_router(notifications.router)
-api_router.include_router(migration.router)
-api_router.include_router(imports.router)
-api_router.include_router(push.router)
-api_router.include_router(radar.router)
-api_router.include_router(simulation.router)
-api_router.include_router(subscriptions.router)
-api_router.include_router(cron.router)
-
-# Include the router in the main app
-app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+from api.index import app  # noqa: E402,F401 — canonical Vercel/Firebase ASGI app
