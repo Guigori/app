@@ -316,10 +316,25 @@ export function localCreateTransaction(input: TransactionInput): Transaction {
   return enrich(db, tx);
 }
 
+/** A paid invoice locks its purchase breakdown until an audited refund exists. */
+function assertPurchaseNotSettled(db: LocalDb, transaction: Transaction): void {
+  if (transaction.invoice_payment) throw new Error("Pagamento de fatura não pode ser alterado manualmente.");
+  if (!transaction.card_id) return;
+  const card = db.cards.find(c => c.id === transaction.card_id);
+  if (!card?.paid_cycles) return;
+  const firstClosing = cycleBounds(transaction.date, card.closing_day)[1];
+  const count = transaction.installment ? transaction.total_installments ?? 1 : 1;
+  for (let i = 0; i < count; i++) {
+    const cycle = configuredDayInMonth(firstClosing, i, card.closing_day);
+    if (card.paid_cycles[cycle]?.amount) throw new Error("Compra pertence a uma fatura com pagamento; faça um estorno auditado.");
+  }
+}
+
 export function localUpdateTransaction(id: string, input: TransactionInput): Transaction {
   const db = readDb();
   const index = db.transactions.findIndex((t) => t.id === id);
   if (index < 0) throw new Error("Transação não encontrada.");
+  assertPurchaseNotSettled(db, db.transactions[index]);
   const tx = buildTransaction(db, input, db.transactions[index]);
   db.transactions[index] = tx;
   writeDb(db);
@@ -328,6 +343,8 @@ export function localUpdateTransaction(id: string, input: TransactionInput): Tra
 
 export function localDeleteTransaction(id: string): void {
   const db = readDb();
+  const existing = db.transactions.find(t => t.id === id);
+  if (existing) assertPurchaseNotSettled(db, existing);
   db.transactions = db.transactions.filter((t) => t.id !== id);
   writeDb(db);
 }
@@ -859,6 +876,9 @@ export function localUpdateCard(id: string, input: CardInput): CreditCard {
   const db = readDb();
   const existing = db.cards.find((c) => c.id === id);
   if (!existing) throw new Error("Cartão não encontrado.");
+  if (existing.paid_cycles && Object.keys(existing.paid_cycles).length && (existing.closing_day !== input.closing_day || existing.due_day !== input.due_day)) {
+    throw new Error("Não é possível mudar o ciclo de um cartão com pagamentos registrados.");
+  }
   const card: LocalCard = { ...existing, ...input };
   db.cards = db.cards.map((c) => (c.id === id ? card : c));
   writeDb(db);
