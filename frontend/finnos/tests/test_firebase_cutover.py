@@ -66,3 +66,14 @@ def test_production_routes_cover_every_subscription_method():
     for path in ("/api/subscriptions", "/api/subscriptions/sample-id",
                  "/api/finance/integrity", "/api/auth/me"):
         assert re.fullmatch(route["src"], path), path
+
+
+def test_legacy_mongo_adapter_fails_closed_without_connecting(monkeypatch):
+    """Old imports cannot accidentally reconnect and write to another database."""
+    monkeypatch.delenv("MONGO_URL", raising=False)
+    monkeypatch.delenv("DB_NAME", raising=False)
+    import pytest
+    spec = util.spec_from_file_location("finnos_retired_mongo_adapter", ROOT / "backend/lib/db.py")
+    module = util.module_from_spec(spec)
+    with pytest.raises(RuntimeError, match="MongoDB legado foi desativado"):
+        spec.loader.exec_module(module)
