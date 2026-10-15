@@ -22,8 +22,8 @@ def test_deprecated_backend_server_is_the_canonical_firebase_app(monkeypatch):
     from api.index import app as firebase_app
     assert isinstance(module.app, FastAPI)
     assert module.app is firebase_app
-    assert any(route.path == "/api/auth/me" for route in module.app.routes)
-    assert any(route.path == "/api/finance/integrity" for route in module.app.routes)
+    assert any(getattr(route, "path", None) == "/api/auth/me" for route in module.app.routes)
+    assert any(getattr(route, "path", None) == "/api/finance/integrity" for route in module.app.routes)
 
 
 def test_active_runtime_never_imports_motor_or_mongo():
