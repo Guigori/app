@@ -122,7 +122,7 @@ def test_api_route_maps_to_python_function_and_preserves_spa():
     assert config["framework"] == "vite"
     assert config["routes"][0]["dest"] == "/api"
     import re
-    for path in ["/api/auth/me", "/api/accounts", "/api/transactions/id", "/api/dashboard"]:
+    for path in ["/api/auth/me", "/api/accounts", "/api/transactions/id", "/api/dashboard", "/api/push/prefs", "/api/push/public-key", "/api/push/subscribe"]:
         assert re.fullmatch(config["routes"][0]["src"], path)
     assert config["routes"][-1]["src"] == "/(?!api(?:/|$)).*"
 
