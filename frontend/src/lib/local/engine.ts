@@ -868,8 +868,14 @@ export function localUpdateCard(id: string, input: CardInput): CreditCard {
 export function localDeleteCard(id: string): void {
   const db = readDb();
   if (db.subscriptions.some(sub => sub.card_id === id)) throw new Error("Cartão vinculado a uma assinatura.");
+  if (db.transactions.some(tx => tx.card_id === id || (tx.invoice_payment && tx.notes?.includes(id)))) {
+    throw new Error("Cartão possui compras vinculadas. Não é permitido perder o histórico da fatura.");
+  }
+  const card = db.cards.find(c => c.id === id);
+  if (card?.paid_cycles && Object.keys(card.paid_cycles).length) {
+    throw new Error("Cartão possui histórico de pagamentos.");
+  }
   db.cards = db.cards.filter((c) => c.id !== id);
-  db.transactions = db.transactions.map((t) => (t.card_id === id ? { ...t, card_id: null, card_name: null } : t));
   writeDb(db);
 }
 
