@@ -45,7 +45,7 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
 function installmentPortion(value: number, count: number, offset: number): number {
   const cents = Math.round(value * 100);
   if (!Number.isSafeInteger(cents) || !Number.isInteger(count) || count < 1
-      || cents < count || offset < 0 || offset >= count) {
+      || cents < 0 || offset < 0 || offset >= count) {
     throw new Error("Parcelamento inválido: cada parcela deve valer ao menos R$ 0,01.");
   }
   const base = Math.floor(cents / count);
