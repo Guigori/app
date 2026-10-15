@@ -49,7 +49,7 @@ def mount(app, firebase_app, verified_claims, same_origin):
     async def finance_origin(request, call_next):
         if request.method in {"POST", "PUT", "PATCH", "DELETE"} and any(
             request.url.path.startswith("/api/" + x)
-            for x in ["accounts", "categories", "transactions", "notifications", "cards", "budgets", "goals", "radar", "ai", "simulate"]
+            for x in ["accounts", "categories", "transactions", "notifications", "subscriptions", "cards", "budgets", "goals", "radar", "ai", "simulate"]
         ):
             from fastapi import HTTPException
             from fastapi.responses import JSONResponse
