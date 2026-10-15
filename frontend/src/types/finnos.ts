@@ -417,6 +417,19 @@ export interface PushPublicKey {
   supported: boolean;
 }
 
+// A subscription is a standalone plan, not a fixed expense transaction.
+export interface SubscriptionInput {
+  name: string;
+  value: number;
+  recurrence: "mensal" | "anual";
+  next_charge: string;
+  account_id: string;
+  category_id: string | null;
+  card_id: string | null;
+  active: boolean;
+  notes: string | null;
+}
+
 // --- Assinaturas (mirror: backend/models/notify.py SubscriptionItem) ---
 
 export interface SubscriptionItem {
@@ -430,9 +443,10 @@ export interface SubscriptionItem {
   account_name: string;
   card_id: string | null;
   card_name: string | null;
-  recurrence: string;
+  recurrence: "mensal" | "anual";
   next_charge: string;
   active: boolean;
+  notes?: string | null;
 }
 
 export interface Subscriptions {

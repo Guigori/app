@@ -99,3 +99,31 @@ def test_mismatched_uid_is_denied():
         assert error.value.status_code == 403
     finally:
         adapter.active_uid.reset(token)
+
+
+@pytest.mark.parametrize("kind, field, identifier", [
+    ("accounts", "account_id", "account-1"),
+    ("categories", "category_id", "category-1"),
+    ("cards", "card_id", "card-1"),
+])
+def test_subscription_prevents_removing_referenced_resource(monkeypatch, kind, field, identifier):
+    token = _with_uid()
+    try:
+        records = {
+            kind: [{"id": identifier, "user_id": "uid-alpha"}],
+            "transactions": [], "cards": [],
+            "goals": [], "budget_cycles": [],
+            "subscriptions": [{"id": "sub-1", "user_id": "uid-alpha",
+                               field: identifier}],
+        }
+        if kind == "cards":
+            records["cards"] = [{"id": identifier, "user_id": "uid-alpha"}]
+        _mock_delete(monkeypatch, records)
+        with pytest.raises(HTTPException) as error:
+            asyncio.run(getattr(adapter.db, kind).delete_one(
+                {"user_id": "uid-alpha", "id": identifier}
+            ))
+        assert error.value.status_code == 409
+        assert "assinatura" in str(error.value.detail).lower()
+    finally:
+        adapter.active_uid.reset(token)

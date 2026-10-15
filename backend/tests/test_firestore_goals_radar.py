@@ -26,6 +26,14 @@ def test_radar_and_subscription_contracts(finance):
     tx(client,a['id'],type='despesa',status='agendado',fixed=True,value=50)
     r=client.get('/api/radar')
     assert r.status_code==200,r.text
+    # A fixed expense is not automatically a paid service subscription.
+    assert client.get('/api/subscriptions').json()['monthly_total']==0
+    subscription = client.post('/api/subscriptions', json={
+        'name':'Spotify', 'value':50, 'recurrence':'mensal',
+        'next_charge':'2026-10-15', 'account_id':a['id'],
+        'category_id':None, 'card_id':None, 'active':True, 'notes':None,
+    })
+    assert subscription.status_code==201,subscription.text
     assert client.get('/api/subscriptions').json()['monthly_total']==50
     user['uid']='test-b'
     assert client.get('/api/subscriptions').json()['items']==[]

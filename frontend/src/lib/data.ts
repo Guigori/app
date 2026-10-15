@@ -39,6 +39,9 @@ import {
   localInvoice,
   localPayInvoice,
   localSubscriptions,
+  localCreateSubscription,
+  localUpdateSubscription,
+  localDeleteSubscription,
   localCalendar,
   type LocalTxFilters,
 } from "@/lib/local/engine";
@@ -59,6 +62,8 @@ import type {
   Notifications,
   PayInvoiceInput,
   Subscriptions,
+  SubscriptionInput,
+  SubscriptionItem,
   Category,
   CategoryInput,
   Dashboard,
@@ -439,7 +444,23 @@ export async function payInvoice(cardId: string, input: PayInvoiceInput, operati
 
 export async function fetchSubscriptions(): Promise<Subscriptions> {
   if (isLocalMode()) return localSubscriptions();
-  return cachedFetch("subscriptions", () => apiGet<Subscriptions>("/subscriptions"));
+  return cachedFetch("subscriptions:v2", () => apiGet<Subscriptions>("/subscriptions"));
+}
+
+export async function createSubscription(input: SubscriptionInput): Promise<SubscriptionItem> {
+  return isLocalMode() ? localCreateSubscription(input) : apiPost<SubscriptionItem>("/subscriptions", input);
+}
+
+export async function updateSubscription(id: string, input: SubscriptionInput): Promise<SubscriptionItem> {
+  return isLocalMode() ? localUpdateSubscription(id, input) : apiPut<SubscriptionItem>(`/subscriptions/${encodeURIComponent(id)}`, input);
+}
+
+export async function deleteSubscription(id: string): Promise<void> {
+  if (isLocalMode()) {
+    localDeleteSubscription(id);
+    return;
+  }
+  await apiDelete<void>(`/subscriptions/${encodeURIComponent(id)}`);
 }
 
 /** Reminder settings live on the server, so local mode reports them as unavailable. */

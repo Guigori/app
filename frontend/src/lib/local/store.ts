@@ -1,7 +1,7 @@
 // Persistence for local (browser-only) mode. Everything is kept under one
 // localStorage key so "apagar meus dados" is a single removeItem.
 
-import type { Account, CardInput, Category, Transaction } from "@/types/finnos";
+import type { Account, CardInput, Category, SubscriptionItem, Transaction } from "@/types/finnos";
 
 import { getMode } from "@/lib/mode";
 
@@ -26,6 +26,7 @@ export interface LocalDb {
   categories: Category[];
   transactions: Transaction[];
   cards: LocalCard[];
+  subscriptions: SubscriptionItem[];
 }
 
 export const DEFAULT_CATEGORIES: Omit<Category, "id" | "created_at">[] = [
@@ -57,6 +58,7 @@ export function freshDb(name = "Você"): LocalDb {
     accounts: [],
     transactions: [],
     cards: [],
+    subscriptions: [],
     categories: DEFAULT_CATEGORIES.map((c) => ({ ...c, id: newId(), created_at: now })),
   };
 }
@@ -115,6 +117,7 @@ function normalizeDb(parsed: Partial<LocalDb>): LocalDb {
     categories: parsed.categories ?? [],
     transactions: parsed.transactions ?? [],
     cards: parsed.cards ?? [],
+    subscriptions: parsed.subscriptions ?? [],
   };
 }
 

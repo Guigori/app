@@ -54,6 +54,7 @@ class SubscriptionItem(BaseModel):
     recurrence: str
     next_charge: str
     active: bool
+    notes: Optional[str] = None
 
 
 class SubscriptionsOut(BaseModel):
