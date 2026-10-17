@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { createCard, deleteCard, fetchAccounts, updateCard } from "@/lib/data";
+import { createCard, deleteCard, fetchAccounts, fetchInstitutions, updateCard } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { parseAmount } from "@/lib/format";
+import { resolveInstitutionChoice, type InstitutionChoice } from "@/lib/institutionSelection";
+import { InstitutionPicker } from "@/components/accounts/InstitutionPicker";
 import { cn } from "@/lib/utils";
 import type { CardInput, CreditCard } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
@@ -33,6 +35,7 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [institution, setInstitution] = useState("");
+  const [institutionChoice, setInstitutionChoice] = useState<InstitutionChoice>("new");
   const [color, setColor] = useState(COLORS[0]);
   const [limitRaw, setLimitRaw] = useState("");
   const [closingDay, setClosingDay] = useState("20");
@@ -43,6 +46,8 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
 
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, enabled: open, staleTime: 60_000 });
   const accounts = accountsQuery.data ?? [];
+  const institutionsQuery = useQuery({ queryKey: ["institutions"], queryFn: fetchInstitutions, enabled: open });
+  const institutions = institutionsQuery.data ?? [];
 
   useEffect(() => {
     if (!open) return;
@@ -50,6 +55,7 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
     if (card) {
       setName(card.name);
       setInstitution(card.institution);
+      setInstitutionChoice(card.institution_id ?? (card.institution ? "new" : "none"));
       setColor(card.color);
       setLimitRaw(String(card.limit));
       setClosingDay(String(card.closing_day));
@@ -59,6 +65,7 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
     } else {
       setName("");
       setInstitution("");
+      setInstitutionChoice("new");
       setColor(COLORS[0]);
       setLimitRaw("");
       setClosingDay("20");
@@ -69,11 +76,16 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
   }, [open, card]);
 
   const mutation = useMutation({
-    mutationFn: (input: CardInput) => (card ? updateCard(card.id, input) : createCard(input)),
+    mutationFn: async (input: CardInput) => {
+      const resolved = await resolveInstitutionChoice(institutionChoice, input.institution, institutions);
+      const payload = { ...input, ...resolved };
+      return card ? updateCard(card.id, payload) : createCard(payload);
+    },
     onSuccess: async () => {
       toast.success(card ? "Cartão atualizado." : "Cartão cadastrado.");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["cards"] }),
+        queryClient.invalidateQueries({ queryKey: ["institutions"] }),
         queryClient.invalidateQueries({ queryKey: ["notifications"] }),
       ]);
       onOpenChange(false);
@@ -93,6 +105,7 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
     mutation.mutate({
       name: name.trim(),
       institution: institution.trim(),
+      institution_id: institutionChoice !== "new" && institutionChoice !== "none" ? institutionChoice : null,
       color,
       limit,
       closing_day: closing,
@@ -132,17 +145,9 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
                 data-testid="card-name-input"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="card-institution">Banco</Label>
-              <Input
-                id="card-institution"
-                value={institution}
-                onChange={(e) => setInstitution(e.target.value)}
-                placeholder="Ex.: Nubank"
-                maxLength={60}
-                data-testid="card-institution-input"
-              />
-            </div>
+            <InstitutionPicker institutions={institutions} choice={institutionChoice} name={institution}
+              onChoice={value => { setInstitutionChoice(value); if (value === "none") setInstitution(""); else if (value !== "new") setInstitution(institutions.find(item => item.id === value)?.name ?? ""); }}
+              onName={setInstitution} label="Instituição emissora" />
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
