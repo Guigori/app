@@ -5,6 +5,7 @@ import { Check, Eye, EyeOff, Loader2, MonitorSmartphone } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { beginSession, endSession } from "@/lib/session";
+import { destinationAfterAuthentication, startOnboarding } from "@/lib/onboarding";
 import { disableLocalMode, enableLocalMode, enableDemoMode } from "@/lib/mode";
 import type { User } from "@/types/finnos";
 import { AuthLayout } from "@/components/layout/AuthLayout";
@@ -44,7 +45,7 @@ export default function Login() {
     onSuccess: async () => {
       disableLocalMode();
       await beginSession();
-      navigate("/", { replace: true });
+      navigate(await destinationAfterAuthentication(), { replace: true });
     },
     onError: (error) => { setLoginSucceeded(false); setFormError(emailSessionError(error)); },
   });
@@ -87,10 +88,10 @@ export default function Login() {
             <SocialAuthButtons onGoogle={async () => {
                 setFormError(null);
                 try {
-                  await openGoogleSession();
+                  await openGoogleSession(startOnboarding);
                   disableLocalMode();
                   await beginSession();
-                  navigate("/", { replace: true });
+                  navigate(await destinationAfterAuthentication(), { replace: true });
                 } catch (error) {
                   setFormError(googleSessionError(error));
                 }
