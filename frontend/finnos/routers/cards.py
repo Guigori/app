@@ -36,6 +36,7 @@ async def _build(doc: dict, txs: List[dict], accounts: dict) -> CardOut:
         id=doc["id"],
         name=doc["name"],
         institution=doc.get("institution", ""),
+        institution_id=doc.get("institution_id"),
         color=doc.get("color", "#5B3FE4"),
         limit=round(limit, 2),
         closing_day=doc["closing_day"],
