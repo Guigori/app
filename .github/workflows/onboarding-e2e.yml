@@ -1,4 +1,4 @@
-name: FINNOS Onboarding E2E
+name: FINNOS UI E2E
 
 on:
   pull_request:
@@ -8,6 +8,11 @@ on:
       - "frontend/src/lib/onboarding.ts"
       - "frontend/src/components/RequireAuth.tsx"
       - "tests/e2e/onboarding.spec.ts"
+      - "tests/e2e/wallet.spec.ts"
+      - "frontend/src/pages/Accounts.tsx"
+      - "frontend/src/components/accounts/**"
+      - "frontend/src/lib/institutionGroups.ts"
+      - "frontend/src/lib/local/engine.ts"
       - "tests/playwright.config.ts"
       - ".github/workflows/onboarding-e2e.yml"
   workflow_dispatch:
@@ -17,7 +22,7 @@ permissions:
 
 jobs:
   onboarding:
-    name: Desktop and mobile wizard
+    name: Desktop and mobile onboarding and wallet
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -43,6 +48,6 @@ jobs:
           done
           cat /tmp/finnos-vite.log
           exit 1
-      - name: Run onboarding end-to-end tests
+      - name: Run onboarding and wallet end-to-end tests
         working-directory: tests
-        run: npx playwright test e2e/onboarding.spec.ts --project=desktop --project=mobile
+        run: npx playwright test e2e/onboarding.spec.ts e2e/wallet.spec.ts --project=desktop --project=mobile

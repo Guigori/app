@@ -4,6 +4,7 @@ import { freshDb, writeDb } from "@/lib/local/store";
 import { todayISO } from "@/lib/format";
 import {
   localCalendar, localCreateAccount, localCreateCard, localCreateTransaction,
+  localDeleteAccount, localCreateInstitution, localListInstitutions,
   localDashboard, localDeleteCard, localInvoice, localListAccounts, localListCards,
   localPayInvoice,
 } from "@/lib/local/engine";
@@ -72,4 +73,22 @@ test("invalid new sub-cent installment schedules never enter local history", () 
     adjusted_value: null, attachment: null, notes: null,
   })).toThrow(/R\$ 0,01/);
   expect(localListCards()[0].used).toBe(0);
+});
+
+
+test("local wallet refuses account deletion with only a linked credit card", () => {
+  const { account } = setup();
+  expect(() => localDeleteAccount(account.id)).toThrow(/cartão de crédito/);
+});
+
+test("local institutions are isolated records and cannot be deleted while used", () => {
+  setup();
+  const bank = localCreateInstitution({ name: "Banco Próprio", color: "#5B35FF" });
+  expect(localListInstitutions().map(item => item.id)).toContain(bank.id);
+  const checking = localCreateAccount({
+    name: "Conta do banco", institution: bank.name, institution_id: bank.id,
+    type: "corrente", color: "#070F52", initial_balance: 50, active: true,
+  });
+  expect(checking.institution_id).toBe(bank.id);
+  expect(() => localCreateInstitution({ name: "banco próprio", color: "#5B35FF" })).toThrow(/já cadastrada/);
 });

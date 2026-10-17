@@ -26,6 +26,7 @@ class AccountOut(BaseModel):
     id: str
     name: str
     institution: str = ""
+    institution_id: Optional[str] = None
     type: AccountType = "corrente"
     color: str = "#070F52"
     initial_balance: Money = 0.0
@@ -39,6 +40,7 @@ class AccountOut(BaseModel):
 class AccountIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     institution: str = Field(default="", max_length=60)
+    institution_id: Optional[str] = Field(default=None, max_length=1500)
     type: AccountType = "corrente"
     color: str = Field(default="#070F52", pattern=HEX_PATTERN)
     initial_balance: Money = Field(default=0.0, ge=0)

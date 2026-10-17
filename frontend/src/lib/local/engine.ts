@@ -133,6 +133,34 @@ function sortedTransactions(db: LocalDb): Transaction[] {
   );
 }
 
+// --- Institutions -----------------------------------------------------------
+
+export function localListInstitutions() {
+  return readDb().institutions;
+}
+
+export function localCreateInstitution(input: import("@/types/finnos").InstitutionInput) {
+  const db = readDb();
+  const name = input.name.trim().replace(/\s+/g, " ");
+  if (name.length < 2 || db.institutions.some(inst => inst.name.trim().toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR"))) {
+    throw new Error("Instituição inválida ou já cadastrada.");
+  }
+  const institution = { id: newId(), name, color: input.color, created_at: new Date().toISOString() };
+  db.institutions.push(institution);
+  writeDb(db);
+  return institution;
+}
+
+export function localDeleteInstitution(id: string) {
+  const db = readDb();
+  if (db.accounts.some(a => a.institution_id === id) || db.cards.some(c => c.institution_id === id)) {
+    throw new Error("Instituição possui contas ou cartões vinculados.");
+  }
+  if (!db.institutions.some(i => i.id === id)) throw new Error("Instituição não encontrada.");
+  db.institutions = db.institutions.filter(i => i.id !== id);
+  writeDb(db);
+}
+
 // --- Accounts ---------------------------------------------------------------
 
 export function localListAccounts(): Account[] {
@@ -152,6 +180,7 @@ export function localGetAccount(id: string): AccountDetail {
 
 export function localCreateAccount(input: AccountInput): Account {
   const db = readDb();
+  if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
   const account: Account = {
     ...input,
     id: newId(),
@@ -169,6 +198,7 @@ export function localUpdateAccount(id: string, input: AccountInput): Account {
   const db = readDb();
   const index = db.accounts.findIndex((a) => a.id === id);
   if (index < 0) throw new Error("Conta não encontrada.");
+  if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
   db.accounts[index] = { ...db.accounts[index], ...input };
   writeDb(db);
   return enrichedAccounts(db).find((a) => a.id === id)!;
@@ -183,6 +213,7 @@ export function localDeleteAccount(id: string): void {
     );
   }
   if (db.subscriptions.some(sub => sub.account_id === id)) throw new Error("Conta vinculada a uma assinatura.");
+  if (db.cards.some(card => card.payment_account_id === id)) throw new Error("Conta vinculada a um cartão de crédito. Altere a conta de pagamento do cartão antes de excluir.");
   db.accounts = db.accounts.filter((a) => a.id !== id);
   writeDb(db);
 }
@@ -866,6 +897,7 @@ export function localListCards(): CreditCard[] {
 
 export function localCreateCard(input: CardInput): CreditCard {
   const db = readDb();
+  if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
   const card: LocalCard = { ...input, id: newId(), created_at: new Date().toISOString() };
   db.cards = [...db.cards, card];
   writeDb(db);
@@ -879,6 +911,7 @@ export function localUpdateCard(id: string, input: CardInput): CreditCard {
   if (existing.paid_cycles && Object.keys(existing.paid_cycles).length && (existing.closing_day !== input.closing_day || existing.due_day !== input.due_day)) {
     throw new Error("Não é possível mudar o ciclo de um cartão com pagamentos registrados.");
   }
+  if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
   const card: LocalCard = { ...existing, ...input };
   db.cards = db.cards.map((c) => (c.id === id ? card : c));
   writeDb(db);

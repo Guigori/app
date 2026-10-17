@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Pencil, Trash2, Wallet } from "lucide-react";
 import { fetchAccount } from "@/lib/data";
+import { signedAccountMovement } from "@/lib/accountMovement";
 import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatDate, formatHiddenBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -22,17 +23,6 @@ interface AccountDetailDialogProps {
   account: Account | null;
   onEdit: (account: Account) => void;
   onDelete: (account: Account) => void;
-}
-
-interface AccountDetail {
-  account: Account;
-  transactions: {
-    id: string;
-    name: string;
-    date: string;
-    value: number;
-    type: "receita" | "despesa" | "transferencia";
-  }[];
 }
 
 export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDelete }: AccountDetailDialogProps) {
@@ -108,10 +98,10 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
                       <p
                         className={cn(
                           "shrink-0 text-sm font-semibold tabular-nums",
-                          t.type === "receita" ? "text-income" : "text-expense",
+                          signedAccountMovement(account.id, t) >= 0 ? "text-income" : "text-expense",
                         )}
                       >
-                        {hidden ? formatHiddenBRL() : formatBRL(t.type === "receita" ? t.value : -t.value)}
+                        {hidden ? formatHiddenBRL() : formatBRL(signedAccountMovement(account.id, t))}
                       </p>
                     </li>
                   ))}

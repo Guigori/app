@@ -15,6 +15,7 @@ HEX_PATTERN = r"^#[0-9a-fA-F]{6}$"
 class CardIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     institution: str = Field(default="", max_length=60)
+    institution_id: Optional[str] = Field(default=None, max_length=1500)
     color: str = Field(default="#5B3FE4", pattern=HEX_PATTERN)
     limit: Money = Field(gt=0)
     closing_day: int = Field(ge=1, le=31)
@@ -27,6 +28,7 @@ class CardOut(BaseModel):
     id: str
     name: str
     institution: str
+    institution_id: Optional[str] = None
     color: str
     limit: Money
     closing_day: int

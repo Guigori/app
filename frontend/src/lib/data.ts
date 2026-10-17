@@ -12,6 +12,9 @@ import { cacheSet, cachedFetch } from "@/lib/offline/accountCache";
 import {
   localClearData,
   localCreateAccount,
+  localListInstitutions,
+  localCreateInstitution,
+  localDeleteInstitution,
   localCreateCategory,
   localCreateTransaction,
   localDashboard,
@@ -49,6 +52,8 @@ import type {
   Account,
   AccountDetail,
   AccountInput,
+  Institution,
+  InstitutionInput,
   BudgetSummary,
   BudgetSuggestion,
   BudgetCycle,
@@ -260,6 +265,30 @@ export async function createBudgetCycle(payload: BudgetCyclePayload): Promise<Bu
 }
 export async function updateBudgetCycle(id: string, payload: BudgetCyclePayload): Promise<BudgetCycle> {
   return apiPut<BudgetCycle>(`/budgets/${id}`, payload);
+}
+
+// --- Institutions -----------------------------------------------------------
+
+export async function fetchInstitutions(): Promise<Institution[]> {
+  if (isLocalMode()) return localListInstitutions();
+  try {
+    return await cachedFetch("institutions", () => apiGet<Institution[]>("/institutions"));
+  } catch (error) {
+    // A legacy account can already have cached accounts but no institution catalog yet.
+    // Offline fallback is display-only; never hide an online authentication/API error.
+    if (!navigator.onLine && error instanceof Error && error.message === "FINNOS_OFFLINE_NO_CACHE") return [];
+    throw error;
+  }
+}
+
+export async function createInstitution(input: InstitutionInput): Promise<Institution> {
+  if (isLocalMode()) return localCreateInstitution(input);
+  return apiPost<Institution>("/institutions", input);
+}
+
+export async function deleteInstitution(id: string): Promise<void> {
+  if (isLocalMode()) return localDeleteInstitution(id);
+  return apiDelete<void>(`/institutions/${encodeURIComponent(id)}`);
 }
 
 // --- Accounts ---------------------------------------------------------------

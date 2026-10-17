@@ -157,7 +157,17 @@ def atomic(db, uid, action):
 
 
 def validate_refs(db, uid, name, doc, transaction):
+    from finnos.lib.institutions import institution_key
     fields = []
+    if name in {"accounts", "cards"}:
+        fields.append(("institution_id", "institutions"))
+    if name == "institutions":
+        candidate = institution_key(doc.get("name", ""))
+        if not candidate:
+            raise HTTPException(422, "Nome da instituição inválido.")
+        if any(institution_key(item.get("name", "")) == candidate and item["id"] != doc["id"]
+               for item in rows(db, uid, "institutions", transaction)):
+            raise HTTPException(409, "Esta instituição já está cadastrada.")
     if name == "transactions":
         fields = [
             ("account_id", "accounts"),
@@ -166,7 +176,7 @@ def validate_refs(db, uid, name, doc, transaction):
             ("card_id", "cards"),
         ]
     if name == "cards":
-        fields = [("payment_account_id", "accounts")]
+        fields.append(("payment_account_id", "accounts"))
     if name == "transactions":
         if doc.get("invoice_payment"):
             raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
@@ -210,6 +220,11 @@ def validate_refs(db, uid, name, doc, transaction):
             raise HTTPException(
                 400, "Referência financeira inválida para este usuário."
             )
+    if name in {"accounts", "cards"} and doc.get("institution_id"):
+        institution_ref = root(db, uid).collection("institutions").document(resource_id(doc["institution_id"]))
+        institution = institution_ref.get(transaction=transaction)
+        if institution.exists:
+            doc["institution"] = institution.to_dict()["name"]
 
 
 class Cursor:
@@ -411,6 +426,14 @@ class Collection:
                     }[self.name]
                     if any(sub.get(subscription_field) == doc["id"] for sub in subscriptions):
                         raise HTTPException(409, "Registro possui assinatura vinculada.")
+                if self.name == "institutions" and any(
+                    row.get("institution_id") == doc["id"]
+                    for kind in ("accounts", "cards")
+                    for row in rows(db, uid, kind, tr)
+                ):
+                    raise HTTPException(409, "Instituição possui contas ou cartões vinculados.")
+                if self.name == "accounts":
+                    tr.delete(root(db, uid).collection("accountPaymentMethods").document(resource_id(doc["id"])))
                 tr.delete(
                     root(db, uid).collection(self.name).document(resource_id(doc["id"]))
                 )
@@ -434,6 +457,7 @@ db = SimpleNamespace(
         name: Collection(name)
         for name in [
             "accounts",
+            "institutions",
             "categories",
             "transactions",
             "cards",
