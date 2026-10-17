@@ -138,3 +138,57 @@ async def delete_account(account_id: str, user: dict = Depends(require_user)) ->
     result = await db.accounts.delete_one({"id": account_id, "user_id": user["id"]})
     if not result.deleted_count:
         raise HTTPException(status_code=404, detail="Conta não encontrada.")
+
+
+# Payment methods are read and written only through the verified FastAPI session.
+# Existing users/{uid}/accountPaymentMethods/{accountId} documents are reused.
+from typing import Literal
+from pydantic import BaseModel, Field, field_validator
+from starlette.concurrency import run_in_threadpool
+from finnos.lib import db as store
+
+PaymentMethod = Literal["Pix", "Débito", "Dinheiro", "Boleto"]
+
+class PaymentMethodsPayload(BaseModel):
+    methods: list[PaymentMethod] = Field(max_length=4)
+
+    @field_validator("methods")
+    @classmethod
+    def unique_methods(cls, methods):
+        if len(methods) != len(set(methods)):
+            raise ValueError("Formas de pagamento duplicadas.")
+        return methods
+
+def _default_methods(account):
+    return ["Dinheiro"] if account.get("type") == "carteira" else ["Pix", "Débito", "Boleto"]
+
+@router.get("/{account_id}/payment-methods")
+async def read_payment_methods(account_id: str, user: dict = Depends(require_user)):
+    account = await db.accounts.find_one({"id": account_id, "user_id": user["id"]})
+    if not account:
+        raise HTTPException(404, "Conta não encontrada.")
+    def read():
+        ref = store.root(store.client(), user["id"]).collection("accountPaymentMethods").document(store.resource_id(account_id))
+        snapshot = ref.get()
+        saved = (snapshot.to_dict() or {}) if snapshot.exists else {}
+        values = saved.get("methods", _default_methods(account))
+        return {"methods": [m for m in ("Pix", "Débito", "Dinheiro", "Boleto") if isinstance(values, list) and m in values]}
+    return await run_in_threadpool(read)
+
+@router.put("/{account_id}/payment-methods")
+async def change_payment_methods(
+    account_id: str, payload: PaymentMethodsPayload, user: dict = Depends(require_user),
+):
+    uid = user["id"]
+    def write():
+        client = store.client()
+        def action(tr):
+            parent = store.root(client, uid)
+            account = parent.collection("accounts").document(store.resource_id(account_id))
+            if not account.get(transaction=tr).exists:
+                raise HTTPException(404, "Conta não encontrada.")
+            ref = parent.collection("accountPaymentMethods").document(store.resource_id(account_id))
+            tr.set(ref, {"methods": payload.methods, "updatedAt": datetime.now(timezone.utc).isoformat()})
+            return {"methods": payload.methods}
+        return store.atomic(client, uid, action)
+    return await run_in_threadpool(write)
