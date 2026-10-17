@@ -47,6 +47,7 @@ export interface Account {
 export interface AccountInput {
   name: string;
   institution: string;
+  institution_id?: string | null;
   type: AccountType;
   color: string;
   initial_balance: number;
