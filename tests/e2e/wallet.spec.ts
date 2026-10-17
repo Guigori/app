@@ -48,3 +48,21 @@ test("card issuer stays distinct from the linked payment account's bank", async 
   await expect(card).toContainText("Conta Inter");
   await expect(page.locator("[data-testid^=wallet-group-]")).toHaveCount(2);
 });
+
+
+test("manages standalone institutions and refuses silent account creation", async ({ page }) => {
+  await page.goto("/contas");
+  await page.getByRole("button", { name: "Instituições", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Instituições financeiras" });
+  await expect(dialog).toBeVisible();
+  await dialog.locator("#institution-create-name").fill("Banco Novo");
+  await dialog.getByRole("button", { name: "Adicionar" }).click();
+  await expect(dialog.getByText("Banco Novo")).toBeVisible();
+  await dialog.getByRole("button", { name: "Fechar" }).click();
+  await expect(page.getByTestId("wallet-institutions")).toBeVisible();
+  await expect(page.getByTestId("wallet-balance")).toContainText("0,00");
+  await page.getByRole("button", { name: "Instituições", exact: true }).click();
+  await dialog.getByRole("button", { name: "Excluir instituição Banco Novo" }).click();
+  await dialog.getByRole("button", { name: "Confirmar exclusão" }).click();
+  await expect(dialog.getByText("Banco Novo")).toHaveCount(0);
+});
