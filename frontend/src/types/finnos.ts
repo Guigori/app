@@ -17,6 +17,18 @@ export interface User {
   auth_providers?: string[];
 }
 
+export interface Institution {
+  id: string;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+export interface InstitutionInput {
+  name: string;
+  color: string;
+}
+
 export interface Account {
   id: string;
   name: string;
