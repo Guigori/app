@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { apiGet } from "@/lib/api";
 import { createEmailAccount, completeEmailVerification, resendAccountVerification, emailSessionError } from "@/lib/emailSession";
 import { beginSession } from "@/lib/session";
+import { destinationAfterAuthentication, startOnboarding } from "@/lib/onboarding";
 import { disableLocalMode, getMode } from "@/lib/mode";
 import type { User } from "@/types/finnos";
 import { AuthLayout } from "@/components/layout/AuthLayout";
@@ -50,7 +51,7 @@ export default function Register() {
       if (getMode() === "local") toast.info("Seus dados locais continuam neste aparelho. A transferência para a conta ainda não está disponível.");
       disableLocalMode();
       await beginSession();
-      navigate("/onboarding", { replace: true });
+      navigate(await destinationAfterAuthentication(true), { replace: true });
     },
     onError: (error) => setFormError(emailSessionError(error)),
   });
@@ -98,10 +99,10 @@ export default function Register() {
               <SocialAuthButtons onGoogle={async () => {
                 setFormError(null);
                 try {
-                  await openGoogleSession();
+                  await openGoogleSession(startOnboarding);
                   disableLocalMode();
                   await beginSession();
-                  navigate("/onboarding", { replace: true });
+                  navigate(await destinationAfterAuthentication(), { replace: true });
                 } catch (error) {
                   setFormError(googleSessionError(error));
                 }
