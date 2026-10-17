@@ -271,7 +271,14 @@ export async function updateBudgetCycle(id: string, payload: BudgetCyclePayload)
 
 export async function fetchInstitutions(): Promise<Institution[]> {
   if (isLocalMode()) return localListInstitutions();
-  return cachedFetch("institutions", () => apiGet<Institution[]>("/institutions"));
+  try {
+    return await cachedFetch("institutions", () => apiGet<Institution[]>("/institutions"));
+  } catch (error) {
+    // A legacy account can already have cached accounts but no institution catalog yet.
+    // Offline fallback is display-only; never hide an online authentication/API error.
+    if (!navigator.onLine && error instanceof Error && error.message === "FINNOS_OFFLINE_NO_CACHE") return [];
+    throw error;
+  }
 }
 
 export async function createInstitution(input: InstitutionInput): Promise<Institution> {
