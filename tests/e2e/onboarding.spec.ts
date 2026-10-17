@@ -3,6 +3,9 @@ import { expect, test } from "@playwright/test";
 test.beforeEach(async ({ page }) => {
   // Device-only mode tests the real wizard UI without a Firebase test account.
   await page.addInitScript(() => window.localStorage.setItem("finnos:mode", "local"));
+  // In the isolated Vite test server, absent Firebase cookies must be a real 401,
+  // not a network error. The client then selects the requested local identity.
+  await page.route("**/api/auth/me", route => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ detail: "Não autenticado." }) }));
 });
 
 test("completes all six onboarding steps without inserting a fake transaction", async ({ page }) => {
