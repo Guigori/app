@@ -98,3 +98,38 @@ Com dados artificiais:
 ## Decisão pendente
 
 O usuário pediu **auditoria/testes/relatório** do Módulo 02. **Aguardar aprovação das correções funcionais antes de implementá-las**. A PR #36 contém apenas testes, simulador sem escrita e documentação; permanecer em rascunho.
+
+
+---
+
+## Implementação autorizada — Módulo 02
+
+O proprietário aprovou as correções funcionais após a auditoria. Os 63% acima são um marco histórico pré-implementação, não o status atual desta branch.
+
+### Correções codificadas
+
+- **Integridade local:** exclusão de conta bloqueada quando é conta de pagamento de cartão. Preferências locais são limpas após exclusão bem-sucedida.
+- **Transferências:** no detalhamento, valor positivo para conta destino e negativo para origem, sem alterar lançamentos persistidos.
+- **Privacidade:** o novo WalletInstitutions aplica o controle ocultar valores aos saldos geral e por banco, entradas, saídas, faturas e limites.
+- **Instituições por titular:** GET/POST/DELETE /api/institutions, documentos sob users/{uid}/institutions/{id}, com nomes normalizados, IDs gerados no servidor, autenticação, proteção de origem e impedimento de exclusão de instituições vinculadas.
+- **Compatibilidade:** institution_id opcional em contas/cartões; registros legados continuam disponíveis sem reescrita financeira.
+- **Emissor independente do pagador:** instituição emissora do cartão diferente da conta de pagamento quando necessário.
+- **Carteira institucional:** /contas apresenta grupos de instituições com contas, cartões, subtotais e links às faturas. Limite de crédito NÃO entra na soma do saldo.
+- **Preferências protegidas pela API:** GET/PUT /api/accounts/{id}/payment-methods reaproveita users/{uid}/accountPaymentMethods/{id} sem acesso direto pelo Firebase SDK Web. Valida UID e método de pagamento, faz remoção do documento na mesma transação de exclusão da conta.
+- **Local e offline:** instituições no banco local; bases antigas normalizadas. Se o usuário estiver OFFLINE e não tiver cache novo do catálogo, continua visualizando as contas; autenticação/API ONLINE falham explicitamente, sem mascarar erros.
+
+### Evidências automatizadas
+
+- Backend: isolamento por UID, proteção de origem, centavos, CRUD e exclusões, emissor independente de conta pagadora, reutilização de preferências antigas e validação das novas.
+- Frontend: tipagem, lint, build, testes de agrupamento por ID/nome, direção de transferências e integridade do modo local.
+- Navegador (Playwright Chromium): fluxos de onboarding e Carteira em viewport desktop/mobile, incluindo saldo oculto e cartão de instituição diferente de sua conta pagadora.
+- CodeQL Python e JavaScript/TypeScript; adaptador Firestore.
+- Esses testes usam Firestore simulado ou modo local, NÃO contas reais nem Safari físico. Não comprovam as regras efetivas de segurança do Firebase Console.
+
+### Migração conservadora e limitações
+
+Nenhum registro financeiro real do Firestore foi modificado. O simulador de associação de instituições permanece em somente leitura e a UI pode apresentar contas/cartões antigos pela igualdade estrita do nome normalizado. O vínculo persistente de cada registro antigo só é criado quando o proprietário salva explicitamente esse registro com uma instituição, ou por migração auditada posterior.
+
+Para uma migração em massa: inventário por UID, backup verificável, resolução humana de aliases como Inter e Banco Inter, gravar IDs sem alterar saldos/faturas/transações, comparar centavos, testar rollback e só então aplicar após aprovação e homologação no Preview.
+
+**Prontidão técnica provisória do Módulo 02: ~90%.** Faltam regras reais Firebase, Preview autenticado, Safari físico e migração persistente com backup/rollback. A estimativa não é cobertura de código nem conclusão global do FINNOS. A PR de implementação permanece em rascunho e não houve publicação em produção.
