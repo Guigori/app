@@ -89,7 +89,7 @@ export const BOTTOM_LEFT: NavItem[] = [
 
 export const BOTTOM_RIGHT: NavItem[] = [
   { to: "/fluxo", label: "Fluxo", icon: ArrowUpDown, slug: "fluxo" },
-  { to: "/contas", label: "Contas", icon: Wallet, slug: "contas" },
+  { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
 ];
 
 export const PAGE_TITLES: Record<string, string> = {
