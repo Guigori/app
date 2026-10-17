@@ -25,11 +25,12 @@ describe("wallet institution grouping", () => {
     const groups = walletGroups(
       [account("a1", "Conta Inter", "Banco Inter", 400, "inter")],
       [card("c1", "Nubank", "nb", "a1")], institutions);
-    const byId = Object.fromEntries(groups.map(group => [group.institutionId,group]));
-    expect(byId.nb.cards.map(card => card.id)).toEqual(["c1"]);
-    expect(byId.inter.accounts.map(account => account.id)).toEqual(["a1"]);
-    expect(byId.nb.balanceCents).toBe(0);
-    expect(byId.inter.balanceCents).toBe(40000);
+    const issuerGroup = groups.find(group => group.institutionId === "nb");
+    const payerGroup = groups.find(group => group.institutionId === "inter");
+    expect(issuerGroup?.cards.map(item => item.id)).toEqual(["c1"]);
+    expect(payerGroup?.accounts.map(item => item.id)).toEqual(["a1"]);
+    expect(issuerGroup?.balanceCents).toBe(0);
+    expect(payerGroup?.balanceCents).toBe(40000);
   });
   it("does not merge aliases or invent bank IDs for names not present", () => {
     expect(institutionKey("  BANCO  Inter ")).toBe("banco inter");
