@@ -431,3 +431,104 @@ def test_live_validation_cannot_mint_arbitrary_user_tokens(finance, monkeypatch)
         ).status_code
         == 404
     )
+
+
+# --- Module 02 wallet audit: HTTP contracts against isolated Firestore fake ---
+
+def test_wallet_02_account_creation_edit_and_cent_storage(finance):
+    client, active, db = finance
+    response = client.post("/api/accounts", json={
+        "name": "Conta principal", "institution": "Banco Teste",
+        "type": "corrente", "initial_balance": 70.35,
+        "color": "#070F52", "active": True
+    })
+    assert response.status_code == 201, response.text
+    acc = response.json()
+    original_id, original_created = acc["id"], acc["created_at"]
+    assert acc["institution"] == "Banco Teste" and acc["balance"] == 70.35
+    stored = next(v for k, v in db.data.items() if k[-2:] == ("accounts", original_id))
+    assert stored["initial_balance_cents"] == 7035
+    assert "initial_balance" not in stored
+
+    assert tx(client, original_id, value=3.05).status_code == 201
+    response = client.put(f"/api/accounts/{original_id}", json={
+        "name": "Conta renomeada", "institution": "Banco Teste",
+        "type": "digital", "initial_balance": 70.35,
+        "color": "#4B2CFF", "active": True,
+    })
+    assert response.status_code == 200, response.text
+    updated = response.json()
+    assert updated["id"] == original_id
+    assert updated["created_at"] == original_created
+    assert updated["balance"] == 73.40
+    assert updated["institution"] == "Banco Teste"
+    assert len(client.get("/api/transactions").json()) == 1
+
+
+def test_wallet_02_transfers_are_balanced_and_pending_are_excluded(finance):
+    client, _, _ = finance
+    first = account(client, "Conta A", 150.05)
+    second = account(client, "Conta B", 200.10)
+    payload = dict(type="transferencia", to_account_id=second["id"], value=32.20)
+    assert tx(client, first["id"], **payload).status_code == 201
+    assert tx(client, first["id"], **{**payload, "value": 99, "status": "pendente"}).status_code == 201
+    assert tx(client, first["id"], **{**payload, "value": 44, "status": "agendado"}).status_code == 201
+    balances = {a["name"]: a["balance"] for a in client.get("/api/accounts").json()}
+    assert balances == {"Conta A": 117.85, "Conta B": 232.30}
+    assert round(sum(balances.values()), 2) == 350.15
+    month = client.get("/api/dashboard?month=2026-10").json()
+    assert month["income"] == month["expense"] == 0
+    assert month["total_balance"] == 350.15
+
+
+def test_wallet_02_credit_purchase_changes_invoice_not_cash_balance(finance):
+    client, _, _ = finance
+    source = account(client, "Conta", 100)
+    card_result = client.post("/api/cards", json={
+        "name": "Crédito", "institution": "Banco Teste",
+        "limit": 500, "closing_day": 20, "due_day": 7,
+        "payment_account_id": source["id"],
+    })
+    assert card_result.status_code == 201, card_result.text
+    card_id = card_result.json()["id"]
+    expense = tx(client, source["id"], name="Mercado", type="despesa", card_id=card_id, value=40)
+    assert expense.status_code == 201, expense.text
+    assert client.get("/api/accounts").json()[0]["balance"] == 100
+    assert client.get("/api/dashboard?month=2026-10").json()["expense"] == 40
+    cards = client.get("/api/cards").json()
+    assert cards[0]["used"] == 40
+    assert cards[0]["payment_account_id"] == source["id"]
+
+
+def test_wallet_02_deleting_account_linked_only_to_card_is_rejected(finance):
+    client, _, _ = finance
+    source = account(client, "Conta", 100)
+    created = client.post("/api/cards", json={
+        "name": "Crédito", "limit": 500, "closing_day": 20, "due_day": 7,
+        "payment_account_id": source["id"],
+    })
+    assert created.status_code == 201, created.text
+    assert client.delete("/api/accounts/" + source["id"]).status_code == 409
+    assert len(client.get("/api/accounts").json()) == 1
+    assert client.delete("/api/cards/" + created.json()["id"]).status_code == 204
+    assert client.delete("/api/accounts/" + source["id"]).status_code == 204
+
+
+def test_wallet_02_cross_uid_account_and_card_payment_refs_are_denied(finance):
+    client, active, _ = finance
+    own = account(client, "Pessoa A", 100)
+    active.update(uid="test-b", email="b@example.invalid")
+    foreign = account(client, "Pessoa B", 200)
+    assert client.get(f"/api/accounts/{own['id']}").status_code == 404
+    assert client.put(f"/api/accounts/{own['id']}", json={
+        "name": "Invasão", "initial_balance": 100,
+    }).status_code == 404
+    assert client.post("/api/cards", json={
+        "name": "Cartão inválido", "limit": 100, "closing_day": 20, "due_day": 7,
+        "payment_account_id": own["id"]
+    }).status_code == 400
+    assert tx(client, foreign["id"], type="transferencia",
+              to_account_id=own["id"]).status_code == 400
+    assert len(client.get("/api/accounts").json()) == 1
+    active.update(uid="test-a", email="a@example.invalid")
+    assert len(client.get("/api/accounts").json()) == 1
