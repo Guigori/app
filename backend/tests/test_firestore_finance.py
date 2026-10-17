@@ -582,3 +582,88 @@ def test_wallet_02_dry_run_rejects_duplicate_source_identifiers():
         dry_run_institution_groups(
             [{"id": "a1", "institution": "Banco"}, {"id": "a1", "institution": "Outro"}], []
         )
+
+
+# --- Module 02: user-owned institutions and server-verified payment preferences ---
+
+def test_wallet_02_institution_issuer_and_payment_account_are_distinct(finance):
+    client, active, db = finance
+    bank_a = client.post("/api/institutions", json={"name": "Nubank"}).json()
+    bank_b = client.post("/api/institutions", json={"name": "Banco Inter"}).json()
+    assert bank_a["id"] != bank_b["id"]
+    assert client.post("/api/institutions", json={"name": "  nubank  "}).status_code == 409
+    account_response = client.post("/api/accounts", json={
+        "name": "Conta Inter", "institution": "texto arbitrário",
+        "institution_id": bank_b["id"], "initial_balance": 100.25
+    })
+    assert account_response.status_code == 201, account_response.text
+    account_row = account_response.json()
+    assert account_row["institution"] == "Banco Inter"
+    assert account_row["institution_id"] == bank_b["id"]
+    card_response = client.post("/api/cards", json={
+        "name": "Cartão Nubank", "institution": "não confiável",
+        "institution_id": bank_a["id"], "payment_account_id": account_row["id"],
+        "limit": 1000, "closing_day": 20, "due_day": 7
+    })
+    assert card_response.status_code == 201, card_response.text
+    card_row = card_response.json()
+    assert card_row["institution"] == "Nubank"
+    assert card_row["institution_id"] == bank_a["id"]
+    assert card_row["payment_account_id"] == account_row["id"]
+    assert client.delete("/api/institutions/" + bank_a["id"]).status_code == 409
+    assert client.delete("/api/institutions/" + bank_b["id"]).status_code == 409
+    assert client.get("/api/dashboard?month=2026-10").json()["total_balance"] == 100.25
+    identity = active
+    identity.update(uid="test-b", email="b@example.invalid")
+    assert client.get("/api/institutions").json() == []
+    assert client.post("/api/accounts", json={
+        "name": "Fraude", "institution_id": bank_a["id"]
+    }).status_code == 400
+    assert client.post("/api/cards", json={
+        "name": "Fraude", "institution_id": bank_b["id"],
+        "limit": 100, "closing_day": 20, "due_day": 7
+    }).status_code == 400
+    identity.update(uid="test-a", email="a@example.invalid")
+
+
+def test_wallet_02_institution_delete_unlinked_and_origin_protection(finance):
+    client, active, _ = finance
+    response = client.post("/api/institutions", json={"name": "Banco Livre"})
+    assert response.status_code == 201, response.text
+    iid = response.json()["id"]
+    bad = client.post("/api/institutions", json={"name": "Ataque"}, headers={"Origin": "https://attacker.invalid"})
+    assert bad.status_code == 403
+    assert client.delete("/api/institutions/" + iid).status_code == 204
+    assert client.delete("/api/institutions/" + iid).status_code == 404
+
+
+def test_wallet_02_payment_preferences_require_owner_and_clean_on_delete(finance):
+    client, identity, db = finance
+    acc = account(client, "Conta preferência", 10)
+    endpoint = "/api/accounts/" + acc["id"] + "/payment-methods"
+    original = client.get(endpoint)
+    assert original.status_code == 200 and original.json()["methods"] == ["Pix", "Débito", "Boleto"]
+    saved = client.put(endpoint, json={"methods": ["Pix", "Dinheiro"]})
+    assert saved.status_code == 200, saved.text
+    assert client.get(endpoint).json()["methods"] == ["Pix", "Dinheiro"]
+    key = ("users", "test-a", "accountPaymentMethods", acc["id"])
+    assert db.data[key]["methods"] == ["Pix", "Dinheiro"]
+    assert client.put(endpoint, json={"methods": ["Pix", "Pix"]}).status_code == 422
+    assert client.put(endpoint, json={"methods": ["Crédito"]}).status_code == 422
+    assert client.put(endpoint, json={"methods": ["Pix"]}, headers={"Origin": "https://attacker.invalid"}).status_code == 403
+    identity.update(uid="test-b", email="b@example.invalid")
+    assert client.get(endpoint).status_code == 404
+    assert client.put(endpoint, json={"methods": ["Pix"]}).status_code == 404
+    identity.update(uid="test-a", email="a@example.invalid")
+    assert client.delete("/api/accounts/" + acc["id"]).status_code == 204
+    assert key not in db.data
+
+
+def test_wallet_02_payment_preferences_preserve_old_firestore_document(finance):
+    client, _, db = finance
+    acc = account(client, "Conta legado", 10)
+    key = ("users", "test-a", "accountPaymentMethods", acc["id"])
+    db.data[key] = {"methods": ["Dinheiro"], "updatedAt": "2026-10-01T00:00:00Z"}
+    resp = client.get("/api/accounts/" + acc["id"] + "/payment-methods")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["methods"] == ["Dinheiro"]
