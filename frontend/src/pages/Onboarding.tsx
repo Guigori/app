@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, CheckCircle2, CreditCard, FileSpreadsheet, Landmark, Loader2, ShieldCheck, Sparkles, Upload, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, CreditCard, Landmark, Loader2, ShieldCheck, Sparkles, Upload, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { createTransaction, fetchAccounts, fetchCards, fetchCategories, fetchMe, updateMyName } from "@/lib/data";
 import { apiPost } from "@/lib/api";
 import { isLocalMode } from "@/lib/mode";
-import { emptyOnboarding, fetchOnboarding, saveOnboarding, type OnboardingPercentages } from "@/lib/onboarding";
+import { fetchOnboarding, saveOnboarding, type OnboardingPercentages } from "@/lib/onboarding";
 import type { TransactionInput } from "@/types/finnos";
 import { parseFinancialFile, type ImportRow } from "@/lib/importFinancial";
 import { ImportReview } from "@/components/onboarding/ImportReview";
@@ -224,7 +224,6 @@ export default function Onboarding() {
 
   if (!hydrated && !local) return <div className="mx-auto max-w-3xl py-16 text-center text-sm text-muted-foreground">{stateQuery.isError ? <><p>Não foi possível carregar sua configuração.</p><Button className="mt-4" onClick={() => void stateQuery.refetch()}>Tentar novamente</Button></> : "Carregando sua configuração..."}</div>;
 
-  const state = stateQuery.data ?? emptyOnboarding;
   return <div className="mx-auto max-w-3xl space-y-5 pb-12" data-testid="onboarding-wizard">
     <div className="rounded-[28px] border border-primary/15 bg-gradient-to-br from-primary/10 via-card to-card p-6 sm:p-8">
       <div className="flex items-center justify-between gap-3">
@@ -329,8 +328,6 @@ export default function Onboarding() {
       </div>
       {step === 3 && importRows.length > 0 && method !== "manual" && <p className="text-xs text-muted-foreground">Confirme ou desmarque os lançamentos selecionados antes de avançar, ou escolha Manual.</p>}
     </CardContent></Card>
-    <div className="text-center"><Link to="/" className="text-xs text-muted-foreground hover:text-foreground">Ir para a Home sem concluir agora</Link></div>
     <CardDialog open={cardOpen} onOpenChange={setCardOpen}/>
-    <FileSpreadsheet className="sr-only" aria-hidden="true"/>
   </div>;
 }
