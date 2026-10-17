@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getAccountPaymentMethods, setAccountPaymentMethods, PAYMENT_METHODS, type PaymentMethod } from "@/lib/accountPaymentPreferences";
+import { getAccountPaymentMethods, setAccountPaymentMethods, clearLocalAccountPaymentMethods, PAYMENT_METHODS, type PaymentMethod } from "@/lib/accountPaymentPreferences";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PlusCircle, Wallet } from "lucide-react";
 import { toast } from "sonner";
@@ -21,7 +21,13 @@ export default function Accounts() {
   const queryClient = useQueryClient();
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts });
   const accounts = accountsQuery.data ?? [];
-  const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: fetchCards });
+  const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: async () => {
+    try { return await fetchCards(); }
+    catch (error) {
+      if (!navigator.onLine && error instanceof Error && error.message === "FINNOS_OFFLINE_NO_CACHE") return [];
+      throw error;
+    }
+  } });
   const institutionsQuery = useQuery({ queryKey: ["institutions"], queryFn: fetchInstitutions });
   const cards = cardsQuery.data ?? [];
   const institutions = institutionsQuery.data ?? [];
@@ -46,7 +52,8 @@ export default function Accounts() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteAccount(id),
-    onSuccess: async () => {
+    onSuccess: async (_result, deletedId) => {
+      clearLocalAccountPaymentMethods(deletedId);
       toast.success("Conta excluída.");
       setPendingDelete(null);
       setSelected(null);
