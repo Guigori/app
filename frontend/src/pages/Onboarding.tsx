@@ -56,6 +56,7 @@ export default function Onboarding() {
   const [hydrated, setHydrated] = useState(local);
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
+  const [nameHydrated, setNameHydrated] = useState(false);
   const [income, setIncome] = useState("");
   const [mode, setMode] = useState<"503020" | "personalizado">("503020");
   const [percentages, setPercentages] = useState<OnboardingPercentages>(DEFAULT_PERCENT);
@@ -81,8 +82,11 @@ export default function Onboarding() {
     setHydrated(true);
   }, [stateQuery.data, hydrated]);
   useEffect(() => {
-    if (userQuery.data && !name) setName(userQuery.data.name);
-  }, [userQuery.data, name]);
+    if (userQuery.data && !nameHydrated) {
+      setName(userQuery.data.name);
+      setNameHydrated(true);
+    }
+  }, [userQuery.data, nameHydrated]);
 
   const persist = async (nextStep: number, extra: Record<string, unknown> = {}) => {
     if (local) {
