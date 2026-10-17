@@ -1,0 +1,48 @@
+name: FINNOS Onboarding E2E
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "frontend/src/pages/Onboarding.tsx"
+      - "frontend/src/lib/onboarding.ts"
+      - "frontend/src/components/RequireAuth.tsx"
+      - "tests/e2e/onboarding.spec.ts"
+      - "tests/playwright.config.ts"
+      - ".github/workflows/onboarding-e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  onboarding:
+    name: Desktop and mobile wizard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: Install Playwright dependencies
+        working-directory: tests
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Start frontend in device-only mode
+        run: |
+          cd frontend
+          npm run dev -- --host 127.0.0.1 --port 3000 > /tmp/finnos-vite.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/ > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/finnos-vite.log
+          exit 1
+      - name: Run onboarding end-to-end tests
+        working-directory: tests
+        run: npx playwright test e2e/onboarding.spec.ts --project=desktop --project=mobile
