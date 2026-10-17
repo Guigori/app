@@ -176,7 +176,7 @@ def validate_refs(db, uid, name, doc, transaction):
             ("card_id", "cards"),
         ]
     if name == "cards":
-        fields = [("payment_account_id", "accounts")]
+        fields.append(("payment_account_id", "accounts"))
     if name == "transactions":
         if doc.get("invoice_payment"):
             raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
