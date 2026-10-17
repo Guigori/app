@@ -3,6 +3,7 @@ from finnos.lib import db
 from finnos.routers import (
     auth,
     accounts,
+    institutions,
     categories,
     transactions,
     dashboard,
@@ -28,6 +29,7 @@ def mount(app, firebase_app, verified_claims, same_origin):
     router = APIRouter(prefix="/api")
     for module in [
         accounts,
+        institutions,
         categories,
         transactions,
         dashboard,
@@ -53,7 +55,7 @@ def mount(app, firebase_app, verified_claims, same_origin):
     async def finance_origin(request, call_next):
         if request.method in {"POST", "PUT", "PATCH", "DELETE"} and any(
             request.url.path.startswith("/api/" + x)
-            for x in ["accounts", "categories", "transactions", "notifications", "push", "subscriptions", "cards", "budgets", "goals", "radar", "ai", "simulate", "onboarding"]
+            for x in ["accounts", "institutions", "categories", "transactions", "notifications", "push", "subscriptions", "cards", "budgets", "goals", "radar", "ai", "simulate", "onboarding"]
         ):
             from fastapi import HTTPException
             from fastapi.responses import JSONResponse
