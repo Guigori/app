@@ -4,7 +4,7 @@ import { apiPostWithBearer } from "./api";
 import { getApiErrorMessage } from "./errors";
 import type { User } from "@/types/finnos";
 
-export async function openGoogleSession(onNewAccount?: () => Promise<void>): Promise<User> {
+export async function openGoogleSession(onNewAccount?: () => Promise<unknown>): Promise<User> {
   if (!firebaseAuth) throw new Error(firebaseConfigurationError || "Firebase não configurado neste ambiente.");
   const result = await signInWithPopup(firebaseAuth, googleProvider);
   try {
