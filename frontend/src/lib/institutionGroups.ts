@@ -27,7 +27,7 @@ export function walletGroups(accounts: Account[], cards: CreditCard[], instituti
     if (!group) {
       group = {
         key, institutionId: known?.id ?? null,
-        name: known?.name ?? name.trim().replace(/\s+/g, " ") || "Sem instituição",
+        name: (known?.name ?? name.trim().replace(/\s+/g, " ")) || "Sem instituição",
         color: known?.color ?? "#5B35FF",
         accounts: [], cards: [], balanceCents: 0,
       };
