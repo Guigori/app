@@ -15,7 +15,7 @@ router = APIRouter(prefix="/institutions", tags=["institutions"])
 @router.get("", response_model=list[InstitutionOut])
 async def list_institutions(user: dict = Depends(require_user)):
     docs = await db.institutions.find({"user_id": user["id"]}).sort("created_at", 1).to_list(500)
-    return [InstitutionOut(**d) for d in docs]
+    return [InstitutionOut(id=d["id"], name=d["name"], color=d.get("color", "#5B35FF"), created_at=d["created_at"]) for d in docs]
 
 @router.post("", response_model=InstitutionOut, status_code=201)
 async def create_institution(payload: InstitutionIn, user: dict = Depends(require_user)):
@@ -29,7 +29,7 @@ async def create_institution(payload: InstitutionIn, user: dict = Depends(requir
     )
     # Adapter transactionally rejects duplicate normalized institution names.
     await db.institutions.insert_one(doc)
-    return InstitutionOut(**doc)
+    return InstitutionOut(id=doc["id"], name=doc["name"], color=doc["color"], created_at=doc["created_at"])
 
 @router.delete("/{institution_id}", status_code=204, response_class=Response)
 async def delete_institution(institution_id: str, user: dict = Depends(require_user)):
