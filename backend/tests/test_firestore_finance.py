@@ -532,3 +532,53 @@ def test_wallet_02_cross_uid_account_and_card_payment_refs_are_denied(finance):
     assert len(client.get("/api/accounts").json()) == 1
     active.update(uid="test-a", email="a@example.invalid")
     assert len(client.get("/api/accounts").json()) == 1
+
+
+def test_wallet_02_institution_dry_run_preserves_ids_balances_and_sources():
+    from scripts.wallet_institution_dry_run import dry_run_institution_groups
+    accounts = [
+        {"id": "a1", "institution": " Nubank ", "balance": "300.55"},
+        {"id": "a2", "institution": "nubank", "balance": "99.45"},
+        {"id": "a3", "institution": "Inter", "balance": "-20.00"},
+        {"id": "a4", "institution": "Banco Inter", "balance": "500.00"},
+    ]
+    cards = [
+        {"id": "c1", "institution": "NUBANK", "payment_account_id": "a1", "limit": 1000},
+        {"id": "c2", "institution": "Banco Inter", "payment_account_id": "a3", "limit": 500},
+    ]
+    before = copy.deepcopy((accounts, cards))
+    report = dry_run_institution_groups(accounts, cards)
+    assert report["write_operations"] == 0
+    assert report["account_count"] == 4
+    assert report["card_count"] == 2
+    assert report["account_balance_total_unchanged"] == "880.00"
+    assert report["source_account_ids"] == ["a1", "a2", "a3", "a4"]
+    assert report["source_card_ids"] == ["c1", "c2"]
+    groups = {g["candidate_key"]: g for g in report["candidate_groups"]}
+    assert set(groups) == {"nubank", "inter", "banco inter"}
+    assert groups["nubank"]["account_ids"] == ["a1", "a2"]
+    assert groups["nubank"]["card_ids"] == ["c1"]
+    assert groups["inter"]["account_ids"] == ["a3"]
+    assert groups["banco inter"]["card_ids"] == ["c2"]
+    assert (accounts, cards) == before
+    assert not report["safe_to_auto_merge_aliases"]
+
+
+def test_wallet_02_dry_run_keeps_empty_institutions_unassigned():
+    from scripts.wallet_institution_dry_run import dry_run_institution_groups
+    result = dry_run_institution_groups(
+        [{"id": "a1", "name": "Carteira", "institution": "", "initial_balance": 25}],
+        [{"id": "c1", "name": "Cartão", "institution": "   "}],
+    )
+    assert result["candidate_groups"] == []
+    assert result["unassigned"] == [{"kind": "accounts", "id": "a1"}, {"kind": "cards", "id": "c1"}]
+    assert result["account_balance_total_unchanged"] == "25"
+    assert result["write_operations"] == 0
+
+
+def test_wallet_02_dry_run_rejects_duplicate_source_identifiers():
+    from scripts.wallet_institution_dry_run import dry_run_institution_groups
+    with pytest.raises(ValueError, match="duplicado"):
+        dry_run_institution_groups(
+            [{"id": "a1", "institution": "Banco"}, {"id": "a1", "institution": "Outro"}], []
+        )
