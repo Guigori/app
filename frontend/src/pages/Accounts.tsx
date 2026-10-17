@@ -123,8 +123,8 @@ export default function Accounts() {
                   {hidden ? formatHiddenBRL() : formatBRL(account.balance)}
                 </p>
                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs" data-testid={`account-flows-${account.id}`}>
-                  <span className="text-emerald-600 dark:text-emerald-400">Entradas {formatBRL(account.total_income)}</span>
-                  <span className="text-rose-600 dark:text-rose-400">Saídas {formatBRL(account.total_expense)}</span>
+                  <span className="text-emerald-600 dark:text-emerald-400">Entradas {hidden ? formatHiddenBRL() : formatBRL(account.total_income)}</span>
+                  <span className="text-rose-600 dark:text-rose-400">Saídas {hidden ? formatHiddenBRL() : formatBRL(account.total_expense)}</span>
                 </div>
                 <div className="mt-3 flex justify-end gap-1 border-t border-border pt-3">
                   <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); void openPaymentMethods(account); }}>Pagamentos</Button>
