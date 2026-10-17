@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { createAccount, updateAccount } from "@/lib/data";
+import { createAccount, fetchInstitutions, updateAccount } from "@/lib/data";
+import { resolveInstitutionChoice, type InstitutionChoice } from "@/lib/institutionSelection";
+import { InstitutionPicker } from "@/components/accounts/InstitutionPicker";
 import { getApiErrorMessage } from "@/lib/errors";
 import { parseAmount, ACCOUNT_TYPE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -34,6 +36,9 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [institution, setInstitution] = useState("");
+  const [institutionChoice, setInstitutionChoice] = useState<InstitutionChoice>("new");
+  const institutionsQuery = useQuery({ queryKey: ["institutions"], queryFn: fetchInstitutions, enabled: open });
+  const institutions = institutionsQuery.data ?? [];
   const [type, setType] = useState<AccountType>("corrente");
   const [color, setColor] = useState(ACCOUNT_COLORS[0]);
   const [initialRaw, setInitialRaw] = useState("0");
@@ -46,6 +51,7 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
     if (account) {
       setName(account.name);
       setInstitution(account.institution);
+      setInstitutionChoice(account.institution_id ?? (account.institution ? "new" : "none"));
       setType(account.type);
       setColor(account.color);
       setInitialRaw(String(account.initial_balance));
@@ -53,6 +59,7 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
     } else {
       setName("");
       setInstitution("");
+      setInstitutionChoice("new");
       setType("corrente");
       setColor(ACCOUNT_COLORS[0]);
       setInitialRaw("0");
@@ -61,12 +68,16 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
   }, [open, account]);
 
   const mutation = useMutation({
-    mutationFn: (input: AccountInput) =>
-      account ? updateAccount(account.id, input) : createAccount(input),
+    mutationFn: async (input: AccountInput) => {
+      const resolved = await resolveInstitutionChoice(institutionChoice, input.institution, institutions);
+      const payload = { ...input, ...resolved };
+      return account ? updateAccount(account.id, payload) : createAccount(payload);
+    },
     onSuccess: async () => {
       toast.success(account ? "Conta atualizada." : "Conta criada.");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["institutions"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
         queryClient.invalidateQueries({ queryKey: ["account"] }),
       ]);
@@ -83,6 +94,7 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
     mutation.mutate({
       name: name.trim(),
       institution: institution.trim(),
+      institution_id: institutionChoice !== "new" && institutionChoice !== "none" ? institutionChoice : null,
       type,
       color,
       initial_balance: initial,
@@ -109,10 +121,9 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
             <Label htmlFor="account-name">Nome</Label>
             <Input id="account-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Nubank, Carteira" maxLength={60} data-testid="account-name-input" />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="account-institution">Instituição</Label>
-            <Input id="account-institution" value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="Ex.: Nubank, Banco Inter" maxLength={60} data-testid="account-institution-input" />
-          </div>
+          <InstitutionPicker institutions={institutions} choice={institutionChoice} name={institution}
+            onChoice={value => { setInstitutionChoice(value); if (value === "none") setInstitution(""); else if (value !== "new") setInstitution(institutions.find(item => item.id === value)?.name ?? ""); }}
+            onName={setInstitution} />
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="account-type">Tipo</Label>
