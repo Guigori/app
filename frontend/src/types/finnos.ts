@@ -21,6 +21,7 @@ export interface Account {
   id: string;
   name: string;
   institution: string;
+  institution_id?: string | null;
   type: AccountType;
   color: string;
   initial_balance: number;
@@ -340,6 +341,7 @@ export interface CalendarMonth {
 export interface CardInput {
   name: string;
   institution: string;
+  institution_id?: string | null;
   color: string;
   limit: number;
   closing_day: number;
@@ -352,6 +354,7 @@ export interface CreditCard {
   id: string;
   name: string;
   institution: string;
+  institution_id?: string | null;
   color: string;
   limit: number;
   closing_day: number;
