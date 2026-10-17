@@ -51,6 +51,6 @@ export async function destinationAfterAuthentication(isNewAccount = false): Prom
   } catch {
     // Never discard a verified session because onboarding is temporarily unavailable.
     // The Home retains an explicit resume link for an incomplete configuration.
-    return "/";
+    return isNewAccount ? "/onboarding" : "/";
   }
 }
