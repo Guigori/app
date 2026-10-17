@@ -38,6 +38,7 @@ async def _enriched_accounts(user_id: str) -> list[AccountOut]:
                 id=a["id"],
                 name=a["name"],
                 institution=a.get("institution", ""),
+                institution_id=a.get("institution_id"),
                 type=a.get("type", "corrente"),
                 color=a.get("color", "#070F52"),
                 initial_balance=D(a.get("initial_balance") or D("0.0")),
