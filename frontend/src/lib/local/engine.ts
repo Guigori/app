@@ -183,6 +183,7 @@ export function localDeleteAccount(id: string): void {
     );
   }
   if (db.subscriptions.some(sub => sub.account_id === id)) throw new Error("Conta vinculada a uma assinatura.");
+  if (db.cards.some(card => card.payment_account_id === id)) throw new Error("Conta vinculada a um cartão de crédito. Altere a conta de pagamento do cartão antes de excluir.");
   db.accounts = db.accounts.filter((a) => a.id !== id);
   writeDb(db);
 }
