@@ -4,7 +4,7 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { AppShell } from "@/components/layout/AppShell";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
-import Dashboard from "@/pages/Dashboard";
+import { ExperienceHome } from "@/components/layout/ExperienceHome";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import DashboardOverview from "@/pages/dashboard/DashboardOverview";
 import Transactions from "@/pages/Transactions";
@@ -40,7 +40,7 @@ export default function App() {
             <Route index element={<DashboardOverview />} />
           </Route>
           <Route element={<AppShell />}>
-            <Route index element={<Dashboard />} />
+            <Route index element={<ExperienceHome />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/validacao-preview" element={<PreviewValidation />} />
             <Route path="/registro-inteligente" element={<SmartRegister />} />
