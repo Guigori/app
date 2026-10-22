@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
+import { classifyExperience, type ExperienceMode } from "@/shared/experience/classifyExperience";
 
-export type ExperienceMode = "app" | "dashboard";
+export type { ExperienceMode };
 
 function subscribe(onChange: () => void) {
   window.addEventListener("resize", onChange);
@@ -17,15 +18,12 @@ function subscribe(onChange: () => void) {
 function getSnapshot(): ExperienceMode {
   const width = window.innerWidth;
   const height = window.innerHeight;
-  const isLandscape = width > height;
-  const hasTouch = navigator.maxTouchPoints > 0;
+  const touch = navigator.maxTouchPoints > 0;
   const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
-  // Tablet-class touch displays, including iPadOS desktop-style user agents.
-  // A laptop with a touchscreen and a fine pointer remains a dashboard.
-  const isTablet = hasTouch && coarsePointer && Math.max(width, height) >= 700 && Math.min(width, height) >= 600;
-  if (isTablet) return isLandscape ? "dashboard" : "app";
-  const isPhone = hasTouch && coarsePointer && Math.min(width, height) < 600;
-  return isPhone ? "app" : "dashboard";
+  const ua = navigator.userAgent;
+  // iPadOS can advertise itself as Macintosh. This is a hint, not sole detection.
+  const tabletHint = /iPad/i.test(ua) || (/Macintosh/i.test(ua) && touch && coarsePointer);
+  return classifyExperience({ width, height, touch, coarsePointer, tabletHint });
 }
 
 export function useExperienceMode(): ExperienceMode {
