@@ -5,6 +5,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import DashboardOverview from "@/pages/dashboard/DashboardOverview";
 import Transactions from "@/pages/Transactions";
 import Accounts from "@/pages/Accounts";
 import Categories from "@/pages/Categories";
@@ -34,6 +36,9 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />
         <Route element={<RequireAuth />}>
+          <Route path="/dashboard" element={<DashboardShell />}>
+            <Route index element={<DashboardOverview />} />
+          </Route>
           <Route element={<AppShell />}>
             <Route index element={<Dashboard />} />
             <Route path="/onboarding" element={<Onboarding />} />
