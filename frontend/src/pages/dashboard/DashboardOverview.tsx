@@ -1,8 +1,11 @@
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
+import { useExperienceMode } from "@/lib/experienceMode";
 import { ArrowUpRight } from "lucide-react";
 
 /** Layout foundation only. Live KPIs are intentionally deferred until the shared finance hooks are audited. */
 export default function DashboardOverview() {
+  const mode = useExperienceMode();
+  if (mode === "app") return <Navigate to="/" replace />;
   return (
     <div className="space-y-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
