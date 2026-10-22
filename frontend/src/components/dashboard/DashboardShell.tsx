@@ -3,11 +3,11 @@ import { LayoutDashboard, Wallet, ArrowLeftRight, ChartNoAxesCombined, Radar, Se
 
 const links = [
   { to: "/dashboard", label: "Visão geral", icon: LayoutDashboard, end: true },
-  { to: "/dashboard/carteira", label: "Carteira", icon: Wallet },
-  { to: "/dashboard/transacoes", label: "Transações", icon: ArrowLeftRight },
-  { to: "/dashboard/analises", label: "Análises", icon: ChartNoAxesCombined },
-  { to: "/dashboard/radar", label: "Radar", icon: Radar },
-  { to: "/dashboard/configuracoes", label: "Configurações", icon: Settings2 },
+  { to: "/contas", label: "Carteira", icon: Wallet },
+  { to: "/transacoes", label: "Transações", icon: ArrowLeftRight },
+  { to: "/analise", label: "Análises", icon: ChartNoAxesCombined },
+  { to: "/radar", label: "Radar", icon: Radar },
+  { to: "/configuracoes", label: "Configurações", icon: Settings2 },
 ];
 
 /** Dedicated desktop dashboard shell; deliberately does not mount AppShell or its mobile FAB/nav. */
@@ -18,6 +18,7 @@ export function DashboardShell() {
         <aside className="sticky top-0 hidden h-svh w-60 shrink-0 flex-col border-r border-black/[0.06] bg-white px-4 py-6 dark:border-white/10 dark:bg-[#17181e] md:flex">
           <NavLink to="/dashboard" className="px-3 text-xl font-semibold tracking-tight">FINNOS<span className="text-[#5b35ff]">.</span></NavLink>
           <p className="mt-1 px-3 text-xs text-neutral-500">Painel financeiro</p>
+          {/* Until dashboard-specific module views exist, these links open the functional App pages. */}
           <nav aria-label="Dashboard" className="mt-9 flex flex-col gap-1">
             {links.map(({ to, label, icon: Icon, end }) => (
               <NavLink key={to} to={to} end={end} className={({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${isActive ? "bg-[#f0efff] font-medium text-[#4b2cff] dark:bg-[#30274b] dark:text-[#b5a2ff]" : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/10"}`}>
