@@ -27,3 +27,12 @@ F. Run typecheck, unit/integration tests, security regression and production bui
 
 ## Non-goals
 No direct bank transfers, silent transaction modification, copied Tickwell branding or proprietary code, and no production activation by default.
+
+## Product UX split — approved direction (2026-10-21)
+FINNOS App/PWA on phones: minimal, visual, fast consultation, registration and daily control. Primary home: available balance, income/expense summary, compact trend, upcoming bills, recent transactions and one prominent quick-add. Preserve bottom navigation and existing quick-registration concepts. FIINT appears as contextual insight, approval and alert, not a dense operations dashboard. Complex settings remain accessible via secondary screens; essential functionality must not disappear. Target fast perceived loading, offline-first drafts, accessible touch controls, light/dark mode.
+
+FINNOS Web on desktop: comprehensive, organized, visually inspired by the supplied Tickwell screenshots. Collapsible sidebar; KPI strip; configurable card grid; detailed analytics, accounts/cards/budgets/patrimony; full FIINT agents console, rule builder, simulation drawer, approval queue and audit trail. Preserve FINNOS visual identity and do not copy Tickwell assets or brand.
+
+Shared platform: one Firebase UID, Firestore source of truth, FastAPI rules and permissions, shared design tokens and business logic. Adapt layouts and interaction patterns by viewport/capability, not by duplicating financial engines or databases. Tablet layouts bridge the two. No misleading fake metrics in production.
+
+Acceptance criteria: phone 375px/390px and tablet 768px plus desktop 1280px/1440px; keyboard and screen-reader support; zero horizontal overflow; quick registration reachable in one action; desktop rules builder and dry-run usable without truncation; user data identical across experiences; no regression to offline sync.
