@@ -1,9 +1,13 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Wallet, ArrowLeftRight, ChartNoAxesCombined, Radar, Settings2 } from "lucide-react";
+import { LayoutDashboard, Wallet, ArrowLeftRight, ChartNoAxesCombined, Radar, Settings2, CreditCard, Repeat2, Landmark, ClipboardList } from "lucide-react";
 
 const links = [
   { to: "/dashboard", label: "Visão geral", icon: LayoutDashboard, end: true },
   { to: "/dashboard/carteira", label: "Carteira", icon: Wallet },
+  { to: "/dashboard/contas", label: "Contas e bancos", icon: Landmark },
+  { to: "/dashboard/cartoes", label: "Cartões e faturas", icon: CreditCard },
+  { to: "/dashboard/assinaturas", label: "Assinaturas", icon: Repeat2 },
+  { to: "/dashboard/orcamento", label: "Orçamento", icon: ClipboardList },
   { to: "/dashboard/transacoes", label: "Transações", icon: ArrowLeftRight },
   { to: "/dashboard/analises", label: "Análises", icon: ChartNoAxesCombined },
   { to: "/dashboard/radar", label: "Radar", icon: Radar },

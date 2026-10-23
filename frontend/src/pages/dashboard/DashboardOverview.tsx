@@ -47,7 +47,7 @@ export default function DashboardOverview() {
     </div>
     {summary.isPending && <div role="status" className={`${panel} p-6 text-sm text-neutral-500`}>Carregando seus dados financeiros…</div>}
     {summary.isError && <div role="alert" className={`${panel} flex flex-wrap items-center justify-between gap-3 p-5`}><p className="text-sm">Não foi possível carregar o resumo financeiro.</p><button className="text-sm font-medium text-[#5b35ff]" onClick={() => summary.refetch()}>Tentar novamente</button></div>}
-    {noAccounts && <div className={`${panel} flex flex-wrap items-center justify-between gap-3 p-5`}><p className="text-sm">Cadastre sua primeira conta para começar a acompanhar suas finanças.</p><Link className="text-sm font-semibold text-[#5b35ff]" to="/contas">Cadastrar conta →</Link></div>}
+    {noAccounts && <div className={`${panel} flex flex-wrap items-center justify-between gap-3 p-5`}><p className="text-sm">Cadastre sua primeira conta para começar a acompanhar suas finanças.</p><Link className="text-sm font-semibold text-[#5b35ff]" to="/dashboard/contas">Cadastrar conta →</Link></div>}
     {d && <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi title="Saldo consolidado" value={d.total_balance} detail="Disponível nas contas" hidden={hidden}/>
