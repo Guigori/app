@@ -35,8 +35,8 @@ const changeMonth = (month: string, delta: number) => {
         <div className="flex items-center gap-2 text-sm font-medium"><CalendarDays size={17} className="text-primary" /> {monthLabel(month)}</div>
         <div className="flex items-center gap-2">
           <button aria-label="Mês anterior" onClick={() => { setMonth(changeMonth(month, -1)); }} className="rounded-lg p-2 hover:bg-muted"><ChevronLeft size={18} /></button>
-          <button onClick={() => { setMonth(currentMonth()); setSelectedDate(null); }} className="rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-muted">Hoje</button>
-          <button aria-label="Próximo mês" onClick={() => { setMonth(changeMonth(month, 1)); setSelectedDate(null); }} className="rounded-lg p-2 hover:bg-muted"><ChevronRight size={18} /></button>
+          <button onClick={() => { setMonth(currentMonth()); }} className="rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-muted">Hoje</button>
+          <button aria-label="Próximo mês" onClick={() => { setMonth(changeMonth(month, 1)); }} className="rounded-lg p-2 hover:bg-muted"><ChevronRight size={18} /></button>
         </div>
       </div>
 
