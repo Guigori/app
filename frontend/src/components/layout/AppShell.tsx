@@ -8,7 +8,7 @@ import { Header } from "@/components/layout/Header";
 import { NavDrawer } from "@/components/layout/NavDrawer";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { QuickActionFAB } from "@/components/layout/QuickActionFAB";
-import { TopTabs } from "@/components/layout/TopTabs";
+import { Sidebar } from "@/components/layout/Sidebar";
 import { LocalNotificationPulse, NotificationPermissionPrompt } from "@/components/notifications/NotificationPermissionPrompt";
 import { useEdgeSwipe } from "@/lib/useEdgeSwipe";
 import { ConnectivityStatus } from "@/components/sync/ConnectivityStatus";
@@ -22,10 +22,10 @@ export function AppShell() {
   return (
     <DialogsProvider>
       <div className="min-h-svh bg-background">
-        <div>
-          <Header onOpenMenu={() => setMenuOpen(true)} />
-          <TopTabs />
-          <main className="mx-auto w-full max-w-7xl px-4 py-5 pb-32 sm:px-6 lg:px-10 dashboard:pb-28">
+        <Sidebar />
+        <div className="lg:pl-72">
+          <div className="lg:hidden"><Header onOpenMenu={() => setMenuOpen(true)} /></div>
+          <main className="mx-auto w-full max-w-[1600px] px-4 py-5 pb-32 sm:px-6 lg:px-8 dashboard:pb-28">
             {/^\/radar\/[^/]+$/.test(location.pathname) || location.pathname === "/configuracoes" ? null : <BackButton />}
             {/* Each route fades/slides in, so navigation feels continuous instead of a jump. */}
             <AnimatePresence mode="wait" initial={false}>
@@ -41,8 +41,8 @@ export function AppShell() {
             </AnimatePresence>
           </main>
         </div>
-        <NavDrawer open={menuOpen} onOpenChange={setMenuOpen} />
-        <MobileNav />
+        <div className="lg:hidden"><NavDrawer open={menuOpen} onOpenChange={setMenuOpen} /></div>
+        <div className="lg:hidden"><MobileNav /></div>
         <QuickActionFAB />
         <AiPanel />
         <ConnectivityStatus />
