@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownLeft, ArrowRight, ArrowUpRight, CalendarDays, ChevronLeft, ChevronRight, CreditCard, Plus, Wallet } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CalendarDays, CreditCard, Plus, Wallet } from "lucide-react";
 import { fetchAccounts, fetchCalendar, fetchDashboard, fetchMe, fetchCards, fetchBudget } from "@/lib/data";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
@@ -14,36 +14,6 @@ import type { MetricKind } from "@/types/finnos";
 
 const money = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
 const changeMonth = (month: string, delta: number) => {
-  const [year, m] = month.split("-").map(Number);
-  const d = new Date(year, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-};
-const metric: Record<MetricKind, string> = { income: "receitas", expense: "despesas", balance: "caixa", invested: "projecao" };
-
-export default function DashboardWeb() {
-  const [month, setMonth] = useState(currentMonth());
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [chartView, setChartView] = useState<"Projeção" | "Linhas" | "Barras" | "Pizza">("Projeção");
-  const [chartPeriod, setChartPeriod] = useState("1 mês");
-  const { hidden, toggle } = useBalanceHidden();
-  const dialogs = useDialogs();
-  const navigate = useNavigate();
-  const dashboard = useQuery({ queryKey: ["dashboard", month], queryFn: () => fetchDashboard(month) });
-  const calendar = useQuery({ queryKey: ["calendar", month], queryFn: () => fetchCalendar(month) });
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts });
-  const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards });
-  const budget = useQuery({ queryKey: ["budget", month], queryFn: () => fetchBudget(month) });
-  const me = useQuery({ queryKey: ["me"], queryFn: fetchMe });
-  const radar = useQuery({ queryKey: ["radar", month], queryFn: fetchRadar });
-  const data = dashboard.data;
-  const display = (amount: number) => hidden ? "••••••" : money(amount);
-  const go = (kind: MetricKind) => navigate(`/fluxo?month=${month}&metric=${metric[kind]}`);
-  const days = calendar.data?.days ?? [];
-  const [year, m] = month.split("-").map(Number);
-  const offset = new Date(year, m - 1, 1).getDay();
-  const count = new Date(year, m, 0).getDate();
-  const byDate = new Map(days.map((d) => [d.date, d]));
-  const selected = selectedDate ? byDate.get(selectedDate) : undefined;
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
 
@@ -64,7 +34,7 @@ export default function DashboardWeb() {
       <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-medium"><CalendarDays size={17} className="text-primary" /> {monthLabel(month)}</div>
         <div className="flex items-center gap-2">
-          <button aria-label="Mês anterior" onClick={() => { setMonth(changeMonth(month, -1)); setSelectedDate(null); }} className="rounded-lg p-2 hover:bg-muted"><ChevronLeft size={18} /></button>
+          <button aria-label="Mês anterior" onClick={() => { setMonth(changeMonth(month, -1)); }} className="rounded-lg p-2 hover:bg-muted"><ChevronLeft size={18} /></button>
           <button onClick={() => { setMonth(currentMonth()); setSelectedDate(null); }} className="rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-muted">Hoje</button>
           <button aria-label="Próximo mês" onClick={() => { setMonth(changeMonth(month, 1)); setSelectedDate(null); }} className="rounded-lg p-2 hover:bg-muted"><ChevronRight size={18} /></button>
         </div>
