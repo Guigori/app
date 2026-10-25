@@ -23,7 +23,7 @@ export function AppShell() {
     <DialogsProvider>
       <div className="min-h-svh bg-background">
         <Sidebar />
-        <div className="lg:pl-72">
+        <div className="lg:pl-60">
           <div className="lg:hidden"><Header onOpenMenu={() => setMenuOpen(true)} /></div>
           <main className="mx-auto w-full max-w-[1600px] px-4 py-5 pb-32 sm:px-6 lg:px-8 dashboard:pb-28">
             {/^\/radar\/[^/]+$/.test(location.pathname) || location.pathname === "/configuracoes" ? null : <BackButton />}
