@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, ArrowUpRight, CalendarDays, CreditCard, Plus, Wallet } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CalendarDays, ChevronLeft, ChevronRight, CreditCard, Plus, Wallet } from "lucide-react";
 import { fetchAccounts, fetchCalendar, fetchDashboard, fetchMe, fetchCards, fetchBudget } from "@/lib/data";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
