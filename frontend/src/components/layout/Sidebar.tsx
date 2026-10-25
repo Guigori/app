@@ -52,8 +52,8 @@ export function AccountBlock({ compact }: AccountBlockProps) {
 /** Desktop rail: logo, grouped Calen-style navigation, account block. */
 export function Sidebar() {
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 flex-col border-r border-border bg-card lg:flex">
-      <div className="px-6 pb-2 pt-6">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-border bg-card lg:flex">
+      <div className="px-5 pb-2 pt-5">
         <FinnosLogo />
       </div>
       <div className="flex-1 overflow-y-auto px-3 py-4" data-testid="sidebar-nav">
