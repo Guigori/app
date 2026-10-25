@@ -4,7 +4,7 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { AppShell } from "@/components/layout/AppShell";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
-import Dashboard from "@/pages/Dashboard";
+import DashboardEntry from "@/pages/DashboardEntry";
 import Transactions from "@/pages/Transactions";
 import Accounts from "@/pages/Accounts";
 import Categories from "@/pages/Categories";
@@ -35,7 +35,7 @@ export default function App() {
         <Route path="/cadastro" element={<Register />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
-            <Route index element={<Dashboard />} />
+            <Route index element={<DashboardEntry />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/validacao-preview" element={<PreviewValidation />} />
             <Route path="/registro-inteligente" element={<SmartRegister />} />
