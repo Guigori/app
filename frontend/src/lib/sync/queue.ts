@@ -120,7 +120,8 @@ export async function flushSyncQueue(): Promise<void> {
         const failed = { ...current, status: "error" as const, lastError: error instanceof Error ? error.message : "Falha ao sincronizar" };
         await saveSyncOperation(failed);
         window.dispatchEvent(new CustomEvent("finnos:sync-error", { detail: { operation: failed } }));
-        break;
+        // Keep processing independent operations after a conflict.
+        continue;
       }
     }
   } finally {
@@ -145,6 +146,10 @@ export async function getSyncOperation(id: string): Promise<SyncOperation | null
 export async function updateQueuedTransaction(id: string, payload: TransactionInput): Promise<void> {
   const op = await getSyncOperation(id);
   if (!op) throw new Error("Operação pendente não encontrada.");
+  // A sent operation is immutable: changing its payload would violate server idempotency.
+  if (op.attempts > 0) {
+    throw new Error("Esta operação já foi enviada. Revise a sincronização antes de editar.");
+  }
   await saveSyncOperation({ ...op, payload, status: "pending", lastError: undefined });
   window.dispatchEvent(new CustomEvent("finnos:sync-state"));
 }
