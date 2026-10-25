@@ -1,7 +1,7 @@
 import { firebaseAuth } from "@/lib/firebase";
 import { cachedFetch } from "@/lib/offline/accountCache";
 import type { Transaction, TransactionInput } from "@/types/finnos";
-import { apiGet, apiPost, apiPut } from "@/lib/api";
+import { ApiError, apiGet, apiPost, apiPut } from "@/lib/api";
 
 const DB_NAME = "finnos-sync";
 const DB_VERSION = 1;
@@ -20,7 +20,7 @@ export interface SyncOperation {
   source: OperationSource;
   createdAt: string;
   attempts: number;
-  status: "pending" | "syncing" | "error";
+  status: "pending" | "syncing" | "error" | "conflict";
   lastError?: string;
 }
 
@@ -104,6 +104,7 @@ export async function flushSyncQueue(): Promise<void> {
   window.dispatchEvent(new CustomEvent("finnos:sync-state"));
   try {
     for (const op of await listSyncOperations()) {
+      if (op.status === "conflict") continue;
       if (!navigator.onLine || op.uid !== firebaseAuth?.currentUser?.uid) break;
       const current = { ...op, status: "syncing" as const, attempts: op.attempts + 1, lastError: undefined };
       await saveSyncOperation(current);
@@ -117,7 +118,7 @@ export async function flushSyncQueue(): Promise<void> {
         await remove(op.id);
         window.dispatchEvent(new CustomEvent("finnos:sync-success", { detail: { operation: op } }));
       } catch (error) {
-        const failed = { ...current, status: "error" as const, lastError: error instanceof Error ? error.message : "Falha ao sincronizar" };
+        const failed = { ...current, status: (error instanceof ApiError && error.status === 409 ? "conflict" : "error") as "conflict" | "error", lastError: error instanceof Error ? error.message : "Falha ao sincronizar" };
         await saveSyncOperation(failed);
         window.dispatchEvent(new CustomEvent("finnos:sync-error", { detail: { operation: failed } }));
         // Keep processing independent operations after a conflict.
