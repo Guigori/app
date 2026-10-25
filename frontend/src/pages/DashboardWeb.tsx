@@ -7,6 +7,7 @@ import { currentMonth, firstName, monthLabel } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { HomeFinancialChart } from "@/components/dashboard/HomeFinancialChart";
+import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 import { RadarSection } from "@/components/dashboard/RadarSection";
 import { fetchRadar } from "@/lib/data";
 import type { MetricKind } from "@/types/finnos";
@@ -22,6 +23,8 @@ const metric: Record<MetricKind, string> = { income: "receitas", expense: "despe
 export default function DashboardWeb() {
   const [month, setMonth] = useState(currentMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [chartView, setChartView] = useState<"Projeção" | "Linhas" | "Barras" | "Pizza">("Projeção");
+  const [chartPeriod, setChartPeriod] = useState("1 mês");
   const { hidden, toggle } = useBalanceHidden();
   const dialogs = useDialogs();
   const navigate = useNavigate();
@@ -90,26 +93,26 @@ export default function DashboardWeb() {
         </section>
       )}
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(310px,1fr)]">
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,1fr)]">
         <section className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-5">
           <div className="mb-5 flex items-center justify-between"><div><h2 className="font-heading text-lg font-semibold">Calendário financeiro</h2><p className="text-xs text-muted-foreground">Entradas e saídas por dia</p></div><Link to="/fluxo" className="text-xs font-medium text-primary hover:underline">Ver fluxo <ArrowRight className="inline" size={12} /></Link></div>
           {calendar.isError && <div className="py-8 text-center text-sm text-muted-foreground">Calendário indisponível. <button onClick={() => calendar.refetch()} className="underline">Tentar novamente</button></div>}
           {calendar.isPending && <div className="h-72 animate-pulse rounded-xl bg-muted" />}
           {calendar.data && <>
             <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-muted-foreground">{["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d) => <span key={d} className="py-2">{d}</span>)}</div>
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid grid-cols-7 gap-0.5">
               {Array.from({ length: offset }, (_, i) => <div key={`empty-${i}`} />)}
               {Array.from({ length: count }, (_, i) => {
                 const date = `${month}-${String(i + 1).padStart(2, "0")}`;
                 const day = byDate.get(date);
                 const net = day ? day.income - day.expense : 0;
-                return <button type="button" key={date} onClick={() => setSelectedDate(date)} aria-label={`Dia ${i + 1}`} aria-pressed={selectedDate === date} className={`min-h-16 rounded-xl border p-1.5 text-left transition hover:border-primary/40 sm:min-h-20 ${selectedDate === date ? "border-primary bg-primary/10" : date === today ? "border-primary/40 bg-primary/5" : "border-transparent bg-muted/40"}`}>
+                return <button type="button" key={date} onClick={() => setSelectedDate(date)} aria-label={`Dia ${i + 1}`} aria-pressed={selectedDate === date} className={`min-h-11 rounded-lg border p-1.5 text-left transition hover:border-primary/40 sm:min-h-12 ${selectedDate === date ? "border-primary bg-primary/10" : date === today ? "border-primary/40 bg-primary/5" : "border-transparent bg-muted/40"}`}>
                   <span className="text-xs font-semibold">{i + 1}</span>
-                  {day && (day.income !== 0 || day.expense !== 0) && <span className={`mt-2 block truncate text-[10px] font-semibold ${net < 0 ? "text-rose-500" : "text-emerald-600"}`}>{hidden ? "•••" : money(net)}</span>}
+                  {day && (day.income !== 0 || day.expense !== 0) && <span className={`mt-0.5 block truncate text-[10px] font-semibold ${net < 0 ? "text-rose-500" : "text-emerald-600"}`}>{hidden ? "•••" : money(net)}</span>}
                 </button>;
               })}
             </div>
-            <div className="mt-4 rounded-xl bg-muted/60 p-3 text-sm">
+            <div className="mt-2 rounded-xl bg-muted/60 p-2 text-xs">
               {selectedDate ? <><p className="font-semibold">Dia {selectedDate.slice(-2)}</p><p className="mt-1 text-muted-foreground">Receitas: {display(selected?.income ?? 0)} · Despesas: {display(selected?.expense ?? 0)}</p></> : <p className="text-muted-foreground">Selecione um dia para ver o resumo.</p>}
             </div>
           </>}
@@ -128,7 +131,37 @@ export default function DashboardWeb() {
           </section>
         </div>
       </div>
-      {data && <section className="rounded-2xl border border-border bg-card p-4 sm:p-5"><div className="mb-3 flex items-center justify-between"><h2 className="font-heading text-lg font-semibold">Evolução financeira</h2><Link to="/fluxo" className="text-xs font-medium text-primary">Análise completa</Link></div><HomeFinancialChart month={data.month} total={data.total_balance} income={data.income} expense={data.expense} result={data.month_balance} onOpenMetric={go} menuView="Projeção" menuInterval="1 mês" menuSeries={["Receitas", "Despesas", "Resultado"]} /></section>}
+      {data && <section className="space-y-5">
+        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="font-heading text-lg font-semibold">Evolução financeira</h2><p className="text-xs text-muted-foreground">Explore seus gráficos sem sair do painel</p></div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select aria-label="Tipo de gráfico" value={chartView} onChange={(e) => setChartView(e.target.value as typeof chartView)} className="rounded-lg border border-border bg-background px-3 py-2 text-xs">
+                <option value="Projeção">Projeção</option><option value="Linhas">Linhas</option><option value="Barras">Barras</option><option value="Pizza">Pizza</option>
+              </select>
+              <select aria-label="Período do gráfico" value={chartPeriod} onChange={(e) => setChartPeriod(e.target.value)} className="rounded-lg border border-border bg-background px-3 py-2 text-xs">
+                <option>7 dias</option><option>1 mês</option><option>3 meses</option><option>6 meses</option><option>1 ano</option>
+              </select>
+              <Link to="/fluxo" className="text-xs font-medium text-primary">Análise completa</Link>
+            </div>
+          </div>
+          <HomeFinancialChart month={data.month} total={data.total_balance} income={data.income} expense={data.expense} result={data.month_balance} onOpenMetric={go} menuView={chartView} menuInterval={chartPeriod} menuSeries={["Receitas", "Despesas", "Resultado"]} />
+        </div>
+        <div className="grid gap-5 xl:grid-cols-2">
+          <ExpensesDonutChart month={data.month} slices={data.categories} total={data.expense} onOpenDetails={() => go("expense")} onOpenCategory={(slice) => navigate(`/fluxo?month=${month}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)} />
+          <div className="rounded-2xl border border-border bg-card p-5">
+            <h2 className="font-heading text-lg font-semibold">Resumo do período</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Distribuição de receitas e despesas</p>
+            <div className="mt-6 space-y-5">
+              {([{label:"Receitas", value:data.income, kind:"income"}, {label:"Despesas", value:data.expense, kind:"expense"}, {label:"Resultado", value:data.month_balance, kind:"balance"}] as const).map((item) => (
+                <button key={item.label} onClick={() => go(item.kind)} className="flex w-full items-center justify-between border-b border-border/60 pb-4 text-left text-sm hover:text-primary">
+                  <span>{item.label}</span><strong className="font-heading">{display(item.value)}</strong>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>}
       <RadarSection signals={radar.data?.items ?? []} totalCount={radar.data?.count ?? 0} />
     </div>
   );
