@@ -341,6 +341,8 @@ class Collection:
                 if not docs and not upsert:
                     return SimpleNamespace(matched_count=0)
                 doc = docs[0] if docs else dict(query, id=str(uuid.uuid4()))
+                if self.name == "transactions" and docs and doc.get("invoice_payment"):
+                    raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
                 ref = (
                     root(db, uid).collection(self.name).document(resource_id(doc["id"]))
                 )
