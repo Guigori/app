@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, balance_effects, month_bounds, month_portion
-from finnos.lib.competency import monthly_competency
+from finnos.lib.competency import monthly_competency, positive_category_slices
 from finnos.models.finnos import CategorySlice, DashboardOut, RuleItem
 from finnos.routers.auth import require_user
 from finnos.routers.transactions import _ref_maps, enrich_transaction
@@ -50,7 +50,7 @@ async def dashboard(
         if cat:
             by_group[cat["group"]] += amount
     slices = []
-    for cat_id, total in sorted(by_category.items(), key=lambda kv: -kv[1]):
+    for cat_id, total, share in positive_category_slices(by_category):
         slice_cat = cat_by_id.get(cat_id)
         slices.append(
             CategorySlice(
@@ -59,7 +59,7 @@ async def dashboard(
                 color=slice_cat["color"] if slice_cat else "#94A3B8",
                 icon=slice_cat["icon"] if slice_cat else "more-horizontal",
                 total=round(total, 2),
-                percent=round(total / expense * 100, 1) if expense else D("0.0"),
+                percent=share,
             )
         )
     rule = []
