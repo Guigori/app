@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
 
-vi.mock("@/lib/mode", () => ({ getMode: () => "local" }));
+vi.mock("@/lib/mode", () => ({ getMode: () => "local", isLocalMode: () => true }));
 
 import { freshDb, readDb, writeDb, type LocalCard } from "@/lib/local/store";
 import { fetchTransactionsPage } from "@/lib/data";
