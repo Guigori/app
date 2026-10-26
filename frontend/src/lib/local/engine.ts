@@ -1259,7 +1259,7 @@ export function localBankRefund(cardId: string, input: BankRefundInput, operatio
   if (!card) throw new Error("Cartão não encontrado.");
   if (!operationId || operationId.length > 200) throw new Error("Identificador inválido.");
   if (!db.accounts.some(account => account.id === input.account_id)) throw new Error("Conta bancária inválida.");
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(input.date) || input.date > todayISO()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || input.date > todayISO()) {
     throw new Error("Reembolso não pode ser realizado no futuro.");
   }
   const reason = input.reason.trim();
