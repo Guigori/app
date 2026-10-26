@@ -20,6 +20,18 @@ class FinanceModel(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_default=True)
 
 
+def quantize_brl(value):
+    """Round monetary values to two decimals, always HALF_UP (not half-even).
+
+    Works with negative debits and credits; normalizes decimal input before
+    producing JSON numbers, keeping the storage/currency rule consistent.
+    """
+    amount = D(value)
+    if not amount.is_finite() or abs(amount) > D("9000000000000"):
+        raise ValueError("Valor monetário inválido.")
+    return amount.quantize(D("0.01"), rounding=ROUND_HALF_UP)
+
+
 def cents(value):
     amount = D(value)
     if not amount.is_finite() or abs(amount) > D("9000000000000"):
