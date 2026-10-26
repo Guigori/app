@@ -27,8 +27,11 @@ async def _build(doc: dict, txs: List[dict], accounts: dict) -> CardOut:
     start, closing = cycle_bounds(today, doc["closing_day"])
     due = due_date(closing, doc["closing_day"], doc["due_day"])
     best = best_purchase_day(closing)
-    from finnos.lib.invoices import commitment, invoice_state
+    from finnos.lib.invoices import commitment, invoice_state, default_invoice_cycle
     current, future_cents, used_cents = commitment(doc, txs, closing.isoformat())
+    payable_cycle = default_invoice_cycle(doc, txs, today)
+    payable_state = invoice_state(doc, txs, payable_cycle)
+
     invoice, future, used = D(current)/100, D(future_cents)/100, D(used_cents)/100
     limit = D(doc["limit"])
     account = accounts.get(doc.get("payment_account_id") or "", {})
@@ -46,6 +49,9 @@ async def _build(doc: dict, txs: List[dict], accounts: dict) -> CardOut:
         active=doc.get("active", True),
         invoice_paid=invoice_state(doc, txs, closing.isoformat())["paid"],
         current_invoice=round(invoice, 2),
+        payable_invoice=D(max(0, payable_state["total_cents"] - payable_state["paid_cents"])) / 100,
+        payable_cycle=payable_cycle,
+        payable_due=payable_state["due_date"],
         future_installments=round(future, 2),
         used=used,
         available=round(max(limit - used, D("0.0")), 2),
