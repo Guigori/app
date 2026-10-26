@@ -20,6 +20,7 @@ export interface LocalCard extends CardInput {
   created_at: string;
   paid_cycles?: Record<string, { amount: number; paid_at: string; items?: import("@/types/finnos").InvoiceItem[] }>;
   invoice_adjustments?: Record<string, Array<import("@/types/finnos").InvoiceAdjustment & { fingerprint?: string }>>;
+  invoice_refunds?: Record<string, Array<import("@/types/finnos").BankRefund & { fingerprint?: string }>>;
 }
 
 export interface LocalDb {
