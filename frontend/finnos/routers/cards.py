@@ -272,7 +272,7 @@ async def credit_invoice(
                 "fingerprint": fingerprint,
                 "cycle": payload.cycle,
                 "purchase_id": payload.purchase_id,
-                "amount_cents": amount,
+                "credit_cents": amount,
                 "reason": reason,
                 "date": today_iso(),
                 "created_at": now,
