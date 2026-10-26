@@ -4,7 +4,7 @@ Passing this audit does NOT prove that an earlier MongoDB account has been
 migrated. Legacy reconciliation is an independent operator-controlled step.
 """
 from collections import Counter
-from finnos.lib.money import D
+from finnos.lib.money import D, cents
 from finnos.lib.stats import balance_effects
 from finnos.lib.dates import today_iso
 
@@ -36,6 +36,49 @@ def audit_finance(records):
             problems["transaction_transfer_invalid"] += 1
         if tx.get("invoice_payment") and tx.get("invoice_card_id") not in cards:
             problems["invoice_payment_card_missing"] += 1
+
+    # FIN-05 integrity: a compensation must reference an original purchase
+    # on the same card. A bank reimbursement must have exactly one matching
+    # cash receipt; otherwise Dashboard and bank balances can silently drift.
+    purchases = {tx["id"]: tx for tx in records["transactions"] if tx.get("id")}
+    refund_ledger_ids = set()
+    for card in records["cards"]:
+        seen_adjustments = set()
+        for kind, ledger, amount_key in (
+            ("credit", card.get("invoice_adjustments") or {}, "credit_cents"),
+            ("refund", card.get("invoice_refunds") or {}, "refund_cents"),
+        ):
+            for cycle, entries in ledger.items():
+                for entry in entries:
+                    entry_id = entry.get("id")
+                    key = (kind, entry_id)
+                    if not entry_id or key in seen_adjustments:
+                        problems["invoice_adjustment_duplicate_id"] += 1
+                    seen_adjustments.add(key)
+                    purchase = purchases.get(entry.get("purchase_id"))
+                    if not purchase or purchase.get("card_id") != card.get("id"):
+                        problems["invoice_adjustment_original_missing"] += 1
+                    amount = entry.get(amount_key)
+                    if type(amount) is not int or amount <= 0:
+                        problems["invoice_adjustment_amount_invalid"] += 1
+                    if kind != "refund":
+                        continue
+                    refund_ledger_ids.add(entry_id)
+                    receipt = purchases.get(entry_id)
+                    if (
+                        not receipt or not receipt.get("invoice_refund")
+                        or receipt.get("invoice_card_id") != card.get("id")
+                        or receipt.get("invoice_cycle") != cycle
+                        or receipt.get("original_purchase_id") != entry.get("purchase_id")
+                        or receipt.get("account_id") != entry.get("account_id")
+                        or receipt.get("status") != "pago"
+                        or type(amount) is not int
+                        or cents(receipt.get("value", 0)) != amount
+                    ):
+                        problems["invoice_refund_receipt_missing_or_mismatch"] += 1
+    for tx in records["transactions"]:
+        if tx.get("invoice_refund") and tx.get("id") not in refund_ledger_ids:
+            problems["invoice_refund_orphan_receipt"] += 1
 
     for subscription in records["subscriptions"]:
         if subscription.get("account_id") not in accounts:
