@@ -97,7 +97,7 @@ def output(state):
                 'purchase_id': entry['purchase_id'],
                 'date': entry['date'],
                 'reason': entry['reason'],
-                'value': entry['amount_cents'] / 100,
+                'value': entry['credit_cents'] / 100,
             } for entry in state.get('adjustments', [])
         ],
     }
