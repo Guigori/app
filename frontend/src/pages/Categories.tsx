@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, PlusCircle, Tags, Trash2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
-import { deleteCategory, fetchCategories, fetchBudget } from "@/lib/data";
+import { deleteCategory, fetchCategories, fetchBudget, fetchCurrentBudgetCycle, fetchBudgetCycleProgress } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { formatBRL, GROUP_LABEL } from "@/lib/format";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
@@ -26,6 +26,13 @@ export default function Categories() {
   const thisMonth = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7);
   const budgetQuery = useQuery({ queryKey: ["budget", thisMonth], queryFn: () => fetchBudget(thisMonth) });
   const paceByCategory = new Map((budgetQuery.data?.rows ?? []).map(row => [row.category_id, row]));
+  const cycleQuery = useQuery({ queryKey: ["budget-v2-current"], queryFn: fetchCurrentBudgetCycle });
+  const progressQuery = useQuery({
+    queryKey: ["budget-v2-progress", cycleQuery.data?.id],
+    queryFn: () => fetchBudgetCycleProgress(cycleQuery.data!.id),
+    enabled: Boolean(cycleQuery.data?.id),
+  });
+  const cycleCategories = new Map((progressQuery.data?.allocations ?? []).map(item => [item.category_id, item]));
   const [pendingDelete, setPendingDelete] = useState<Category | null>(null);
 
   const deleteMutation = useMutation({
@@ -90,8 +97,11 @@ export default function Categories() {
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {groupCategories.map((category) => {
                       const pace = paceByCategory.get(category.id);
-                      const hasLimit = category.monthly_budget > 0;
-                      const usage = pace?.percent ?? 0;
+                      const cycleAllocation = cycleCategories.get(category.id);
+                      const limit = cycleAllocation?.planned ?? category.monthly_budget;
+                      const hasLimit = limit > 0;
+                      const used = cycleAllocation ? cycleAllocation.spent + cycleAllocation.committed : pace?.spent ?? 0;
+                      const usage = cycleAllocation?.percent ?? pace?.percent ?? 0;
                       return (
                       <Card key={category.id} className="py-0" data-testid={`category-card-${category.id}`}>
                         <CardContent className="space-y-3 p-4">
@@ -106,9 +116,11 @@ export default function Categories() {
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-medium text-foreground">{category.name}</p>
                             <p className="truncate text-xs text-muted-foreground" data-testid={`category-budget-${category.id}`}>
-                              {category.monthly_budget > 0
-                                ? `Orçamento: ${formatBRL(category.monthly_budget)}/mês`
-                                : "Sem orçamento definido"}
+                              {cycleAllocation
+                                ? `Limite do ciclo atual: ${formatBRL(limit)}`
+                                : category.monthly_budget > 0
+                                  ? `Orçamento mensal: ${formatBRL(category.monthly_budget)}`
+                                  : "Sem limite definido"}
                             </p>
                           </div>
                           <div className="flex shrink-0 gap-1">
@@ -133,10 +145,10 @@ export default function Categories() {
                             </Button>
                           </div>
                         </div>
-                        {hasLimit && pace ? (
+                        {hasLimit && (cycleAllocation || pace) ? (
                           <div className="space-y-1.5" data-testid={`category-pace-${category.id}`}>
                             <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                              <span>{formatBRL(pace.spent)} utilizado</span>
+                              <span>{formatBRL(used)} utilizado</span>
                               <span className={usage > 100 ? "font-semibold text-destructive" : ""}>
                                 {Math.round(usage)}%
                               </span>
@@ -148,14 +160,14 @@ export default function Categories() {
                                 style={{ width: `${Math.min(100, Math.max(0, usage))}%` }} />
                             </div>
                             <div className="flex items-start justify-between gap-2 text-xs text-muted-foreground">
-                              <span>{formatBRL(Math.max(category.monthly_budget - pace.spent, 0))} disponível</span>
+                              <span>{formatBRL(Math.max(limit - used, 0))} disponível</span>
                               <span className="text-right">
-                                {pace.pace_projected_close != null && pace.pace_day && pace.pace_day > 0
+                                {!cycleAllocation && pace?.pace_projected_close != null && pace.pace_day && pace.pace_day > 0
                                   ? `Projeção: ${formatBRL(pace.pace_projected_close)}`
                                   : "Sem projeção ainda"}
                               </span>
                             </div>
-                            {pace.pace_daily_allowance != null && pace.pace_day != null
+                            {!cycleAllocation && pace?.pace_daily_allowance != null && pace.pace_day != null
                               && pace.pace_days_in_month != null && pace.pace_day < pace.pace_days_in_month ? (
                               <p className="text-xs text-muted-foreground">
                                 <TrendingUp className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
