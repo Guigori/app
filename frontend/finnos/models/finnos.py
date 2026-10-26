@@ -80,6 +80,7 @@ class CategoryIn(BaseModel):
 
 class TransactionOut(BaseModel):
     invoice_payment: bool = False
+    invoice_refund: bool = False
     version: int = 1
     id: str
     name: str
