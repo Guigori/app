@@ -51,7 +51,7 @@ def month_portion(tx: dict, month: str) -> float | None:
     month to the last installment — so future parcels never double-count in the
     current month. Pending/scheduled money and transfers count as zero.
     """
-    if tx.get("invoice_payment") or tx.get("type") == "transferencia" or tx.get("status") != "pago":
+    if tx.get("invoice_payment") or tx.get("invoice_refund") or tx.get("type") == "transferencia" or tx.get("status") != "pago":
         return None
     d: str = tx["date"]
     if tx.get("installment"):
