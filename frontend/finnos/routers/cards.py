@@ -139,6 +139,7 @@ async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(
     from finnos.lib import db as store
     from finnos.lib.invoices import invoice_state, output, default_invoice_cycle
     from finnos.lib.invoice_payments import allocate_payment, to_cents
+    from finnos.lib.history import record_event
     from starlette.concurrency import run_in_threadpool
     import hashlib
     if not 1 <= len(x_finnos_operation_id) <= 200:
@@ -186,6 +187,7 @@ async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(
             card.setdefault('invoice_cycles',{})[cycle] = dict(items=state['items'],paid_cents=state['paid_cents'],paid_at=payload.date)
             response = output(state)
             tr.create(owner.collection('transactions').document(identifier),store.encode(debit))
+            record_event(tr, owner, "transactions", "created", None, debit)
             tr.set(card_ref,store.encode(card))
             tr.create(receipt_ref,dict(request=request_key,state=state,created_at=now))
             return response
@@ -210,6 +212,7 @@ async def credit_invoice(
     import json
     from finnos.lib import db as store
     from finnos.lib.invoice_credits import validate_credit, append_credit
+    from finnos.lib.history import record_event
     from finnos.lib.invoice_payments import to_cents
     from finnos.lib.invoices import invoice_state, output
     from starlette.concurrency import run_in_threadpool
@@ -280,6 +283,12 @@ async def credit_invoice(
             # Only update the card's credit ledger; do not rewrite purchases,
             # payment receipts, accounts or any other user collection.
             tr.update(card_ref, {"invoice_adjustments": card["invoice_adjustments"]})
+            record_event(
+                tr, owner, "cards", "updated",
+                {"id": card_id, "name": card["name"]},
+                {"id": card_id, "name": card["name"],
+                 "credit_amount": D(amount) / 100},
+            )
             return output(invoice_state(card, txs, payload.cycle))
 
         return store.atomic(instance, uid, action)
