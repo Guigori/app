@@ -53,7 +53,8 @@ def invoice_state(card, txs, cycle, categories=None):
     adjustments = cycle_credits(card, cycle)
     total = sum(i['purchase_cents'] for i in items) - credit_total_cents(card, cycle)
     paid = (saved or {}).get('paid_cents', 0)
-    return dict(card_id=card['id'],card_name=card['name'],cycle_start=start,cycle_end=cycle,due_date=due_date(closing,card['closing_day'],card['due_day']).isoformat(),total_cents=total,paid_cents=paid,paid=total > 0 and paid == total,paid_at=(saved or {}).get('paid_at'),items=items,adjustments=adjustments,adjustment_cents=credit_total_cents(card, cycle))
+    refunds = list((card.get('invoice_refunds') or {}).get(cycle) or [])
+    return dict(card_id=card['id'],card_name=card['name'],cycle_start=start,cycle_end=cycle,due_date=due_date(closing,card['closing_day'],card['due_day']).isoformat(),total_cents=total,paid_cents=paid,paid=total > 0 and paid == total,paid_at=(saved or {}).get('paid_at'),items=items,adjustments=adjustments,adjustment_cents=credit_total_cents(card, cycle),refunds=refunds,refund_cents=sum(item['refund_cents'] for item in refunds))
 
 
 def default_invoice_cycle(card, txs, today):
@@ -80,7 +81,7 @@ def default_invoice_cycle(card, txs, today):
 def output(state):
     return {
         **{k: v for k, v in state.items() if k not in {
-            'total_cents', 'paid_cents', 'items', 'adjustments', 'adjustment_cents'
+            'total_cents', 'paid_cents', 'items', 'adjustments', 'adjustment_cents', 'refunds', 'refund_cents'
         }},
         'total': state['total_cents'] / 100,
         'paid_amount': state['paid_cents'] / 100,
@@ -99,6 +100,13 @@ def output(state):
                 'reason': entry['reason'],
                 'value': entry['credit_cents'] / 100,
             } for entry in state.get('adjustments', [])
+        ],
+        'refund_total': state.get('refund_cents', 0) / 100,
+        'refunds': [
+            {'id': item['id'], 'purchase_id': item['purchase_id'],
+             'account_id': item['account_id'], 'date': item['date'],
+             'reason': item['reason'], 'value': item['refund_cents'] / 100}
+            for item in state.get('refunds', [])
         ],
     }
 
