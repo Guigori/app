@@ -83,7 +83,7 @@ class InvoiceAdjustment(BaseModel):
 
 
 class CreditInvoiceIn(BaseModel):
-    cycle: str = Field(pattern=r"^\\d{4}-\\d{2}-\\d{2}$")
+    cycle: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     purchase_id: str = Field(min_length=1, max_length=1500)
     value: Money = Field(gt=0)
     reason: str = Field(min_length=5, max_length=300)
