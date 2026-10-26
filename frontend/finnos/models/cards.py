@@ -39,6 +39,10 @@ class CardOut(BaseModel):
     invoice_paid: bool = False
     # Derived, never stored:
     current_invoice: Money
+    # Next invoice to pay; can be a closed cycle older than the open one.
+    payable_invoice: Money = 0
+    payable_cycle: Optional[str] = None
+    payable_due: Optional[str] = None
     future_installments: Money
     used: Money
     available: Money
