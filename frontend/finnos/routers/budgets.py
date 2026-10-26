@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.recurrence import projections_in_period
-from finnos.lib.competency import credit_events
+from finnos.lib.competency import credit_events, monthly_competency
 from finnos.models.budget import BudgetAllocationOut, BudgetAllocationProgress, BudgetCycleIn, BudgetCycleOut, BudgetCycleProgress
 from finnos.routers.auth import require_user
 router = APIRouter(prefix='/budgets', tags=['budgets'])
@@ -33,7 +33,7 @@ def _tx_amount(tx: dict) -> float:
     return round(D(tx.get('installment_value') or 0), 2) if tx.get('installment') else round(D(tx.get('value') or 0), 2)
 
 def _occurrences_in_cycle(tx: dict, start: date, end: date):
-    if tx.get('invoice_payment') or tx.get('type') == 'transferencia':
+    if tx.get('invoice_payment') or tx.get('invoice_refund') or tx.get('type') == 'transferencia':
         return []
     import calendar
     tx_date = date.fromisoformat(tx['date'])
@@ -108,36 +108,38 @@ async def budget_suggestion(user: dict=Depends(require_user)):
     start_idx = current_idx - 3
     (sy, sm) = (start_idx // 12, start_idx % 12 + 1)
     (ey, em) = ((current_idx - 1) // 12, (current_idx - 1) % 12 + 1)
-    import calendar
-    start = date(sy, sm, 1).isoformat()
-    end = date(ey, em, calendar.monthrange(ey, em)[1]).isoformat()
-    txs = await db.transactions.find({'user_id': user['id'], 'type': 'despesa', 'status': 'pago', 'date': {'$gte': start, '$lte': end}}).to_list(20000)
+    # Reuse the same competency semantics as Home, Flow and Budget:
+    # installments, merchant credits and bank refunds are all reconciled in
+    # cents. In particular a refunded card purchase must not inflate the
+    # suggested salary/income or generate a second spent category.
+    txs = await db.transactions.find({'user_id': user['id']}).to_list(20000)
+    cards = await db.cards.find({'user_id': user['id']}).to_list(200)
     cats = await db.categories.find({'user_id': user['id']}).to_list(500)
-    by_id = {c['id']: c for c in cats}
-    monthly: dict[tuple[str, str], float] = {}
-    for tx in txs:
-        cid = tx.get('category_id')
-        if not cid:
-            continue
-        key = (cid, str(tx['date'])[:7])
-        monthly[key] = monthly.get(key, 0) + _tx_amount(tx)
-    suggestions = []
+    by_id = {cat['id']: cat for cat in cats}
     month_keys = [f'{(start_idx + i) // 12:04d}-{(start_idx + i) % 12 + 1:02d}' for i in range(3)]
-    for (cid, cat) in by_id.items():
-        vals = [monthly.get((cid, key), D('0.0')) for key in month_keys]
+    monthly = {key: monthly_competency(txs, cards, key) for key in month_keys}
+    suggestions = []
+    for cid, cat in by_id.items():
+        # Net refunds may make a month negative; the prospective spending
+        # limit cannot be negative, but historical reports keep the signed
+        # amount for faithful audit.
+        vals = [max(D('0.0'), monthly[key]['by_category'].get(cid, D('0.0')))
+                for key in month_keys]
         if not any(vals):
             continue
         avg = round(sum(vals) / 3, 2)
         buffer = D('1.05') if cat.get('group') == 'necessidades' else D('1.0')
         planned = round(avg * buffer, 2)
-        suggestions.append({'category_id': cid, 'name': cat.get('name'), 'group': cat.get('group'), 'average': avg, 'suggested': planned, 'months_observed': sum((1 for value in vals if value > 0))})
-    suggestions.sort(key=lambda x: -x['suggested'])
-    income_txs = await db.transactions.find({'user_id': user['id'], 'type': 'receita', 'status': 'pago', 'date': {'$gte': start, '$lte': end}}).to_list(5000)
-    income_by_month: dict[str, float] = {}
-    for tx in income_txs:
-        key = str(tx['date'])[:7]
-        income_by_month[key] = income_by_month.get(key, 0) + _tx_amount(tx)
-    expected_income = round(sum((income_by_month.get(key, D('0.0')) for key in month_keys)) / 3, 2) if income_by_month else 0
+        suggestions.append({
+            'category_id': cid, 'name': cat.get('name'),
+            'group': cat.get('group'), 'average': avg,
+            'suggested': planned,
+            'months_observed': sum(value > 0 for value in vals),
+        })
+    suggestions.sort(key=lambda item: -item['suggested'])
+    expected_income = round(
+        sum((monthly[key]['income'] for key in month_keys), D('0.0')) / 3, 2
+    )
     return {'expected_income': expected_income, 'categories': suggestions, 'method': 'media_recente', 'writes_data': False}
 
 @router.get('', response_model=List[BudgetCycleOut])
