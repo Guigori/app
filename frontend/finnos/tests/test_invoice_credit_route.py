@@ -1,3 +1,4 @@
+import asyncio
 """FIN-05 HTTP handler behavior with synthetic transactional Firestore fakes.
 
 No Firebase credentials, Firestore rules or real user data are touched.
@@ -87,36 +88,33 @@ def credit(value=100, reason="Produto devolvido"):
     return CreditInvoiceIn(cycle="2026-10-29", purchase_id="purchase", value=value, reason=reason)
 
 
-@pytest.mark.asyncio
-async def test_credit_handler_is_atomic_and_retry_safe(monkeypatch):
+def test_credit_handler_is_atomic_and_retry_safe(monkeypatch):
     record = fixture(monkeypatch, paid=4000)
-    first = await credit_invoice("card", credit(100), user={"id": "uid"}, x_finnos_operation_id="op-1")
+    first = asyncio.run(credit_invoice("card", credit(100), user={"id": "uid"}, x_finnos_operation_id="op-1"))
     assert first["total"] == 200
     assert first["paid_amount"] == 40
     assert first["outstanding"] == 160
     assert first["adjustment_total"] == 100
     assert len(record["invoice_adjustments"]["2026-10-29"]) == 1
-    second = await credit_invoice("card", credit(100), user={"id": "uid"}, x_finnos_operation_id="op-1")
+    second = asyncio.run(credit_invoice("card", credit(100), user={"id": "uid"}, x_finnos_operation_id="op-1"))
     assert second["outstanding"] == 160
     assert len(record["invoice_adjustments"]["2026-10-29"]) == 1
     with pytest.raises(HTTPException) as reuse:
-        await credit_invoice("card", credit(110), user={"id": "uid"}, x_finnos_operation_id="op-1")
+        asyncio.run(credit_invoice("card", credit(110), user={"id": "uid"}, x_finnos_operation_id="op-1"))
     assert reuse.value.status_code == 409
 
 
-@pytest.mark.asyncio
-async def test_paid_invoice_disallows_credit_without_bank_refund(monkeypatch):
+def test_paid_invoice_disallows_credit_without_bank_refund(monkeypatch):
     record = fixture(monkeypatch, paid=30000)
     with pytest.raises(HTTPException) as denied:
-        await credit_invoice("card", credit(), user={"id": "uid"}, x_finnos_operation_id="paid")
+        asyncio.run(credit_invoice("card", credit(), user={"id": "uid"}, x_finnos_operation_id="paid"))
     assert denied.value.status_code == 409
     assert not record.get("invoice_adjustments")
 
 
-@pytest.mark.asyncio
-async def test_credit_handler_avoids_duplicate_account_or_purchase_writes(monkeypatch):
+def test_credit_handler_avoids_duplicate_account_or_purchase_writes(monkeypatch):
     record = fixture(monkeypatch)
-    output = await credit_invoice("card", credit(300), user={"id": "uid"}, x_finnos_operation_id="zero")
+    output = asyncio.run(credit_invoice("card", credit(300), user={"id": "uid"}, x_finnos_operation_id="zero"))
     assert output["total"] == 0
     assert output["outstanding"] == 0
     assert output["items"][0]["value"] == 300
