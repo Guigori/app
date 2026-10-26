@@ -127,6 +127,12 @@ export interface Transaction {
   created_at: string;
 }
 
+export interface TransactionPage {
+  month: string;
+  items: Transaction[];
+  next_cursor: string | null;
+}
+
 export interface TransactionInput {
   name: string;
   value: number;
