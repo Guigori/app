@@ -57,7 +57,11 @@ async def _signals(user_id: str) -> list[dict]:
     signals = []
     hist = [t for t in txs if t.get('type') == 'despesa' and t.get('status') == 'pago' and (start90 <= t['date'] < today_s)]
     by_cat = defaultdict(list)
-    card_docs = await db.cards.find({'user_id': user_id, 'active': True}).to_list(200)
+    # Historical credits/refunds on inactive (or legacy cards missing 'active')
+    # must still reduce the original category. Only card-pressure alerts
+    # should depend on whether a card remains active.
+    card_docs = await db.cards.find({'user_id': user_id}).to_list(200)
+    active_cards = [card for card in card_docs if card.get('active', True)]
     current_cat = defaultdict(D, monthly_competency(txs, card_docs, month)["by_category"])
     for t in hist:
         if t.get('category_id'):
@@ -95,7 +99,7 @@ async def _signals(user_id: str) -> list[dict]:
             signals.append(dict(id=f"duplicate-{t['id']}", type='risk', severity='high', title='Possível cobrança duplicada', description=f"{t['name']} aparece duas vezes por {brl(key[1])}", explanation='Encontramos dois lançamentos com mesmo nome, valor e data. Vale conferir antes de considerar ambos corretos.', metric=brl(key[1]), score=92, related_entity_type='transaction', related_entity_id=t['id'], expires_at=(today + timedelta(days=14)).isoformat(), evidence=[{'label': 'Valor', 'value': brl(key[1])}, {'label': 'Data', 'value': t['date']}]))
         seen[key] = t['id']
     (card_txs, accounts) = await card_context(user_id)
-    for doc in card_docs:
+    for doc in active_cards:
         card = await build_card(doc, card_txs, accounts)
         close = days_until(card.next_closing)
         monthly = []
