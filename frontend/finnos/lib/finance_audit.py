@@ -7,8 +7,17 @@ from collections import Counter
 from finnos.lib.money import D, cents
 from finnos.lib.stats import balance_effects
 from finnos.lib.dates import today_iso
+from decimal import InvalidOperation
 
 KINDS = ("accounts", "categories", "cards", "transactions", "goals", "budget_cycles", "subscriptions")
+
+
+def same_money_in_cents(value, expected):
+    try:
+        return cents(value) == expected
+    except (TypeError, ValueError, InvalidOperation):
+        return False
+
 
 
 def audit_finance(records):
@@ -73,7 +82,7 @@ def audit_finance(records):
                         or receipt.get("account_id") != entry.get("account_id")
                         or receipt.get("status") != "pago"
                         or type(amount) is not int
-                        or cents(receipt.get("value", 0)) != amount
+                        or not same_money_in_cents(receipt.get("value"), amount)
                     ):
                         problems["invoice_refund_receipt_missing_or_mismatch"] += 1
     for tx in records["transactions"]:
