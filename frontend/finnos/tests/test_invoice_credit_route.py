@@ -35,8 +35,7 @@ class Collection:
         self.ref = ref
 
     def document(self, key):
-        assert key == "card"
-        return self.ref
+        return self.ref if key == "card" else "finance_history:" + key
 
 
 class Owner:
@@ -44,13 +43,19 @@ class Owner:
         self.ref = ref
 
     def collection(self, name):
-        assert name == "cards"
+        assert name in {"cards", "finance_history"}
         return Collection(self.ref)
 
 
 class Transaction:
     def update(self, ref, payload):
         ref.record.update(copy.deepcopy(payload))
+
+    def create(self, ref, payload):
+        assert str(ref).startswith("finance_history:")
+        assert payload["entity"] == "cards"
+        assert payload["action"] == "updated"
+        assert payload["after"]["credit_amount_cents"] > 0
 
 
 def fixture(monkeypatch, *, paid=0):
