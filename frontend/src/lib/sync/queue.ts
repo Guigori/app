@@ -64,9 +64,20 @@ export async function queueTransaction(input: TransactionInput, source: Operatio
   };
   if (!op.uid || op.uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   await transact<void>("readwrite", (store, resolve, reject) => {
-    const req = store.put(op);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    // Date.now() alone is not a FIFO key: two fast registrations often share
+    // the same millisecond and IndexedDB getAll() is sorted by random UUID.
+    // Assign a strictly increasing creation timestamp in one IDB transaction.
+    const existing = store.getAll();
+    existing.onerror = () => reject(existing.error);
+    existing.onsuccess = () => {
+      const mostRecent = (existing.result as SyncOperation[]).reduce(
+        (max, item) => Math.max(max, Date.parse(item.createdAt) || 0), 0,
+      );
+      op.createdAt = new Date(Math.max(Date.now(), mostRecent + 1)).toISOString();
+      const req = store.put(op);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    };
   });
   window.dispatchEvent(new CustomEvent("finnos:sync-state"));
   return op;
@@ -168,6 +179,11 @@ export async function getSyncOperation(id: string): Promise<SyncOperation | null
 export async function discardConflictedOperation(id: string): Promise<void> {
   const uid = firebaseAuth?.currentUser?.uid;
   if (!uid) throw new Error("FINNOS_AUTH_REQUIRED");
+  const reviewed = await getSyncOperation(id);
+  if (!reviewed || reviewed.uid !== uid) throw new Error("FINNOS_SESSION_CHANGED");
+  if (reviewed.status !== "conflict") {
+    throw new Error("Somente operações bloqueadas podem ser descartadas após revisão.");
+  }
   await transact<void>("readwrite", (store, resolve, reject) => {
     const req = store.get(id);
     req.onerror = () => reject(req.error);
