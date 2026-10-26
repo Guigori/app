@@ -26,3 +26,17 @@
 - E2E autenticado executado com resultados e capturas/logs. **Ainda não realizado nesta etapa.**
 - Sem alteração nas configurações de Firebase, Auth, sessões ou regras Firestore.
 - PR permanece Draft e a produção inalterada até aprovação explícita.
+
+
+## Cobertura incremental — FIN-08 (26/10/2026)
+
+Regressões adicionadas **sem acessar Firestore real**:
+- `test_budget_refund_consistency.py`: reembolso de fatura liquidada não incrementa salário em Orçamento V2, reversão de despesa por competência e sugestões de categoria consistentes.
+- `test_radar_archived_card_credits.py`: estorno ligado a cartão arquivado entra no gasto líquido da categoria; cartão inativo não gera alerta de fatura corrente.
+- `test_refund_category_donut.py`: reembolso não cria valores negativos no gráfico de rosca; total financeiro assinado permanece preservado.
+- `src/lib/local/finance-migration.test.ts`: gráfico local de mês com somente devolução fica sem fatias negativas.
+- `test_simulation_refund_parity.py`: simulação usa saldo bancário real e fatura quitada sem contabilizar novamente o reembolso como renda.
+
+**Não substituir a homologação em Preview:** esses testes não comprovam autenticação,
+cabeçalhos de sessão, transações reais Firestore, permissão por UID ou integração da UI.
+O merge continua condicionado à matriz acima e à autorização explícita.
