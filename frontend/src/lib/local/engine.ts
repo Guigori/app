@@ -452,6 +452,7 @@ export function localDashboard(month?: string | null): Dashboard {
   const today = todayISO();
   const m = month ?? currentMonth();
   const prev = addMonth(m, -1);
+  const creditEvents = localCreditEvents(db);
 
   let totalBalance = db.accounts.reduce((sum, a) => sum + a.initial_balance, 0);
   for (const tx of db.transactions) {
@@ -487,6 +488,13 @@ export function localDashboard(month?: string | null): Dashboard {
     }
   }
 
+  for (const event of creditsForMonth(creditEvents, m)) {
+    expense -= event.amount;
+    const category = event.category_id ? db.categories.find(item => item.id === event.category_id) : undefined;
+    byCategory.set(event.category_id, (byCategory.get(event.category_id) ?? 0) - event.amount);
+    if (category) byGroup[category.group] -= event.amount;
+  }
+  for (const event of creditsForMonth(creditEvents, prev)) prevExpense -= event.amount;
   income = round2(income);
   expense = round2(expense);
 
@@ -543,6 +551,7 @@ export function localTrends(months: number, endMonth?: string): Trends {
   const window: string[] = [];
   for (let i = months - 1; i >= 0; i -= 1) window.push(addMonth(last, -i));
 
+  const creditEvents = localCreditEvents(db);
   const rows: MonthTrend[] = window.map((m) => {
     let income = 0;
     let expense = 0;
@@ -552,6 +561,7 @@ export function localTrends(months: number, endMonth?: string): Trends {
       if (tx.type === "receita") income += portion;
       else expense += portion;
     }
+    expense -= creditsForMonth(creditEvents, m).reduce((total, item) => total + item.amount, 0);
     return {
       month: m,
       label: MONTH_ABBR[Number(m.slice(5, 7)) - 1],
@@ -758,6 +768,7 @@ export function localFlow(params: FlowParams): Flow {
   const txs = params.category_id
     ? db.transactions.filter((t) => t.category_id === params.category_id)
     : db.transactions;
+  const creditEvents = localCreditEvents(db).filter(item => !params.category_id || item.category_id === params.category_id);
   const todayMonth = todayISO().slice(0, 7);
 
   const amount = (t: Transaction) => round2(t.installment ? t.installment_value ?? 0 : t.value);
@@ -800,6 +811,7 @@ export function localFlow(params: FlowParams): Flow {
         else pExpense += projected;
       }
     }
+    expense -= creditsForMonth(creditEvents, m).reduce((total, item) => total + item.amount, 0);
     for (const source of recurringSources(m)) {
       if (source.type === "receita") pIncome += amount(source);
       else pExpense += amount(source);
@@ -823,6 +835,9 @@ export function localFlow(params: FlowParams): Flow {
     const portion = monthPortion(tx, focus);
     if (portion === null || tx.type === "receita") continue;
     byCat.set(tx.category_id, (byCat.get(tx.category_id) ?? 0) + portion);
+  }
+  for (const event of creditsForMonth(creditEvents, focus)) {
+    byCat.set(event.category_id, (byCat.get(event.category_id) ?? 0) - event.amount);
   }
   const focusExpense = round2([...byCat.values()].reduce((s, v) => s + v, 0));
   const categories: FlowCategory[] = [...byCat.entries()]
@@ -869,7 +884,7 @@ export function localCalendar(month: string): CalendarMonth {
       buckets.get(tx.date) ??
       { date: tx.date, income: 0, expense: 0, projected_income: 0, projected_expense: 0, count: 0, active_count: 0 };
     day.count += 1;
-    if (tx.type !== "transferencia" && !tx.invoice_payment) {
+    if (tx.type !== "transferencia" && !tx.invoice_payment && !tx.invoice_refund) {
       const value = round2(tx.installment ? installmentPortion(tx.value, tx.total_installments ?? 1, firstRemainingInstallment(tx)) : tx.value);
       if (tx.status === "pago") {
         if (tx.type === "receita") day.income = round2(day.income + value);
