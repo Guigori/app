@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   finance-frontend:
@@ -26,40 +26,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Install reproducible frontend dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --legacy-peer-deps --no-audit --no-fund
-          else
-            npm install --legacy-peer-deps --no-audit --no-fund
-          fi
+      - name: Install exact committed frontend dependencies
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
       - name: Typecheck
         run: npm run typecheck
       - name: Frontend tests
         run: npm test
       - name: Production build
         run: npm run build
-      - name: Commit generated lockfile (migration branch only)
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/refactor/finn-migration-phase1-20261026' }}
-        working-directory: .
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend/package-lock.json
-          if git diff --cached --quiet; then
-            echo 'Lockfile unchanged'
-          else
-            git commit -m 'build(finance): version deterministic frontend lockfile'
-            git push origin HEAD:refactor/finn-migration-phase1-20261026
-          fi
-      - name: Save generated lockfile for review
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: finnos-frontend-lockfile
-          path: frontend/package-lock.json
-          if-no-files-found: warn
-
   active-financial-api:
     runs-on: ubuntu-latest
     timeout-minutes: 15
