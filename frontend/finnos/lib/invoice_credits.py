@@ -12,7 +12,7 @@ def cycle_credits(card: dict, cycle: str) -> list[dict]:
 
 
 def credit_total_cents(card: dict, cycle: str) -> int:
-    return sum(item["amount_cents"] for item in cycle_credits(card, cycle))
+    return sum(item["credit_cents"] for item in cycle_credits(card, cycle))
 
 
 def validate_credit(card: dict, txs: list[dict], cycle: str, purchase_id: str, amount_cents: int) -> dict:
@@ -26,7 +26,7 @@ def validate_credit(card: dict, txs: list[dict], cycle: str, purchase_id: str, a
     if len(matches) != 1:
         raise ValueError("Compra não encontrada nesta fatura.")
     previous = sum(
-        item["amount_cents"] for item in cycle_credits(card, cycle)
+        item["credit_cents"] for item in cycle_credits(card, cycle)
         if item["purchase_id"] == purchase_id
     )
     if previous + amount_cents > matches[0]["purchase_cents"]:
