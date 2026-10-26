@@ -10,6 +10,7 @@ import { loadSessionProfile } from "@/lib/profileIdentity";
 import { queueTransaction, flushSyncQueue, listSyncOperations, type OperationSource } from "@/lib/sync/queue";
 import { cacheSet, cachedFetch } from "@/lib/offline/accountCache";
 import {
+  localFinanceHistory,
   localClearData,
   localCreateAccount,
   localListInstitutions,
@@ -55,6 +56,7 @@ import type {
   AccountInput,
   Institution,
   InstitutionInput,
+  FinanceHistoryPage,
   BudgetSummary,
   BudgetSuggestion,
   BudgetCycle,
@@ -199,6 +201,14 @@ export async function fetchTrends(months: number, endMonth?: string): Promise<Tr
   const params = new URLSearchParams({ months: String(months) });
   if (endMonth) params.set("end_month", endMonth);
   return cachedFetch(`trends:${params.toString()}`, () => apiGet<Trends>(`/analytics/trends?${params.toString()}`));
+}
+
+/** FINN-inspired append-only financial audit history, read-only and UID-scoped. */
+export async function fetchFinanceHistory(limit = 50, before?: string): Promise<FinanceHistoryPage> {
+  if (isLocalMode()) return localFinanceHistory(limit, before);
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (before) params.set("before", before);
+  return apiGet<FinanceHistoryPage>(`/finance/history?${params.toString()}`);
 }
 
 export async function fetchBudget(month: string): Promise<BudgetSummary> {
