@@ -377,6 +377,9 @@ export interface CreditCard {
   active: boolean;
   invoice_paid: boolean;
   current_invoice: number;
+  payable_invoice?: number;
+  payable_cycle?: string | null;
+  payable_due?: string | null;
   future_installments: number;
   used: number;
   available: number;
