@@ -40,6 +40,8 @@ import type {
   Trends,
 } from "@/types/finnos";
 
+import { spendingPace } from "@/lib/budgetPace";
+
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
 /** Mirror of finnos.lib.money.installment_portion: no negative/zero installments. */
@@ -550,7 +552,16 @@ export function localBudget(month: string): BudgetSummary {
     const percent = budget > 0 ? Math.round((spent / budget) * 1000) / 10 : 0;
     const status: BudgetStatus =
       budget <= 0 ? "sem_limite" : percent <= 80 ? "dentro" : percent <= 100 ? "proximo" : "acima";
+    const pace = spendingPace(
+      budget,
+      db.transactions.filter(tx => tx.category_id === cat.id && tx.type === "despesa")
+        .map(tx => ({ date: tx.date, amount: monthPortion(tx, month) ?? 0 }))
+        .filter(event => event.amount > 0),
+      month,
+      todayISO(),
+    );
     rows.push({
+      ...pace,
       category_id: cat.id,
       name: cat.name,
       icon: cat.icon,
