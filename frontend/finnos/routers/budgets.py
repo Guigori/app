@@ -6,6 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
+from finnos.lib.recurrence import projections_in_period
 from finnos.models.budget import BudgetAllocationOut, BudgetAllocationProgress, BudgetCycleIn, BudgetCycleOut, BudgetCycleProgress
 from finnos.routers.auth import require_user
 router = APIRouter(prefix='/budgets', tags=['budgets'])
@@ -48,15 +49,6 @@ def _occurrences_in_cycle(tx: dict, start: date, end: date):
         return out
     if start <= tx_date <= end:
         out.append((tx_date, amount, realised))
-    if tx.get('fixed') and (tx.get('recurrence') or 'mensal') == 'mensal':
-        for offset in range(1, 60):
-            idx = tx_date.year * 12 + tx_date.month - 1 + offset
-            (yy, mm) = (idx // 12, idx % 12 + 1)
-            occurrence = date(yy, mm, min(tx_date.day, calendar.monthrange(yy, mm)[1]))
-            if occurrence > end:
-                break
-            if occurrence >= start:
-                out.append((occurrence, amount, False))
     return out
 
 async def _progress(cycle: dict, user_id: str) -> BudgetCycleProgress:
@@ -77,6 +69,15 @@ async def _progress(cycle: dict, user_id: str) -> BudgetCycleProgress:
                 target = spent_by_cat if realised else committed_by_cat
                 key = tx['category_id']
                 target[key] = target.get(key, 0) + amount
+    # Recurrence expansion happens once per series/period, independently of
+    # the individual historical rows that established it.
+    for source, occurrence in projections_in_period(txs, start, end):
+        amount = _tx_amount(source)
+        if source.get('type') == 'receita':
+            committed_income += amount
+        elif source.get('type') == 'despesa' and source.get('category_id'):
+            key = source['category_id']
+            committed_by_cat[key] = committed_by_cat.get(key, D('0.0')) + amount
     allocations = []
     for allocation in cycle.get('allocations', []):
         (key, planned) = (allocation['category_id'], round(D(allocation.get('planned') or 0), 2))
