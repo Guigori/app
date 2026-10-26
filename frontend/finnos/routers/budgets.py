@@ -1,4 +1,4 @@
-from finnos.lib.money import D, installment_portion, remaining_installment_indices, FinanceModel, Money
+from finnos.lib.money import D, installment_portion, remaining_installment_indices, FinanceModel, Money, quantize_brl
 """Budget V2 — versioned cycles. Existing monthly category budgets remain untouched."""
 import uuid
 from datetime import date, datetime, timezone
@@ -30,7 +30,7 @@ async def _out(cycle: dict) -> BudgetCycleOut:
     return BudgetCycleOut(**payload, allocations=allocations, status=_status(cycle, date.fromisoformat(today_iso())))
 
 def _tx_amount(tx: dict) -> float:
-    return round(D(tx.get('installment_value') or 0), 2) if tx.get('installment') else round(D(tx.get('value') or 0), 2)
+    return quantize_brl(D(tx.get('installment_value') or 0)) if tx.get('installment') else quantize_brl(D(tx.get('value') or 0))
 
 def _occurrences_in_cycle(tx: dict, start: date, end: date):
     if tx.get('invoice_payment') or tx.get('invoice_refund') or tx.get('type') == 'transferencia':
@@ -86,19 +86,19 @@ async def _progress(cycle: dict, user_id: str) -> BudgetCycleProgress:
             committed_by_cat[key] = committed_by_cat.get(key, D('0.0')) + amount
     allocations = []
     for allocation in cycle.get('allocations', []):
-        (key, planned) = (allocation['category_id'], round(D(allocation.get('planned') or 0), 2))
-        (spent, committed) = (round(spent_by_cat.get(key, 0), 2), round(committed_by_cat.get(key, 0), 2))
-        (projected, cat) = (round(spent + committed, 2), by_id.get(key, {}))
-        allocations.append(BudgetAllocationProgress(**allocation, name=cat.get('name'), icon=cat.get('icon'), color=cat.get('color'), spent=spent, committed=committed, available=round(planned - projected, 2), projected_close=projected, percent=round(projected / planned * 100, 1) if planned else 0))
-    (planned, spent, committed) = (round(sum((a.planned for a in allocations)), 2), round(sum((a.spent for a in allocations)), 2), round(sum((a.committed for a in allocations)), 2))
-    projected = round(spent + committed, 2)
+        (key, planned) = (allocation['category_id'], quantize_brl(D(allocation.get('planned') or 0)))
+        (spent, committed) = (quantize_brl(spent_by_cat.get(key, 0)), quantize_brl(committed_by_cat.get(key, 0)))
+        (projected, cat) = (quantize_brl(spent + committed), by_id.get(key, {}))
+        allocations.append(BudgetAllocationProgress(**allocation, name=cat.get('name'), icon=cat.get('icon'), color=cat.get('color'), spent=spent, committed=committed, available=quantize_brl(planned - projected), projected_close=projected, percent=round(projected / planned * 100, 1) if planned else 0))
+    (planned, spent, committed) = (quantize_brl(sum((a.planned for a in allocations))), quantize_brl(sum((a.spent for a in allocations))), quantize_brl(sum((a.committed for a in allocations))))
+    projected = quantize_brl(spent + committed)
     duration = max((end - start).days + 1, 1)
     elapsed = 0 if today < start else duration if today > end else (today - start).days + 1
     (elapsed_percent, used_percent) = (round(elapsed / duration * 100, 1), round(projected / planned * 100, 1) if planned else 0)
     pace = 'sem_plano' if not planned else 'acima' if used_percent > elapsed_percent + 10 else 'abaixo' if used_percent < max(elapsed_percent - 10, 0) else 'no_ritmo'
-    expected_income = round(D(cycle.get('expected_income') or 0), 2)
-    income_base = max(expected_income, round(received_income + committed_income, 2))
-    return BudgetCycleProgress(cycle_id=cycle['id'], start_date=start, end_date=end, planned=planned, spent=spent, committed=committed, available=round(planned - projected, 2), projected_close=projected, expected_income=expected_income, received_income=round(received_income, 2), committed_income=round(committed_income, 2), safe_to_spend=round(max(income_base - spent - committed, 0), 2), elapsed_percent=elapsed_percent, used_percent=used_percent, pace=pace, allocations=allocations)
+    expected_income = quantize_brl(D(cycle.get('expected_income') or 0))
+    income_base = max(expected_income, quantize_brl(received_income + committed_income))
+    return BudgetCycleProgress(cycle_id=cycle['id'], start_date=start, end_date=end, planned=planned, spent=spent, committed=committed, available=quantize_brl(planned - projected), projected_close=projected, expected_income=expected_income, received_income=quantize_brl(received_income), committed_income=quantize_brl(committed_income), safe_to_spend=quantize_brl(max(income_base - spent - committed, 0)), elapsed_percent=elapsed_percent, used_percent=used_percent, pace=pace, allocations=allocations)
 
 @router.get('/suggestion')
 async def budget_suggestion(user: dict=Depends(require_user)):
@@ -127,9 +127,9 @@ async def budget_suggestion(user: dict=Depends(require_user)):
                 for key in month_keys]
         if not any(vals):
             continue
-        avg = round(sum(vals) / 3, 2)
+        avg = quantize_brl(sum(vals) / 3)
         buffer = D('1.05') if cat.get('group') == 'necessidades' else D('1.0')
-        planned = round(avg * buffer, 2)
+        planned = quantize_brl(avg * buffer)
         suggestions.append({
             'category_id': cid, 'name': cat.get('name'),
             'group': cat.get('group'), 'average': avg,
@@ -137,9 +137,8 @@ async def budget_suggestion(user: dict=Depends(require_user)):
             'months_observed': sum(value > 0 for value in vals),
         })
     suggestions.sort(key=lambda item: -item['suggested'])
-    expected_income = round(
-        sum((monthly[key]['income'] for key in month_keys), D('0.0')) / 3, 2
-    )
+    expected_income = quantize_brl(
+        sum((monthly[key]['income'] for key in month_keys), D('0.0')) / 3)
     return {'expected_income': expected_income, 'categories': suggestions, 'method': 'media_recente', 'writes_data': False}
 
 @router.get('', response_model=List[BudgetCycleOut])
