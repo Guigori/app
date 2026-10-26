@@ -27,6 +27,20 @@ def cents(value):
     return int((amount * 100).quantize(D(1), rounding=ROUND_HALF_UP))
 
 
+
+def remaining_installment_indices(tx):
+    """Indices of installments still represented by an imported k/n purchase.
+
+    When current_installment is k, tx.date is the date of installment k.
+    Total purchase value remains the original n-installment amount. Preserves
+    the existing last-installment cent reconciliation.
+    """
+    n = int(tx.get("total_installments") or 1)
+    current = int(tx.get("current_installment") or 1)
+    if n < 1 or not 1 <= current <= n:
+        raise ValueError("Parcela atual inválida.")
+    return range(current - 1, n)
+
 def installment_portion(tx, offset):
     """Exact nonnegative installment in reais, adding remaining cents at the end.
 
