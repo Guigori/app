@@ -74,7 +74,7 @@ export default defineConfig(() => {
       // No hmr.clientPort override: Vite infers the WS target from window.location, which
       // is correct on both localhost:3000 (smoke) and the https/:443 preview proxy.
       // Build-error rendering: emergent-overlay when it loaded, else Vite's own overlay.
-      hmr: hotReloadDisabled ? false : { overlay: !emergentOverlay },
+      hmr: hotReloadDisabled ? false : { overlay: true },
       watch: hotReloadDisabled ? null : { usePolling: true, interval: 300 },
       // Use the SAME Firestore API as Vercel. The legacy Mongo server on :8001
       // is intentionally not a fallback. Start `npm run dev:api` in another terminal.
