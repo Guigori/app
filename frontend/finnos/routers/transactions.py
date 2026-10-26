@@ -147,7 +147,7 @@ def _document(user_id: str, payload: TransactionIn) -> dict:
             payload.current_installment or 1 if payload.installment else None
         ),
         "installment_value": (
-            installment_portion({"value": total, "total_installments": payload.total_installments}, 0)
+            installment_portion({"value": total, "total_installments": payload.total_installments}, (payload.current_installment or 1) - 1)
             if payload.installment
             else None
         ),
