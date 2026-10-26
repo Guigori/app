@@ -15,6 +15,33 @@ permissions:
   contents: read
 
 jobs:
+  finance-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install frontend dependencies
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Frontend tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Save generated lockfile for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finnos-frontend-lockfile
+          path: frontend/package-lock.json
+          if-no-files-found: warn
+
   active-financial-api:
     runs-on: ubuntu-latest
     timeout-minutes: 15
