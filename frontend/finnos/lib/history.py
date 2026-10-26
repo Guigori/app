@@ -24,7 +24,7 @@ def visible_summary(collection: str, doc: dict | None) -> dict | None:
         if doc.get(key) is not None:
             result[key] = str(doc[key])[:80]
     for key in ("value", "monthly_budget", "monthly_goal", "initial_balance",
-                "limit", "expected_income"):
+                "limit", "expected_income", "credit_amount", "refund_amount"):
         if doc.get(key) is not None:
             result[key + "_cents"] = cents(doc[key])
     if collection == "budget_cycles":
