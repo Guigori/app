@@ -4,7 +4,7 @@ import { IDBFactory } from "fake-indexeddb";
 vi.mock("@/lib/mode", () => ({ getMode: () => "local" }));
 
 import { freshDb, readDb, writeDb, type LocalCard } from "@/lib/local/store";
-import { localInvoice, localListCards, localFlow, localCreateTransaction, localCreditInvoice, localBankRefund, localDeleteTransaction, localDashboard, localBudget, localFinanceHistory } from "@/lib/local/engine";
+import { localInvoice, localListCards, localFlow, localCreateTransaction, localCreditInvoice, localBankRefund, localDeleteTransaction, localDashboard, localBudget, localFinanceHistory, localCreateAccount, localListAccounts } from "@/lib/local/engine";
 import type { Transaction, TransactionInput } from "@/types/finnos";
 
 const date = "2026-10-20";
@@ -210,4 +210,22 @@ it("prevents bank refund on a card bill that is not fully paid", () => {
     cycle: "2026-10-29", purchase_id: "new", account_id: "bank",
     date: "2026-10-26", value: 50, reason: "Produto devolvido",
   }, "refund-2")).toThrow("fatura quitada");
+});
+
+
+it("keeps negative opening balance and card-free cash movement consistent locally", () => {
+  const db = freshDb("Overdraft");
+  db.accounts = [];
+  db.cards = [];
+  db.transactions = [];
+  writeDb(db);
+  const newAccount = localCreateAccount({
+    name: "Conta com cheque especial", type: "corrente",
+    institution: "Banco", institution_id: null,
+    color: "#070F52", initial_balance: -500.23, active: true,
+  });
+  expect(localListAccounts().find(item => item.id === newAccount.id)?.balance).toBe(-500.23);
+  expect(localDashboard("2026-10").total_balance).toBe(-500.23);
+  const saved = readDb();
+  expect(saved.accounts.find(item => item.id === newAccount.id)?.initial_balance).toBe(-500.23);
 });
