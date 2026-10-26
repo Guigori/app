@@ -42,6 +42,31 @@ import type {
 
 import { spendingPace } from "@/lib/budgetPace";
 
+/** Sanitized, append-only history. Mirrors the server record_event contract. */
+function localAudit(db: LocalDb, entity: string, action: "created" | "updated" | "deleted",
+  before: { id: string; name?: string; value?: number; monthly_budget?: number; date?: string } | null,
+  after: { id: string; name?: string; value?: number; monthly_budget?: number; date?: string } | null): void {
+  const summary = (item: typeof before) => item ? {
+    ...(item.name ? { name: item.name } : {}),
+    ...(item.date ? { date: item.date } : {}),
+    ...(item.value != null ? { value_cents: Math.round(item.value * 100) } : {}),
+    ...(item.monthly_budget != null ? { monthly_budget_cents: Math.round(item.monthly_budget * 100) } : {}),
+  } : null;
+  db.audit_events ??= [];
+  db.audit_events.push({
+    id: newId(), entity, entity_id: (after ?? before)!.id, action,
+    summary: `${action}: ${entity}`, created_at: new Date().toISOString(),
+    before: summary(before), after: summary(after),
+  });
+}
+
+export function localFinanceHistory(limit = 50, before?: string) {
+  const items = [...(readDb().audit_events ?? [])]
+    .filter(item => !before || item.created_at < before)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+  return { items: items.slice(0, limit), next_cursor: items.length > limit ? items[limit - 1]?.created_at ?? null : null };
+}
+
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
 /** Mirror of finnos.lib.money.installment_portion: no negative/zero installments. */
@@ -243,6 +268,7 @@ export function localCreateCategory(input: CategoryInput): Category {
   const db = readDb();
   const category: Category = { ...input, id: newId(), created_at: new Date().toISOString() };
   db.categories.push(category);
+  localAudit(db, "categories", "created", null, category);
   writeDb(db);
   return category;
 }
@@ -251,7 +277,9 @@ export function localUpdateCategory(id: string, input: CategoryInput): Category 
   const db = readDb();
   const index = db.categories.findIndex((c) => c.id === id);
   if (index < 0) throw new Error("Categoria não encontrada.");
+  const before = { ...db.categories[index] };
   db.categories[index] = { ...db.categories[index], ...input };
+  localAudit(db, "categories", "updated", before, db.categories[index]);
   writeDb(db);
   return db.categories[index];
 }
@@ -264,7 +292,9 @@ export function localDeleteCategory(id: string): void {
     );
   }
   if (db.subscriptions.some(sub => sub.category_id === id)) throw new Error("Categoria vinculada a uma assinatura.");
+  const previous = db.categories.find(c => c.id === id) ?? null;
   db.categories = db.categories.filter((c) => c.id !== id);
+  if (previous) localAudit(db, "categories", "deleted", previous, null);
   writeDb(db);
 }
 
@@ -362,6 +392,7 @@ export function localCreateTransaction(input: TransactionInput): Transaction {
   const db = readDb();
   const tx = buildTransaction(db, input);
   db.transactions.push(tx);
+  localAudit(db, "transactions", "created", null, tx);
   writeDb(db);
   return enrich(db, tx);
 }
@@ -390,7 +421,9 @@ export function localUpdateTransaction(id: string, input: TransactionInput): Tra
   if (index < 0) throw new Error("Transação não encontrada.");
   assertPurchaseNotSettled(db, db.transactions[index]);
   const tx = buildTransaction(db, input, db.transactions[index]);
+  const before = { ...db.transactions[index] };
   db.transactions[index] = tx;
+  localAudit(db, "transactions", "updated", before, tx);
   writeDb(db);
   return enrich(db, tx);
 }
@@ -1210,6 +1243,7 @@ export function localCreditInvoice(cardId: string, input: CreditInvoiceInput, op
       },
     ],
   };
+  localAudit(db, "cards", "updated", { id: card.id, name: card.name }, { id: card.id, name: card.name });
   writeDb(db);
   return invoiceForCycle(db, card, input.cycle);
 }
