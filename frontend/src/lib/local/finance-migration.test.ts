@@ -4,8 +4,8 @@ import { IDBFactory } from "fake-indexeddb";
 vi.mock("@/lib/mode", () => ({ getMode: () => "local" }));
 
 import { freshDb, writeDb, type LocalCard } from "@/lib/local/store";
-import { localInvoice, localListCards, localFlow } from "@/lib/local/engine";
-import type { Transaction } from "@/types/finnos";
+import { localInvoice, localListCards, localFlow, localCreateTransaction } from "@/lib/local/engine";
+import type { Transaction, TransactionInput } from "@/types/finnos";
 
 const date = "2026-10-20";
 
@@ -92,4 +92,21 @@ it("keeps the settled snapshot but includes a new purchase after early partial p
   expect(invoice.outstanding).toBe(260);
   expect(invoice.items.map(item => item.id).sort()).toEqual(["existing", "new"]);
   expect(localListCards()[0].current_invoice).toBe(260);
+});
+
+it("validates imported installment k/n and future settled dates before saving", () => {
+  setScenario([]);
+  const input: TransactionInput = {
+    name: "Notebook", value: 1000, type: "despesa", status: "pago",
+    date: "2026-10-20", account_id: "bank", card_id: "card",
+    to_account_id: null, category_id: null, fixed: false, recurrence: null,
+    installment: true, total_installments: 10, current_installment: 11,
+    adjusted_value: null, attachment: null, notes: null, notify_enabled: true,
+  };
+  expect(() => localCreateTransaction(input)).toThrow("Parcela atual inválida.");
+  expect(() => localCreateTransaction({ ...input, current_installment: 0 })).toThrow("Parcela atual inválida.");
+  expect(() => localCreateTransaction({
+    ...input, current_installment: 7, date: "2026-11-20",
+  })).toThrow("Lançamento futuro não pode estar pago.");
+  expect(localInvoice("card").items).toHaveLength(0);
 });
