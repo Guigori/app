@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, month_portion, balance_effects
+from finnos.lib.competency import monthly_competency
 from finnos.lib.radar_patterns import recurring_signals
 from finnos.models.radar import RadarActionIn, RadarFeedbackIn, RadarOut, RadarSignalOut
 from finnos.routers.auth import require_user
@@ -56,15 +57,12 @@ async def _signals(user_id: str) -> list[dict]:
     signals = []
     hist = [t for t in txs if t.get('type') == 'despesa' and t.get('status') == 'pago' and (start90 <= t['date'] < today_s)]
     by_cat = defaultdict(list)
-    current_cat = defaultdict(D)
+    card_docs = await db.cards.find({'user_id': user_id, 'active': True}).to_list(200)
+    current_cat = defaultdict(D, monthly_competency(txs, card_docs, month)["by_category"])
     for t in hist:
         if t.get('category_id'):
             by_cat[t['category_id']].append(D(t.get('adjusted_value') or t['value']))
-    for t in txs:
-        if t.get('type') == 'despesa' and t.get('status') == 'pago' and t['date'].startswith(month) and t.get('category_id'):
-            p = month_portion(t, month)
-            if p is not None:
-                current_cat[t['category_id']] += p
+    # Current month category totals already include audited credits and refunds.
     elapsed = max(today.day, 1)
     for (cid, current) in current_cat.items():
         vals = by_cat.get(cid, [])
@@ -96,7 +94,6 @@ async def _signals(user_id: str) -> list[dict]:
         if key in seen:
             signals.append(dict(id=f"duplicate-{t['id']}", type='risk', severity='high', title='Possível cobrança duplicada', description=f"{t['name']} aparece duas vezes por {brl(key[1])}", explanation='Encontramos dois lançamentos com mesmo nome, valor e data. Vale conferir antes de considerar ambos corretos.', metric=brl(key[1]), score=92, related_entity_type='transaction', related_entity_id=t['id'], expires_at=(today + timedelta(days=14)).isoformat(), evidence=[{'label': 'Valor', 'value': brl(key[1])}, {'label': 'Data', 'value': t['date']}]))
         seen[key] = t['id']
-    card_docs = await db.cards.find({'user_id': user_id, 'active': True}).to_list(200)
     (card_txs, accounts) = await card_context(user_id)
     for doc in card_docs:
         card = await build_card(doc, card_txs, accounts)
