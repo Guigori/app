@@ -181,7 +181,19 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       return transaction ? updateTransaction(transaction.id, input) : createTransaction(input);
     },
     onSuccess: async () => {
-      toast.success(syncOperationId ? "Registro confirmado e sincronizado." : transaction ? "Transação atualizada." : "Transação registrada.", { duration: 3000 });
+      if (syncOperationId) {
+        const remaining = await getSyncOperation(syncOperationId);
+        if (remaining) {
+          toast.info("Alteração preservada neste aparelho", {
+            description: "O lançamento ainda não foi confirmado pelo servidor. A sincronização continua pendente.",
+            duration: 4500,
+          });
+        } else {
+          toast.success("Registro sincronizado.", { duration: 3000 });
+        }
+      } else {
+        toast.success(transaction ? "Transação atualizada." : "Transação registrada.", { duration: 3000 });
+      }
       await refreshFinancialViews();
       onOpenChange(false);
     },
