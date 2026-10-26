@@ -82,6 +82,7 @@ import type {
   FlowParams,
   Transaction,
   TransactionInput,
+  TransactionPage,
   Trends,
   User,
   Radar,
@@ -380,6 +381,33 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
       installment_value: o.payload.installment && o.payload.total_installments ? txAmount(o.payload) / o.payload.total_installments : null,
       created_at: o.createdAt }));
   return [...optimistic, ...updated];
+}
+
+/** ARQ-03 staged indexed pagination. The legacy list endpoint and its totals
+ * remain untouched until all visual consumers migrate to paginated contracts.
+ */
+export async function fetchTransactionsPage(month: string, cursor?: string, limit = 50): Promise<TransactionPage> {
+  if (!/^\d{4}-\d{2}$/.test(month) || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new Error("Página financeira inválida.");
+  }
+  if (isLocalMode()) {
+    const rows = localListTransactions({ month })
+      .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+    const start = cursor ? rows.findIndex(row => row.id === cursor) + 1 : 0;
+    if (cursor && start === 0) throw new Error("Cursor financeiro inválido.");
+    const items = rows.slice(start, start + limit);
+    return {
+      month,
+      items,
+      next_cursor: start + limit < rows.length ? items.at(-1)?.id ?? null : null,
+    };
+  }
+  const params = new URLSearchParams({ month, limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  const uid = firebaseAuth?.currentUser?.uid;
+  const result = await apiGet<TransactionPage>(`/transactions/page?${params.toString()}`);
+  if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  return result;
 }
 
 export async function createTransaction(input: TransactionInput, source: OperationSource = "manual"): Promise<Transaction> {
