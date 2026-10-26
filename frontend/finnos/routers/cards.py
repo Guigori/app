@@ -10,7 +10,7 @@ from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import aware, months_between
 from finnos.models.cards import CardIn, CardOut
-from finnos.models.notify import Invoice, InvoiceItem, PayInvoiceIn
+from finnos.models.notify import Invoice, InvoiceItem, PayInvoiceIn, CreditInvoiceIn
 from finnos.routers.auth import require_user
 
 router = APIRouter(prefix="/cards", tags=["cards"])
@@ -190,4 +190,98 @@ async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(
             tr.create(receipt_ref,dict(request=request_key,state=state,created_at=now))
             return response
         return store.atomic(instance,uid,action)
+    return await run_in_threadpool(execute)
+
+
+@router.post("/{card_id}/credits", response_model=Invoice)
+async def credit_invoice(
+    card_id: str,
+    payload: CreditInvoiceIn,
+    user: dict = Depends(require_user),
+    x_finnos_operation_id: str = Header(...),
+):
+    """Record an immutable, idempotent purchase credit on an unpaid invoice.
+
+    Credit notes only reduce unpaid card debt; they never silently reimburse a
+    bank account or delete purchases/payment transactions. All writes are
+    UID-scoped and serialized inside the existing Firestore card transaction.
+    """
+    import hashlib
+    import json
+    from finnos.lib import db as store
+    from finnos.lib.invoice_credits import validate_credit, append_credit
+    from finnos.lib.invoice_payments import to_cents
+    from finnos.lib.invoices import invoice_state, output
+    from starlette.concurrency import run_in_threadpool
+
+    if not 1 <= len(x_finnos_operation_id) <= 200:
+        raise HTTPException(422, "Identificador de operação inválido.")
+    reason = payload.reason.strip()
+    if len(reason) < 5:
+        raise HTTPException(422, "Descreva o motivo do estorno.")
+    try:
+        amount = to_cents(payload.value)
+        # Also validate the requested closing-cycle date before reading storage.
+        date.fromisoformat(payload.cycle)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    uid = store.scoped({"user_id": user["id"]})
+    entry_id = hashlib.sha256(
+        f"invoice-credit:{uid}:{card_id}:{x_finnos_operation_id}".encode()
+    ).hexdigest()
+    request_key = {
+        "card_id": card_id,
+        "cycle": payload.cycle,
+        "purchase_id": payload.purchase_id,
+        "amount_cents": amount,
+        "reason": reason,
+    }
+    fingerprint = hashlib.sha256(
+        json.dumps(request_key, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+
+    def execute():
+        instance = store.client()
+
+        def action(tr):
+            owner = store.root(instance, uid)
+            card_ref = owner.collection("cards").document(store.resource_id(card_id))
+            snap = card_ref.get(transaction=tr)
+            if not snap.exists:
+                raise HTTPException(404, "Cartão não encontrado.")
+            card = dict(store.decode(snap.to_dict()), id=card_id)
+            previous = next((
+                item for entries in (card.get("invoice_adjustments") or {}).values()
+                for item in entries if item.get("id") == entry_id
+            ), None)
+            txs = store.rows(instance, uid, "transactions", tr)
+            if previous is not None:
+                if previous.get("fingerprint") != fingerprint:
+                    raise HTTPException(409, "Identificador reutilizado para outro estorno.")
+                return output(invoice_state(card, txs, payload.cycle))
+
+            try:
+                validate_credit(card, txs, payload.cycle, payload.purchase_id, amount)
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+
+            now = datetime.now(timezone.utc)
+            append_credit(card, {
+                "id": entry_id,
+                "fingerprint": fingerprint,
+                "cycle": payload.cycle,
+                "purchase_id": payload.purchase_id,
+                "amount_cents": amount,
+                "reason": reason,
+                "date": today_iso(),
+                "created_at": now,
+            })
+            # Only update the card's credit ledger; do not rewrite purchases,
+            # payment receipts, accounts or any other user collection.
+            tr.update(card_ref, {"invoice_adjustments": card["invoice_adjustments"]})
+            return output(invoice_state(card, txs, payload.cycle))
+
+        return store.atomic(instance, uid, action)
+
     return await run_in_threadpool(execute)
