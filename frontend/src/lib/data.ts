@@ -43,6 +43,7 @@ import {
   localInvoice,
   localPayInvoice,
   localCreditInvoice,
+  localBankRefund,
   localSubscriptions,
   localCreateSubscription,
   localUpdateSubscription,
@@ -70,6 +71,7 @@ import type {
   Notifications,
   PayInvoiceInput,
   CreditInvoiceInput,
+  BankRefundInput,
   Subscriptions,
   SubscriptionInput,
   SubscriptionItem,
@@ -473,14 +475,21 @@ export async function clearNotifications(ids: string[]): Promise<void> {
 
 // --- Fatura / assinaturas / avisos -----------------------------------------
 
-export async function fetchInvoice(cardId: string): Promise<Invoice> {
-  if (isLocalMode()) return localInvoice(cardId);
-  return cachedFetch(`invoice:${cardId}`, () => apiGet<Invoice>(`/cards/${cardId}/invoice`));
+export async function fetchInvoice(cardId: string, cycle?: string): Promise<Invoice> {
+  if (isLocalMode()) return localInvoice(cardId, cycle);
+  const parameter = cycle ? `?cycle=${encodeURIComponent(cycle)}` : "";
+  return cachedFetch(`invoice:${cardId}:${cycle ?? "default"}`, () => apiGet<Invoice>(`/cards/${cardId}/invoice${parameter}`));
 }
 
 export async function payInvoice(cardId: string, input: PayInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
   if (isLocalMode()) return localPayInvoice(cardId, input);
   return apiPost<Invoice>(`/cards/${cardId}/pay`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+
+/** Paid invoice refund creates one bank receipt; the original invoice remains paid. */
+export async function refundInvoiceToBank(cardId: string, input: BankRefundInput, operationId = crypto.randomUUID()): Promise<Invoice> {
+  if (isLocalMode()) return localBankRefund(cardId, input, operationId);
+  return apiPost<Invoice>(`/cards/${encodeURIComponent(cardId)}/refunds`, input, { "X-FINNOS-Operation-ID": operationId });
 }
 
 /** Merchant credit reduces unpaid card debt; it never transfers money to a bank account. */
