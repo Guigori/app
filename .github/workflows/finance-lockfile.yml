@@ -1,0 +1,49 @@
+name: FINNOS Lockfile do Frontend
+
+on:
+  push:
+    branches:
+      - refactor/finn-migration-phase1-20261026
+    paths:
+      - '.github/workflows/finance-lockfile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/finn-migration-phase1-20261026
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Generate deterministic npm lockfile
+        working-directory: frontend
+        run: npm install --package-lock-only --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+      - name: Verify reproducible dependency installation
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Commit lockfile to migration branch only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/package-lock.json
+          if git diff --cached --quiet; then
+            echo 'Lockfile already up to date.'
+          else
+            git commit -m 'build(finance): commit reproducible npm lockfile'
+            git push origin HEAD:refactor/finn-migration-phase1-20261026
+          fi
+      - name: Upload lockfile for recovery
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finnos-committed-lockfile
+          path: frontend/package-lock.json
+          if-no-files-found: error
