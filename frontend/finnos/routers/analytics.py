@@ -8,7 +8,7 @@ from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, month_bounds, month_portion, months_between
 from finnos.lib.recurrence import monthly_projection_sources
 from finnos.lib.category_pace import monthly_pace
-from finnos.lib.competency import monthly_competency
+from finnos.lib.competency import monthly_competency, credit_events
 from finnos.models.analytics import (
     BudgetRow,
     BudgetSummary,
@@ -90,11 +90,12 @@ async def budget(
     cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
     monthly = monthly_competency(txs, cards, m)
     spent_by_cat, income = monthly["by_category"], monthly["income"]
+    adjustments = credit_events(cards, txs)
     rows: list[BudgetRow] = []
     for cat in categories:
         budget_value = round(D(cat.get("monthly_budget") or D("0.0")), 2)
         spent = round(spent_by_cat.get(cat["id"], D("0.0")), 2)
-        pace = monthly_pace(budget_value, txs, cat["id"], m, as_of=today_iso())
+        pace = monthly_pace(budget_value, txs, cat["id"], m, as_of=today_iso(), credits=adjustments)
         if budget_value <= 0:
             status = "sem_limite"
             percent = D("0.0")
