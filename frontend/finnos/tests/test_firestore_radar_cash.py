@@ -24,4 +24,4 @@ def test_settled_future_date_uses_home_semantics():
     accounts = [{"id": "a", "initial_balance": 10}]
     txs = [{"id": "income", "account_id": "a", "type": "receita",
             "value": 15, "status": "pago", "date": "2026-10-20"}]
-    assert _settled_cash_balance(accounts, txs, "2026-10-14") == 25
+    assert _settled_cash_balance(accounts, txs, "2026-10-14") == 10

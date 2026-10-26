@@ -66,11 +66,11 @@ def month_portion(tx: dict, month: str) -> float | None:
 def balance_effects(tx: dict, today: str) -> list[tuple[str, float]]:
     """Signed effect on each account's balance.
 
-    Status is the single source of truth: "pago" means the money moved, so it
-    counts regardless of the date; "pendente"/"agendado" never move a balance.
+    Only paid transactions dated today or earlier affect the realized balance.
+    Pending and scheduled transactions never affect the realized balance.
     A parcelado purchase counts only the installments already come due.
     """
-    if tx.get("card_id") or tx.get("status") != "pago":
+    if tx.get("card_id") or tx.get("status") != "pago" or tx.get("date", "") > today:
         return []
     v = D(tx["value"])
     if tx.get("installment"):

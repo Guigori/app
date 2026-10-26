@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
 const mocks=vi.hoisted(()=>({auth:{currentUser:{uid:"A"} as {uid:string}|null},post:vi.fn(),put:vi.fn()}));
 vi.mock("@/lib/firebase",()=>({firebaseAuth:mocks.auth}));
-vi.mock("@/lib/api",()=>({apiPost:mocks.post,apiPut:mocks.put,apiGet:vi.fn()}));
+vi.mock("@/lib/api",()=>({ApiError: class ApiError extends Error { status:number; constructor(status:number,message:string){super(message);this.status=status;} },apiPost:mocks.post,apiPut:mocks.put,apiGet:vi.fn()}));
 import { cacheSet,cachedFetch } from "@/lib/offline/accountCache";
 import { queueTransaction,listSyncOperations,flushSyncQueue } from "./queue";
 const input={name:"Offline",type:"despesa" as const,status:"pago" as const,value:12.34,date:"2026-10-12",account_id:"bank",card_id:null,to_account_id:null,category_id:null,fixed:false,recurrence:null,installment:false,total_installments:null,current_installment:null,adjusted_value:null,attachment:null,notes:null,notify_enabled:true};
