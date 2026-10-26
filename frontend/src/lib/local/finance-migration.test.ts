@@ -4,6 +4,7 @@ import { IDBFactory } from "fake-indexeddb";
 vi.mock("@/lib/mode", () => ({ getMode: () => "local" }));
 
 import { freshDb, readDb, writeDb, type LocalCard } from "@/lib/local/store";
+import { fetchTransactionsPage } from "@/lib/data";
 import { localInvoice, localListCards, localFlow, localCreateTransaction, localCreditInvoice, localBankRefund, localDeleteTransaction, localDashboard, localBudget, localFinanceHistory, localCreateAccount, localListAccounts } from "@/lib/local/engine";
 import type { Transaction, TransactionInput } from "@/types/finnos";
 
@@ -228,4 +229,22 @@ it("keeps negative opening balance and card-free cash movement consistent locall
   expect(localDashboard("2026-10").total_balance).toBe(-500.23);
   const saved = readDb();
   expect(saved.accounts.find(item => item.id === newAccount.id)?.initial_balance).toBe(-500.23);
+});
+
+
+it("paginates the local monthly history with stable cursor parity and no duplicates", async () => {
+  const transactions = Array.from({ length: 122 }, (_, i) => ({
+    ...purchase(`purchase-${String(i).padStart(4, "0")}`, 1.25),
+    card_id: null,
+  }));
+  setScenario(transactions);
+  const first = await fetchTransactionsPage("2026-10", undefined, 50);
+  const second = await fetchTransactionsPage("2026-10", first.next_cursor!, 50);
+  const third = await fetchTransactionsPage("2026-10", second.next_cursor!, 50);
+  expect([first.items.length, second.items.length, third.items.length]).toEqual([50, 50, 22]);
+  expect(third.next_cursor).toBeNull();
+  const ids = [...first.items, ...second.items, ...third.items].map(item => item.id);
+  expect(new Set(ids).size).toBe(122);
+  expect(() => fetchTransactionsPage("invalid-month")).not.toThrow();
+  await expect(fetchTransactionsPage("2026-10", "not-in-records")).rejects.toThrow("Cursor");
 });
