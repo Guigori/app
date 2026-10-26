@@ -207,6 +207,63 @@ async def list_transactions(
     ]
 
 
+@router.get("/page")
+async def list_transactions_page(
+    month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
+    limit: int = Query(default=50, ge=1, le=100),
+    cursor: Optional[str] = Query(default=None, max_length=1500),
+    user: dict = Depends(require_user),
+):
+    """Indexed, read-only monthly page using a Firestore document cursor.
+
+    The existing /transactions array contract stays unchanged until UI
+    migration and aggregate tests. This endpoint deliberately requires a
+    bounded month and never streams all 20,000 user transactions.
+    """
+    from finnos.lib import db as store
+    from firebase_admin import firestore
+    from starlette.concurrency import run_in_threadpool
+
+    start, end = month_bounds(month)
+    uid = store.scoped({"user_id": user["id"]})
+
+    def read_page():
+        collection = store.root(store.client(), uid).collection("transactions")
+        query = (
+            collection.where("date", ">=", start)
+            .where("date", "<=", end)
+            .order_by("date", direction=firestore.Query.DESCENDING)
+        )
+        if cursor:
+            previous = collection.document(store.resource_id(cursor)).get()
+            if not previous.exists:
+                raise HTTPException(422, "Cursor financeiro expirado ou inválido.")
+            previous_date = (previous.to_dict() or {}).get("date")
+            if not isinstance(previous_date, str) or not start <= previous_date <= end:
+                raise HTTPException(422, "Cursor não pertence ao mês solicitado.")
+            query = query.start_after(previous)
+        snapshots = list(query.limit(limit + 1).stream(timeout=15))
+        has_more = len(snapshots) > limit
+        selected = snapshots[:limit]
+        docs = [
+            dict(store.decode(snapshot.to_dict()), id=snapshot.id, user_id=uid)
+            for snapshot in selected
+        ]
+        return docs, (selected[-1].id if has_more and selected else None)
+
+    docs, next_cursor = await run_in_threadpool(read_page)
+    accounts_by_id, categories_by_id = await _ref_maps(uid)
+    cards_by_id = await _cards_by_id(uid)
+    return {
+        "month": month,
+        "items": [
+            enrich_transaction(doc, accounts_by_id, categories_by_id, cards_by_id)
+            for doc in docs
+        ],
+        "next_cursor": next_cursor,
+    }
+
+
 @router.post("", response_model=TransactionOut, status_code=201)
 async def create_transaction(
     payload: TransactionIn,
