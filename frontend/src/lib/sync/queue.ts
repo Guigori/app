@@ -104,7 +104,10 @@ export async function flushSyncQueue(): Promise<void> {
   window.dispatchEvent(new CustomEvent("finnos:sync-state"));
   try {
     for (const op of await listSyncOperations()) {
-      if (op.status === "conflict") continue;
+      // FIFO is a financial invariant: a later update may depend on the prior
+      // create/update. Never skip a rejected operation and send its successors.
+      // Conflicts and validation errors require explicit resolution.
+      if (op.status === "conflict") break;
       if (!navigator.onLine || op.uid !== firebaseAuth?.currentUser?.uid) break;
       const current = { ...op, status: "syncing" as const, attempts: op.attempts + 1, lastError: undefined };
       await saveSyncOperation(current);
@@ -115,15 +118,28 @@ export async function flushSyncQueue(): Promise<void> {
         } else if (op.entityId) {
           await apiPut<Transaction>(`/transactions/${op.entityId}`, op.payload, { "X-FINNOS-Operation-ID": op.id, "X-FINNOS-Source": op.source, "X-FINNOS-Base-Version": String(op.baseVersion ?? 1) });
         }
+        // A completed request may have committed on the server while the user
+        // changed accounts. Preserve the operation for an idempotent retry by
+        // the original UID rather than silently deleting its queue record.
+        if (op.uid !== firebaseAuth?.currentUser?.uid) break;
         await remove(op.id);
         window.dispatchEvent(new CustomEvent("finnos:sync-success", { detail: { operation: op } }));
       } catch (error) {
-        const failed = { ...current, status: (error instanceof ApiError && error.status === 409 ? "conflict" : "error") as "conflict" | "error", lastError: error instanceof Error ? error.message : "Falha ao sincronizar" };
+        // 409 conflicts and 422 payload rejections cannot be repaired by
+        // replaying the same operation. Keep them for manual review.
+        const needsReview = error instanceof ApiError && (error.status === 409 || error.status === 422);
+        const failed = {
+          ...current,
+          status: (needsReview ? "conflict" : "error") as "conflict" | "error",
+          lastError: error instanceof Error ? error.message : "Falha ao sincronizar",
+        };
+        // Do not modify a former user's queue after switching accounts.
+        if (op.uid !== firebaseAuth?.currentUser?.uid) break;
         await saveSyncOperation(failed);
         window.dispatchEvent(new CustomEvent("finnos:sync-error", { detail: { operation: failed } }));
-        // A transport/server failure may leave dependent operations unsafe to send.
-        if (!(error instanceof ApiError && (error.status === 409 || error.status === 422))) break;
-        continue;
+        // Stop on *any* failure. This preserves dependency order, including
+        // the next flush; only an explicit resolution can bypass a conflict.
+        break;
       }
     }
   } finally {
