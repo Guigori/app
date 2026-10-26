@@ -36,7 +36,8 @@ def remaining_installment_indices(tx):
     the existing last-installment cent reconciliation.
     """
     n = int(tx.get("total_installments") or 1)
-    current = int(tx.get("current_installment") or 1)
+    current_raw = tx.get("current_installment")
+    current = 1 if current_raw is None else int(current_raw)
     if n < 1 or not 1 <= current <= n:
         raise ValueError("Parcela atual inválida.")
     return range(current - 1, n)
