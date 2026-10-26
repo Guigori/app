@@ -58,6 +58,7 @@ import type {
   Institution,
   InstitutionInput,
   FinanceHistoryPage,
+  FinanceIntegrity,
   BudgetSummary,
   BudgetSuggestion,
   BudgetCycle,
@@ -204,6 +205,14 @@ export async function fetchTrends(months: number, endMonth?: string): Promise<Tr
   const params = new URLSearchParams({ months: String(months) });
   if (endMonth) params.set("end_month", endMonth);
   return cachedFetch(`trends:${params.toString()}`, () => apiGet<Trends>(`/analytics/trends?${params.toString()}`));
+}
+
+/** FIN-09 historical invoice review reads only the authenticated user's records.
+ * A clean comparison is NOT proof of an earlier MongoDB migration.
+ */
+export async function fetchFinanceIntegrity(): Promise<FinanceIntegrity> {
+  if (isLocalMode()) throw new Error("Auditoria Firestore não disponível no modo local.");
+  return apiGet<FinanceIntegrity>("/finance/integrity");
 }
 
 /** FINN-inspired append-only financial audit history, read-only and UID-scoped. */
