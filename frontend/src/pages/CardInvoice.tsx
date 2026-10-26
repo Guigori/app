@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Loader2, Search } from "lucide-react";
+import { CheckCircle2, Loader2, Search, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { fetchAccounts, fetchInvoice, payInvoice } from "@/lib/data";
+import { fetchAccounts, fetchInvoice, payInvoice, creditInvoice } from "@/lib/data";
 import { useBalanceHidden } from "@/lib/balance";
 import { getApiErrorMessage } from "@/lib/errors";
 import { formatBRL, formatDate, formatHiddenBRL, parseAmount } from "@/lib/format";
-import type { PayInvoiceInput } from "@/types/finnos";
+import type { PayInvoiceInput, CreditInvoiceInput } from "@/types/finnos";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,12 @@ export default function CardInvoice() {
   const [valueRaw, setValueRaw] = useState("");
   const [operationId, setOperationId] = useState(() => crypto.randomUUID());
   const [formError, setFormError] = useState<string | null>(null);
+  const [creditOpen, setCreditOpen] = useState(false);
+  const [creditPurchaseId, setCreditPurchaseId] = useState("");
+  const [creditAmountRaw, setCreditAmountRaw] = useState("");
+  const [creditReason, setCreditReason] = useState("");
+  const [creditOperationId, setCreditOperationId] = useState(() => crypto.randomUUID());
+  const [creditError, setCreditError] = useState<string | null>(null);
 
   const invoiceQuery = useQuery({ queryKey: ["invoice", cardId], queryFn: () => fetchInvoice(cardId) });
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, staleTime: 60_000 });
@@ -50,6 +56,23 @@ export default function CardInvoice() {
     setOperationId(crypto.randomUUID());
     setAccountId((current) => current || accounts[0]?.id || "");
   }, [payOpen, invoice, accounts]);
+
+  useEffect(() => {
+    if (!creditOpen || !invoice) return;
+    const first = invoice.items[0];
+    setCreditPurchaseId(first?.id ?? "");
+    const alreadyCredited = (invoice.adjustments ?? [])
+      .filter(item => item.purchase_id === first?.id)
+      .reduce((sum, item) => sum + item.value, 0);
+    const available = Math.min(
+      Math.max((first?.value ?? 0) - alreadyCredited, 0),
+      invoice.outstanding ?? invoice.total - invoice.paid_amount,
+    );
+    setCreditAmountRaw(available > 0 ? String(Math.round(available * 100) / 100) : "");
+    setCreditReason("");
+    setCreditError(null);
+    setCreditOperationId(crypto.randomUUID());
+  }, [creditOpen, invoice]);
 
   const items = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -73,6 +96,21 @@ export default function CardInvoice() {
       ]);
     },
     onError: (error) => setFormError(getApiErrorMessage(error)),
+  });
+
+  const creditMutation = useMutation({
+    mutationFn: (input: CreditInvoiceInput) => creditInvoice(cardId, input, creditOperationId),
+    onSuccess: async () => {
+      toast.success("Crédito registrado. Compra e pagamentos originais preservados.");
+      setCreditOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["invoice", cardId] }),
+        queryClient.invalidateQueries({ queryKey: ["cards"] }),
+        queryClient.invalidateQueries({ queryKey: ["flow"] }),
+        queryClient.invalidateQueries({ queryKey: ["budget"] }),
+      ]);
+    },
+    onError: (error) => setCreditError(getApiErrorMessage(error)),
   });
 
   if (invoiceQuery.isPending) {
@@ -103,16 +141,27 @@ export default function CardInvoice() {
             {formatDate(invoice.due_date)}
           </p>
         </div>
-        {invoice.paid ? (
-          <Badge className="gap-1.5 bg-income/15 text-income" data-testid="invoice-paid-badge">
-            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-            Paga em {invoice.paid_at ? formatDate(invoice.paid_at) : "—"}
-          </Badge>
-        ) : (
-          <Button onClick={() => setPayOpen(true)} disabled={invoice.total <= 0} data-testid="pay-invoice-button">
-            Registrar pagamento
+        <div className="flex flex-wrap items-center gap-2">
+          {invoice.paid ? (
+            <Badge className="gap-1.5 bg-income/15 text-income" data-testid="invoice-paid-badge">
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Paga em {invoice.paid_at ? formatDate(invoice.paid_at) : "—"}
+            </Badge>
+          ) : (
+            <Button onClick={() => setPayOpen(true)} disabled={(invoice.outstanding ?? 0) <= 0} data-testid="pay-invoice-button">
+              Registrar pagamento
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => setCreditOpen(true)}
+            disabled={(invoice.outstanding ?? 0) <= 0 || invoice.items.length === 0}
+            data-testid="credit-invoice-button"
+          >
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            Registrar estorno
           </Button>
-        )}
+        </div>
       </div>
 
       <div className="rounded-3xl border border-border bg-card p-5">
@@ -123,6 +172,16 @@ export default function CardInvoice() {
         {invoice.paid_amount > 0 ? (
           <p className="mt-1 text-sm text-muted-foreground" data-testid="invoice-paid-amount">
             Pago: {money(invoice.paid_amount)} · Em aberto: {money(invoice.outstanding ?? invoice.total - invoice.paid_amount)}
+          </p>
+        ) : null}
+        {(invoice.adjustment_total ?? 0) > 0 ? (
+          <p className="mt-1 text-sm text-muted-foreground" data-testid="invoice-credits-total">
+            Créditos auditados nesta fatura: {money(invoice.adjustment_total ?? 0)}
+          </p>
+        ) : null}
+        {invoice.paid ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Para estornar compras de faturas já quitadas, será necessário registrar um reembolso bancário em fluxo específico.
           </p>
         ) : null}
       </div>
@@ -167,6 +226,96 @@ export default function CardInvoice() {
           </li>
         ) : null}
       </ul>
+
+      {(invoice.adjustments ?? []).length > 0 ? (
+        <section className="rounded-3xl border border-border bg-card p-5" data-testid="invoice-credits-history">
+          <h2 className="font-heading text-base font-semibold">Histórico de estornos</h2>
+          <ul className="mt-3 space-y-3">
+            {(invoice.adjustments ?? []).map(item => (
+              <li key={item.id} className="flex items-start justify-between gap-4 text-sm">
+                <div>
+                  <p className="font-medium">{item.reason}</p>
+                  <p className="text-xs text-muted-foreground">{formatDate(item.date)} · {invoice.items.find(p => p.id === item.purchase_id)?.name ?? "Compra original"}</p>
+                </div>
+                <span className="shrink-0 font-semibold text-income">− {money(item.value)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <Dialog open={creditOpen} onOpenChange={setCreditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-heading">Registrar estorno no cartão</DialogTitle>
+            <DialogDescription>
+              O crédito reduz somente o saldo não pago desta fatura. A compra e os pagamentos anteriores
+              permanecem no histórico. Não há devolução automática para a conta bancária.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={(event) => {
+            event.preventDefault();
+            setCreditError(null);
+            const value = parseAmount(creditAmountRaw);
+            const purchase = invoice.items.find(item => item.id === creditPurchaseId);
+            const alreadyCredited = (invoice.adjustments ?? [])
+              .filter(item => item.purchase_id === creditPurchaseId)
+              .reduce((sum, item) => sum + item.value, 0);
+            if (!purchase) return setCreditError("Selecione uma compra nesta fatura.");
+            if (!value || value <= 0) return setCreditError("Informe um valor positivo.");
+            if (value > Math.min(purchase.value - alreadyCredited, invoice.outstanding ?? 0) + 1e-6) {
+              return setCreditError("Valor maior que o saldo da compra ou da fatura.");
+            }
+            if (creditReason.trim().length < 5) return setCreditError("Descreva o motivo do estorno.");
+            creditMutation.mutate({
+              cycle: invoice.cycle_end, purchase_id: creditPurchaseId,
+              value, reason: creditReason.trim(),
+            });
+          }} data-testid="credit-invoice-form">
+            <div className="space-y-2">
+              <Label htmlFor="credit-purchase">Compra ou parcela</Label>
+              <Select value={creditPurchaseId} onValueChange={(id) => {
+                setCreditPurchaseId(id);
+                const selected = invoice.items.find(item => item.id === id);
+                const prior = (invoice.adjustments ?? []).filter(item => item.purchase_id === id)
+                  .reduce((sum, item) => sum + item.value, 0);
+                const limit = Math.min(Math.max((selected?.value ?? 0) - prior, 0), invoice.outstanding ?? 0);
+                setCreditAmountRaw(limit > 0 ? String(Math.round(limit * 100) / 100) : "");
+              }}>
+                <SelectTrigger id="credit-purchase" className="w-full" data-testid="credit-purchase-select">
+                  <SelectValue>{invoice.items.find(item => item.id === creditPurchaseId)?.name ?? "Selecione a compra"}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {invoice.items.map(item => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name}{item.installment_label ? ` · ${item.installment_label}` : ""} · {money(item.value)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="credit-amount">Valor do crédito (R$)</Label>
+              <Input id="credit-amount" inputMode="decimal" value={creditAmountRaw}
+                onChange={(event) => setCreditAmountRaw(event.target.value)} data-testid="credit-amount-input" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="credit-reason">Motivo do estorno</Label>
+              <Input id="credit-reason" maxLength={300} value={creditReason}
+                onChange={(event) => setCreditReason(event.target.value)}
+                placeholder="Ex.: Produto devolvido à loja" data-testid="credit-reason-input" />
+            </div>
+            {creditError ? <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{creditError}</p> : null}
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => setCreditOpen(false)}>Cancelar</Button>
+              <Button type="submit" disabled={creditMutation.isPending} data-testid="credit-confirm-button">
+                {creditMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+                Confirmar estorno
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
         <DialogContent className="sm:max-w-md">
