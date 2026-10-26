@@ -19,6 +19,7 @@ const FINANCIAL_KEYS = [
   ["monthly_budget_cents", "Limite mensal"], ["allocated_cents", "Total planejado"],
   ["value_cents", "Valor"], ["limit_cents", "Limite do cartão"],
   ["initial_balance_cents", "Saldo inicial"],
+  ["credit_amount_cents", "Crédito na fatura"], ["refund_amount_cents", "Reembolso bancário"],
 ] as const;
 function currency(cents: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
