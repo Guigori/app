@@ -156,7 +156,7 @@ def atomic(db, uid, action):
     return execute(db.transaction(max_attempts=5))
 
 
-def validate_refs(db, uid, name, doc, transaction):
+def validate_refs(db, uid, name, doc, transaction, original_tx=None):
     from finnos.lib.institutions import institution_key
     fields = []
     if name in {"accounts", "cards"}:
@@ -180,14 +180,13 @@ def validate_refs(db, uid, name, doc, transaction):
     if name == "transactions":
         if doc.get("invoice_payment"):
             raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
+        from finnos.lib.dates import today_iso
+        from finnos.lib.invoices import purchase_write_conflict
         cards = rows(db, uid, "cards", transaction)
-        if doc.get("card_id"):
-            from finnos.lib.invoices import occurrences
-            card = next((c for c in cards if c["id"] == doc["card_id"]), None)
-            if card and any(key in (card.get("invoice_cycles") or {}) for key, _, _ in occurrences(card, doc)):
-                raise HTTPException(409, "Ciclo com pagamentos está congelado; compra exige ajuste auditado.")
-        if any(any(item["id"] == doc["id"] for cycle in (card.get("invoice_cycles") or {}).values() for item in cycle["items"]) for card in cards):
-            raise HTTPException(409, "Compra pertence a uma fatura com pagamentos; alteração exige estorno auditado.")
+        for card in cards:
+            reason = purchase_write_conflict(card, doc, today_iso(), original_tx)
+            if reason:
+                raise HTTPException(409, reason)
     if name == "cards":
         old = root(db, uid).collection(name).document(doc["id"]).get(transaction=transaction)
         if old.exists and old.to_dict().get("invoice_cycles") and any(doc.get(k) != old.to_dict().get(k) for k in ["closing_day", "due_day"]):
@@ -341,6 +340,7 @@ class Collection:
                 if not docs and not upsert:
                     return SimpleNamespace(matched_count=0)
                 doc = docs[0] if docs else dict(query, id=str(uuid.uuid4()))
+                original_tx = dict(doc) if self.name == "transactions" and docs else None
                 if self.name == "transactions" and docs and doc.get("invoice_payment"):
                     raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
                 ref = (
@@ -368,7 +368,7 @@ class Collection:
                         doc.update(update.get("$setOnInsert", {}))
                     doc.update(update["$set"])
                 if self.name == 'transactions': doc['version'] = previous_version + 1
-                validate_refs(db, uid, self.name, doc, tr)
+                validate_refs(db, uid, self.name, doc, tr, original_tx=original_tx)
                 tr.set(ref, encode(doc))
                 if operation_ref is not None:
                     tr.create(operation_ref, {'fingerprint':fingerprint, 'target_id':doc['id']})
@@ -390,7 +390,7 @@ class Collection:
                     return SimpleNamespace(deleted_count=0)
                 doc = docs[0]
                 if self.name == "transactions":
-                    validate_refs(db, uid, self.name, doc, tr)
+                    validate_refs(db, uid, self.name, doc, tr, original_tx=doc)
                 if self.name == "cards" and doc.get("invoice_cycles"):
                     raise HTTPException(409, "Cartão possui histórico de pagamentos.")
                 if self.name in {"accounts", "categories", "cards"}:
