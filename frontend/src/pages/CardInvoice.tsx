@@ -3,11 +3,11 @@ import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Search, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { fetchAccounts, fetchInvoice, payInvoice, creditInvoice } from "@/lib/data";
+import { fetchAccounts, fetchCards, fetchInvoice, payInvoice, creditInvoice, refundInvoiceToBank } from "@/lib/data";
 import { useBalanceHidden } from "@/lib/balance";
 import { getApiErrorMessage } from "@/lib/errors";
 import { formatBRL, formatDate, formatHiddenBRL, parseAmount } from "@/lib/format";
-import type { PayInvoiceInput, CreditInvoiceInput } from "@/types/finnos";
+import type { PayInvoiceInput, CreditInvoiceInput, BankRefundInput } from "@/types/finnos";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,8 +40,27 @@ export default function CardInvoice() {
   const [creditReason, setCreditReason] = useState("");
   const [creditOperationId, setCreditOperationId] = useState(() => crypto.randomUUID());
   const [creditError, setCreditError] = useState<string | null>(null);
+  const [cycleMonth, setCycleMonth] = useState("");
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundPurchaseId, setRefundPurchaseId] = useState("");
+  const [refundAmount, setRefundAmount] = useState("");
+  const [refundReason, setRefundReason] = useState("");
+  const [refundAccountId, setRefundAccountId] = useState("");
+  const [refundDate, setRefundDate] = useState("");
+  const [refundOperationId, setRefundOperationId] = useState(() => crypto.randomUUID());
+  const [refundError, setRefundError] = useState<string | null>(null);
 
-  const invoiceQuery = useQuery({ queryKey: ["invoice", cardId], queryFn: () => fetchInvoice(cardId) });
+  const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: fetchCards, staleTime: 60_000 });
+  const card = cardsQuery.data?.find(item => item.id === cardId);
+  const cycle = cycleMonth && card ? (() => {
+    const [year, month] = cycleMonth.split("-").map(Number);
+    const last = new Date(year, month, 0).getDate();
+    return `${cycleMonth}-${String(Math.min(card.closing_day, last)).padStart(2, "0")}`;
+  })() : undefined;
+  const invoiceQuery = useQuery({
+    queryKey: ["invoice", cardId, cycle ?? "default"],
+    queryFn: () => fetchInvoice(cardId, cycle),
+  });
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, staleTime: 60_000 });
   const invoice = invoiceQuery.data;
   const accounts = accountsQuery.data ?? [];
@@ -73,6 +92,20 @@ export default function CardInvoice() {
     setCreditError(null);
     setCreditOperationId(crypto.randomUUID());
   }, [creditOpen, invoice]);
+
+  useEffect(() => {
+    if (!refundOpen || !invoice) return;
+    const first = invoice.items[0];
+    setRefundPurchaseId(first?.id ?? "");
+    const previous = (invoice.refunds ?? []).filter(r => r.purchase_id === first?.id)
+      .reduce((sum, r) => sum + r.value, 0);
+    setRefundAmount(first ? String(Math.max(0, first.value - previous)) : "");
+    setRefundReason("");
+    setRefundAccountId(accounts[0]?.id ?? "");
+    setRefundDate(new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }));
+    setRefundOperationId(crypto.randomUUID());
+    setRefundError(null);
+  }, [refundOpen, invoice, accounts]);
 
   const items = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -113,6 +146,26 @@ export default function CardInvoice() {
     onError: (error) => setCreditError(getApiErrorMessage(error)),
   });
 
+  const refundMutation = useMutation({
+    mutationFn: (input: BankRefundInput) => refundInvoiceToBank(cardId, input, refundOperationId),
+    onSuccess: async () => {
+      toast.success("Reembolso bancário registrado sem alterar a fatura quitada.");
+      setRefundOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["invoice", cardId] }),
+        queryClient.invalidateQueries({ queryKey: ["cards"] }),
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["budget"] }),
+        queryClient.invalidateQueries({ queryKey: ["flow"] }),
+        queryClient.invalidateQueries({ queryKey: ["radar"] }),
+        queryClient.invalidateQueries({ queryKey: ["finance-history"] }),
+      ]);
+    },
+    onError: (error) => setRefundError(getApiErrorMessage(error)),
+  });
+
   if (invoiceQuery.isPending) {
     return <FinnosPageLoading title="Carregando fatura" description="Atualizando compras, pagamentos e total aberto." />;
   }
@@ -140,13 +193,28 @@ export default function CardInvoice() {
             Ciclo de {formatDate(invoice.cycle_start)} a {formatDate(invoice.cycle_end)} · vence{" "}
             {formatDate(invoice.due_date)}
           </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Label htmlFor="invoice-cycle-month" className="text-xs text-muted-foreground">
+              Consultar histórico (mês de fechamento)
+            </Label>
+            <Input id="invoice-cycle-month" type="month" className="w-44"
+              value={cycleMonth} disabled={!card} onChange={event => setCycleMonth(event.target.value)}
+              data-testid="invoice-cycle-month" />
+            {cycleMonth && <Button size="sm" variant="ghost" onClick={() => setCycleMonth("")}>Fatura padrão</Button>}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {invoice.paid ? (
-            <Badge className="gap-1.5 bg-income/15 text-income" data-testid="invoice-paid-badge">
-              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-              Paga em {invoice.paid_at ? formatDate(invoice.paid_at) : "—"}
-            </Badge>
+            <>
+              <Badge className="gap-1.5 bg-income/15 text-income" data-testid="invoice-paid-badge">
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Paga em {invoice.paid_at ? formatDate(invoice.paid_at) : "—"}
+              </Badge>
+              <Button size="sm" variant="outline" onClick={() => setRefundOpen(true)}
+                data-testid="bank-refund-button">
+                <RotateCcw className="h-4 w-4" aria-hidden="true" /> Registrar reembolso
+              </Button>
+            </>
           ) : (
             <Button onClick={() => setPayOpen(true)} disabled={(invoice.outstanding ?? 0) <= 0} data-testid="pay-invoice-button">
               Registrar pagamento
@@ -243,6 +311,95 @@ export default function CardInvoice() {
           </ul>
         </section>
       ) : null}
+
+      {(invoice.refunds ?? []).length > 0 && (
+        <section className="rounded-3xl border border-border bg-card p-5" data-testid="invoice-refunds-history">
+          <h2 className="font-heading text-base font-semibold">Reembolsos bancários</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Devoluções confirmadas na conta, sem alterar a fatura originalmente quitada.
+          </p>
+          <ul className="mt-3 space-y-3">
+            {(invoice.refunds ?? []).map(item => (
+              <li key={item.id} className="flex items-start justify-between gap-3 text-sm">
+                <div>
+                  <p className="font-medium">{item.reason}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDate(item.date)} · {invoice.items.find(p => p.id === item.purchase_id)?.name ?? "Compra"}
+                  </p>
+                </div>
+                <span className="font-semibold text-income">+ {money(item.value)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <Dialog open={refundOpen} onOpenChange={setRefundOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Registrar reembolso bancário</DialogTitle>
+            <DialogDescription>
+              Uma receita de reembolso será lançada na conta escolhida. Não é renda nova
+              nem altera a fatura paga; a devolução fica vinculada à compra original.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={event => {
+            event.preventDefault();
+            setRefundError(null);
+            const value = parseAmount(refundAmount);
+            const selected = invoice.items.find(item => item.id === refundPurchaseId);
+            const refunded = (invoice.refunds ?? []).filter(item => item.purchase_id === refundPurchaseId)
+              .reduce((sum, item) => sum + item.value, 0);
+            const adjusted = (invoice.adjustments ?? []).filter(item => item.purchase_id === refundPurchaseId)
+              .reduce((sum, item) => sum + item.value, 0);
+            if (!selected) return setRefundError("Selecione a compra reembolsada.");
+            if (!refundAccountId) return setRefundError("Selecione a conta de recebimento.");
+            if (!value || value <= 0 || value > selected.value - refunded - adjusted + 1e-6)
+              return setRefundError("Valor excede o saldo reembolsável desta compra.");
+            if (refundReason.trim().length < 5) return setRefundError("Informe o motivo.");
+            refundMutation.mutate({ cycle: invoice.cycle_end, purchase_id: refundPurchaseId,
+              account_id: refundAccountId, date: refundDate, value, reason: refundReason.trim() });
+          }} data-testid="bank-refund-form">
+            <div className="space-y-2">
+              <Label htmlFor="refund-purchase">Compra</Label>
+              <Select value={refundPurchaseId} onValueChange={setRefundPurchaseId}>
+                <SelectTrigger id="refund-purchase"><SelectValue placeholder="Selecione"/></SelectTrigger>
+                <SelectContent>{invoice.items.map(item =>
+                  <SelectItem key={item.id} value={item.id}>{item.name} · {money(item.value)}</SelectItem>
+                )}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="refund-account">Conta de recebimento</Label>
+              <Select value={refundAccountId} onValueChange={setRefundAccountId}>
+                <SelectTrigger id="refund-account"><SelectValue placeholder="Selecione"/></SelectTrigger>
+                <SelectContent>{accounts.map(account =>
+                  <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
+                )}</SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2"><Label htmlFor="refund-date">Data</Label>
+                <Input id="refund-date" type="date" value={refundDate} onChange={event => setRefundDate(event.target.value)} />
+              </div>
+              <div className="space-y-2"><Label htmlFor="refund-amount">Valor (R$)</Label>
+                <Input id="refund-amount" inputMode="decimal" value={refundAmount} onChange={event => setRefundAmount(event.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-2"><Label htmlFor="refund-reason">Motivo</Label>
+              <Input id="refund-reason" value={refundReason} onChange={event => setRefundReason(event.target.value)} maxLength={300}
+                placeholder="Ex.: Produto devolvido à loja" />
+            </div>
+            {refundError && <p className="text-sm text-destructive" role="alert">{refundError}</p>}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setRefundOpen(false)}>Cancelar</Button>
+              <Button type="submit" disabled={refundMutation.isPending} data-testid="bank-refund-confirm">
+                {refundMutation.isPending ? "Registrando..." : "Confirmar reembolso"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={creditOpen} onOpenChange={setCreditOpen}>
         <DialogContent className="sm:max-w-md">
