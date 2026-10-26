@@ -70,3 +70,20 @@ def monthly_competency(txs: list[dict], cards: list[dict], month: str) -> dict:
         "by_category": {key: D(value) / 100 for key, value in categories.items()},
         "credit_events": credits,
     }
+
+
+def positive_category_slices(by_category: dict) -> list[tuple]:
+    """Nonnegative weights for expense pies, separate from signed net expense.
+
+    Refunds may make a category negative within a calendar month. Financial
+    totals must retain that negative value, but Recharts SVG pie segments
+    cannot display negative wedges or percentages based on a negative total.
+    Only positive net categories enter the donut; history/budget remain signed.
+    """
+    rows = [(category_id, D(amount)) for category_id, amount in by_category.items()
+            if D(amount) > 0]
+    denominator = sum((amount for _, amount in rows), D(0))
+    if denominator <= 0:
+        return []
+    return [(category_id, amount, round(amount * 100 / denominator, 1))
+            for category_id, amount in sorted(rows, key=lambda row: -row[1])]
