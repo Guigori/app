@@ -42,6 +42,7 @@ import type {
 } from "@/types/finnos";
 
 import { spendingPace } from "@/lib/budgetPace";
+import { roundBRL } from "@/lib/roundMoney";
 import { localCreditEvents, creditsForMonth } from "@/lib/local/competency";
 
 /** Sanitized, append-only history. Mirrors the server record_event contract. */
@@ -69,7 +70,7 @@ export function localFinanceHistory(limit = 50, before?: string) {
   return { items: items.slice(0, limit), next_cursor: items.length > limit ? items[limit - 1]?.created_at ?? null : null };
 }
 
-const round2 = (v: number) => Math.round(v * 100) / 100;
+const round2 = roundBRL;
 
 /** Mirror of finnos.lib.money.installment_portion: no negative/zero installments. */
 function installmentPortion(value: number, count: number, offset: number): number {
