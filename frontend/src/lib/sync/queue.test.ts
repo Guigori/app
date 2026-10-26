@@ -4,7 +4,7 @@ const mocks=vi.hoisted(()=>({auth:{currentUser:{uid:"A"} as {uid:string}|null},p
 vi.mock("@/lib/firebase",()=>({firebaseAuth:mocks.auth}));
 vi.mock("@/lib/api",()=>({ApiError: class ApiError extends Error { status:number; constructor(status:number,message:string){super(message);this.status=status;} },apiPost:mocks.post,apiPut:mocks.put,apiGet:vi.fn()}));
 import { cacheSet,cachedFetch } from "@/lib/offline/accountCache";
-import { queueTransaction,listSyncOperations,flushSyncQueue } from "./queue";
+import { queueTransaction,listSyncOperations,flushSyncQueue,discardConflictedOperation } from "./queue";
 const input={name:"Offline",type:"despesa" as const,status:"pago" as const,value:12.34,date:"2026-10-12",account_id:"bank",card_id:null,to_account_id:null,category_id:null,fixed:false,recurrence:null,installment:false,total_installments:null,current_installment:null,adjusted_value:null,attachment:null,notes:null,notify_enabled:true};
 beforeEach(()=>{vi.stubGlobal("indexedDB",new IDBFactory());vi.stubGlobal("navigator",{onLine:false});vi.stubGlobal("window",{dispatchEvent:vi.fn()});mocks.auth.currentUser={uid:"A"};mocks.post.mockReset();mocks.put.mockReset();});
 it("commits the offline queue to IndexedDB and isolates user switches",async()=>{
@@ -110,5 +110,31 @@ it("does not remove a queued operation after an account switch during a successf
   await flushSyncQueue();
   expect(mocks.post.mock.calls.map(call => call[2]["X-FINNOS-Operation-ID"]))
     .toEqual([queued.id, queued.id]);
+  expect(await listSyncOperations()).toHaveLength(0);
+});
+
+
+it("only an explicit UID-scoped reviewed discard unblocks a failed operation", async () => {
+  const { ApiError } = await import("@/lib/api");
+  const first = await queueTransaction({ ...input, name: "Rejected" });
+  const second = await queueTransaction({ ...input, name: "Later" });
+  await expect(discardConflictedOperation(first.id)).rejects.toThrow("Somente operações bloqueadas");
+  vi.stubGlobal("navigator", { onLine: true });
+  mocks.post.mockRejectedValueOnce(new ApiError(422, "invalid category"));
+  await flushSyncQueue();
+  expect(mocks.post).toHaveBeenCalledTimes(1);
+
+  mocks.auth.currentUser = { uid: "B" };
+  await expect(discardConflictedOperation(first.id)).rejects.toThrow("FINNOS_SESSION_CHANGED");
+  expect(await listSyncOperations()).toHaveLength(0);
+  mocks.auth.currentUser = { uid: "A" };
+  expect(await listSyncOperations()).toHaveLength(2);
+
+  await discardConflictedOperation(first.id);
+  expect((await listSyncOperations()).map(op => op.id)).toEqual([second.id]);
+  mocks.post.mockResolvedValue({ id: "later-ok" });
+  await flushSyncQueue();
+  expect(mocks.post.mock.calls.map(call => call[2]["X-FINNOS-Operation-ID"]))
+    .toEqual([first.id, second.id]);
   expect(await listSyncOperations()).toHaveLength(0);
 });
