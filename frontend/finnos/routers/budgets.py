@@ -1,4 +1,4 @@
-from finnos.lib.money import D, installment_portion, FinanceModel, Money
+from finnos.lib.money import D, installment_portion, remaining_installment_indices, FinanceModel, Money
 """Budget V2 — versioned cycles. Existing monthly category budgets remain untouched."""
 import uuid
 from datetime import date, datetime, timezone
@@ -39,13 +39,12 @@ def _occurrences_in_cycle(tx: dict, start: date, end: date):
     (amount, realised) = (_tx_amount(tx), tx.get('status') == 'pago')
     out = []
     if tx.get('installment'):
-        total = int(tx.get('total_installments') or 1)
-        for offset in range(total):
+        for offset, installment_index in enumerate(remaining_installment_indices(tx)):
             idx = tx_date.year * 12 + tx_date.month - 1 + offset
             (yy, mm) = (idx // 12, idx % 12 + 1)
             occurrence = date(yy, mm, min(tx_date.day, calendar.monthrange(yy, mm)[1]))
             if start <= occurrence <= end:
-                out.append((occurrence, installment_portion(tx, offset), realised and occurrence <= date.fromisoformat(today_iso())))
+                out.append((occurrence, installment_portion(tx, installment_index), realised and occurrence <= date.fromisoformat(today_iso())))
         return out
     if start <= tx_date <= end:
         out.append((tx_date, amount, realised))
