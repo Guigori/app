@@ -245,6 +245,6 @@ it("paginates the local monthly history with stable cursor parity and no duplica
   expect(third.next_cursor).toBeNull();
   const ids = [...first.items, ...second.items, ...third.items].map(item => item.id);
   expect(new Set(ids).size).toBe(122);
-  expect(() => fetchTransactionsPage("invalid-month")).not.toThrow();
+  await expect(fetchTransactionsPage("invalid-month")).rejects.toThrow("Página financeira inválida.");
   await expect(fetchTransactionsPage("2026-10", "not-in-records")).rejects.toThrow("Cursor");
 });
