@@ -25,6 +25,7 @@ import type {
   Invoice,
   InvoiceItem,
   CreditInvoiceInput,
+  BankRefundInput,
   NotificationItem,
   PayInvoiceInput,
   SubscriptionInput,
@@ -106,7 +107,7 @@ function monthBounds(month: string): [string, string] {
 
 /** Positive amount the transaction contributes to `month`'s income/expense stats. */
 function monthPortion(tx: Transaction, month: string): number | null {
-  if (tx.invoice_payment || tx.type === "transferencia" || tx.status !== "pago") return null;
+  if (tx.invoice_payment || tx.invoice_refund || tx.type === "transferencia" || tx.status !== "pago") return null;
   if (tx.installment) {
     const n = tx.total_installments ?? 1;
     const offset = monthsBetween(tx.date.slice(0, 7), month);
@@ -399,7 +400,7 @@ export function localCreateTransaction(input: TransactionInput): Transaction {
 
 /** A paid invoice locks its purchase breakdown until an audited refund exists. */
 function assertPurchaseNotSettled(db: LocalDb, transaction: Transaction): void {
-  if (transaction.invoice_payment) throw new Error("Pagamento de fatura não pode ser alterado manualmente.");
+  if (transaction.invoice_payment || transaction.invoice_refund) throw new Error("Movimento de fatura não pode ser alterado manualmente.");
   if (!transaction.card_id) return;
   const card = db.cards.find(c => c.id === transaction.card_id);
   if (!card) return;
@@ -1109,6 +1110,7 @@ function invoiceForCycle(db: LocalDb, card: LocalCard, closing: string): Invoice
   const items = cycleItems(card, db.transactions, start, closing, db.categories);
   const payment = card.paid_cycles?.[closing];
   const adjustments = card.invoice_adjustments?.[closing] ?? [];
+  const refunds = card.invoice_refunds?.[closing] ?? [];
   const adjustmentTotal = round2(adjustments.reduce((sum, item) => sum + item.value, 0));
   const total = round2(items.reduce((sum, item) => sum + item.value, 0) - adjustmentTotal);
   const paidAmount = round2(payment?.amount ?? 0);
@@ -1126,6 +1128,8 @@ function invoiceForCycle(db: LocalDb, card: LocalCard, closing: string): Invoice
     items,
     adjustments,
     adjustment_total: adjustmentTotal,
+    refunds,
+    refund_total: round2(refunds.reduce((total, item) => total + item.value, 0)),
   };
 }
 
@@ -1244,6 +1248,64 @@ export function localCreditInvoice(cardId: string, input: CreditInvoiceInput, op
     ],
   };
   localAudit(db, "cards", "updated", { id: card.id, name: card.name }, { id: card.id, name: card.name });
+  writeDb(db);
+  return invoiceForCycle(db, card, input.cycle);
+}
+
+/** Bank refund of a settled purchase: real cash movement, preserved invoice. */
+export function localBankRefund(cardId: string, input: BankRefundInput, operationId: string): Invoice {
+  const db = readDb();
+  const card = db.cards.find(item => item.id === cardId);
+  if (!card) throw new Error("Cartão não encontrado.");
+  if (!operationId || operationId.length > 200) throw new Error("Identificador inválido.");
+  if (!db.accounts.some(account => account.id === input.account_id)) throw new Error("Conta bancária inválida.");
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(input.date) || input.date > todayISO()) {
+    throw new Error("Reembolso não pode ser realizado no futuro.");
+  }
+  const reason = input.reason.trim();
+  if (reason.length < 5 || reason.length > 300) throw new Error("Descreva o motivo do reembolso.");
+  const cents = Math.round(input.value * 100);
+  if (!Number.isSafeInteger(cents) || cents <= 0 || Math.abs(input.value * 100 - cents) > 1e-6) {
+    throw new Error("Valor inválido.");
+  }
+  const key = `${cardId}:refund:${operationId}`;
+  const fingerprint = JSON.stringify({ ...input, reason, cents });
+  const previous = Object.values(card.invoice_refunds ?? {}).flat().find(item => item.id === key);
+  if (previous) {
+    if (previous.fingerprint !== fingerprint) throw new Error("Identificador de reembolso reutilizado.");
+    return invoiceForCycle(db, card, input.cycle);
+  }
+  const invoice = invoiceForCycle(db, card, input.cycle);
+  if (!invoice.paid) throw new Error("Reembolso bancário exige fatura quitada.");
+  const purchase = invoice.items.find(item => item.id === input.purchase_id);
+  if (!purchase) throw new Error("Compra não encontrada nesta fatura.");
+  const refunded = (invoice.refunds ?? []).filter(item => item.purchase_id === input.purchase_id)
+    .reduce((total, item) => total + Math.round(item.value * 100), 0);
+  const credited = (invoice.adjustments ?? []).filter(item => item.purchase_id === input.purchase_id)
+    .reduce((total, item) => total + Math.round(item.value * 100), 0);
+  if (refunded + credited + cents > Math.round(purchase.value * 100)) {
+    throw new Error("Devoluções ultrapassam o valor da compra.");
+  }
+  const credit = buildTransaction(db, {
+    name: `Reembolso ${card.name}`, type: "receita",
+    value: cents / 100, status: "pago", date: input.date,
+    account_id: input.account_id, card_id: null, to_account_id: null,
+    category_id: null, fixed: false, recurrence: null, installment: false,
+    total_installments: null, current_installment: null,
+    adjusted_value: null, attachment: null, notes: input.reason,
+  });
+  credit.id = key;
+  credit.invoice_refund = true;
+  db.transactions.push(credit);
+  card.invoice_refunds = {
+    ...card.invoice_refunds,
+    [input.cycle]: [
+      ...(card.invoice_refunds?.[input.cycle] ?? []),
+      { id: key, account_id: input.account_id, purchase_id: input.purchase_id,
+        date: input.date, reason, value: cents / 100, fingerprint },
+    ],
+  };
+  localAudit(db, "transactions", "created", null, credit);
   writeDb(db);
   return invoiceForCycle(db, card, input.cycle);
 }
