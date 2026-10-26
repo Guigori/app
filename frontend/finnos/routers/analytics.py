@@ -8,6 +8,7 @@ from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, month_bounds, month_portion, months_between
 from finnos.lib.recurrence import monthly_projection_sources
 from finnos.lib.category_pace import monthly_pace
+from finnos.lib.competency import monthly_competency
 from finnos.models.analytics import (
     BudgetRow,
     BudgetSummary,
@@ -52,17 +53,11 @@ async def trends(
     last = end_month or today_iso()[:7]
     window = [add_months(last, -i) for i in range(months - 1, -1, -1)]
     txs = await db.transactions.find({"user_id": user["id"]}).to_list(20000)
+    cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
     rows: list[MonthTrend] = []
     for m in window:
-        income = expense = D("0.0")
-        for tx in txs:
-            portion = month_portion(tx, m)
-            if portion is None:
-                continue
-            if tx["type"] == "receita":
-                income += portion
-            else:
-                expense += portion
+        monthly = monthly_competency(txs, cards, m)
+        income, expense = monthly["income"], monthly["expense"]
         rows.append(
             MonthTrend(
                 month=m,
@@ -92,17 +87,9 @@ async def budget(
         .to_list(500)
     )
     txs = await db.transactions.find({"user_id": user["id"]}).to_list(20000)
-    spent_by_cat: dict[str | None, float] = {}
-    income = D("0.0")
-    for tx in txs:
-        portion = month_portion(tx, m)
-        if portion is None:
-            continue
-        if tx["type"] == "receita":
-            income += portion
-        else:
-            key = tx.get("category_id")
-            spent_by_cat[key] = spent_by_cat.get(key, D("0.0")) + portion
+    cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
+    monthly = monthly_competency(txs, cards, m)
+    spent_by_cat, income = monthly["by_category"], monthly["income"]
     rows: list[BudgetRow] = []
     for cat in categories:
         budget_value = round(D(cat.get("monthly_budget") or D("0.0")), 2)
@@ -200,6 +187,7 @@ async def flow(
         window = [add_months(focus, -i) for i in range(months - 1, -1, -1)]
         window += [add_months(focus, 1), add_months(focus, 2)]
     txs = await db.transactions.find({"user_id": user["id"]}).to_list(20000)
+    cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
     if category_id:
         txs = [tx for tx in txs if tx.get("category_id") == category_id]
     categories = await db.categories.find({"user_id": user["id"]}).to_list(500)
@@ -207,14 +195,10 @@ async def flow(
     today_month = today_iso()[:7]
     series: list[FlowPoint] = []
     for m in window:
-        income = expense = p_income = p_expense = D("0.0")
+        monthly = monthly_competency(txs, cards, m)
+        income, expense = monthly["income"], monthly["expense"]
+        p_income = p_expense = D("0.0")
         for tx in txs:
-            portion = month_portion(tx, m)
-            if portion is not None:
-                if tx["type"] == "receita":
-                    income += portion
-                else:
-                    expense += portion
             projected = _projection(tx, m)
             if projected is not None:
                 if tx["type"] == "receita":
@@ -242,13 +226,7 @@ async def flow(
                 future=m > today_month,
             )
         )
-    by_cat: dict[str | None, float] = {}
-    for tx in txs:
-        portion = month_portion(tx, focus)
-        if portion is None or tx["type"] == "receita":
-            continue
-        key = tx.get("category_id")
-        by_cat[key] = by_cat.get(key, D("0.0")) + portion
+    by_cat = monthly_competency(txs, cards, focus)["by_category"]
     focus_expense = round(sum(by_cat.values()), 2)
     breakdown = [
         FlowCategory(
