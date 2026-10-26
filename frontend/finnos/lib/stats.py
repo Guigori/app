@@ -1,4 +1,4 @@
-from finnos.lib.money import D, installment_portion
+from finnos.lib.money import D, installment_portion, remaining_installment_indices
 
 """Month & money math shared by FINNOS routers.
 
@@ -55,10 +55,10 @@ def month_portion(tx: dict, month: str) -> float | None:
         return None
     d: str = tx["date"]
     if tx.get("installment"):
-        n = int(tx.get("total_installments") or 1)
+        indices = remaining_installment_indices(tx)
         offset = months_between(d[:7], month)
-        if 0 <= offset < n:
-            return installment_portion(tx, offset)
+        if 0 <= offset < len(indices):
+            return installment_portion(tx, indices.start + offset)
         return None
     return round(D(tx["value"]), 2) if d[:7] == month else None
 
@@ -83,9 +83,12 @@ def balance_effects(tx: dict, today: str) -> list[tuple[str, float]]:
         return []
     v = D(tx["value"])
     if tx.get("installment"):
-        n = int(tx.get("total_installments") or 1)
+        indices = remaining_installment_indices(tx)
         due = months_between(tx["date"][:7], today[:7]) + 1
-        v = sum((installment_portion(tx, i) for i in range(max(0, min(due, n)))), D(0))
+        v = sum(
+            (installment_portion(tx, i) for i in indices[:max(0, due)]),
+            D(0),
+        )
     if tx["type"] == "receita":
         return [(tx["account_id"], round(v, 2))]
     if tx["type"] == "despesa":
