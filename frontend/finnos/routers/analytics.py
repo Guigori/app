@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, month_bounds, month_portion, months_between
+from finnos.lib.recurrence import monthly_projection_sources
 from finnos.models.analytics import (
     BudgetRow,
     BudgetSummary,
@@ -152,21 +153,15 @@ def _amount(tx: dict) -> float:
     return round(D(tx["value"]), 2)
 
 
-def _projection(tx: dict, month: str, settled_keys: set) -> float | None:
-    """Money still expected in `month`: pending/scheduled entries on their own month,
-    plus "fixa mensal" entries repeating into later months (skipped when a real
-    transaction with the same name already exists in that month, so nothing doubles)."""
-    if tx.get("type") == "transferencia":
+def _projection(tx: dict, month: str) -> float | None:
+    """An explicitly scheduled/pending entry projects only on its own month.
+
+    Monthly recurrence projections are emitted separately by the shared helper.
+    """
+    if tx.get("invoice_payment") or tx.get("type") == "transferencia":
         return None
-    tx_month = tx["date"][:7]
-    if tx.get("status") != "pago" and tx_month == month:
+    if tx.get("status") != "pago" and tx["date"][:7] == month:
         return _amount(tx)
-    if tx.get("fixed") and (tx.get("recurrence") or "mensal") == "mensal":
-        if (
-            months_between(tx_month, month) > 0
-            and (tx["name"].strip().lower(), month) not in settled_keys
-        ):
-            return _amount(tx)
     return None
 
 
@@ -200,7 +195,6 @@ async def flow(
         txs = [tx for tx in txs if tx.get("category_id") == category_id]
     categories = await db.categories.find({"user_id": user["id"]}).to_list(500)
     cat_by_id = {c["id"]: c for c in categories}
-    settled_keys = {(tx["name"].strip().lower(), tx["date"][:7]) for tx in txs}
     today_month = today_iso()[:7]
     series: list[FlowPoint] = []
     for m in window:
@@ -212,12 +206,19 @@ async def flow(
                     income += portion
                 else:
                     expense += portion
-            projected = _projection(tx, m, settled_keys)
+            projected = _projection(tx, m)
             if projected is not None:
                 if tx["type"] == "receita":
                     p_income += projected
                 else:
                     p_expense += projected
+        # Emit one future recurring expense/income per logical series, not one
+        # for every fixed transaction ever entered.
+        for source, _ in monthly_projection_sources(txs, m):
+            if source["type"] == "receita":
+                p_income += _amount(source)
+            else:
+                p_expense += _amount(source)
         series.append(
             FlowPoint(
                 month=m,
