@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from finnos.lib.dates import today_iso
-from finnos.lib.stats import balance_effects
+from finnos.lib.stats import balance_effects, paid_future_is_inconsistent
 from finnos.lib.invoices import invoice_state, commitment
 
 
@@ -39,3 +39,11 @@ def test_invoice_payment_does_not_count_as_credit_purchase():
     card = {"id": "card", "name": "Card", "closing_day": 29, "due_day": 7, "invoice_cycles": {}}
     payment = {"id": "payment", "type": "despesa", "card_id": None, "invoice_payment": True, "date": "2026-10-20", "value": 100}
     assert commitment(card, [payment], "2026-10-29") == (0, 0, 0)
+
+
+def test_future_paid_input_must_be_rejected_not_silently_reclassified():
+    assert paid_future_is_inconsistent("pago", "2026-12-01", "2026-10-26")
+    assert not paid_future_is_inconsistent("agendado", "2026-12-01", "2026-10-26")
+    assert not paid_future_is_inconsistent("pendente", "2026-12-01", "2026-10-26")
+    assert not paid_future_is_inconsistent("pago", "2026-10-26", "2026-10-26")
+    assert not paid_future_is_inconsistent("pago", "2026-10-25", "2026-10-26")
