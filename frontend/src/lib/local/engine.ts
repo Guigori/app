@@ -24,6 +24,7 @@ import type {
   CreditCard,
   Invoice,
   InvoiceItem,
+  CreditInvoiceInput,
   NotificationItem,
   PayInvoiceInput,
   SubscriptionInput,
@@ -368,7 +369,11 @@ function assertPurchaseNotSettled(db: LocalDb, transaction: Transaction): void {
   if (transaction.invoice_payment) throw new Error("Pagamento de fatura não pode ser alterado manualmente.");
   if (!transaction.card_id) return;
   const card = db.cards.find(c => c.id === transaction.card_id);
-  if (!card?.paid_cycles) return;
+  if (!card) return;
+  if (Object.values(card.invoice_adjustments ?? {}).some(items => items.some(item => item.purchase_id === transaction.id))) {
+    throw new Error("Compra possui estorno auditado e não pode ser alterada ou excluída.");
+  }
+  if (!card.paid_cycles) return;
   const firstClosing = cycleBounds(transaction.date, card.closing_day)[1];
   const count = transaction.installment ? (transaction.total_installments ?? 1) - firstRemainingInstallment(transaction) : 1;
   for (let i = 0; i < count; i++) {
@@ -905,6 +910,10 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
   const totals = new Map([...purchaseLines].map(([cycle, purchases]) => [
     cycle, round2([...purchases.values()].reduce((sum, value) => sum + value, 0)),
   ]));
+  for (const [cycle, credits] of Object.entries(doc.invoice_adjustments ?? {})) {
+    const creditTotal = credits.reduce((sum, item) => sum + item.value, 0);
+    totals.set(cycle, round2((totals.get(cycle) ?? 0) - creditTotal));
+  }
   let used = 0, future = 0;
   for (const [cycle, total] of totals) {
     const outstanding = round2(Math.max(0, total - (paidCycles[cycle]?.amount ?? 0)));
@@ -1048,17 +1057,19 @@ function cycleItems(card: LocalCard, txs: Transaction[], start: string, closing:
   return [...frozen, ...items.filter(item => !seen.has(item.id))]
     .sort((a, b) => b.date.localeCompare(a.date));
 }
-export function localInvoice(cardId: string): Invoice {
-  const db = readDb();
-  const card = db.cards.find((c) => c.id === cardId);
-  if (!card) throw new Error("Cartão não encontrado.");
-  const [start, closing] = cycleBounds(todayISO(), card.closing_day);
+function invoiceForCycle(db: LocalDb, card: LocalCard, closing: string): Invoice {
+  if (closing !== configuredDayInMonth(closing, 0, card.closing_day)) {
+    throw new Error("Ciclo de fatura inválido.");
+  }
+  const start = addDays(configuredDayInMonth(closing, -1, card.closing_day), 1);
   const items = cycleItems(card, db.transactions, start, closing, db.categories);
   const payment = card.paid_cycles?.[closing];
-  const total = round2(items.reduce((sum, item) => sum + item.value, 0));
+  const adjustments = card.invoice_adjustments?.[closing] ?? [];
+  const adjustmentTotal = round2(adjustments.reduce((sum, item) => sum + item.value, 0));
+  const total = round2(items.reduce((sum, item) => sum + item.value, 0) - adjustmentTotal);
   const paidAmount = round2(payment?.amount ?? 0);
   return {
-    card_id: cardId,
+    card_id: card.id,
     card_name: card.name,
     cycle_start: start,
     cycle_end: closing,
@@ -1069,7 +1080,38 @@ export function localInvoice(cardId: string): Invoice {
     paid_amount: paidAmount,
     paid_at: payment?.paid_at ?? null,
     items,
+    adjustments,
+    adjustment_total: adjustmentTotal,
   };
+}
+
+function defaultLocalInvoiceCycle(db: LocalDb, card: LocalCard): string {
+  const today = todayISO();
+  const open = cycleBounds(today, card.closing_day)[1];
+  const cycles = new Set<string>([
+    ...Object.keys(card.paid_cycles ?? {}),
+    ...Object.keys(card.invoice_adjustments ?? {}),
+  ]);
+  for (const tx of db.transactions) {
+    if (tx.card_id !== card.id || tx.type !== "despesa") continue;
+    const first = cycleBounds(tx.date, card.closing_day)[1];
+    const count = tx.installment ? (tx.total_installments ?? 1) - firstRemainingInstallment(tx) : 1;
+    for (let offset = 0; offset < count; offset++) {
+      const closing = configuredDayInMonth(first, offset, card.closing_day);
+      if (closing < today) cycles.add(closing);
+    }
+  }
+  for (const cycle of [...cycles].filter(cycle => cycle < today).sort()) {
+    if ((invoiceForCycle(db, card, cycle).outstanding ?? 0) > 0) return cycle;
+  }
+  return open;
+}
+
+export function localInvoice(cardId: string, selectedCycle?: string): Invoice {
+  const db = readDb();
+  const card = db.cards.find(item => item.id === cardId);
+  if (!card) throw new Error("Cartão não encontrado.");
+  return invoiceForCycle(db, card, selectedCycle ?? defaultLocalInvoiceCycle(db, card));
 }
 
 export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice {
@@ -1080,13 +1122,12 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || Number.isNaN(Date.parse(input.date + "T12:00:00")) || input.date > todayISO()) {
     throw new Error("A data do pagamento precisa ser válida e não pode estar no futuro.");
   }
-  const currentClosing = cycleBounds(todayISO(), card.closing_day)[1];
-  const closing = input.cycle ?? currentClosing;
+  const closing = input.cycle ?? defaultLocalInvoiceCycle(db, card);
   if (closing !== configuredDayInMonth(closing, 0, card.closing_day)) throw new Error("Ciclo de fatura inválido.");
   const first = configuredDayInMonth(closing, -1, card.closing_day);
   const start = addDays(first, 1);
   const items = cycleItems(card, db.transactions, start, closing, db.categories);
-  const total = round2(items.reduce((sum, item) => sum + item.value, 0));
+  const total = invoiceForCycle(db, card, closing).total;
   const previous = card.paid_cycles?.[closing]?.amount ?? 0;
   const outstanding = round2(total - previous);
   const amount = round2(input.value ?? outstanding);
@@ -1110,7 +1151,7 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   };
   db.cards = db.cards.map((c) => c.id === cardId ? card : c);
   writeDb(db);
-  return localInvoice(cardId);
+  return localInvoice(cardId, closing);
 }
 
 /** Subscriptions are independent from fixed transactions in local and demo mode. */
