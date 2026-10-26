@@ -42,6 +42,7 @@ import type {
 } from "@/types/finnos";
 
 import { spendingPace } from "@/lib/budgetPace";
+import { localCreditEvents, creditsForMonth } from "@/lib/local/competency";
 
 /** Sanitized, append-only history. Mirrors the server record_event contract. */
 function localAudit(db: LocalDb, entity: string, action: "created" | "updated" | "deleted",
@@ -578,6 +579,10 @@ export function localBudget(month: string): BudgetSummary {
     else spentByCat.set(tx.category_id, (spentByCat.get(tx.category_id) ?? 0) + portion);
   }
 
+  const credits = creditsForMonth(localCreditEvents(db), month);
+  for (const event of credits) {
+    spentByCat.set(event.category_id, (spentByCat.get(event.category_id) ?? 0) - event.amount);
+  }
   const rows: BudgetRow[] = [];
   for (const cat of db.categories) {
     const budget = round2(cat.monthly_budget);
@@ -590,7 +595,10 @@ export function localBudget(month: string): BudgetSummary {
       budget,
       db.transactions.filter(tx => tx.category_id === cat.id && tx.type === "despesa")
         .map(tx => ({ date: tx.date, amount: monthPortion(tx, month) ?? 0 }))
-        .filter(event => event.amount > 0),
+        .filter(event => event.amount > 0)
+        .concat(credits.filter(event => event.category_id === cat.id).map(event => ({
+          date: event.date, amount: -event.amount,
+        }))),
       month,
       todayISO(),
     );
