@@ -1154,6 +1154,55 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   return localInvoice(cardId, closing);
 }
 
+
+/** Append-only merchant credit in local mode; no simulated bank reimbursement. */
+export function localCreditInvoice(cardId: string, input: CreditInvoiceInput, operationId: string): Invoice {
+  const db = readDb();
+  const card = db.cards.find(item => item.id === cardId);
+  if (!card) throw new Error("Cartão não encontrado.");
+  if (!operationId || operationId.length > 200) throw new Error("Identificador de operação inválido.");
+  const reason = input.reason.trim();
+  if (reason.length < 5 || reason.length > 300) throw new Error("Descreva o motivo do estorno.");
+  const valueCents = Math.round(input.value * 100);
+  if (!Number.isSafeInteger(valueCents) || valueCents <= 0 || Math.abs(input.value * 100 - valueCents) > 1e-6) {
+    throw new Error("O valor do estorno deve ter no máximo duas casas decimais.");
+  }
+  const id = `${cardId}:${operationId}`;
+  const fingerprint = JSON.stringify({
+    cardId, cycle: input.cycle, purchaseId: input.purchase_id, amountCents: valueCents, reason,
+  });
+  const previous = Object.values(card.invoice_adjustments ?? {}).flat()
+    .find(item => item.id === id);
+  if (previous) {
+    if (previous.fingerprint !== fingerprint) throw new Error("Identificador reutilizado para outro estorno.");
+    return invoiceForCycle(db, card, input.cycle);
+  }
+  const invoice = invoiceForCycle(db, card, input.cycle);
+  const purchase = invoice.items.find(item => item.id === input.purchase_id);
+  if (!purchase) throw new Error("Compra não encontrada nesta fatura.");
+  const priorCents = (invoice.adjustments ?? [])
+    .filter(item => item.purchase_id === input.purchase_id)
+    .reduce((total, item) => total + Math.round(item.value * 100), 0);
+  if (priorCents + valueCents > Math.round(purchase.value * 100)) {
+    throw new Error("O estorno excede o valor ainda disponível dessa compra.");
+  }
+  if (valueCents > Math.round((invoice.outstanding ?? 0) * 100)) {
+    throw new Error("O estorno excede o saldo não pago. Faturas quitadas exigem reembolso bancário.");
+  }
+  card.invoice_adjustments = {
+    ...card.invoice_adjustments,
+    [input.cycle]: [
+      ...(card.invoice_adjustments?.[input.cycle] ?? []),
+      {
+        id, purchase_id: input.purchase_id, date: todayISO(),
+        reason, value: valueCents / 100, fingerprint,
+      },
+    ],
+  };
+  writeDb(db);
+  return invoiceForCycle(db, card, input.cycle);
+}
+
 /** Subscriptions are independent from fixed transactions in local and demo mode. */
 function nextSubscriptionCharge(anchor: string, recurrence: "mensal" | "anual"): string {
   const today = todayISO();
