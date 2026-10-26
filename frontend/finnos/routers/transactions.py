@@ -1,4 +1,4 @@
-from finnos.lib.money import D, cents, installment_portion
+from finnos.lib.money import D, cents, installment_portion, quantize_brl
 
 """Transactions CRUD — filters, installment math and server-side enrichment."""
 import re
@@ -121,9 +121,8 @@ async def _validate(user_id: str, payload: TransactionIn) -> None:
 
 
 def _document(user_id: str, payload: TransactionIn) -> dict:
-    total = round(
-        payload.adjusted_value if payload.adjusted_value else payload.value, 2
-    )
+    total = quantize_brl(
+        payload.adjusted_value if payload.adjusted_value else payload.value)
     doc: dict = {
         "id": str(uuid.uuid4()),
         "user_id": user_id,
