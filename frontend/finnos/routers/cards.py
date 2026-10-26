@@ -115,12 +115,12 @@ async def delete_card(card_id: str, user: dict = Depends(require_user)) -> Respo
 
 @router.get("/{card_id}/invoice", response_model=Invoice)
 async def card_invoice(card_id: str, cycle: str | None = Query(None), user: dict = Depends(require_user)):
-    from finnos.lib.invoices import invoice_state, output
+    from finnos.lib.invoices import invoice_state, output, default_invoice_cycle
     card = await db.cards.find_one({"id": card_id, "user_id": user["id"]})
     if not card:
         raise HTTPException(404, "Cartão não encontrado.")
-    closing = cycle or cycle_bounds(date.fromisoformat(today_iso()), card["closing_day"])[1].isoformat()
     txs = await db.transactions.find({"user_id": user["id"], "card_id": card_id}).to_list(20000)
+    closing = cycle or default_invoice_cycle(card, txs, date.fromisoformat(today_iso()))
     categories = {c["id"]: c for c in await db.categories.find({"user_id": user["id"]}).to_list(500)}
     try:
         return output(invoice_state(card, txs, closing, categories))
@@ -131,7 +131,7 @@ async def card_invoice(card_id: str, cycle: str | None = Query(None), user: dict
 @router.post("/{card_id}/pay", response_model=Invoice)
 async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(require_user), x_finnos_operation_id: str = Header(...)):
     from finnos.lib import db as store
-    from finnos.lib.invoices import invoice_state, output
+    from finnos.lib.invoices import invoice_state, output, default_invoice_cycle
     from finnos.lib.invoice_payments import allocate_payment, to_cents
     from starlette.concurrency import run_in_threadpool
     import hashlib
@@ -167,7 +167,7 @@ async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(
                 raise HTTPException(400,"Conta de pagamento inválida.")
             txs = store.rows(instance,uid,"transactions",tr)
             cats = {c['id']:c for c in store.rows(instance,uid,"categories",tr)}
-            cycle = payload.cycle or cycle_bounds(date.fromisoformat(today_iso()),card['closing_day'])[1].isoformat()
+            cycle = payload.cycle or default_invoice_cycle(card,txs,date.fromisoformat(today_iso()))
             try:
                 state = invoice_state(card,txs,cycle,cats)
                 allocation = allocate_payment(state['total_cents'],[state['paid_cents']] if state['paid_cents'] else [],None if payload.value is None else to_cents(payload.value))
