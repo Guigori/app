@@ -1,4 +1,4 @@
-from finnos.lib.money import D
+from finnos.lib.money import D, quantize_brl
 
 """Bank accounts with server-computed balances (money already due up to today)."""
 import uuid
@@ -43,9 +43,9 @@ async def _enriched_accounts(user_id: str) -> list[AccountOut]:
                 color=a.get("color", "#070F52"),
                 initial_balance=D(a.get("initial_balance") or D("0.0")),
                 active=a.get("active", True),
-                balance=round(balance[a["id"]], 2),
-                total_income=round(max(income[a["id"]], D("0.0")), 2),
-                total_expense=round(max(expense[a["id"]], D("0.0")), 2),
+                balance=quantize_brl(balance[a["id"]]),
+                total_income=quantize_brl(max(income[a["id"]], D("0.0"))),
+                total_expense=quantize_brl(max(expense[a["id"]], D("0.0"))),
                 created_at=aware(a.get("created_at")) or datetime.now(timezone.utc),
             )
         )
