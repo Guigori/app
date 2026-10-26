@@ -161,6 +161,34 @@ export async function getSyncOperation(id: string): Promise<SyncOperation | null
   });
 }
 
+/** Explicit conflict resolution after the user has reconciled server state.
+ * Never delete an operation that could still be retryable or is being sent.
+ * The UI must clearly warn that an unsent local record may be lost.
+ */
+export async function discardConflictedOperation(id: string): Promise<void> {
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (!uid) throw new Error("FINNOS_AUTH_REQUIRED");
+  await transact<void>("readwrite", (store, resolve, reject) => {
+    const req = store.get(id);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const op = req.result as SyncOperation | undefined;
+      if (!op || op.uid !== uid || firebaseAuth?.currentUser?.uid !== uid) {
+        reject(new Error("FINNOS_SESSION_CHANGED"));
+        return;
+      }
+      if (op.status !== "conflict") {
+        reject(new Error("Somente operações bloqueadas podem ser descartadas após revisão."));
+        return;
+      }
+      const deleted = store.delete(id);
+      deleted.onsuccess = () => resolve();
+      deleted.onerror = () => reject(deleted.error);
+    };
+  });
+  window.dispatchEvent(new CustomEvent("finnos:sync-state"));
+}
+
 export async function updateQueuedTransaction(id: string, payload: TransactionInput): Promise<void> {
   const op = await getSyncOperation(id);
   if (!op) throw new Error("Operação pendente não encontrada.");
