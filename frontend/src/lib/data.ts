@@ -41,6 +41,7 @@ import {
   localNotifications,
   localInvoice,
   localPayInvoice,
+  localCreditInvoice,
   localSubscriptions,
   localCreateSubscription,
   localUpdateSubscription,
@@ -66,6 +67,7 @@ import type {
   NotifyPrefsInput,
   Notifications,
   PayInvoiceInput,
+  CreditInvoiceInput,
   Subscriptions,
   SubscriptionInput,
   SubscriptionItem,
@@ -469,6 +471,12 @@ export async function fetchInvoice(cardId: string): Promise<Invoice> {
 export async function payInvoice(cardId: string, input: PayInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
   if (isLocalMode()) return localPayInvoice(cardId, input);
   return apiPost<Invoice>(`/cards/${cardId}/pay`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+
+/** Merchant credit reduces unpaid card debt; it never transfers money to a bank account. */
+export async function creditInvoice(cardId: string, input: CreditInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
+  if (isLocalMode()) return localCreditInvoice(cardId, input, operationId);
+  return apiPost<Invoice>(`/cards/${encodeURIComponent(cardId)}/credits`, input, { "X-FINNOS-Operation-ID": operationId });
 }
 
 export async function fetchSubscriptions(): Promise<Subscriptions> {
