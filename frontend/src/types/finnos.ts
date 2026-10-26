@@ -59,6 +59,21 @@ export interface AccountDetail {
   transactions: Transaction[];
 }
 
+export interface FinanceHistoryEvent {
+  id: string;
+  entity: string;
+  entity_id: string;
+  action: "created" | "updated" | "deleted";
+  summary: string;
+  created_at: string;
+  before: Record<string, string | number> | null;
+  after: Record<string, string | number> | null;
+}
+export interface FinanceHistoryPage {
+  items: FinanceHistoryEvent[];
+  next_cursor: string | null;
+}
+
 export interface Category {
   id: string;
   name: string;
