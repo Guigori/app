@@ -1,4 +1,4 @@
-from finnos.lib.money import D
+from finnos.lib.money import D, quantize_brl
 
 """Dashboard aggregate: total balance, month stats, category donut, 50/30/20 rule, recent."""
 from typing import List, Optional
@@ -58,14 +58,14 @@ async def dashboard(
                 name=slice_cat["name"] if slice_cat else "Sem categoria",
                 color=slice_cat["color"] if slice_cat else "#94A3B8",
                 icon=slice_cat["icon"] if slice_cat else "more-horizontal",
-                total=round(total, 2),
+                total=quantize_brl(total),
                 percent=share,
             )
         )
     rule = []
     for key in ("necessidades", "desejos", "metas"):
-        spent = round(by_group[key], 2)
-        limit = round(income * GROUP_SHARES[key], 2)
+        spent = quantize_brl(by_group[key])
+        limit = quantize_brl(income * GROUP_SHARES[key])
         percent = (
             round(spent / limit * 100, 1)
             if limit > 0
@@ -93,12 +93,12 @@ async def dashboard(
     accounts_by_id, categories_by_id = await _ref_maps(user_id)
     return DashboardOut(
         month=m,
-        total_balance=round(total_balance, 2),
+        total_balance=quantize_brl(total_balance),
         income=income,
         expense=expense,
-        month_balance=round(income - expense, 2),
-        prev_income=round(prev_income, 2) if prev_count else None,
-        prev_expense=round(prev_expense, 2) if prev_count else None,
+        month_balance=quantize_brl(income - expense),
+        prev_income=quantize_brl(prev_income) if prev_count else None,
+        prev_expense=quantize_brl(prev_expense) if prev_count else None,
         invested=D("0.0"),
         categories=slices,
         rule=rule,
