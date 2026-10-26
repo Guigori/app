@@ -3,8 +3,8 @@ import { IDBFactory } from "fake-indexeddb";
 
 vi.mock("@/lib/mode", () => ({ getMode: () => "local" }));
 
-import { freshDb, writeDb, type LocalCard } from "@/lib/local/store";
-import { localInvoice, localListCards, localFlow, localCreateTransaction, localCreditInvoice, localDeleteTransaction } from "@/lib/local/engine";
+import { freshDb, readDb, writeDb, type LocalCard } from "@/lib/local/store";
+import { localInvoice, localListCards, localFlow, localCreateTransaction, localCreditInvoice, localBankRefund, localDeleteTransaction, localDashboard, localBudget, localFinanceHistory } from "@/lib/local/engine";
 import type { Transaction, TransactionInput } from "@/types/finnos";
 
 const date = "2026-10-20";
@@ -153,4 +153,60 @@ it("returns an old unpaid invoice as the local default and preserves explicit cy
   expect(localInvoice("card").cycle_end).toBe("2026-09-29");
   expect(localInvoice("card").outstanding).toBe(100);
   expect(localInvoice("card", "2026-10-29").outstanding).toBe(0);
+});
+
+
+it("returns bank money after a fully paid bill without booking artificial income", () => {
+  const purchaseRecord = { ...purchase("returned", 300), date: "2026-09-20", category_id: "food" };
+  setScenario(
+    [purchaseRecord],
+    { "2026-09-29": {
+      amount: 300, paid_at: "2026-10-07",
+      items: [{
+        id: "returned", name: "returned", date: "2026-09-20",
+        value: 300, category_name: "Compras",
+        category_color: null, installment_label: null,
+      }],
+    }},
+  );
+  const db = readDb();
+  db.categories.push({
+    id: "food", name: "Compras", icon: "shopping-bag",
+    color: "#FF00FF", group: "desejos", monthly_budget: 500,
+    monthly_goal: 0, created_at: "2026-01-01T00:00:00Z",
+  });
+  writeDb(db);
+  expect(localInvoice("card", "2026-09-29").paid).toBe(true);
+  const result = localBankRefund("card", {
+    cycle: "2026-09-29", purchase_id: "returned", account_id: "bank",
+    date: "2026-10-26", value: 100, reason: "Produto devolvido",
+  }, "refund-1");
+  expect(result.refund_total).toBe(100);
+  expect(result.paid_amount).toBe(300);
+  expect(result.outstanding).toBe(0);
+  expect(localBankRefund("card", {
+    cycle: "2026-09-29", purchase_id: "returned", account_id: "bank",
+    date: "2026-10-26", value: 100, reason: "Produto devolvido",
+  }, "refund-1").refunds).toHaveLength(1);
+  expect(() => localBankRefund("card", {
+    cycle: "2026-09-29", purchase_id: "returned", account_id: "bank",
+    date: "2026-10-26", value: 101, reason: "Produto devolvido",
+  }, "refund-1")).toThrow("Identificador");
+  const home = localDashboard("2026-10");
+  expect(home.income).toBe(0);
+  expect(home.expense).toBe(-100);
+  expect(home.total_balance).toBe(5100);
+  const budget = localBudget("2026-10");
+  expect(budget.rows.find(row => row.category_id === "food")?.spent).toBe(-100);
+  expect(localFlow({ month: "2026-10", months: 2 }).expense).toBe(-100);
+  expect(localFinanceHistory(10).items.some(item => item.entity === "transactions")).toBe(true);
+  expect(() => localDeleteTransaction("card:refund:refund-1")).toThrow();
+});
+
+it("prevents bank refund on a card bill that is not fully paid", () => {
+  setScenario([purchase("new", 300)]);
+  expect(() => localBankRefund("card", {
+    cycle: "2026-10-29", purchase_id: "new", account_id: "bank",
+    date: "2026-10-26", value: 50, reason: "Produto devolvido",
+  }, "refund-2")).toThrow("fatura quitada");
 });
