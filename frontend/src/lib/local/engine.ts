@@ -494,10 +494,6 @@ export function localTrends(months: number, endMonth?: string): Trends {
       if (tx.type === "receita") income += portion;
       else expense += portion;
     }
-    for (const source of recurringSources(m)) {
-      if (source.type === "receita") pIncome += amount(source);
-      else pExpense += amount(source);
-    }
     return {
       month: m,
       label: MONTH_ABBR[Number(m.slice(5, 7)) - 1],
@@ -729,6 +725,10 @@ export function localFlow(params: FlowParams): Flow {
         if (tx.type === "receita") pIncome += projected;
         else pExpense += projected;
       }
+    }
+    for (const source of recurringSources(m)) {
+      if (source.type === "receita") pIncome += amount(source);
+      else pExpense += amount(source);
     }
     return {
       month: m,
