@@ -195,6 +195,7 @@ it("returns bank money after a fully paid bill without booking artificial income
   const home = localDashboard("2026-10");
   expect(home.income).toBe(0);
   expect(home.expense).toBe(-100);
+  expect(home.categories).toEqual([]); // refund-only month has no negative donut arcs
   expect(home.total_balance).toBe(5100);
   const budget = localBudget("2026-10");
   expect(budget.rows.find(row => row.category_id === "food")?.spent).toBe(-100);
