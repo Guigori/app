@@ -4,7 +4,7 @@ import { IDBFactory } from "fake-indexeddb";
 vi.mock("@/lib/mode", () => ({ getMode: () => "local" }));
 
 import { freshDb, writeDb, type LocalCard } from "@/lib/local/store";
-import { localInvoice, localListCards, localFlow, localCreateTransaction } from "@/lib/local/engine";
+import { localInvoice, localListCards, localFlow, localCreateTransaction, localCreditInvoice, localDeleteTransaction } from "@/lib/local/engine";
 import type { Transaction, TransactionInput } from "@/types/finnos";
 
 const date = "2026-10-20";
@@ -109,4 +109,48 @@ it("validates imported installment k/n and future settled dates before saving", 
     ...input, current_installment: 7, date: "2026-11-20",
   })).toThrow("Lançamento futuro não pode estar pago.");
   expect(localInvoice("card").items).toHaveLength(0);
+});
+
+it("records audit-safe partial invoice credit and reduces the available debt and limit", () => {
+  setScenario([purchase("one", 300)]);
+  const input = { cycle: "2026-10-29", purchase_id: "one", value: 50, reason: "Produto devolvido" };
+  const after = localCreditInvoice("card", input, "credit-op-1");
+  expect(after.total).toBe(250);
+  expect(after.adjustment_total).toBe(50);
+  expect(after.adjustments?.map(item => item.purchase_id)).toEqual(["one"]);
+  expect(after.items).toHaveLength(1);
+  expect(localListCards()[0].used).toBe(250);
+  expect(localCreditInvoice("card", input, "credit-op-1").adjustments).toHaveLength(1);
+  expect(() => localCreditInvoice("card", { ...input, value: 60 }, "credit-op-1"))
+    .toThrow("Identificador reutilizado");
+  expect(() => localDeleteTransaction("one")).toThrow("estorno auditado");
+});
+
+it("rejects overcrediting a purchase or the amount already paid", () => {
+  setScenario(
+    [purchase("one", 300)],
+    { "2026-10-29": {
+      amount: 240, paid_at: "2026-10-26",
+      items: [{
+        id: "one", name: "one", date, value: 300, category_name: null,
+        category_color: null, installment_label: null,
+      }],
+    }},
+  );
+  const valid = { cycle: "2026-10-29", purchase_id: "one", value: 60, reason: "Desconto confirmado" };
+  expect(() => localCreditInvoice("card", { ...valid, value: 61 }, "large"))
+    .toThrow("saldo não pago");
+  expect(localCreditInvoice("card", valid, "partial").paid).toBe(true);
+  expect(() => localCreditInvoice("card", { ...valid, value: 1 }, "another"))
+    .toThrow("saldo não pago");
+  expect(localListCards()[0].used).toBe(0);
+});
+
+it("returns an old unpaid invoice as the local default and preserves explicit cycle views", () => {
+  setScenario([{
+    ...purchase("previous", 100), date: "2026-09-20",
+  }]);
+  expect(localInvoice("card").cycle_end).toBe("2026-09-29");
+  expect(localInvoice("card").outstanding).toBe(100);
+  expect(localInvoice("card", "2026-10-29").outstanding).toBe(0);
 });
