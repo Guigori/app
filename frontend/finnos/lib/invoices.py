@@ -45,6 +45,27 @@ def invoice_state(card, txs, cycle, categories=None):
     return dict(card_id=card['id'],card_name=card['name'],cycle_start=start,cycle_end=cycle,due_date=due_date(closing,card['closing_day'],card['due_day']).isoformat(),total_cents=total,paid_cents=paid,paid=total > 0 and paid == total,paid_at=(saved or {}).get('paid_at'),items=items)
 
 
+def default_invoice_cycle(card, txs, today):
+    """Select the oldest closed, unpaid invoice; otherwise the open cycle.
+
+    Invoice dates are closing dates (stable FINNOS identifiers), not due months.
+    No historical cycle or payment is modified by this read-only selection.
+    """
+    open_cycle = cycle_bounds(today, card['closing_day'])[1].isoformat()
+    closed = set((card.get('invoice_cycles') or {}).keys())
+    for tx in txs:
+        for cycle, _, _ in occurrences(card, tx):
+            if cycle < today.isoformat():
+                closed.add(cycle)
+    for cycle in sorted(closed):
+        if cycle >= today.isoformat():
+            continue
+        state = invoice_state(card, txs, cycle)
+        if state['total_cents'] > state['paid_cents']:
+            return cycle
+    return open_cycle
+
+
 def output(state):
     return {**{k:v for k,v in state.items() if k not in {'total_cents','paid_cents','items'}},'total':state['total_cents']/100,'paid_amount':state['paid_cents']/100,'outstanding':(state['total_cents']-state['paid_cents'])/100,'items':[{**{k:v for k,v in i.items() if k != 'purchase_cents'},'value':i['purchase_cents']/100} for i in state['items']]}
 
