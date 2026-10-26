@@ -96,6 +96,7 @@ export interface CategoryInput {
 
 export interface Transaction {
   invoice_payment?: boolean;
+  invoice_refund?: boolean;
   version?: number;
   id: string;
   name: string;
@@ -517,6 +518,23 @@ export interface InvoiceAdjustment {
   value: number;
 }
 
+export interface BankRefundInput {
+  cycle: string;
+  purchase_id: string;
+  account_id: string;
+  date: string;
+  value: number;
+  reason: string;
+}
+export interface BankRefund {
+  id: string;
+  purchase_id: string;
+  account_id: string;
+  date: string;
+  value: number;
+  reason: string;
+}
+
 export interface CreditInvoiceInput {
   cycle: string;
   purchase_id: string;
@@ -538,6 +556,8 @@ export interface Invoice {
   items: InvoiceItem[];
   adjustments?: InvoiceAdjustment[];
   adjustment_total?: number;
+  refunds?: BankRefund[];
+  refund_total?: number;
 }
 
 export interface PayInvoiceInput {
