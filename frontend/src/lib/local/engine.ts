@@ -79,7 +79,7 @@ function monthPortion(tx: Transaction, month: string): number | null {
 
 /** Signed effect on each account balance — "pago" moves money, pending/scheduled never does. */
 function balanceEffects(tx: Transaction, today: string): [string, number][] {
-  if (tx.card_id || tx.status !== "pago") return [];
+  if (tx.card_id || tx.status !== "pago" || tx.date > today) return [];
   let v = tx.value;
   if (tx.installment) {
     const n = tx.total_installments ?? 1;
@@ -494,6 +494,10 @@ export function localTrends(months: number, endMonth?: string): Trends {
       if (tx.type === "receita") income += portion;
       else expense += portion;
     }
+    for (const source of recurringSources(m)) {
+      if (source.type === "receita") pIncome += amount(source);
+      else pExpense += amount(source);
+    }
     return {
       month: m,
       label: MONTH_ABBR[Number(m.slice(5, 7)) - 1],
@@ -684,20 +688,29 @@ export function localFlow(params: FlowParams): Flow {
   const txs = params.category_id
     ? db.transactions.filter((t) => t.category_id === params.category_id)
     : db.transactions;
-  const settled = new Set(txs.map((t) => `${t.name.trim().toLowerCase()}|${t.date.slice(0, 7)}`));
   const todayMonth = todayISO().slice(0, 7);
 
   const amount = (t: Transaction) => round2(t.installment ? t.installment_value ?? 0 : t.value);
-  const projection = (t: Transaction, month: string): number | null => {
-    if (t.type === "transferencia") return null;
-    const txMonth = t.date.slice(0, 7);
-    if (t.status !== "pago" && txMonth === month) return amount(t);
-    if (t.fixed && (t.recurrence ?? "mensal") === "mensal") {
-      if (monthsBetween(txMonth, month) > 0 && !settled.has(`${t.name.trim().toLowerCase()}|${month}`)) {
-        return amount(t);
-      }
+  const recurrenceKey = (t: Transaction): string => JSON.stringify([
+    t.type, t.account_id, t.card_id, t.category_id, t.name.trim().toLowerCase(),
+  ]);
+  const recurringSources = (month: string): Transaction[] => {
+    const present = new Set<string>();
+    const latest = new Map<string, Transaction>();
+    for (const tx of txs) {
+      if (tx.invoice_payment || tx.type === "transferencia") continue;
+      const key = recurrenceKey(tx);
+      const txMonth = tx.date.slice(0, 7);
+      if (txMonth === month) present.add(key);
+      if (!tx.fixed || tx.installment || (tx.recurrence ?? "mensal") !== "mensal" || txMonth >= month) continue;
+      const prev = latest.get(key);
+      if (!prev || tx.date > prev.date) latest.set(key, tx);
     }
-    return null;
+    return [...latest.entries()].filter(([key]) => !present.has(key)).map(([, tx]) => tx);
+  };
+  const projection = (t: Transaction, month: string): number | null => {
+    if (t.type === "transferencia" || t.invoice_payment) return null;
+    return t.status !== "pago" && t.date.slice(0, 7) === month ? amount(t) : null;
   };
 
   const series: FlowPoint[] = window.map((m) => {
