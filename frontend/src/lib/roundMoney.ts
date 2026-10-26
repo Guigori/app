@@ -13,6 +13,7 @@ export function moneyCents(value: number): number {
   }
   const absCents = Math.round((Math.abs(value) + Number.EPSILON) * 100);
   if (!Number.isSafeInteger(absCents)) throw new Error("Valor monetário fora do limite.");
+  if (absCents === 0) return 0; // canonical JSON zero, never -0
   return value < 0 ? -absCents : absCents;
 }
 
