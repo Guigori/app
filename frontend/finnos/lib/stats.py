@@ -63,6 +63,15 @@ def month_portion(tx: dict, month: str) -> float | None:
     return round(D(tx["value"]), 2) if d[:7] == month else None
 
 
+def paid_future_is_inconsistent(status: str, tx_date: str, today: str) -> bool:
+    """A not-yet-occurred cash transaction cannot be marked as settled.
+
+    Callers reject new inconsistent writes; existing data remains untouched until
+    an explicit user-confirmed remediation/migration is designed.
+    """
+    return status == "pago" and tx_date > today
+
+
 def balance_effects(tx: dict, today: str) -> list[tuple[str, float]]:
     """Signed effect on each account's balance.
 
