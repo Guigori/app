@@ -179,7 +179,7 @@ def validate_refs(db, uid, name, doc, transaction, original_tx=None):
     if name == "cards":
         fields.append(("payment_account_id", "accounts"))
     if name == "transactions":
-        if doc.get("invoice_payment"):
+        if doc.get("invoice_payment") or doc.get("invoice_refund"):
             raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
         from finnos.lib.dates import today_iso
         from finnos.lib.invoices import purchase_write_conflict
@@ -344,7 +344,7 @@ class Collection:
                 doc = docs[0] if docs else dict(query, id=str(uuid.uuid4()))
                 original_tx = dict(doc) if self.name == "transactions" and docs else None
                 previous_doc = dict(doc) if docs else None
-                if self.name == "transactions" and docs and doc.get("invoice_payment"):
+                if self.name == "transactions" and docs and (doc.get("invoice_payment") or doc.get("invoice_refund")):
                     raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
                 ref = (
                     root(db, uid).collection(self.name).document(resource_id(doc["id"]))
