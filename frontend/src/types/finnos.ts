@@ -59,6 +59,32 @@ export interface AccountDetail {
   transactions: Transaction[];
 }
 
+export interface HistoricalInvoiceReview {
+  status: "review_required" | "no_issues_detected_not_migration_verified";
+  counts: Record<string, number>;
+  examples: Array<{
+    reason: string;
+    card_id: string;
+    cycle: string | null;
+    item_id?: string;
+    recorded_paid_cents?: number;
+    matched_bank_payment_cents?: number;
+  }>;
+  sample_limit: number;
+  auto_fixed: false;
+  legacy_source_compared: false;
+}
+
+export interface FinanceIntegrity {
+  storage: "firestore";
+  integrity_ok: boolean;
+  issues: Record<string, number>;
+  has_financial_records: boolean;
+  total_account_balance: number | null;
+  legacy_reconciliation: "not_verified";
+  historical_invoices: HistoricalInvoiceReview;
+}
+
 export interface FinanceHistoryEvent {
   id: string;
   entity: string;
