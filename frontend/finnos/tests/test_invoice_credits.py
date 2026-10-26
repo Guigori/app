@@ -28,7 +28,7 @@ def credit(instance, txs, value, original="a", cycle="2026-10-29", identifier="c
     validate_credit(instance, txs, cycle, original, value)
     append_credit(instance, {
         "id": identifier, "cycle": cycle, "purchase_id": original,
-        "date": "2026-10-26", "amount_cents": value,
+        "date": "2026-10-26", "credit_cents": value,
         "reason": "Produto devolvido", "fingerprint": "abc",
     })
 
@@ -91,7 +91,7 @@ def test_two_partial_credits_accumulate_without_exceeding_line_or_double_count()
         validate_credit(instance, txs, "2026-10-29", "a", 5001)
     with pytest.raises(ValueError, match="já registrado"):
         append_credit(instance, {
-            "id": "one", "cycle": "2026-10-29", "purchase_id": "a", "amount_cents": 1,
+            "id": "one", "cycle": "2026-10-29", "purchase_id": "a", "credit_cents": 1,
         })
 
 
