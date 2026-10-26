@@ -39,7 +39,15 @@ def invoice_state(card, txs, cycle, categories=None):
             items.append(dict(id=tx['id'],name=tx['name'],date=tx['date'],purchase_cents=value,category_name=cat.get('name'),category_color=cat.get('color'),installment_label=label))
     saved = (card.get('invoice_cycles') or {}).get(cycle)
     if saved:
-        items = saved['items']
+        # Payments preserve a snapshot of the purchases already present. New
+        # purchases can still enter a cycle that was paid before closing.
+        # Keep snapshotted lines authoritative and append only unseen items.
+        archived = list(saved.get('items') or [])
+        known = {(item['id'], item.get('installment_label')) for item in archived}
+        items = archived + [
+            item for item in items
+            if (item['id'], item.get('installment_label')) not in known
+        ]
     total = sum(i['purchase_cents'] for i in items)
     paid = (saved or {}).get('paid_cents', 0)
     return dict(card_id=card['id'],card_name=card['name'],cycle_start=start,cycle_end=cycle,due_date=due_date(closing,card['closing_day'],card['due_day']).isoformat(),total_cents=total,paid_cents=paid,paid=total > 0 and paid == total,paid_at=(saved or {}).get('paid_at'),items=items)
@@ -71,11 +79,51 @@ def output(state):
 
 
 def commitment(card, txs, current):
-    totals = {}
+    """Total current, future and used credit in cents, including early payments.
+
+    A partially paid open cycle may gain purchases. The archived invoice lines
+    take precedence for existing purchases, but must not hide newly added lines.
+    """
+    lines = {}
     for tx in txs:
-        for key, value, _ in occurrences(card, tx):
-            totals[key] = totals.get(key, 0) + value
-    for key, saved in (card.get('invoice_cycles') or {}).items():
-        totals[key] = sum(i['purchase_cents'] for i in saved['items'])
-    owed = {key:max(0,total-(card.get('invoice_cycles') or {}).get(key,{}).get('paid_cents',0)) for key,total in totals.items()}
-    return owed.get(current,0),sum(v for k,v in owed.items() if k > current),sum(owed.values())
+        for cycle, value, label in occurrences(card, tx):
+            lines.setdefault(cycle, {})[(tx['id'], label)] = value
+    saved_cycles = card.get('invoice_cycles') or {}
+    for cycle, saved in saved_cycles.items():
+        bucket = lines.setdefault(cycle, {})
+        for item in saved.get('items') or []:
+            bucket[(item['id'], item.get('installment_label'))] = item['purchase_cents']
+    owed = {
+        cycle: max(0, sum(bucket.values()) - saved_cycles.get(cycle, {}).get('paid_cents', 0))
+        for cycle, bucket in lines.items()
+    }
+    return (
+        owed.get(current, 0),
+        sum(amount for cycle, amount in owed.items() if cycle > current),
+        sum(owed.values()),
+    )
+
+
+def purchase_write_conflict(card, tx, today: str, original=None) -> str | None:
+    """Protect settled history while allowing fresh purchases in an open cycle.
+
+    This is a pure validation rule: existing purchases are not editable after
+    a payment touches their cycle, but a NEW purchase can increase the open
+    invoice before closing. Closed paid cycles remain immutable.
+    """
+    saved_cycles = card.get('invoice_cycles') or {}
+    if not saved_cycles:
+        return None
+    if original:
+        if any(cycle in saved_cycles for cycle, _, _ in occurrences(card, original)):
+            return "Compra vinculada a fatura com pagamentos; alteração exige estorno auditado."
+        if any(
+            item.get('id') == original.get('id')
+            for cycle in saved_cycles.values()
+            for item in cycle.get('items') or []
+        ):
+            return "Compra vinculada a fatura com pagamentos; alteração exige estorno auditado."
+    for cycle, _, _ in occurrences(card, tx):
+        if cycle in saved_cycles and cycle < today:
+            return "Fatura fechada com pagamentos não aceita novas compras retroativas."
+    return None
