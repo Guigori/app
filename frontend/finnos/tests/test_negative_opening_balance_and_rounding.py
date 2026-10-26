@@ -1,5 +1,7 @@
 """FIN-10/11 regressions: debt is a valid opening balance; cent rounding is symmetric."""
 import asyncio
+import json
+from pathlib import Path
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -89,3 +91,13 @@ def test_negative_balance_reconciles_payment_and_transfer(monkeypatch):
     assert result[0].balance == Decimal("-350.23")
     assert result[1].balance == Decimal("50.00")
     assert sum(row.balance for row in result) == Decimal("-300.23")
+
+
+def test_rounding_parity_with_typescript_fixtures():
+    fixture_path = Path(__file__).resolve().parents[2] / "fixtures" / "finance-money-parity.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    for item in fixture["rounding"]:
+        assert cents(item["input"]) == item["cents"], item["input"]
+        assert cents(quantize_brl(item["input"])) == item["cents"], item["input"]
+    for item in fixture["overdraft"]:
+        assert (item["opening_cents"] + item["income_cents"] - item["transfer_out_cents"]) == item["expected_cents"]
