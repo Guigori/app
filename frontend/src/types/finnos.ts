@@ -202,6 +202,13 @@ export interface BudgetRow {
   remaining: number;
   percent: number;
   status: BudgetStatus;
+  pace_day?: number;
+  pace_days_in_month?: number;
+  pace_ideal?: number;
+  pace_daily_allowance?: number;
+  pace_projected_close?: number;
+  pace_difference?: number;
+  pace_cumulative?: number[];
 }
 
 export interface BudgetSummary {
