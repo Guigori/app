@@ -14,6 +14,7 @@ import SettingsIntegrations from "@/pages/SettingsIntegrations";
 import ChartSettings from "@/pages/ChartSettings";
 import Budget from "@/pages/Budget";
 import BudgetSettings from "@/pages/BudgetSettings";
+import FinanceHistory from "@/pages/FinanceHistory";
 import Flow from "@/pages/Flow";
 import Cards from "@/pages/Cards";
 import CardInvoice from "@/pages/CardInvoice";
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="/cartoes/:cardId" element={<CardInvoice />} />
             <Route path="/orcamento" element={<Budget />} />
             <Route path="/orcamento/configuracoes" element={<BudgetSettings />} />
+            <Route path="/historico" element={<FinanceHistory />} />
             <Route path="/fluxo" element={<Flow />} />
             <Route path="/radar" element={<Radar />} />
             <Route path="/radar/:signalId" element={<RadarDetail />} />
