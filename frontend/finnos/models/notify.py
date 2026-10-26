@@ -91,10 +91,10 @@ class CreditInvoiceIn(BaseModel):
 
 
 class BankRefundIn(BaseModel):
-    cycle: str = Field(pattern=r"^\\d{4}-\\d{2}-\\d{2}$")
+    cycle: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     purchase_id: str = Field(min_length=1, max_length=1500)
     account_id: str = Field(min_length=1, max_length=1500)
-    date: str = Field(pattern=r"^\\d{4}-\\d{2}-\\d{2}$")
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     value: Money = Field(gt=0)
     reason: str = Field(min_length=5, max_length=300)
 
