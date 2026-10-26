@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, PlusCircle, Tags, Trash2 } from "lucide-react";
+import { Pencil, PlusCircle, Tags, Trash2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
-import { deleteCategory, fetchCategories } from "@/lib/data";
+import { deleteCategory, fetchCategories, fetchBudget } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { formatBRL, GROUP_LABEL } from "@/lib/format";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
@@ -22,6 +23,9 @@ export default function Categories() {
   const queryClient = useQueryClient();
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
   const categories = categoriesQuery.data ?? [];
+  const thisMonth = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7);
+  const budgetQuery = useQuery({ queryKey: ["budget", thisMonth], queryFn: () => fetchBudget(thisMonth) });
+  const paceByCategory = new Map((budgetQuery.data?.rows ?? []).map(row => [row.category_id, row]));
   const [pendingDelete, setPendingDelete] = useState<Category | null>(null);
 
   const deleteMutation = useMutation({
@@ -84,9 +88,14 @@ export default function Categories() {
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {groupCategories.map((category) => (
+                    {groupCategories.map((category) => {
+                      const pace = paceByCategory.get(category.id);
+                      const hasLimit = category.monthly_budget > 0;
+                      const usage = pace?.percent ?? 0;
+                      return (
                       <Card key={category.id} className="py-0" data-testid={`category-card-${category.id}`}>
-                        <CardContent className="flex items-center gap-3 p-4">
+                        <CardContent className="space-y-3 p-4">
+                        <div className="flex items-center gap-3">
                           <span
                             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
                             style={{ backgroundColor: category.color + "1A", color: category.color }}
@@ -123,9 +132,45 @@ export default function Categories() {
                               <Trash2 className="h-4 w-4" aria-hidden="true" />
                             </Button>
                           </div>
+                        </div>
+                        {hasLimit && pace ? (
+                          <div className="space-y-1.5" data-testid={`category-pace-${category.id}`}>
+                            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                              <span>{formatBRL(pace.spent)} utilizado</span>
+                              <span className={usage > 100 ? "font-semibold text-destructive" : ""}>
+                                {Math.round(usage)}%
+                              </span>
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar"
+                              aria-label={`Gastos em ${category.name}`} aria-valuenow={Math.min(Math.round(usage), 100)}
+                              aria-valuemin={0} aria-valuemax={100}>
+                              <div className={`h-full rounded-full ${usage > 100 ? "bg-destructive" : usage >= 80 ? "bg-amber-500" : "bg-primary"}`}
+                                style={{ width: `${Math.min(100, Math.max(0, usage))}%` }} />
+                            </div>
+                            <div className="flex items-start justify-between gap-2 text-xs text-muted-foreground">
+                              <span>{formatBRL(Math.max(category.monthly_budget - pace.spent, 0))} disponível</span>
+                              <span className="text-right">
+                                {pace.pace_projected_close != null && pace.pace_day && pace.pace_day > 0
+                                  ? `Projeção: ${formatBRL(pace.pace_projected_close)}`
+                                  : "Sem projeção ainda"}
+                              </span>
+                            </div>
+                            {pace.pace_daily_allowance != null && pace.pace_day != null
+                              && pace.pace_days_in_month != null && pace.pace_day < pace.pace_days_in_month ? (
+                              <p className="text-xs text-muted-foreground">
+                                <TrendingUp className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
+                                Até {formatBRL(pace.pace_daily_allowance)}/dia para manter o limite
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : !hasLimit ? (
+                          <Link className="inline-flex text-xs font-medium text-primary hover:underline" to="/orcamento/configuracoes">
+                            Definir limite no orçamento
+                          </Link>
+                        ) : null}
                         </CardContent>
                       </Card>
-                    ))}
+                    );})}
                   </div>
                 )}
               </section>
