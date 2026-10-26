@@ -1,4 +1,4 @@
-from finnos.lib.money import D
+from finnos.lib.money import D, quantize_brl
 
 """Analytics: month-over-month trends and the monthly budget view."""
 from typing import List, Optional
@@ -62,15 +62,15 @@ async def trends(
             MonthTrend(
                 month=m,
                 label=_label(m),
-                income=round(income, 2),
-                expense=round(expense, 2),
-                net=round(income - expense, 2),
+                income=quantize_brl(income),
+                expense=quantize_brl(expense),
+                net=quantize_brl(income - expense),
             )
         )
     return TrendsOut(
         months=rows,
-        total_income=round(sum((r.income for r in rows)), 2),
-        total_expense=round(sum((r.expense for r in rows)), 2),
+        total_income=quantize_brl(sum((r.income for r in rows))),
+        total_expense=quantize_brl(sum((r.expense for r in rows))),
     )
 
 
@@ -93,8 +93,8 @@ async def budget(
     adjustments = credit_events(cards, txs)
     rows: list[BudgetRow] = []
     for cat in categories:
-        budget_value = round(D(cat.get("monthly_budget") or D("0.0")), 2)
-        spent = round(spent_by_cat.get(cat["id"], D("0.0")), 2)
+        budget_value = quantize_brl(D(cat.get("monthly_budget") or D("0.0")))
+        spent = quantize_brl(spent_by_cat.get(cat["id"], D("0.0")))
         pace = monthly_pace(budget_value, txs, cat["id"], m, as_of=today_iso(), credits=adjustments)
         if budget_value <= 0:
             status = "sem_limite"
@@ -115,7 +115,7 @@ async def budget(
                 group=cat.get("group", "necessidades"),
                 budget=budget_value,
                 spent=spent,
-                remaining=round(budget_value - spent, 2),
+                remaining=quantize_brl(budget_value - spent),
                 percent=percent,
                 status=status,
                 pace_day=pace["day"],
@@ -128,17 +128,17 @@ async def budget(
             )
         )
     rows.sort(key=lambda r: (r.budget <= 0, -r.percent, -r.spent))
-    planned = round(sum((r.budget for r in rows)), 2)
-    spent_total = round(sum((r.spent for r in rows)), 2)
-    budgeted_spent = round(sum((r.spent for r in rows if r.budget > 0)), 2)
+    planned = quantize_brl(sum((r.budget for r in rows)))
+    spent_total = quantize_brl(sum((r.spent for r in rows)))
+    budgeted_spent = quantize_brl(sum((r.spent for r in rows if r.budget > 0)))
     return BudgetSummary(
         month=m,
         planned=planned,
         spent=spent_total,
-        remaining=round(planned - budgeted_spent, 2),
+        remaining=quantize_brl(planned - budgeted_spent),
         percent=round(budgeted_spent / planned * 100, 1) if planned else D("0.0"),
-        income=round(income, 2),
-        unbudgeted_spent=round(spent_total - budgeted_spent, 2),
+        income=quantize_brl(income),
+        unbudgeted_spent=quantize_brl(spent_total - budgeted_spent),
         rows=rows,
     )
 
@@ -146,8 +146,8 @@ async def budget(
 def _amount(tx: dict) -> float:
     """What a single occurrence of the transaction is worth."""
     if tx.get("installment"):
-        return round(D(tx.get("installment_value") or D("0.0")), 2)
-    return round(D(tx["value"]), 2)
+        return quantize_brl(D(tx.get("installment_value") or D("0.0")))
+    return quantize_brl(D(tx["value"]))
 
 
 def _projection(tx: dict, month: str) -> float | None:
@@ -218,17 +218,17 @@ async def flow(
                 month=m,
                 label=_label(m),
                 year=f"'{m[2:4]}",
-                income=round(income, 2),
-                expense=round(expense, 2),
-                net=round(income - expense, 2),
-                projected_income=round(p_income, 2),
-                projected_expense=round(p_expense, 2),
-                projected_net=round(p_income - p_expense, 2),
+                income=quantize_brl(income),
+                expense=quantize_brl(expense),
+                net=quantize_brl(income - expense),
+                projected_income=quantize_brl(p_income),
+                projected_expense=quantize_brl(p_expense),
+                projected_net=quantize_brl(p_income - p_expense),
                 future=m > today_month,
             )
         )
     by_cat = monthly_competency(txs, cards, focus)["by_category"]
-    focus_expense = round(sum(by_cat.values()), 2)
+    focus_expense = quantize_brl(sum(by_cat.values()))
     breakdown = [
         FlowCategory(
             category_id=key,
@@ -243,7 +243,7 @@ async def flow(
                 if key
                 else "more-horizontal"
             ),
-            total=round(value, 2),
+            total=quantize_brl(value),
             percent=(
                 round(value / focus_expense * 100, 1) if focus_expense else D("0.0")
             ),
@@ -261,9 +261,9 @@ async def flow(
         projected_income=point.projected_income if point else D("0.0"),
         projected_expense=point.projected_expense if point else D("0.0"),
         projected_net=point.projected_net if point else D("0.0"),
-        total_income=round(sum((p.income for p in series)), 2),
-        total_expense=round(sum((p.expense for p in series)), 2),
-        total_net=round(sum((p.net for p in series)), 2),
+        total_income=quantize_brl(sum((p.income for p in series))),
+        total_expense=quantize_brl(sum((p.expense for p in series))),
+        total_net=quantize_brl(sum((p.net for p in series))),
         series=series,
         categories=breakdown,
     )
@@ -300,25 +300,25 @@ async def calendar_month(
         value = _amount(tx)
         if tx.get("status") == "pago":
             if tx["type"] == "receita":
-                day.income = round(D(day.income) + value, 2)
+                day.income = quantize_brl(D(day.income) + value)
             else:
-                day.expense = round(D(day.expense) + value, 2)
+                day.expense = quantize_brl(D(day.expense) + value)
         elif tx["type"] == "receita":
-            day.projected_income = round(D(day.projected_income) + value, 2)
+            day.projected_income = quantize_brl(D(day.projected_income) + value)
         else:
-            day.projected_expense = round(D(day.projected_expense) + value, 2)
+            day.projected_expense = quantize_brl(D(day.projected_expense) + value)
     days = sorted(buckets.values(), key=lambda d: d.date)
-    income = round(sum((d.income for d in days)), 2)
-    expense = round(sum((d.expense for d in days)), 2)
-    p_income = round(sum((d.projected_income for d in days)), 2)
-    p_expense = round(sum((d.projected_expense for d in days)), 2)
+    income = quantize_brl(sum((d.income for d in days)))
+    expense = quantize_brl(sum((d.expense for d in days)))
+    p_income = quantize_brl(sum((d.projected_income for d in days)))
+    p_expense = quantize_brl(sum((d.projected_expense for d in days)))
     return CalendarOut(
         month=m,
         days=days,
         income=income,
         expense=expense,
-        net=round(income - expense, 2),
+        net=quantize_brl(income - expense),
         projected_income=p_income,
         projected_expense=p_expense,
-        projected_balance=round(income - expense + p_income - p_expense, 2),
+        projected_balance=quantize_brl(income - expense + p_income - p_expense),
     )
