@@ -1,4 +1,4 @@
-from finnos.lib.money import D, installment_portion, remaining_installment_indices
+from finnos.lib.money import D, installment_portion, remaining_installment_indices, quantize_brl
 
 """Month & money math shared by FINNOS routers.
 
@@ -60,7 +60,7 @@ def month_portion(tx: dict, month: str) -> float | None:
         if 0 <= offset < len(indices):
             return installment_portion(tx, indices.start + offset)
         return None
-    return round(D(tx["value"]), 2) if d[:7] == month else None
+    return quantize_brl(tx["value"]) if d[:7] == month else None
 
 
 def paid_future_is_inconsistent(status: str, tx_date: str, today: str) -> bool:
@@ -90,10 +90,10 @@ def balance_effects(tx: dict, today: str) -> list[tuple[str, float]]:
             D(0),
         )
     if tx["type"] == "receita":
-        return [(tx["account_id"], round(v, 2))]
+        return [(tx["account_id"], quantize_brl(v))]
     if tx["type"] == "despesa":
-        return [(tx["account_id"], round(-v, 2))]
-    effects = [(tx["account_id"], round(-v, 2))]
+        return [(tx["account_id"], quantize_brl(-v))]
+    effects = [(tx["account_id"], quantize_brl(-v))]
     if tx.get("to_account_id") and tx["to_account_id"] != tx["account_id"]:
-        effects.append((tx["to_account_id"], round(v, 2)))
+        effects.append((tx["to_account_id"], quantize_brl(v)))
     return effects
