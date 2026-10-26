@@ -12,6 +12,7 @@ export function ConnectivityStatus() {
   const { openTransaction } = useDialogs();
   const [state, setState] = useState<NetworkState>(() => navigator.onLine ? "online" : "offline");
   const [pending, setPending] = useState(0);
+  const [blocker, setBlocker] = useState<SyncOperation | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const collapseTimer = useRef<number | null>(null);
@@ -24,6 +25,7 @@ export function ConnectivityStatus() {
   const refresh = useCallback(async () => {
     const operations = await listSyncOperations();
     setPending(operations.length);
+    setBlocker(operations.find(op => op.status === "conflict") ?? null);
     return operations;
   }, []);
 
@@ -64,7 +66,9 @@ export function ConnectivityStatus() {
         });
         setExpanded(false);
       } else {
-        setExpanded(false);
+        // A rejected operation intentionally blocks the whole FIFO queue.
+        // Keep its status visible until the user explicitly reviews it.
+        setExpanded(after.some(op => op.status === "conflict"));
       }
     } finally {
       setSyncing(false);
@@ -76,9 +80,11 @@ export function ConnectivityStatus() {
     const syncSuccess = () => { void queryClient.invalidateQueries(); };
     const syncError = (event: Event) => {
       const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;
-      setExpanded(false);
-      toast.error("Não foi possível sincronizar", {
-        description: "O registro continua salvo neste aparelho e poderá ser revisado.",
+      setExpanded(op.status === "conflict");
+      toast.error(op.status === "conflict" ? "Sincronização exige revisão" : "Não foi possível sincronizar", {
+        description: op.status === "conflict"
+          ? "Este lançamento foi rejeitado. Os seguintes estão protegidos até a revisão."
+          : "O registro continua salvo neste aparelho e poderá ser revisado.",
         duration: 5000,
         action: { label: "Revisar", onClick: () => openTransaction({ syncOperationId: op.id, syncPayload: op.payload, firstAttemptAt: op.createdAt }) },
       });
@@ -120,26 +126,36 @@ export function ConnectivityStatus() {
 
   const expand = () => {
     setExpanded(true);
-    collapseLater(5000);
+    if (!blocker) collapseLater(5000);
+  };
+
+  const reviewBlocker = () => {
+    if (!blocker) return expand();
+    openTransaction({
+      syncOperationId: blocker.id,
+      syncPayload: blocker.payload,
+      firstAttemptAt: blocker.createdAt,
+    });
   };
 
   return (
     <button
       type="button"
-      onClick={expanded ? () => setExpanded(false) : expand}
+      onClick={blocker ? reviewBlocker : expanded ? () => setExpanded(false) : expand}
       className={cn(
         "fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-[70] flex -translate-x-1/2 select-none items-center justify-center overflow-hidden rounded-full border bg-background/92 text-xs font-medium text-foreground shadow-md backdrop-blur-xl transition-[width,padding,transform,opacity] duration-300 touch-manipulation",
         expanded ? "w-auto max-w-[calc(100vw-2rem)] gap-2 px-4 py-2.5" : "size-10 p-0",
-        state === "offline" ? "border-amber-500/35" : "border-primary/25",
+        state === "offline" || blocker ? "border-amber-500/35" : "border-primary/25",
       )}
       role="status"
       aria-live="polite"
       aria-expanded={expanded}
-      aria-label={state === "offline" ? "Sem conexão" : syncing ? "Sincronizando" : "Sincronização pendente"}
+      aria-label={blocker ? "Sincronização bloqueada. Revisar lançamento" : state === "offline" ? "Sem conexão" : syncing ? "Sincronizando" : "Sincronização pendente"}
       data-testid="offline-status"
     >
       <span className="grid size-5 shrink-0 place-items-center">
         {syncing ? <Loader2 className="size-4 animate-spin text-primary" /> :
+          blocker ? <TriangleAlert className="size-4 text-amber-500" /> :
           state === "offline" ? <CloudOff className="size-4 text-amber-500" /> :
           <Cloud className="size-4 text-primary" />}
       </span>
@@ -147,6 +163,7 @@ export function ConnectivityStatus() {
         <span className="min-w-0 whitespace-normal text-left leading-snug">
           {syncing
             ? `Sincronizando ${pending} lançamento${pending === 1 ? "" : "s"}…`
+            : blocker ? `Sincronização bloqueada · revisar ${pending} lançamento${pending === 1 ? "" : "s"}`
             : state === "offline"
               ? (pending
                 ? `Você está offline · ${pending} lançamento${pending === 1 ? "" : "s"} salvo${pending === 1 ? "" : "s"} neste aparelho`
