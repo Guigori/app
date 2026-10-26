@@ -302,6 +302,9 @@ export function localListTransactions(filters: LocalTxFilters): Transaction[] {
 }
 
 function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Transaction): Transaction {
+  if (input.status === "pago" && input.date > todayISO()) {
+    throw new Error("Lançamento futuro não pode estar pago. Use agendado ou pendente.");
+  }
   if (!db.accounts.some((a) => a.id === input.account_id)) {
     throw new Error("Conta inválida: selecione uma conta cadastrada.");
   }
@@ -315,6 +318,7 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
     if (!input.total_installments || input.total_installments < 2 || input.total_installments > 120) {
       throw new Error("Informe de 2 a 120 parcelas.");
     }
+    firstRemainingInstallment(input);
     if (Math.round((input.adjusted_value ?? input.value) * 100) < input.total_installments) {
       throw new Error("Cada parcela deve valer ao menos R$ 0,01.");
     }
