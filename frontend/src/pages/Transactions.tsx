@@ -215,7 +215,7 @@ export default function Transactions() {
     : monthTransactions.slice().sort((a, b) => (sortDir === "desc"
       ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
   const listPending = pagedList ? pagesQuery.isPending : transactionsQuery.isPending;
-  const listError = pagedList ? pagesQuery.error : transactionsQuery.error;
+  const listError = pagedList ? (!pagesQuery.data ? pagesQuery.error : null) : transactionsQuery.error;
   const retryList = () => { if (pagedList) void pagesQuery.refetch(); else void transactionsQuery.refetch(); };
   useEffect(() => {
     if (!highlightedTransactionId || transactions.length === 0) return;
