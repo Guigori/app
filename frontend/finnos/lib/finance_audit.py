@@ -7,6 +7,8 @@ from collections import Counter
 from finnos.lib.money import D, cents
 from finnos.lib.stats import balance_effects
 from finnos.lib.dates import today_iso
+from finnos.lib.legacy_reconciliation import review_historical_invoices
+from finnos.lib.money import quantize_brl
 from decimal import InvalidOperation
 
 KINDS = ("accounts", "categories", "cards", "transactions", "goals", "budget_cycles", "subscriptions")
@@ -121,6 +123,9 @@ def audit_finance(records):
         "issues": dict(sorted(problems.items())),
         "counts": counts,
         "has_financial_records": any(counts[k] for k in ("accounts", "cards", "transactions")),
-        "total_account_balance": float(round(total_balance, 2)) if not problems else None,
+        "total_account_balance": float(quantize_brl(total_balance)) if not problems else None,
         "legacy_reconciliation": "not_verified",
+        "historical_invoices": review_historical_invoices(
+            records["cards"], records["transactions"], today_iso()
+        ),
     }
