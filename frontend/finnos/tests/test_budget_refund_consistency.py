@@ -4,6 +4,7 @@ No Firestore credentials are used. All data and query results are synthetic,
 and read-only calculations never modify the user's records.
 """
 import asyncio
+from decimal import Decimal
 from datetime import date
 from types import SimpleNamespace
 
@@ -129,7 +130,7 @@ def test_budget_suggestion_uses_refund_adjusted_monthly_expenses(monkeypatch):
     monkeypatch.setattr(budgets, "today_iso", lambda: "2026-10-26")
     result = asyncio.run(budgets.budget_suggestion(user={"id": "owner"}))
     assert result["expected_income"] == 1000
-    assert result["categories"][0]["average"] == 166.67
-    assert result["categories"][0]["suggested"] == 166.67
+    assert result["categories"][0]["average"] == Decimal("166.67")
+    assert result["categories"][0]["suggested"] == Decimal("166.67")
     assert result["categories"][0]["months_observed"] == 3
     assert result["writes_data"] is False
