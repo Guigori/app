@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from finnos.lib.db import db
-from finnos.lib.stats import aware, month_bounds
+from finnos.lib.stats import aware, month_bounds, paid_future_is_inconsistent
+from finnos.lib.dates import today_iso
 from finnos.models.finnos import TransactionIn, TransactionOut, TxStatus, TxType
 from finnos.routers.auth import require_user
 
@@ -76,6 +77,8 @@ async def _validate(user_id: str, payload: TransactionIn) -> None:
         date.fromisoformat(payload.date)
     except ValueError:
         raise HTTPException(422, "Data inválida.")
+    if paid_future_is_inconsistent(payload.status, payload.date, today_iso()):
+        raise HTTPException(422, "Lançamento futuro não pode estar pago. Use agendado ou pendente.")
     if payload.account_id not in accounts_by_id:
         raise HTTPException(
             status_code=400, detail="Conta inválida: selecione uma conta cadastrada."
