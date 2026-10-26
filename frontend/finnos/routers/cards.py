@@ -10,7 +10,7 @@ from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import aware, months_between
 from finnos.models.cards import CardIn, CardOut
-from finnos.models.notify import Invoice, InvoiceItem, PayInvoiceIn, CreditInvoiceIn
+from finnos.models.notify import Invoice, InvoiceItem, PayInvoiceIn, CreditInvoiceIn, BankRefundIn
 from finnos.routers.auth import require_user
 
 router = APIRouter(prefix="/cards", tags=["cards"])
@@ -284,4 +284,110 @@ async def credit_invoice(
 
         return store.atomic(instance, uid, action)
 
+    return await run_in_threadpool(execute)
+
+
+@router.post("/{card_id}/refunds", response_model=Invoice)
+async def bank_refund_invoice(
+    card_id: str,
+    payload: BankRefundIn,
+    user: dict = Depends(require_user),
+    x_finnos_operation_id: str = Header(...),
+):
+    """Reimburse a settled card purchase through a real bank account.
+
+    The invoice remains paid, the purchase remains immutable, and a separate
+    bank receipt is created atomically with the append-only refund record.
+    """
+    import hashlib
+    import json
+    from starlette.concurrency import run_in_threadpool
+    from finnos.lib import db as store
+    from finnos.lib.invoice_refunds import validate_bank_refund, append_refund
+    from finnos.lib.invoice_payments import to_cents
+    from finnos.lib.invoices import invoice_state, output
+    from finnos.lib.history import record_event
+
+    if not 1 <= len(x_finnos_operation_id) <= 200:
+        raise HTTPException(422, "Identificador de operação inválido.")
+    try:
+        refund_date = date.fromisoformat(payload.date)
+        date.fromisoformat(payload.cycle)
+        amount = to_cents(payload.value)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if refund_date > date.fromisoformat(today_iso()):
+        raise HTTPException(422, "Reembolso realizado não pode ter data futura.")
+    reason = payload.reason.strip()
+    if len(reason) < 5:
+        raise HTTPException(422, "Descreva o motivo do reembolso.")
+
+    uid = store.scoped({"user_id": user["id"]})
+    refund_id = hashlib.sha256(
+        f"bank-refund:{uid}:{card_id}:{x_finnos_operation_id}".encode()
+    ).hexdigest()
+    request_data = {
+        "cycle": payload.cycle, "purchase_id": payload.purchase_id,
+        "account_id": payload.account_id, "date": payload.date,
+        "reason": reason, "refund_cents": amount,
+    }
+    fingerprint = hashlib.sha256(
+        json.dumps(request_data, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+
+    def execute():
+        instance = store.client()
+
+        def action(tr):
+            parent = store.root(instance, uid)
+            card_ref = parent.collection("cards").document(store.resource_id(card_id))
+            snap = card_ref.get(transaction=tr)
+            if not snap.exists:
+                raise HTTPException(404, "Cartão não encontrado.")
+            card = dict(store.decode(snap.to_dict()), id=card_id)
+            previous = next((
+                entry for entries in (card.get("invoice_refunds") or {}).values()
+                for entry in entries if entry["id"] == refund_id
+            ), None)
+            txs = store.rows(instance, uid, "transactions", tr)
+            if previous:
+                if previous.get("fingerprint") != fingerprint:
+                    raise HTTPException(409, "Identificador de reembolso reutilizado.")
+                return output(invoice_state(card, txs, payload.cycle))
+
+            account = parent.collection("accounts").document(
+                store.resource_id(payload.account_id)
+            ).get(transaction=tr)
+            if not account.exists:
+                raise HTTPException(400, "Conta bancária inválida.")
+            try:
+                validate_bank_refund(card, txs, payload.cycle, payload.purchase_id, amount)
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+
+            now = datetime.now(timezone.utc)
+            append_refund(card, {
+                "id": refund_id, "cycle": payload.cycle,
+                "purchase_id": payload.purchase_id,
+                "account_id": payload.account_id, "refund_cents": amount,
+                "date": payload.date, "reason": reason,
+                "fingerprint": fingerprint, "created_at": now,
+            })
+            receipt = {
+                "id": refund_id, "user_id": uid,
+                "name": f"Reembolso {card['name']}", "value": D(amount) / 100,
+                "type": "receita", "status": "pago", "date": payload.date,
+                "account_id": payload.account_id, "card_id": None,
+                "to_account_id": None, "category_id": None,
+                "fixed": False, "installment": False,
+                "invoice_refund": True, "invoice_card_id": card_id,
+                "invoice_cycle": payload.cycle, "original_purchase_id": payload.purchase_id,
+                "created_at": now, "updated_at": now, "version": 1,
+            }
+            tr.create(parent.collection("transactions").document(refund_id), store.encode(receipt))
+            tr.update(card_ref, {"invoice_refunds": store.encode(card["invoice_refunds"])})
+            record_event(tr, parent, "transactions", "created", None, receipt)
+            return output(invoice_state(card, txs, payload.cycle))
+
+        return store.atomic(instance, uid, action)
     return await run_in_threadpool(execute)
