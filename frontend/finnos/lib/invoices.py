@@ -5,7 +5,7 @@ in this module is integer cents. Historical unpaid invoices retain the limit.
 """
 from datetime import date
 from finnos.lib.cards import cycle_bounds, due_date, _clamp_day
-from finnos.lib.money import cents, installment_portion
+from finnos.lib.money import cents, installment_portion, remaining_installment_indices
 
 
 def occurrences(card, tx):
@@ -14,13 +14,14 @@ def occurrences(card, tx):
     purchase = date.fromisoformat(tx['date'])
     first = cycle_bounds(purchase, card['closing_day'])[1]
     n = int(tx.get('total_installments') or 1) if tx.get('installment') else 1
+    indices = remaining_installment_indices(tx) if tx.get('installment') else range(1)
     first_index = first.year * 12 + (first.month - 1)
     results = []
-    for i in range(n):
-        year, month_index = divmod(first_index + i, 12)
+    for month_offset, installment_index in enumerate(indices):
+        year, month_index = divmod(first_index + month_offset, 12)
         closing = _clamp_day(year, month_index + 1, card['closing_day'])
-        value = cents(installment_portion(tx, i)) if tx.get('installment') else cents(tx['value'])
-        results.append((closing.isoformat(), value, f'{i+1}/{n}' if n > 1 else None))
+        value = cents(installment_portion(tx, installment_index)) if tx.get('installment') else cents(tx['value'])
+        results.append((closing.isoformat(), value, f'{installment_index+1}/{n}' if n > 1 else None))
     return results
 
 
@@ -43,10 +44,10 @@ def invoice_state(card, txs, cycle, categories=None):
         # purchases can still enter a cycle that was paid before closing.
         # Keep snapshotted lines authoritative and append only unseen items.
         archived = list(saved.get('items') or [])
-        known = {(item['id'], item.get('installment_label')) for item in archived}
+        known = {item['id'] for item in archived}
         items = archived + [
             item for item in items
-            if (item['id'], item.get('installment_label')) not in known
+            if item['id'] not in known
         ]
     total = sum(i['purchase_cents'] for i in items)
     paid = (saved or {}).get('paid_cents', 0)
@@ -87,12 +88,12 @@ def commitment(card, txs, current):
     lines = {}
     for tx in txs:
         for cycle, value, label in occurrences(card, tx):
-            lines.setdefault(cycle, {})[(tx['id'], label)] = value
+            lines.setdefault(cycle, {})[tx['id']] = value
     saved_cycles = card.get('invoice_cycles') or {}
     for cycle, saved in saved_cycles.items():
         bucket = lines.setdefault(cycle, {})
         for item in saved.get('items') or []:
-            bucket[(item['id'], item.get('installment_label'))] = item['purchase_cents']
+            bucket[item['id']] = item['purchase_cents']
     owed = {
         cycle: max(0, sum(bucket.values()) - saved_cycles.get(cycle, {}).get('paid_cents', 0))
         for cycle, bucket in lines.items()
