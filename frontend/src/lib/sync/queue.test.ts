@@ -25,9 +25,11 @@ it("reuses the same operation after a lost response and removes it only after su
 it("sends the cached base version and keeps conflicting edits for review",async()=>{
   await cacheSet("firebase:A:transaction:existing",{id:"existing",version:4});
   await queueTransaction(input,"manual","existing");
-  vi.stubGlobal("navigator",{onLine:true});mocks.put.mockRejectedValue(new Error("409 conflict"));
+  const { ApiError } = await import("@/lib/api");
+  vi.stubGlobal("navigator",{onLine:true});mocks.put.mockRejectedValue(new ApiError(409,"409 conflict"));
   await flushSyncQueue();expect(mocks.put.mock.calls[0][2]["X-FINNOS-Base-Version"]).toBe("4");
   expect((await listSyncOperations())[0].lastError).toBe("409 conflict");
+  expect((await listSyncOperations())[0].status).toBe("conflict");
 });
 it("does not share an IndexedDB financial snapshot with another UID",async()=>{
   vi.stubGlobal("navigator",{onLine:true});await cachedFetch("accounts",async()=>[{name:"A"}]);
@@ -52,4 +54,61 @@ it("commits an offline React Query mutation durably instead of pausing it in mem
     onlineManager.setOnline(true);
     queryClient.clear();
   }
+});
+
+
+it.each([409, 422])("blocks later queued financial operations after a %i rejection", async (status) => {
+  const { ApiError } = await import("@/lib/api");
+  const first = await queueTransaction({ ...input, name: "First" });
+  const second = await queueTransaction({ ...input, name: "Second" });
+  vi.stubGlobal("navigator", { onLine: true });
+  mocks.post.mockRejectedValueOnce(new ApiError(status, "requires review"));
+  await flushSyncQueue();
+  const pending = await listSyncOperations();
+  expect(mocks.post).toHaveBeenCalledTimes(1);
+  expect(mocks.post.mock.calls[0][2]["X-FINNOS-Operation-ID"]).toBe(first.id);
+  expect(pending.find(op => op.id === first.id)?.status).toBe("conflict");
+  expect(pending.find(op => op.id === second.id)?.status).toBe("pending");
+
+  // No automatic retry may silently bypass a rejected first operation.
+  await flushSyncQueue();
+  expect(mocks.post).toHaveBeenCalledTimes(1);
+});
+
+it("preserves FIFO and original idempotency keys when the first request fails temporarily", async () => {
+  const first = await queueTransaction({ ...input, name: "First" });
+  const second = await queueTransaction({ ...input, name: "Second" });
+  vi.stubGlobal("navigator", { onLine: true });
+  mocks.post.mockRejectedValueOnce(new Error("network disconnected"));
+  await flushSyncQueue();
+  expect(mocks.post).toHaveBeenCalledTimes(1);
+  expect((await listSyncOperations()).find(op => op.id === second.id)?.attempts).toBe(0);
+
+  mocks.post.mockResolvedValue({ id: "created" });
+  await flushSyncQueue();
+  expect(mocks.post.mock.calls.map(call => call[2]["X-FINNOS-Operation-ID"]))
+    .toEqual([first.id, first.id, second.id]);
+  expect(await listSyncOperations()).toHaveLength(0);
+});
+
+it("does not remove a queued operation after an account switch during a successful response", async () => {
+  const queued = await queueTransaction({ ...input, name: "Switch" });
+  vi.stubGlobal("navigator", { onLine: true });
+  mocks.post.mockImplementationOnce(async () => {
+    mocks.auth.currentUser = { uid: "B" };
+    return { id: "server-commit" };
+  });
+  await flushSyncQueue();
+  expect(await listSyncOperations()).toEqual([]);
+  mocks.auth.currentUser = { uid: "A" };
+  const pending = await listSyncOperations();
+  expect(pending).toHaveLength(1);
+  expect(pending[0].id).toBe(queued.id);
+  expect(pending[0].status).toBe("syncing");
+
+  mocks.post.mockResolvedValue({ id: "server-commit" });
+  await flushSyncQueue();
+  expect(mocks.post.mock.calls.map(call => call[2]["X-FINNOS-Operation-ID"]))
+    .toEqual([queued.id, queued.id]);
+  expect(await listSyncOperations()).toHaveLength(0);
 });
