@@ -487,6 +487,21 @@ export interface InvoiceItem {
   installment_label: string | null;
 }
 
+export interface InvoiceAdjustment {
+  id: string;
+  purchase_id: string;
+  date: string;
+  reason: string;
+  value: number;
+}
+
+export interface CreditInvoiceInput {
+  cycle: string;
+  purchase_id: string;
+  value: number;
+  reason: string;
+}
+
 export interface Invoice {
   card_id: string;
   card_name: string;
@@ -499,6 +514,8 @@ export interface Invoice {
   outstanding?: number;
   paid_at: string | null;
   items: InvoiceItem[];
+  adjustments?: InvoiceAdjustment[];
+  adjustment_total?: number;
 }
 
 export interface PayInvoiceInput {
