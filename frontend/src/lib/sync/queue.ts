@@ -121,7 +121,8 @@ export async function flushSyncQueue(): Promise<void> {
         const failed = { ...current, status: (error instanceof ApiError && error.status === 409 ? "conflict" : "error") as "conflict" | "error", lastError: error instanceof Error ? error.message : "Falha ao sincronizar" };
         await saveSyncOperation(failed);
         window.dispatchEvent(new CustomEvent("finnos:sync-error", { detail: { operation: failed } }));
-        // Keep processing independent operations after a conflict.
+        // A transport/server failure may leave dependent operations unsafe to send.
+        if (!(error instanceof ApiError && (error.status === 409 || error.status === 422))) break;
         continue;
       }
     }
