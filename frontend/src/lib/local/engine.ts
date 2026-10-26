@@ -498,7 +498,12 @@ export function localDashboard(month?: string | null): Dashboard {
   income = round2(income);
   expense = round2(expense);
 
+  // Negative category balances from refunds remain in net expense and budget,
+  // but SVG donut wedges must represent only nonnegative spend.
+  const positiveCategoryTotal = [...byCategory.values()]
+    .reduce((sum, value) => sum + Math.max(0, value), 0);
   const categories: CategorySlice[] = [...byCategory.entries()]
+    .filter(([, total]) => total > 0)
     .sort((a, b) => b[1] - a[1])
     .map(([catId, total]) => {
       const category = catId ? db.categories.find((c) => c.id === catId) : undefined;
@@ -508,7 +513,7 @@ export function localDashboard(month?: string | null): Dashboard {
         color: category?.color ?? "#94A3B8",
         icon: category?.icon ?? "more-horizontal",
         total: round2(total),
-        percent: expense ? Math.round((total / expense) * 1000) / 10 : 0,
+        percent: positiveCategoryTotal ? Math.round((total / positiveCategoryTotal) * 1000) / 10 : 0,
       };
     });
 
