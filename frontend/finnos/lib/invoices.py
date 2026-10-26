@@ -6,6 +6,7 @@ in this module is integer cents. Historical unpaid invoices retain the limit.
 from datetime import date
 from finnos.lib.cards import cycle_bounds, due_date, _clamp_day
 from finnos.lib.money import cents, installment_portion, remaining_installment_indices
+from finnos.lib.invoice_credits import cycle_credits, credit_total_cents
 
 
 def occurrences(card, tx):
@@ -49,9 +50,10 @@ def invoice_state(card, txs, cycle, categories=None):
             item for item in items
             if item['id'] not in known
         ]
-    total = sum(i['purchase_cents'] for i in items)
+    adjustments = cycle_credits(card, cycle)
+    total = sum(i['purchase_cents'] for i in items) - credit_total_cents(card, cycle)
     paid = (saved or {}).get('paid_cents', 0)
-    return dict(card_id=card['id'],card_name=card['name'],cycle_start=start,cycle_end=cycle,due_date=due_date(closing,card['closing_day'],card['due_day']).isoformat(),total_cents=total,paid_cents=paid,paid=total > 0 and paid == total,paid_at=(saved or {}).get('paid_at'),items=items)
+    return dict(card_id=card['id'],card_name=card['name'],cycle_start=start,cycle_end=cycle,due_date=due_date(closing,card['closing_day'],card['due_day']).isoformat(),total_cents=total,paid_cents=paid,paid=total > 0 and paid == total,paid_at=(saved or {}).get('paid_at'),items=items,adjustments=adjustments,adjustment_cents=credit_total_cents(card, cycle))
 
 
 def default_invoice_cycle(card, txs, today):
@@ -76,7 +78,29 @@ def default_invoice_cycle(card, txs, today):
 
 
 def output(state):
-    return {**{k:v for k,v in state.items() if k not in {'total_cents','paid_cents','items'}},'total':state['total_cents']/100,'paid_amount':state['paid_cents']/100,'outstanding':(state['total_cents']-state['paid_cents'])/100,'items':[{**{k:v for k,v in i.items() if k != 'purchase_cents'},'value':i['purchase_cents']/100} for i in state['items']]}
+    return {
+        **{k: v for k, v in state.items() if k not in {
+            'total_cents', 'paid_cents', 'items', 'adjustments', 'adjustment_cents'
+        }},
+        'total': state['total_cents'] / 100,
+        'paid_amount': state['paid_cents'] / 100,
+        'outstanding': (state['total_cents'] - state['paid_cents']) / 100,
+        'adjustment_total': state.get('adjustment_cents', 0) / 100,
+        'items': [
+            {**{k: v for k, v in item.items() if k != 'purchase_cents'},
+             'value': item['purchase_cents'] / 100}
+            for item in state['items']
+        ],
+        'adjustments': [
+            {
+                'id': entry['id'],
+                'purchase_id': entry['purchase_id'],
+                'date': entry['date'],
+                'reason': entry['reason'],
+                'value': entry['amount_cents'] / 100,
+            } for entry in state.get('adjustments', [])
+        ],
+    }
 
 
 def commitment(card, txs, current):
@@ -94,8 +118,11 @@ def commitment(card, txs, current):
         bucket = lines.setdefault(cycle, {})
         for item in saved.get('items') or []:
             bucket[item['id']] = item['purchase_cents']
+    for cycle in card.get('invoice_adjustments') or {}:
+        lines.setdefault(cycle, {})
     owed = {
-        cycle: max(0, sum(bucket.values()) - saved_cycles.get(cycle, {}).get('paid_cents', 0))
+        cycle: max(0, sum(bucket.values()) - credit_total_cents(card, cycle)
+                   - saved_cycles.get(cycle, {}).get('paid_cents', 0))
         for cycle, bucket in lines.items()
     }
     return (
@@ -113,8 +140,14 @@ def purchase_write_conflict(card, tx, today: str, original=None) -> str | None:
     invoice before closing. Closed paid cycles remain immutable.
     """
     saved_cycles = card.get('invoice_cycles') or {}
-    if not saved_cycles:
+    adjusted = card.get('invoice_adjustments') or {}
+    if not saved_cycles and not adjusted:
         return None
+    if original and any(
+        item.get('purchase_id') == original.get('id')
+        for entries in adjusted.values() for item in entries
+    ):
+        return "Compra possui estorno auditado e não pode ser alterada ou excluída."
     if original:
         if any(cycle in saved_cycles for cycle, _, _ in occurrences(card, original)):
             return "Compra vinculada a fatura com pagamentos; alteração exige estorno auditado."
