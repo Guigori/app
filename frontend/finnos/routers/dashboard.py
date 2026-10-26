@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, balance_effects, month_bounds, month_portion
+from finnos.lib.competency import monthly_competency
 from finnos.models.finnos import CategorySlice, DashboardOut, RuleItem
 from finnos.routers.auth import require_user
 from finnos.routers.transactions import _ref_maps, enrich_transaction
@@ -31,37 +32,23 @@ async def dashboard(
     accounts = await db.accounts.find({"user_id": user_id}).to_list(500)
     categories = await db.categories.find({"user_id": user_id}).to_list(500)
     txs = await db.transactions.find({"user_id": user_id}).to_list(20000)
+    cards = await db.cards.find({"user_id": user_id}).to_list(200)
     cat_by_id = {c["id"]: c for c in categories}
     total_balance = sum((D(a.get("initial_balance") or D("0.0")) for a in accounts))
     for tx in txs:
         for _acc, amount in balance_effects(tx, today):
             total_balance += amount
-    income = expense = D("0.0")
-    prev_income = prev_expense = D("0.0")
-    prev_count = 0
-    by_category: dict = {}
+    month_actual = monthly_competency(txs, cards, m)
+    last_actual = monthly_competency(txs, cards, prev_month)
+    income, expense = month_actual["income"], month_actual["expense"]
+    prev_income, prev_expense = last_actual["income"], last_actual["expense"]
+    prev_count = sum(month_portion(tx, prev_month) is not None for tx in txs)
+    by_category = month_actual["by_category"]
     by_group = {"necessidades": D("0.0"), "desejos": D("0.0"), "metas": D("0.0")}
-    for tx in txs:
-        portion = month_portion(tx, m)
-        if portion is not None:
-            if tx["type"] == "receita":
-                income += portion
-            else:
-                expense += portion
-                cat = cat_by_id.get(tx.get("category_id"))
-                key = cat["id"] if cat else None
-                by_category[key] = by_category.get(key, D("0.0")) + portion
-                if cat:
-                    by_group[cat["group"]] += portion
-        prev_portion = month_portion(tx, prev_month)
-        if prev_portion is not None:
-            prev_count += 1
-            if tx["type"] == "receita":
-                prev_income += prev_portion
-            else:
-                prev_expense += prev_portion
-    income = round(income, 2)
-    expense = round(expense, 2)
+    for cat_id, amount in by_category.items():
+        cat = cat_by_id.get(cat_id)
+        if cat:
+            by_group[cat["group"]] += amount
     slices = []
     for cat_id, total in sorted(by_category.items(), key=lambda kv: -kv[1]):
         slice_cat = cat_by_id.get(cat_id)
