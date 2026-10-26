@@ -43,7 +43,8 @@ class AccountIn(BaseModel):
     institution_id: Optional[str] = Field(default=None, max_length=1500)
     type: AccountType = "corrente"
     color: str = Field(default="#070F52", pattern=HEX_PATTERN)
-    initial_balance: Money = Field(default=0.0, ge=0)
+    # Overdrafts and pre-existing liabilities are legitimate opening balances.
+    initial_balance: Money = Field(default=0.0)
     active: bool = True
 
 
