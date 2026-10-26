@@ -10,7 +10,7 @@ from finnos.lib.money import cents
 from finnos.lib.stats import month_portion
 
 
-def monthly_pace(limit, transactions, category_id, month, as_of=None):
+def monthly_pace(limit, transactions, category_id, month, as_of=None, credits=None):
     year, month_num = map(int, month.split("-"))
     days = monthrange(year, month_num)[1]
     as_of = as_of or date.today()
@@ -33,6 +33,12 @@ def monthly_pace(limit, transactions, category_id, month, as_of=None):
         if occurrence > as_of:
             continue
         cumulative[tx_day] += cents(value)
+    for credit in credits or []:
+        if credit.get("category_id") != category_id or str(credit.get("date", ""))[:7] != month:
+            continue
+        day_of_month = int(credit["date"][8:10])
+        if date(year, month_num, day_of_month) <= as_of:
+            cumulative[day_of_month] -= credit["cents"]
     for i in range(1, len(cumulative)):
         cumulative[i] += cumulative[i-1]
     spent = cumulative[day]
