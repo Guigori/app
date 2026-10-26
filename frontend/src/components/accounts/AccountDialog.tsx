@@ -90,7 +90,8 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
     setFormError(null);
     const initial = parseAmount(initialRaw);
     if (!name.trim()) return setFormError("Dê um nome à conta.");
-    if (initial === null || initial < 0) return setFormError("Informe um saldo inicial válido.");
+    if (initial === null || !Number.isSafeInteger(Math.round(initial * 100)) || Math.abs(initial * 100 - Math.round(initial * 100)) > 1e-6)
+      return setFormError("Informe um saldo inicial válido, com até duas casas decimais.");
     mutation.mutate({
       name: name.trim(),
       institution: institution.trim(),
@@ -143,6 +144,7 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
             <div className="space-y-2">
               <Label htmlFor="account-initial">Saldo inicial (R$)</Label>
               <Input id="account-initial" inputMode="decimal" value={initialRaw} onChange={(e) => setInitialRaw(e.target.value)} data-testid="account-initial-input" />
+              <p className="text-xs text-muted-foreground">Use um valor negativo se a conta já estiver no cheque especial (ex.: -500,00).</p>
             </div>
           </div>
           <div className="space-y-2">
