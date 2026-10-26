@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.recurrence import projections_in_period
+from finnos.lib.competency import credit_events
 from finnos.models.budget import BudgetAllocationOut, BudgetAllocationProgress, BudgetCycleIn, BudgetCycleOut, BudgetCycleProgress
 from finnos.routers.auth import require_user
 router = APIRouter(prefix='/budgets', tags=['budgets'])
@@ -54,6 +55,7 @@ async def _progress(cycle: dict, user_id: str) -> BudgetCycleProgress:
     (start, end, today) = (date.fromisoformat(str(cycle['start_date'])), date.fromisoformat(str(cycle['end_date'])), date.fromisoformat(today_iso()))
     txs = await db.transactions.find({'user_id': user_id}).to_list(20000)
     categories = await db.categories.find({'user_id': user_id}).to_list(500)
+    cards = await db.cards.find({'user_id': user_id}).to_list(200)
     by_id = {cat['id']: cat for cat in categories}
     (spent_by_cat, committed_by_cat) = ({}, {})
     received_income = committed_income = D('0.0')
@@ -68,6 +70,11 @@ async def _progress(cycle: dict, user_id: str) -> BudgetCycleProgress:
                 target = spent_by_cat if realised else committed_by_cat
                 key = tx['category_id']
                 target[key] = target.get(key, 0) + amount
+    # Financial credit events reverse spending on the date confirmed.
+    for event in credit_events(cards, txs):
+        if start <= date.fromisoformat(event["date"]) <= end and event["category_id"]:
+            key = event["category_id"]
+            spent_by_cat[key] = spent_by_cat.get(key, D("0.0")) - D(event["cents"]) / 100
     # Recurrence expansion happens once per series/period, independently of
     # the individual historical rows that established it.
     for source, occurrence in projections_in_period(txs, start, end):
