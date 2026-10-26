@@ -38,6 +38,7 @@ def enrich_transaction(
     return TransactionOut(
         version=doc.get("version", 1),
         invoice_payment=doc.get("invoice_payment", False),
+        invoice_refund=doc.get("invoice_refund", False),
         id=doc["id"],
         name=doc["name"],
         value=D(doc["value"]),
