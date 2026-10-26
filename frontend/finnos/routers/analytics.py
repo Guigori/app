@@ -7,6 +7,7 @@ from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, month_bounds, month_portion, months_between
 from finnos.lib.recurrence import monthly_projection_sources
+from finnos.lib.category_pace import monthly_pace
 from finnos.models.analytics import (
     BudgetRow,
     BudgetSummary,
@@ -106,6 +107,7 @@ async def budget(
     for cat in categories:
         budget_value = round(D(cat.get("monthly_budget") or D("0.0")), 2)
         spent = round(spent_by_cat.get(cat["id"], D("0.0")), 2)
+        pace = monthly_pace(budget_value, txs, cat["id"], m, as_of=today_iso())
         if budget_value <= 0:
             status = "sem_limite"
             percent = D("0.0")
@@ -128,6 +130,13 @@ async def budget(
                 remaining=round(budget_value - spent, 2),
                 percent=percent,
                 status=status,
+                pace_day=pace["day"],
+                pace_days_in_month=pace["days_in_month"],
+                pace_ideal=D(pace["ideal_cents"]) / 100,
+                pace_daily_allowance=D(pace["daily_allowance_cents"]) / 100,
+                pace_projected_close=D(pace["projected_month_end_cents"]) / 100,
+                pace_difference=D(pace["diff_from_ideal_cents"]) / 100,
+                pace_cumulative=[D(value) / 100 for value in pace["cumulative_cents"]],
             )
         )
     rows.sort(key=lambda r: (r.budget <= 0, -r.percent, -r.spent))
