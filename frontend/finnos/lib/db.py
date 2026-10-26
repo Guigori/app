@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from google.api_core.exceptions import GoogleAPICallError
 from starlette.concurrency import run_in_threadpool
 from finnos.lib.money import D, cents
+from finnos.lib.history import record_event
 
 active_uid = ContextVar("finnos_uid", default=None)
 firebase_application = None
@@ -316,6 +317,7 @@ class Collection:
                     raise HTTPException(409, "Registro já existe.")
                 if self.name == "transactions": doc["version"] = 1
                 tr.create(ref, encode(doc))
+                record_event(tr, root(db, uid), self.name, "created", None, doc)
                 if operation_ref is not None:
                     tr.create(operation_ref, {"fingerprint": fingerprint, "target_id": identifier})
 
@@ -341,6 +343,7 @@ class Collection:
                     return SimpleNamespace(matched_count=0)
                 doc = docs[0] if docs else dict(query, id=str(uuid.uuid4()))
                 original_tx = dict(doc) if self.name == "transactions" and docs else None
+                previous_doc = dict(doc) if docs else None
                 if self.name == "transactions" and docs and doc.get("invoice_payment"):
                     raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
                 ref = (
@@ -370,6 +373,7 @@ class Collection:
                 if self.name == 'transactions': doc['version'] = previous_version + 1
                 validate_refs(db, uid, self.name, doc, tr, original_tx=original_tx)
                 tr.set(ref, encode(doc))
+                record_event(tr, root(db, uid), self.name, "updated" if previous_doc else "created", previous_doc, doc)
                 if operation_ref is not None:
                     tr.create(operation_ref, {'fingerprint':fingerprint, 'target_id':doc['id']})
                 return SimpleNamespace(matched_count=1)
@@ -439,6 +443,7 @@ class Collection:
                 tr.delete(
                     root(db, uid).collection(self.name).document(resource_id(doc["id"]))
                 )
+                record_event(tr, root(db, uid), self.name, "deleted", doc, None)
                 return SimpleNamespace(deleted_count=1)
 
             return atomic(db, uid, action)
