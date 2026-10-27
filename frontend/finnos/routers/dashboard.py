@@ -5,12 +5,13 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
-from finnos.lib.account_balances import AccountLedger
-from finnos.lib.stats import add_months, month_bounds, month_portion
-from finnos.lib.competency import monthly_competency, positive_category_slices
+from finnos.lib.account_balances import finance_revision
+from finnos.lib.financial_summaries import stream_financial_window
+from finnos.lib.stats import add_months
+from finnos.lib.competency import positive_category_slices
 from finnos.models.finnos import CategorySlice, DashboardOut, RuleItem
 from finnos.routers.auth import require_user
-from finnos.routers.transactions import _ref_maps, enrich_transaction
+from finnos.routers.transactions import enrich_transaction
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 GROUP_LABELS = {
@@ -30,23 +31,23 @@ async def dashboard(
     today = today_iso()
     m = month or today[:7]
     prev_month = add_months(m, -1)
+    # The revision precedes account/card reads; the bounded ledger rejects
+    # concurrent writes instead of mixing old opening balances and new rows.
+    revision = await finance_revision(user_id)
     accounts = await db.accounts.find({"user_id": user_id}).to_list(500)
     categories = await db.categories.find({"user_id": user_id}).to_list(500)
-    txs = await db.transactions.find({"user_id": user_id}).to_list(20000)
     cards = await db.cards.find({"user_id": user_id}).to_list(200)
     cat_by_id = {c["id"]: c for c in categories}
-    # Same canonical cash ledger used by /accounts, rather than a second
-    # implementation of balance math. Dashboard's competency scan is still
-    # legacy and will be paginated separately before exceeding 20k rows.
-    cash_ledger = AccountLedger(accounts, today)
-    for tx in txs:
-        cash_ledger.add(tx)
-    total_balance = cash_ledger.total_balance
-    month_actual = monthly_competency(txs, cards, m)
-    last_actual = monthly_competency(txs, cards, prev_month)
+    statement = await stream_financial_window(
+        user_id, [m, prev_month], cards, revision,
+        accounts=accounts, today=today, recent_month=m,
+    )
+    total_balance = statement.accounts.total_balance
+    month_actual = statement.monthly(m)
+    last_actual = statement.monthly(prev_month)
     income, expense = month_actual["income"], month_actual["expense"]
     prev_income, prev_expense = last_actual["income"], last_actual["expense"]
-    prev_count = sum(month_portion(tx, prev_month) is not None for tx in txs)
+    prev_count = last_actual["count"]
     by_category = month_actual["by_category"]
     by_group = {"necessidades": D("0.0"), "desejos": D("0.0"), "metas": D("0.0")}
     for cat_id, amount in by_category.items():
@@ -86,15 +87,8 @@ async def dashboard(
                 status=status,
             )
         )
-    start, end = month_bounds(m)
-    docs = (
-        await db.transactions.find(
-            {"user_id": user_id, "date": {"$gte": start, "$lte": end}}
-        )
-        .sort([("date", -1), ("created_at", -1)])
-        .to_list(6, allow_truncate=True)
-    )
-    accounts_by_id, categories_by_id = await _ref_maps(user_id)
+    accounts_by_id = {a["id"]: a for a in accounts}
+    categories_by_id = cat_by_id
     return DashboardOut(
         month=m,
         total_balance=quantize_brl(total_balance),
@@ -106,5 +100,5 @@ async def dashboard(
         invested=D("0.0"),
         categories=slices,
         rule=rule,
-        recent=[enrich_transaction(d, accounts_by_id, categories_by_id) for d in docs],
+        recent=[enrich_transaction(d, accounts_by_id, categories_by_id) for d in statement.recent],
     )
