@@ -26,6 +26,15 @@ export interface SyncOperation {
   lastError?: string;
 }
 
+/** Narrow a mixed offline queue before financial transaction overlays.
+ * Entity drafts must NEVER be treated as movements of money.
+ */
+export function isTransactionSyncOperation(
+  operation: SyncOperation,
+): operation is SyncOperation & { payload: TransactionInput } {
+  return operation.kind.startsWith("transaction.");
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
