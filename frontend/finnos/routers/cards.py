@@ -237,6 +237,10 @@ async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(
             tr.create(owner.collection('transactions').document(identifier),store.encode(debit))
             record_event(tr, owner, "transactions", "created", None, debit)
             tr.set(card_ref,store.encode(card))
+            # Invoice settlements change card state; a replay must rebuild
+            # the corresponding shadow rather than assume transaction-only deltas.
+            from finnos.lib.finance_shadow_outbox import capture_event
+            capture_event("cards", "updated", {"id": card_id}, {"id": card_id})
             tr.create(receipt_ref,dict(request=request_key,state=state,created_at=now))
             return response
         return store.atomic(instance,uid,action)
@@ -443,6 +447,8 @@ async def bank_refund_invoice(
             }
             tr.create(parent.collection("transactions").document(refund_id), store.encode(receipt))
             tr.update(card_ref, {"invoice_refunds": store.encode(card["invoice_refunds"])})
+            from finnos.lib.finance_shadow_outbox import capture_event
+            capture_event("cards", "updated", {"id": card_id}, {"id": card_id})
             record_event(tr, parent, "transactions", "created", None, receipt)
             return output(invoice_state(card, txs, payload.cycle))
 
