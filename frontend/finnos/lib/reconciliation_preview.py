@@ -6,6 +6,7 @@ verified bank connection or migration authority.
 """
 from collections import defaultdict
 from finnos.lib.money import cents
+from finnos.lib.stats import balance_effects
 
 
 def compare_invoice_evidence(cards: list[dict], txs: list[dict], evidence: list[dict]) -> dict:
@@ -59,4 +60,49 @@ def compare_invoice_evidence(cards: list[dict], txs: list[dict], evidence: list[
         "writes_data": False,
         "migration_reconciled": False,
         "external_statement_verified": False,
+    }
+
+
+def compare_account_evidence(accounts: list[dict], txs: list[dict], evidence: list[dict]) -> dict:
+    """Dry-run account statement reconciliation as of the supplied date.
+
+    Opening balances plus paid bank/transfer effects produce a reproducible
+    comparison. A matching value still requires external verification.
+    """
+    by_id = {account["id"]: account for account in accounts}
+    output = []
+    for row in evidence:
+        identifier, statement_date = row["account_id"], row["statement_date"]
+        account = by_id.get(identifier)
+        if account is None:
+            output.append({"account_id": identifier, "date": statement_date,
+                           "status": "unknown_account", "evidence_verified": False})
+            continue
+        try:
+            recorded_cents = cents(account.get("initial_balance", 0))
+            for tx in txs:
+                for affected_id, amount in balance_effects(tx, statement_date):
+                    if affected_id == identifier:
+                        recorded_cents += cents(amount)
+            expected_cents = cents(row["statement_balance"])
+        except (TypeError, ValueError, KeyError, ArithmeticError):
+            output.append({"account_id": identifier, "date": statement_date,
+                           "status": "invalid_historical_records",
+                           "evidence_verified": False})
+            continue
+        output.append({
+            "account_id": identifier, "date": statement_date,
+            "status": ("values_match_unverified" if expected_cents == recorded_cents
+                       else "manual_review"),
+            "recorded_cents": recorded_cents,
+            "reported_cents": expected_cents,
+            "difference_cents": recorded_cents - expected_cents,
+            "evidence_verified": False,
+        })
+    return {
+        "items": output,
+        "matched_count": sum(x["status"] == "values_match_unverified" for x in output),
+        "review_count": sum(x["status"] != "values_match_unverified" for x in output),
+        "writes_data": False,
+        "opening_balance_source_verified": False,
     }
