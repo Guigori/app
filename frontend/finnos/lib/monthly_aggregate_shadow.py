@@ -199,6 +199,18 @@ def reconcile_months(
             or snapshot.get("checksum") != snapshot_checksum(snapshot)):
         return {"match": False, "reason": "stale_or_unknown_schema", "diffs": {}}
 
+    if ("source_count" in snapshot
+            and (type(snapshot["source_count"]) is not int
+                 or snapshot["source_count"] != len(transactions))):
+        return {
+            "match": False, "reason": "source_count_mismatch", "diffs": {
+                "source_count": {
+                    "expected": len(transactions),
+                    "candidate": snapshot.get("source_count"),
+                },
+            },
+            "finance_revision": revision, "production_eligible": False,
+        }
     expected = IncrementalMonthlyLedger.from_history(transactions, cards)
     # Include the months in both ledgers, or explicit requested months.
     checked = (sorted(set(snapshot["months"]) | set(expected.months))
