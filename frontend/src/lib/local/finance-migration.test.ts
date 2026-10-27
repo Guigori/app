@@ -312,7 +312,8 @@ it("applies search, status, account and date filters across ordered local cursor
   }
   const expected = transactions.filter(tx =>
     tx.status === "agendado" && tx.name.includes("purchase-00"),
-  ).map(tx => tx.id).sort();
+  ).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+    .map(tx => tx.id);
   expect(collected).toEqual(expected);
   expect(new Set(collected).size).toBe(collected.length);
   await expect(fetchTransactionsPage({
