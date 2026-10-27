@@ -1438,7 +1438,7 @@ export function localSubscriptions(): Subscriptions {
   const monthly = round2(yearly / 12);
   const month = todayISO().slice(0, 7);
   const income = round2(db.transactions.filter(tx =>
-    tx.type === "receita" && tx.status === "pago" && tx.date.startsWith(month)
+    tx.type === "receita" && !tx.invoice_refund && tx.status === "pago" && tx.date.startsWith(month)
   ).reduce((sum, tx) => sum + tx.value, 0));
   return {
     items, monthly_total: monthly, yearly_total: yearly,
