@@ -295,7 +295,8 @@ async def calendar_month(
         )
         day.count += 1
         # Invoice payment is a bank movement, not a second purchase expense.
-        if tx["type"] == "transferencia" or tx.get("invoice_payment"):
+        if (tx["type"] == "transferencia" or tx.get("invoice_payment")
+                or tx.get("invoice_refund")):
             continue
         value = _amount(tx)
         if tx.get("status") == "pago":
@@ -307,6 +308,35 @@ async def calendar_month(
             day.projected_income = quantize_brl(D(day.projected_income) + value)
         else:
             day.projected_expense = quantize_brl(D(day.projected_expense) + value)
+    # FIN-08/14: reverse a purchase as a negative expense on the actual
+    # compensation date. An invoice bank refund must not be counted as new
+    # salary or income, even when the original purchase was in a prior month.
+    cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
+    if any(
+        entry.get("date", "")[:7] == m
+        for card in cards
+        for ledger in ("invoice_adjustments", "invoice_refunds")
+        for events in (card.get(ledger) or {}).values()
+        for entry in events
+    ):
+        originals = await db.transactions.find(
+            {"user_id": user["id"]}
+        ).to_list(20000)
+        for credit in credit_events(cards, originals):
+            day_key = credit["date"]
+            if day_key[:7] != m:
+                continue
+            is_new_day = day_key not in buckets
+            day = buckets.setdefault(
+                day_key, DayFlow(date=day_key, income=D("0.0"),
+                                 expense=D("0.0"), projected_income=D("0.0"),
+                                 projected_expense=D("0.0"), count=0),
+            )
+            day.expense = quantize_brl(D(day.expense) - D(credit["cents"]) / 100)
+            if credit["kind"] == "merchant_credit":
+                day.count += 1
+            # A bank-refund transaction has already contributed its own day
+            # count; do not duplicate it on the calendar.
     days = sorted(buckets.values(), key=lambda d: d.date)
     income = quantize_brl(sum((d.income for d in days)))
     expense = quantize_brl(sum((d.expense for d in days)))
