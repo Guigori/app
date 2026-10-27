@@ -44,6 +44,7 @@ import type {
 import { spendingPace } from "@/lib/budgetPace";
 import { roundBRL } from "@/lib/roundMoney";
 import { localCreditEvents, creditsForMonth } from "@/lib/local/competency";
+import { localSubscriptionProjections } from "@/lib/local/subscriptionProjection";
 
 /** Sanitized, append-only history. Mirrors the server record_event contract. */
 function localAudit(db: LocalDb, entity: string, action: "created" | "updated" | "deleted",
@@ -821,6 +822,12 @@ export function localFlow(params: FlowParams): Flow {
     for (const source of recurringSources(m)) {
       if (source.type === "receita") pIncome += amount(source);
       else pExpense += amount(source);
+    }
+    for (const projected of localSubscriptionProjections(
+      db.subscriptions.filter(sub => !params.category_id || sub.category_id === params.category_id),
+      db.transactions, m, todayISO(),
+    )) {
+      pExpense += projected.subscription.value;
     }
     return {
       month: m,
