@@ -187,9 +187,8 @@ def test_emulator_real_finance_http_endpoints_and_offline_retries(monkeypatch):
             ), 204)
 
             revision = await finance_revision(UID)
-            # 4 genuine mutations + 4 idempotent retries + 2 temporary
-            # transaction events = 10 HTTP revision commits.
-            assert revision == 12
+            # Seven writes and six idempotent retries, one revision each.
+            assert revision == 13
             events = [
                 owner.collection("_finance_shadow_outbox_v1")
                 .document(f"{i:016d}").get().to_dict()
@@ -198,7 +197,7 @@ def test_emulator_real_finance_http_endpoints_and_offline_retries(monkeypatch):
             assert all(event is not None for event in events)
             assert all(event["finance_revision"] == ix
                        for ix, event in enumerate(events, 1))
-            assert sum(item["is_noop"] for item in events) == 5
+            assert sum(item["is_noop"] for item in events) == 6
             assert sum(item["requires_rebuild"] for item in events) >= 3
             assert all(event["user_id"] == UID for event in events)
             assert len(list(owner.collection("transactions").stream())) == 3
