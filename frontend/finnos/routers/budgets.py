@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.recurrence import projections_in_period
+from finnos.lib.subscription_projection import planned_subscriptions_in_period
 from finnos.lib.competency import credit_events, monthly_competency
 from finnos.models.budget import BudgetAllocationOut, BudgetAllocationProgress, BudgetCycleIn, BudgetCycleOut, BudgetCycleProgress
 from finnos.routers.auth import require_user
@@ -56,6 +57,7 @@ async def _progress(cycle: dict, user_id: str) -> BudgetCycleProgress:
     txs = await db.transactions.find({'user_id': user_id}).to_list(20000)
     categories = await db.categories.find({'user_id': user_id}).to_list(500)
     cards = await db.cards.find({'user_id': user_id}).to_list(200)
+    subscriptions = await db.subscriptions.find({'user_id': user_id}).to_list(500)
     by_id = {cat['id']: cat for cat in categories}
     (spent_by_cat, committed_by_cat) = ({}, {})
     received_income = committed_income = D('0.0')
@@ -84,6 +86,16 @@ async def _progress(cycle: dict, user_id: str) -> BudgetCycleProgress:
         elif source.get('type') == 'despesa' and source.get('category_id'):
             key = source['category_id']
             committed_by_cat[key] = committed_by_cat.get(key, D('0.0')) + amount
+    # FIN-13: include only deduplicated upcoming bills in category
+    # commitments. These are plans, never realized cash movements.
+    for sub, charge in planned_subscriptions_in_period(
+        subscriptions, txs, start, end, today.isoformat()
+    ):
+        if sub.get('category_id'):
+            key = sub['category_id']
+            committed_by_cat[key] = (
+                committed_by_cat.get(key, D('0.0')) + D(sub['value'])
+            )
     allocations = []
     for allocation in cycle.get('allocations', []):
         (key, planned) = (allocation['category_id'], quantize_brl(D(allocation.get('planned') or 0)))
