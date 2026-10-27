@@ -87,6 +87,21 @@ def test_negative_balance_reconciles_payment_and_transfer(monkeypatch):
         accounts=Collection(docs), transactions=Collection(entries),
     ))
     monkeypatch.setattr(accounts, "today_iso", lambda: "2026-10-26")
+    from finnos.lib.account_balances import AccountLedger
+
+    async def revision(uid):
+        assert uid == "owner"
+        return 7
+
+    async def stream(uid, opening, today, expected_revision):
+        assert (uid, today, expected_revision) == ("owner", "2026-10-26", 7)
+        ledger = AccountLedger(opening, today)
+        for entry in entries:
+            ledger.add(entry)
+        return ledger
+
+    monkeypatch.setattr(accounts, "finance_revision", revision)
+    monkeypatch.setattr(accounts, "stream_account_balances", stream)
     result = asyncio.run(accounts._enriched_accounts("owner"))
     assert result[0].balance == Decimal("-350.23")
     assert result[1].balance == Decimal("50.00")
