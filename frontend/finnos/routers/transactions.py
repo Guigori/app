@@ -14,6 +14,20 @@ from finnos.routers.auth import require_user
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
+# FNS-019: Never trust a caller-controlled financial source label. These are
+# the only provenance kinds emitted by the existing FINNOS clients.
+ALLOWED_OPERATION_SOURCES = frozenset({
+    "manual", "ios_shortcut", "bank_notification", "import", "system",
+})
+
+
+def normalized_operation_source(value: str | None) -> str:
+    source = value or "manual"
+    if source not in ALLOWED_OPERATION_SOURCES:
+        raise HTTPException(422, "Origem financeira não permitida.")
+    return source
+
+
 
 async def _ref_maps(user_id: str) -> tuple[dict, dict]:
     accounts = await db.accounts.find({"user_id": user_id}).to_list(500)
@@ -274,7 +288,7 @@ async def create_transaction(
     await _validate(user["id"], payload)
     doc = _document(user["id"], payload)
     doc["operation_id"] = x_finnos_operation_id
-    doc["source"] = x_finnos_source or "manual"
+    doc["source"] = normalized_operation_source(x_finnos_source)
     await db.transactions.insert_one(doc)
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
     return enrich_transaction(
@@ -300,7 +314,7 @@ async def update_transaction(
     doc["created_at"] = existing.get("created_at")
     doc["operation_id"] = x_finnos_operation_id
     doc["_expected_version"] = x_finnos_base_version
-    doc["source"] = x_finnos_source or "manual"
+    doc["source"] = normalized_operation_source(x_finnos_source)
     await db.transactions.replace_one({"id": tx_id, "user_id": user["id"]}, doc)
     doc = await db.transactions.find_one({"id":tx_id,"user_id":user["id"]})
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
