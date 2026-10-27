@@ -139,6 +139,14 @@ def test_calendar_subscription_forecast_is_not_a_paid_purchase(monkeypatch):
         name: Coll(name) for name in docs
     }))
     monkeypatch.setattr(analytics, "today_iso", lambda: "2026-10-26")
+    async def revision(uid):
+        assert uid == "owner"
+        return 1
+    async def history(uid, months, selected_cards, expected):
+        assert (uid, expected, months) == ("owner", 1, ["2026-10"])
+        return docs["transactions"]
+    monkeypatch.setattr(analytics, "finance_revision", revision)
+    monkeypatch.setattr(analytics, "read_projection_history", history)
     calendar = asyncio.run(analytics.calendar_month(month="2026-10", user={"id": "owner"}))
     day = next(item for item in calendar.days if item.date == "2026-10-29")
     assert day.count == 0
