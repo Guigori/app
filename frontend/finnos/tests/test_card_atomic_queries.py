@@ -3,7 +3,7 @@
 The query must exclude unrelated card purchases and bank debits, remain
 UID-scoped, and fail closed on malformed records or >20k matching purchases.
 """
-from types import SimpleNamespace
+from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
@@ -76,7 +76,7 @@ def test_only_target_card_is_read_inside_existing_transaction(monkeypatch):
         tr = object()
         result = store.card_purchase_rows(object(), "uid-test", "card", tr)
         assert [x["id"] for x in result] == ["old", "future"]
-        assert result[0]["value"] == 12.34
+        assert result[0]["value"] == Decimal("12.34")
         assert calls == [
             ("where", "card_id", "==", "card"),
             ("limit", 20001),
