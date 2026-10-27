@@ -1,0 +1,108 @@
+"""FIN-13: subscription projections are read-only, deduplicated and calendar-safe."""
+import asyncio
+from datetime import date
+from types import SimpleNamespace
+from decimal import Decimal
+
+from finnos.lib.subscription_projection import (
+    subscription_occurrence, planned_subscriptions,
+    planned_subscriptions_in_period,
+)
+from finnos.routers import analytics
+
+
+def sub(**extra):
+    return {
+        "id": "sub", "name": "Netflix", "active": True,
+        "value": Decimal("49.90"), "next_charge": "2026-01-31",
+        "recurrence": "mensal", "account_id": "bank",
+        "card_id": None, "category_id": "streaming",
+        **extra,
+    }
+
+
+def test_february_clamping_does_not_change_subscription_anchor():
+    subscription = sub()
+    assert subscription_occurrence(subscription, "2026-01") == date(2026, 1, 31)
+    assert subscription_occurrence(subscription, "2026-02") == date(2026, 2, 28)
+    assert subscription_occurrence(subscription, "2026-03") == date(2026, 3, 31)
+    assert subscription["next_charge"] == "2026-01-31"
+    assert planned_subscriptions([subscription], [], "2026-02", "2026-02-20")[0][1] == date(2026, 2, 28)
+    assert planned_subscriptions([subscription], [], "2026-02", "2026-03-01") == []
+
+
+def test_annual_billing_occurs_only_on_anniversary_and_in_active_window():
+    annual = sub(recurrence="anual", next_charge="2026-02-28")
+    assert subscription_occurrence(annual, "2026-02") == date(2026, 2, 28)
+    assert subscription_occurrence(annual, "2026-03") is None
+    assert subscription_occurrence(annual, "2027-02") == date(2027, 2, 28)
+    assert planned_subscriptions([annual], [], "2026-02", "2026-03-01") == []
+    assert subscription_occurrence(sub(active=False), "2026-02") is None
+
+
+def test_explicit_transaction_suppresses_forecast_and_fixed_series_owns_future():
+    matching = {
+        "id": "tx", "name": "NETFLIX", "type": "despesa",
+        "date": "2026-02-28", "status": "agendado",
+        "value": Decimal("49.90"), "card_id": None,
+        "account_id": "bank", "category_id": "streaming",
+    }
+    assert planned_subscriptions([sub()], [matching], "2026-02", "2026-02-01") == []
+    assert len(planned_subscriptions([sub()], [matching], "2026-03", "2026-03-01")) == 1
+    matching["fixed"] = True
+    assert planned_subscriptions([sub()], [matching], "2026-03", "2026-03-01") == []
+
+
+def test_future_credit_card_subscription_not_double_counted_as_cash_spent():
+    card_sub = sub(card_id="card")
+    bill = {
+        "type": "despesa", "name": "Netflix",
+        "date": "2026-02-28", "card_id": "card",
+        "account_id": "bank", "category_id": "streaming",
+        "value": Decimal("49.90"), "status": "pago",
+    }
+    assert planned_subscriptions([card_sub], [bill], "2026-02", "2026-02-01") == []
+
+
+def test_arbitrary_period_includes_only_future_unmatched_months():
+    items = planned_subscriptions_in_period(
+        [sub()], [], date(2026, 1, 20), date(2026, 4, 4), "2026-02-15",
+    )
+    assert [date.isoformat() for _, date in items] == [
+        "2026-02-28", "2026-03-31",
+    ]
+
+
+def test_flow_totals_include_subscription_only_as_future_plan(monkeypatch):
+    docs = {
+        "transactions": [{
+            "id": "salary", "name": "Salário", "type": "receita",
+            "status": "pago", "date": "2026-10-05", "value": 2500,
+            "account_id": "bank",
+        }],
+        "cards": [],
+        "categories": [],
+        "subscriptions": [sub(next_charge="2026-11-28")],
+    }
+
+    class Cursor:
+        def __init__(self, rows): self.rows = rows
+        async def to_list(self, limit): return self.rows
+
+    class Coll:
+        def __init__(self, kind): self.kind = kind
+        def find(self, query):
+            assert query["user_id"] == "owner"
+            return Cursor(docs[self.kind])
+
+    monkeypatch.setattr(analytics, "db", SimpleNamespace(**{
+        name: Coll(name) for name in docs
+    }))
+    monkeypatch.setattr(analytics, "today_iso", lambda: "2026-10-26")
+    result = asyncio.run(analytics.flow(month="2026-10", months=2,
+                                        from_month=None, to_month=None,
+                                        category_id=None, user={"id": "owner"}))
+    november = next(p for p in result.series if p.month == "2026-11")
+    assert november.projected_expense == Decimal("49.90")
+    assert november.expense == 0
+    assert result.expense == 0
