@@ -22,6 +22,7 @@ from finnos.lib.stats import add_months, month_portion
 
 SCHEMA_VERSION = 1
 UNCATEGORIZED = ""
+_MISSING = object()
 
 
 @dataclass
@@ -32,11 +33,11 @@ class MonthTotals:
     categories_cents: dict[str, int] = field(default_factory=dict)
 
     def change(self, income: int, expense: int, count: int,
-               category: str | None = None) -> None:
+               category=_MISSING) -> None:
         self.income_cents += income
         self.expense_cents += expense
         self.count += count
-        if category is not None and expense:
+        if category is not _MISSING and expense:
             key = category or UNCATEGORIZED
             self.categories_cents[key] = self.categories_cents.get(key, 0) + expense
             if self.categories_cents[key] == 0:
@@ -168,6 +169,18 @@ class IncrementalMonthlyLedger:
         }
 
 
+def snapshot_checksum(snapshot: dict) -> str:
+    payload = {
+        "schema_version": snapshot["schema_version"],
+        "finance_revision": snapshot["finance_revision"],
+        "months": snapshot["months"],
+    }
+    canonical = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 def reconcile_months(
     snapshot: dict, transactions: list[dict], cards: list[dict],
     revision: int, months: list[str] | None = None,
@@ -179,7 +192,8 @@ def reconcile_months(
     """
     if (snapshot.get("schema_version") != SCHEMA_VERSION
             or snapshot.get("finance_revision") != revision
-            or snapshot.get("status") != "shadow_only"):
+            or snapshot.get("status") != "shadow_only"
+            or snapshot.get("checksum") != snapshot_checksum(snapshot)):
         return {"match": False, "reason": "stale_or_unknown_schema", "diffs": {}}
 
     expected = IncrementalMonthlyLedger.from_history(transactions, cards)
@@ -223,7 +237,8 @@ def stage_shadow_snapshot(transaction, parent, snapshot: dict, expected_revision
         raise HTTPException(403, "Persistência de agregados exige autorização explícita.")
     if (snapshot.get("finance_revision") != expected_revision
             or snapshot.get("status") != "shadow_only"
-            or snapshot.get("schema_version") != SCHEMA_VERSION):
+            or snapshot.get("schema_version") != SCHEMA_VERSION
+            or snapshot.get("checksum") != snapshot_checksum(snapshot)):
         raise HTTPException(409, "Agregado incompatível com a revisão financeira.")
     rev_doc = parent.collection("_meta").document("finance").get(transaction=transaction)
     current = (rev_doc.to_dict() or {}).get("revision", 0) if rev_doc.exists else 0
