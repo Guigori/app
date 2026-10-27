@@ -17,7 +17,7 @@ from finnos.lib.account_balances import PAGE_SIZE, _revision
 
 def projection_relevant(tx: dict, months: frozenset[str], originals: frozenset[str]) -> bool:
     return (
-        tx.get("fixed") is True
+        bool(tx.get("fixed"))
         or tx.get("installment") is True
         or str(tx.get("date") or "")[:7] in months
         or tx.get("id") in originals
