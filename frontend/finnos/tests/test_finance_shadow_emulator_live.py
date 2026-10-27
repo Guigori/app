@@ -7,6 +7,8 @@ import asyncio
 import os
 from copy import deepcopy
 from decimal import Decimal
+from unittest.mock import patch
+from google.auth.credentials import AnonymousCredentials
 
 import pytest
 from firebase_admin import firestore
@@ -26,11 +28,16 @@ def cloud():
             or not os.environ.get("FIRESTORE_EMULATOR_HOST")
             or os.environ.get("FINNOS_SHADOW_OUTBOX_MODE") != "emulator"):
         pytest.skip("Somente no Firestore Emulator com projeto demo-finnos.")
-    app = firebase_admin.initialize_app(
-        options={"projectId": "demo-finnos"},
-        name="shadow-outbox-emulator",
-    )
-    instance = firestore.client(app=app)
+    # Firebase Admin still requests ADC even with FIRESTORE_EMULATOR_HOST.
+    # Supply ephemeral anonymous credentials ONLY inside this demo-only test.
+    # No service account, ADC file or cloud credential is ever required.
+    with patch("google.auth.default",
+               return_value=(AnonymousCredentials(), "demo-finnos")):
+        app = firebase_admin.initialize_app(
+            options={"projectId": "demo-finnos"},
+            name="shadow-outbox-emulator",
+        )
+        instance = firestore.client(app=app)
     token = store.active_uid.set("test-shadow-finance")
     try:
         yield instance
