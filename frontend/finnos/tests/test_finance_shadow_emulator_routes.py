@@ -217,6 +217,32 @@ def test_emulator_real_finance_http_endpoints_and_offline_retries(monkeypatch):
             assert not list(
                 owner.collection("_finance_month_shadows_v1").limit(1).stream()
             )
+
+            # Fail closed on a misconfigured opt-in, without writing a finance
+            # document or advancing the canonical revision.
+            monkeypatch.setenv("FIREBASE_PROJECT_ID", "finnos-app")
+            rejected = await post(
+                "/api/transactions",
+                payload("Bloqueio", 4, date="2026-10-10", card_id=None),
+                "wrong-project",
+            )
+            assert rejected.status_code == 503
+            assert await finance_revision(UID) == revision
+            monkeypatch.setenv("FIREBASE_PROJECT_ID", "demo-finnos")
+
+            # Switch OFF: the normal canonical route continues to work, but
+            # never creates a shadow envelope for the next finance revision.
+            monkeypatch.delenv("FINNOS_SHADOW_OUTBOX_MODE")
+            normal = require_status(await post(
+                "/api/transactions",
+                payload("Desligado", 5, date="2026-10-11", card_id=None),
+                "disabled-outbox",
+            ), 201)
+            assert normal["value"] == 5
+            assert await finance_revision(UID) == revision + 1
+            assert not owner.collection("_finance_shadow_outbox_v1").document(
+                f"{revision + 1:016d}"
+            ).get().exists
     try:
         asyncio.run(scenario())
     finally:
