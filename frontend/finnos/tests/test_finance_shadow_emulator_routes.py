@@ -97,6 +97,10 @@ def test_emulator_real_finance_http_endpoints_and_offline_retries(monkeypatch):
     monkeypatch.setattr(transactions, "today_iso", lambda: "2026-10-27")
 
     async def scenario():
+        # The ASGI middleware isolates request ContextVars from the calling
+        # test task. Establish the same synthetic UID for post-request audit
+        # reads, without weakening endpoint authentication.
+        store.active_uid.set(UID)
         transport = httpx.ASGITransport(app=api.app)
         async with httpx.AsyncClient(
             transport=transport, base_url="http://testserver",
