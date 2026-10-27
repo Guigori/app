@@ -286,3 +286,37 @@ it("shows the next subscription charge on local calendar as forecast without a p
   expect(calendar.days.find(day => day.date === "2026-10-29")?.count).toBe(1);
   expect(localFlow({ month: "2026-10", months: 2 }).projected_expense).toBe(49.9);
 });
+
+
+
+it("applies search, status, account and date filters across ordered local cursor pages", async () => {
+  const transactions = Array.from({ length: 137 }, (_, index) => ({
+    ...purchase(`purchase-${String(index).padStart(4, "0")}`, 1.25),
+    card_id: null,
+    status: index % 2 === 0 ? "agendado" as const : "pago" as const,
+    date: index % 3 === 0 ? "2026-10-20" : "2026-10-21",
+  }));
+  setScenario(transactions);
+  const filter = {
+    start_date: "2026-10-20", end_date: "2026-10-21",
+    status: "agendado" as const, account_id: "bank",
+    search: "purchase-00",
+  };
+  let cursor: string | undefined;
+  const collected: string[] = [];
+  for (let index = 0; index < 25; index++) {
+    const page = await fetchTransactionsPage(filter, cursor, 7, "asc");
+    collected.push(...page.items.map(item => item.id));
+    if (!page.next_cursor) break;
+    cursor = page.next_cursor;
+  }
+  const expected = transactions.filter(tx =>
+    tx.status === "agendado" && tx.name.includes("purchase-00"),
+  ).map(tx => tx.id).sort();
+  expect(collected).toEqual(expected);
+  expect(new Set(collected).size).toBe(collected.length);
+  await expect(fetchTransactionsPage({
+    start_date: "2026-10-31", end_date: "2026-10-01",
+  })).rejects.toThrow("Página financeira inválida");
+  await expect(fetchTransactionsPage("2026-99")).rejects.toThrow("Página financeira inválida");
+});
