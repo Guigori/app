@@ -34,8 +34,8 @@
 | ID | Escopo | Estado da branch | Prioridade | Evidência / lacuna |
 | --- | --- | --- | --- | --- |
 | ARQ-01 | Rotas Vercel de onboarding/instituições/APIs | Código implementado; falta E2E | P0 | Testes estáticos; smoke Preview autenticado pendente |
-| ARQ-02 | Consultas indexadas e agregados Firestore | Parcial | P0 | Contas: ledger paginado por ID sem limite 20k, com revisão; ainda O(N) leituras. Dashboard/faturas/agregados pendentes |
-| ARQ-03 | Paginação por cursor em todas as visualizações relevantes | Parcial | P0 | Lista de transações paginada; outras telas ainda usam legado |
+| ARQ-02 | Consultas indexadas e agregados Firestore | Parcial | P0 | Dashboard/Tendências: resumo em scan paginado único, sem 20k; GET fatura filtra card_id indexado. Fluxo/rotas de escrita e agregados persistidos pendentes |
+| ARQ-03 | Paginação por cursor em todas as visualizações relevantes | Parcial | P0 | Lista de transações paginada; Dashboard/Tendências e fatura específica fazem leitura paginada. Fluxo, orçamento e outras telas ainda usam legado |
 | ARQ-04 | Núcleo financeiro compartilhado e versionado | Parcial | P0 | AccountLedger compartilhado por Contas/Dashboard, competência/fixtures; caixa projetado e ledger TS completo pendentes |
 | ARQ-05 | Build e lockfile determinísticos | Código implementado | P0 | npm ci/lockfile; conflito pywebpush/cryptography corrigido |
 | ARQ-06 | Job de notificações e transporte Push | Parcial; não ativo em produção | P1 | Contrato GET+Bearer, dispatcher e regras; VAPID/Preview/deploy pendentes |
@@ -56,7 +56,7 @@
 | ID | Escopo | Estado da branch | Prioridade | Relação / lacuna |
 | --- | --- | --- | --- | --- |
 | FNS-001 | Bloquear edição/exclusão de pagamento liquidado | Código implementado | P0 | FIN-01/02 e trilha de auditoria |
-| FNS-002 | Índices e agregados mensais Firestore | Parcial | P0 | ARQ-02/03; saldo de contas paginado sem truncar, agregados materializados ainda pendentes |
+| FNS-002 | Índices e agregados mensais Firestore | Parcial | P0 | ARQ-02/03; resumo mensal em memória durante scan único, sem persistência incremental. Fatura GET filtra por cartão; outros caminhos pendentes |
 | FNS-003 | Dashboard Web v3, hooks e testes de renderização | Pendente de validação específica | P1 | UI Dashboard |
 | FNS-004 | FIINT no FastAPI | Pendente | P1 | ARQ-07 |
 | FNS-005 | Lançamentos pagos futuros | Código implementado | P0 | FIN-06 |
@@ -143,7 +143,7 @@ O arquivo original forneceu **grupos** de IDs e objetivos, não descrição indi
 ## Evidências técnicas verificadas nesta conferência
 - PR #47 HEAD `f9da102a8c2f8214b45b6f6a7fcb4e5f173cd853` antes da criação deste documento.
 - Regressões nesse SHA: **207 testes Python, 113 testes frontend**, typecheck e build aprovados; adaptador Firestore **sintético**, não E2E real.
-- `frontend/finnos/routers/accounts.py` agora usa `stream_account_balances` (páginas de 300), sem teto 20.000; **ainda percorre todo o histórico** e precisa de agregados persistentes após validação. Dashboard/Fluxo e outros módulos ainda têm `to_list(20000)`: ARQ-02 permanece parcial.
+- `frontend/finnos/routers/accounts.py` usa `stream_account_balances` (300 registros/página), sem teto 20.000; Dashboard/Tendências usam `stream_financial_window` e fatura GET usa leitor indexado por cartão. **Fluxo, orçamento e processamento de faturas com escrita ainda usam `to_list(20000)` ou `rows`**: ARQ-02 permanece parcial. Resumos de leitura ainda percorrem todo o histórico.
 - `frontend/finnos/models/cards.py` e `frontend/src/components/cards/CardDialog.tsx` ainda não expõem regra por cartão para compra no dia de fechamento: FIN-15/FNS-021 pendentes.
 - `.github/workflows/quality.yml` usa GET + Bearer para o dispatcher, mas não comprova agendamento efetivo em produção.
 - O Preview READY visto anteriormente correspondia a SHA mais antigo; não é homologação do HEAD.
@@ -164,6 +164,14 @@ O arquivo original forneceu **grupos** de IDs e objetivos, não descrição indi
 - **Testes:** `test_account_balances_streaming.py` cobre mais de 20 mil lançamentos sintéticos, transferências, pagamento de fatura, saldo negativo, histórico legado, UID, corrupção e concorrência; `test_shared_finance_ledger_parity.py` compara Dashboard/contas com a fixture compartilhada.
 - **Limitação importante:** paginação reduz uso de memória e remove o limite rígido de 20 mil, **mas não reduz o número total de leituras históricas**. Índices/agregados incrementais, tempo de resposta real e regras de consistência sob escrita direta externa continuam pendentes. Não alterar saldos armazenados ou criar eventos compensatórios automaticamente.
 - **Gate:** testes do SHA final, Preview do mesmo SHA e E2E com UID sintético autorizado ainda são necessários para homologação; nenhuma mudança em Auth/Rules ou produção.
+
+## Continuidade — Dashboard, Tendências e consulta de faturas (27/10/2026)
+
+- **Dashboard:** substituído `db.transactions.find(...).to_list(20000)` e a segunda consulta dos seis recentes por **uma passagem** em páginas de 300, com `FinancialWindow` (`frontend/finnos/lib/financial_summaries.py`). Saldos usam `AccountLedger`, competência usa `month_portion`, estornos usam `credit_events` e somente categorias de compras historicamente referenciadas pelos estornos são retidas em memória. Os seis recentes preservam ordenação por data e criação. Menos uma leitura integral; ainda são lidos todos os documentos históricos uma vez.
+- **Tendências:** `/analytics/trends` também usa `stream_financial_window`, consolidando até 24 meses com o mesmo contrato monetário em centavos e sem truncar aos 20 mil.
+- **Faturas (GET):** `/cards/{card_id}/invoice` utiliza `read_card_purchases` com filtro `card_id` indexado por Firestore e páginas de 300 em ordem documental. Não mistura compras de outros cartões, mantém compras antigas de parcelas futuras e verifica revisão ao concluir. As operações **de pagamento, créditos, reembolsos e a listagem geral de cartões** continuam com as leituras legadas: não estão otimizadas neste lote.
+- **Testes novos:** `test_financial_window_streaming.py` valida paridade contra `monthly_competency`, 20.007 movimentos, receitas sem reembolso fictício, parcelas antigas, ordenação de recentes, UID e escrita concorrente; `test_card_transaction_reads.py` cobre mais de 20 mil compras, isolamento por cartão/UID e revisão financeira. `test_shared_finance_ledger_parity.py` passa pelo novo Dashboard.
+- **Gates pendentes:** nenhum agregado financeiro materializado foi gravado no Firestore; persiste custo O(histórico) no Dashboard/Tendências. Não há evidência de E2E autorizado com Firestore real/Preview do SHA final. Próximas frentes: Fluxo e Orçamento com projeções/recorrência sem perda de contexto, consultas transacionais de fatura com consistência e arquitetura de agregados incrementais versionados. Produção, Auth, Rules e dados reais inalterados.
 
 ## Regra de manutenção
 Toda implementação futura deve atualizar a linha correspondente: **estado → arquivo/commit/teste → evidência Preview/Firestore → aceite**. Não apagar itens por parecerem duplicados; registrar a equivalência (ex.: FNS-021 ↔ FIN-15) e manter o vínculo. Alterar estados para "homologado" somente após os gates completos.
