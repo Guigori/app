@@ -4,6 +4,7 @@ Preferences persist per verified user. Web Push transport is deliberately not
 advertised until a VAPID dispatcher and device registry are deployed.
 """
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from hashlib import sha256
 import os
 import json
@@ -140,6 +141,25 @@ async def send_test_push(user: dict = Depends(require_user)):
     return {"sent": count}
 
 
+def _dispatch_window(prefs: dict, hour: int) -> int | None:
+    """Only send during the hour explicitly chosen by this user (São Paulo time).
+
+    A zero-day preference means due today, plus overdue items already surfaced
+    by the notification engine. No default-hour send at every cron execution.
+    """
+    if not prefs.get("push_enabled", True):
+        return None
+    if int(prefs.get("hour", 9)) != hour:
+        return None
+    return max(0, min(7, int(prefs.get("days_before", 1))))
+
+
+def _dispatch_kind_allowed(kind: str, prefs: dict) -> bool:
+    if kind == "fatura":
+        return bool(prefs.get("invoice_reminders", True))
+    return bool(prefs.get("transaction_reminders", True))
+
+
 @router.get("/dispatch")
 async def dispatch_push(
     authorization: str | None = Header(default=None),
@@ -165,6 +185,7 @@ async def dispatch_push(
         return [doc.to_dict() or {} for doc in snaps]
 
     registrations_list = await run_in_threadpool(registrations)
+    local_hour = datetime.now(ZoneInfo("America/Sao_Paulo")).hour
     sent = 0
     failures = 0
     # A prior notification delivery can be acknowledged by the push gateway
@@ -180,10 +201,14 @@ async def dispatch_push(
             prefs = await db.notification_preferences.find_one({
                 "user_id": uid, "id": "prefs",
             })
-            if prefs and not prefs.get("push_enabled", True):
+            settings = {**NotifyPrefsIn().model_dump(), **(prefs or {})}
+            window = _dispatch_window(settings, local_hour)
+            if window is None:
                 continue
-            reminder = await notifications(window_days=1, user={"id": uid})
+            reminder = await notifications(window_days=window, user={"id": uid})
             for item in reminder.items[:25]:
+                if not _dispatch_kind_allowed(item.kind, settings):
+                    continue
                 fingerprint = sha256(
                     (uid + "\0" + subscription["endpoint"] + "\0"
                      + item.id + "\0" + today_iso()).encode()
