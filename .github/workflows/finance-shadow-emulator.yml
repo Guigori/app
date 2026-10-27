@@ -9,12 +9,14 @@ on:
       - '.github/workflows/finance-shadow-emulator.yml'
       - '.github/test-fixtures/firebase.shadow.json'
       - '.github/test-fixtures/firestore.shadow.rules'
+      - 'docs/finance/SHADOW-EMULATOR-GATE-20261027.md'
   pull_request:
     paths:
       - 'frontend/finnos/**'
       - '.github/workflows/finance-shadow-emulator.yml'
       - '.github/test-fixtures/firebase.shadow.json'
       - '.github/test-fixtures/firestore.shadow.rules'
+      - 'docs/finance/SHADOW-EMULATOR-GATE-20261027.md'
   workflow_dispatch:
 
 permissions:
