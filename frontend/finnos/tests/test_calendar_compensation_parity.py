@@ -71,6 +71,16 @@ def test_calendar_refunds_reverse_spending_without_increasing_income(monkeypatch
     monkeypatch.setattr(analytics, "db", SimpleNamespace(**{
         kind: Collection(rows, kind) for kind in rows
     }))
+    async def revision(uid):
+        assert uid == "uid"
+        return 1
+
+    async def history(uid, months, cards, expected):
+        assert (uid, months, expected) == ("uid", ["2026-10"], 1)
+        return rows["transactions"]
+
+    monkeypatch.setattr(analytics, "finance_revision", revision)
+    monkeypatch.setattr(analytics, "read_projection_history", history)
     output = asyncio.run(analytics.calendar_month(month="2026-10", user={"id": "uid"}))
     assert output.income == 1000
     assert output.expense == -75
