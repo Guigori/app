@@ -922,6 +922,20 @@ export function localCalendar(month: string): CalendarMonth {
     if (credit.kind === "merchant_credit") day.count += 1;
     buckets.set(credit.date, day);
   }
+  for (const projected of localSubscriptionProjections(
+    db.subscriptions, db.transactions, month, todayISO(),
+  )) {
+    const key = projected.date;
+    const day = buckets.get(key) ?? {
+      date: key, income: 0, expense: 0, projected_income: 0,
+      projected_expense: 0, count: 0, active_count: 0,
+    };
+    day.projected_expense = round2(
+      day.projected_expense + projected.subscription.value
+    );
+    // A planned subscription is not a recorded transaction.
+    buckets.set(key, day);
+  }
   const days = [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date));
   const income = round2(days.reduce((s, d) => s + d.income, 0));
   const expense = round2(days.reduce((s, d) => s + d.expense, 0));
