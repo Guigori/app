@@ -54,4 +54,8 @@ def record_event(transaction, parent, collection: str, action: str,
         "before": visible_summary(collection, before),
         "after": visible_summary(collection, after),
     }
+    # Shadow capture is a no-op unless explicitly enabled for a synthetic
+    # Firestore emulator. It shares the same transaction attempt/context.
+    from finnos.lib.finance_shadow_outbox import capture_event
+    capture_event(collection, action, before, after)
     transaction.create(parent.collection("finance_history").document(event_id), event)
