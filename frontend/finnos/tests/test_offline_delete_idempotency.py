@@ -13,7 +13,8 @@ from finnos.lib import db as store
 
 
 class Snap:
-    def __init__(self, value):
+    def __init__(self, value, identifier=None):
+        self.id = identifier
         self.exists = value is not None
         self.value = deepcopy(value)
     def to_dict(self):
@@ -24,7 +25,7 @@ class Doc:
     def __init__(self, data, path):
         self.data, self.path = data, path
     def get(self, transaction=None):
-        return Snap(self.data.get(self.path))
+        return Snap(self.data.get(self.path), self.path[2])
 
 
 class Collection:
