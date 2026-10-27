@@ -3,6 +3,8 @@ import { Cloud, CloudOff, Loader2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { flushSyncQueue, listSyncOperations, type SyncOperation } from "@/lib/sync/queue";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
+import { SyncEntityReviewDialog } from "./SyncEntityReviewDialog";
+import type { TransactionInput } from "@/types/finnos";
 import { queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +15,7 @@ export function ConnectivityStatus() {
   const [state, setState] = useState<NetworkState>(() => navigator.onLine ? "online" : "offline");
   const [pending, setPending] = useState(0);
   const [blocker, setBlocker] = useState<SyncOperation | null>(null);
+  const [reviewEntity, setReviewEntity] = useState<SyncOperation | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const collapseTimer = useRef<number | null>(null);
@@ -77,16 +80,22 @@ export function ConnectivityStatus() {
 
   useEffect(() => {
     const syncState = () => void refresh();
-    const syncSuccess = () => { void queryClient.invalidateQueries(); };
+    const syncSuccess = () => { void queryClient.invalidateQueries(); void refresh(); };
     const syncError = (event: Event) => {
       const op = (event as CustomEvent<{ operation: SyncOperation }>).detail.operation;
       setExpanded(op.status === "conflict");
       toast.error(op.status === "conflict" ? "Sincronização exige revisão" : "Não foi possível sincronizar", {
         description: op.status === "conflict"
-          ? "Este lançamento foi rejeitado. Os seguintes estão protegidos até a revisão."
+          ? "Este registro foi rejeitado. Os seguintes estão protegidos até a revisão."
           : "O registro continua salvo neste aparelho e poderá ser revisado.",
         duration: 5000,
-        action: { label: "Revisar", onClick: () => openTransaction({ syncOperationId: op.id, syncPayload: op.payload, firstAttemptAt: op.createdAt }) },
+        action: { label: "Revisar", onClick: () => {
+          if (op.kind.startsWith("transaction.")) {
+            openTransaction({ syncOperationId: op.id, syncPayload: op.payload as TransactionInput, firstAttemptAt: op.createdAt });
+          } else {
+            setReviewEntity(op);
+          }
+        } },
       });
     };
     const offline = () => {
@@ -122,7 +131,7 @@ export function ConnectivityStatus() {
     };
   }, [collapseLater, openTransaction, refresh, runSync]);
 
-  if (state === "online" && pending === 0 && !syncing) return null;
+  if (state === "online" && pending === 0 && !syncing && !reviewEntity) return null;
 
   const expand = () => {
     setExpanded(true);
@@ -131,14 +140,19 @@ export function ConnectivityStatus() {
 
   const reviewBlocker = () => {
     if (!blocker) return expand();
+    if (!blocker.kind.startsWith("transaction.")) {
+      setReviewEntity(blocker);
+      return;
+    }
     openTransaction({
       syncOperationId: blocker.id,
-      syncPayload: blocker.payload,
+      syncPayload: blocker.payload as TransactionInput,
       firstAttemptAt: blocker.createdAt,
     });
   };
 
   return (
+    <>
     <button
       type="button"
       onClick={blocker ? reviewBlocker : expanded ? () => setExpanded(false) : expand}
@@ -172,6 +186,8 @@ export function ConnectivityStatus() {
         </span>
       )}
     </button>
+    <SyncEntityReviewDialog operation={reviewEntity} onClose={() => { setReviewEntity(null); void refresh(); }} />
+    </>
   );
 }
 
