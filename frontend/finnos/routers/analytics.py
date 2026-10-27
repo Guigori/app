@@ -345,6 +345,31 @@ async def calendar_month(
                 day.count += 1
             # A bank-refund transaction has already contributed its own day
             # count; do not duplicate it on the calendar.
+    # A subscription is a forecast only. It does not turn into a bank debit,
+    # and an existing or recurring transaction suppresses its projection.
+    subscriptions = await db.subscriptions.find(
+        {"user_id": user["id"]}
+    ).to_list(500)
+    if subscriptions:
+        # Historical fixed expenses may already forecast the same plan; the
+        # current-month subset alone cannot detect such a prior recurring row.
+        all_txs = await db.transactions.find(
+            {"user_id": user["id"]}
+        ).to_list(20000)
+        for sub, charge in planned_subscriptions(
+            subscriptions, all_txs, m, today_iso()
+        ):
+            key = charge.isoformat()
+            day = buckets.setdefault(
+                key, DayFlow(date=key, income=D("0.0"),
+                             expense=D("0.0"), projected_income=D("0.0"),
+                             projected_expense=D("0.0"), count=0),
+            )
+            day.projected_expense = quantize_brl(
+                D(day.projected_expense) + D(sub["value"])
+            )
+            # This is not an actual transaction. Preserve count = recorded
+            # rows so clicking the day does not imply a nonexistent entry.
     days = sorted(buckets.values(), key=lambda d: d.date)
     income = quantize_brl(sum((d.income for d in days)))
     expense = quantize_brl(sum((d.expense for d in days)))
