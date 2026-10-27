@@ -402,10 +402,16 @@ export async function fetchTransactionsPage(
   sortDir: "asc" | "desc" = "desc",
 ): Promise<TransactionPage> {
   const filters: LocalTxFilters = typeof input === "string" ? { month: input } : input;
-  const hasMonth = Boolean(filters.month);
+  const hasMonth = Boolean(filters.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(filters.month));
   const hasRange = Boolean(filters.start_date && filters.end_date);
+  const isDate = (value: string) => /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(value)
+    && !Number.isNaN(Date.parse(value + "T12:00:00Z"))
+    && new Date(value + "T12:00:00Z").toISOString().slice(0, 10) === value;
   if ((!hasMonth && !hasRange)
-    || (hasRange && (filters.start_date! > filters.end_date!))
+    || (filters.month && !hasMonth)
+    || (Boolean(filters.start_date) !== Boolean(filters.end_date))
+    || (hasRange && (!isDate(filters.start_date!) || !isDate(filters.end_date!)
+      || filters.start_date! > filters.end_date!))
     || !Number.isInteger(limit) || limit < 1 || limit > 100) {
     throw new Error("Página financeira inválida.");
   }
