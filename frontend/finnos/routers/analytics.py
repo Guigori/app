@@ -10,6 +10,7 @@ from finnos.lib.recurrence import monthly_projection_sources
 from finnos.lib.subscription_projection import planned_subscriptions
 from finnos.lib.category_pace import monthly_pace
 from finnos.lib.competency import monthly_competency, credit_events
+from finnos.lib.transaction_amount import occurrence_amount as _amount
 from finnos.models.analytics import (
     BudgetRow,
     BudgetSummary,
@@ -142,13 +143,6 @@ async def budget(
         unbudgeted_spent=quantize_brl(spent_total - budgeted_spent),
         rows=rows,
     )
-
-
-def _amount(tx: dict) -> float:
-    """What a single occurrence of the transaction is worth."""
-    if tx.get("installment"):
-        return quantize_brl(D(tx.get("installment_value") or D("0.0")))
-    return quantize_brl(D(tx["value"]))
 
 
 def _projection(tx: dict, month: str) -> float | None:
