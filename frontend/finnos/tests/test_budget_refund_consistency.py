@@ -20,10 +20,10 @@ def tx(identifier, *, kind, value, when, category=None, card=None, **extra):
     }
 
 
-def fake_db(monkeypatch, *, transactions, cards, categories):
+def fake_db(monkeypatch, *, transactions, cards, categories, subscriptions=None):
     data = {
         "transactions": transactions, "cards": cards, "categories": categories,
-        "subscriptions": [],
+        "subscriptions": subscriptions or [],
     }
 
     class Find:
@@ -135,3 +135,41 @@ def test_budget_suggestion_uses_refund_adjusted_monthly_expenses(monkeypatch):
     assert result["categories"][0]["suggested"] == Decimal("166.67")
     assert result["categories"][0]["months_observed"] == 3
     assert result["writes_data"] is False
+
+
+
+def test_budget_v2_projects_upcoming_subscription_once_and_never_debits_cash(monkeypatch):
+    from decimal import Decimal
+    entries = [tx("salary", kind="receita", value=3000, when="2026-10-05")]
+    subscription = {
+        "id": "sub", "name": "Streaming", "value": 49.90,
+        "active": True, "recurrence": "mensal",
+        "next_charge": "2026-10-29", "account_id": "bank",
+        "card_id": None, "category_id": "streaming",
+    }
+    fake_db(monkeypatch, transactions=entries, cards=[], categories=[
+        {"id": "streaming", "name": "Assinaturas", "group": "desejos"},
+    ], subscriptions=[subscription])
+    monkeypatch.setattr(budgets, "today_iso", lambda: "2026-10-26")
+    cycle = {
+        "id": "cycle", "start_date": "2026-10-01",
+        "end_date": "2026-10-31", "expected_income": 3000,
+        "allocations": [{
+            "category_id": "streaming", "planned": 100,
+            "priority": "flexivel", "rollover": False,
+        }],
+    }
+    result = asyncio.run(budgets._progress(cycle, "owner"))
+    assert result.received_income == 3000
+    assert result.allocations[0].spent == 0
+    assert result.allocations[0].committed == Decimal("49.90")
+    assert result.safe_to_spend == Decimal("2950.10")
+
+    # A manually scheduled invoice is the source of truth; the subscription
+    # must not add a second R$49.90 commitment.
+    entries.append(tx("scheduled-sub", kind="despesa", value=49.90,
+                      when="2026-10-29", category="streaming"))
+    entries[-1]["name"] = "Streaming"
+    entries[-1]["status"] = "agendado"
+    result = asyncio.run(budgets._progress(cycle, "owner"))
+    assert result.allocations[0].committed == Decimal("49.90")
