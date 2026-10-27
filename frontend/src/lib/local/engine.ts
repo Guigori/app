@@ -863,8 +863,12 @@ export function localFlow(params: FlowParams): Flow {
   for (const event of creditsForMonth(creditEvents, focus)) {
     byCat.set(event.category_id, (byCat.get(event.category_id) ?? 0) - event.amount);
   }
-  const focusExpense = round2([...byCat.values()].reduce((s, v) => s + v, 0));
-  const categories: FlowCategory[] = [...byCat.entries()]
+  // FIN-08: signed refunds remain in expense/net; the visual breakdown
+  // displays only positive spending with percentages normalized to its own
+  // positive denominator (no negative bars or percentages over 100%).
+  const positiveCategories = [...byCat.entries()].filter(([, value]) => value > 0);
+  const positiveExpense = round2(positiveCategories.reduce((sum, [, value]) => sum + value, 0));
+  const categories: FlowCategory[] = positiveCategories
     .sort((a, b) => b[1] - a[1])
     .map(([key, value]) => {
       const category = key ? db.categories.find((c) => c.id === key) : undefined;
@@ -874,7 +878,7 @@ export function localFlow(params: FlowParams): Flow {
         color: category?.color ?? "#94A3B8",
         icon: category?.icon ?? "more-horizontal",
         total: round2(value),
-        percent: focusExpense ? Math.round((value / focusExpense) * 1000) / 10 : 0,
+        percent: positiveExpense ? Math.round((value / positiveExpense) * 1000) / 10 : 0,
       };
     });
 
