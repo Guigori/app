@@ -123,10 +123,14 @@ async def delete_card(card_id: str, user: dict = Depends(require_user)) -> Respo
 @router.get("/{card_id}/invoice", response_model=Invoice)
 async def card_invoice(card_id: str, cycle: str | None = Query(None), user: dict = Depends(require_user)):
     from finnos.lib.invoices import invoice_state, output, default_invoice_cycle
+    from finnos.lib.account_balances import finance_revision
+    from finnos.lib.card_transaction_reads import read_card_purchases
+
+    revision = await finance_revision(user["id"])
     card = await db.cards.find_one({"id": card_id, "user_id": user["id"]})
     if not card:
         raise HTTPException(404, "Cartão não encontrado.")
-    txs = await db.transactions.find({"user_id": user["id"], "card_id": card_id}).to_list(20000)
+    txs = await read_card_purchases(user["id"], card_id, revision)
     closing = cycle or default_invoice_cycle(card, txs, date.fromisoformat(today_iso()))
     categories = {c["id"]: c for c in await db.categories.find({"user_id": user["id"]}).to_list(500)}
     try:
