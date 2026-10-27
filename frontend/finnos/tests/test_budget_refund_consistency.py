@@ -46,6 +46,29 @@ def fake_db(monkeypatch, *, transactions, cards, categories, subscriptions=None)
         budgets, "db",
         SimpleNamespace(**{name: Collection(name) for name in data}),
     )
+    from finnos.lib.financial_summaries import FinancialWindow
+    from finnos.lib.projection_reads import projection_relevant, referenced_purchase_ids
+
+    async def revision(uid):
+        assert uid == "owner"
+        return 1
+
+    async def history(uid, months, selected_cards, expected):
+        assert (uid, expected) == ("owner", 1)
+        originals = referenced_purchase_ids(selected_cards)
+        return [row for row in data["transactions"]
+                if projection_relevant(row, frozenset(months), originals)]
+
+    async def summary(uid, months, selected_cards, expected):
+        assert (uid, expected) == ("owner", 1)
+        window = FinancialWindow(months, selected_cards)
+        for row in data["transactions"]:
+            window.add(row)
+        return window.finalize()
+
+    monkeypatch.setattr(budgets, "finance_revision", revision)
+    monkeypatch.setattr(budgets, "read_projection_history", history)
+    monkeypatch.setattr(budgets, "stream_financial_window", summary)
 
 
 def test_receipt_from_paid_invoice_is_not_new_budget_income():
