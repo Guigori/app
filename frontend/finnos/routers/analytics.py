@@ -9,7 +9,7 @@ from finnos.lib.stats import add_months, month_bounds, month_portion, months_bet
 from finnos.lib.recurrence import monthly_projection_sources
 from finnos.lib.subscription_projection import planned_subscriptions
 from finnos.lib.category_pace import monthly_pace
-from finnos.lib.competency import monthly_competency, credit_events
+from finnos.lib.competency import monthly_competency, credit_events, positive_category_slices
 from finnos.lib.transaction_amount import occurrence_amount as _amount
 from finnos.models.analytics import (
     BudgetRow,
@@ -230,7 +230,9 @@ async def flow(
             )
         )
     by_cat = monthly_competency(txs, cards, focus)["by_category"]
-    focus_expense = quantize_brl(sum(by_cat.values()))
+    # FIN-08: refunds may make a category negative. The signed values remain
+    # in net expense/budget, but "Onde foi o dinheiro" is a positive-spend
+    # breakdown and must not show negative bars or percentages above 100%.
     breakdown = [
         FlowCategory(
             category_id=key,
@@ -246,11 +248,9 @@ async def flow(
                 else "more-horizontal"
             ),
             total=quantize_brl(value),
-            percent=(
-                round(value / focus_expense * 100, 1) if focus_expense else D("0.0")
-            ),
+            percent=percent,
         )
-        for key, value in sorted(by_cat.items(), key=lambda kv: -kv[1])
+        for key, value, percent in positive_category_slices(by_cat)
     ]
     point = next((p for p in series if p.month == focus), None)
     return FlowOut(
