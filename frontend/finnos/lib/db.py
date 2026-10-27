@@ -384,15 +384,44 @@ class Collection:
 
     async def delete_one(self, query):
         uid = scoped(query)
+        op_id = query.get("_operation_id") if self.name == "transactions" else None
+        expected_version = query.get("_expected_version") if self.name == "transactions" else None
+        clean_query = {key: value for key, value in query.items() if not key.startswith("_")}
+        if op_id is not None:
+            resource_id(op_id)
+        if expected_version is not None and (
+            type(expected_version) is not int or expected_version < 1
+        ):
+            raise HTTPException(422, "Versão de exclusão inválida.")
 
         def write():
             db = client()
 
             def action(tr):
-                docs = [d for d in rows(db, uid, self.name, tr) if matches(d, query)]
+                receipt_ref = None
+                fingerprint = None
+                if op_id:
+                    receipt_key = hashlib.sha256(
+                        (self.name + ":delete:" + op_id).encode()
+                    ).hexdigest()
+                    receipt_ref = root(db, uid).collection("sync_receipts").document(receipt_key)
+                    fingerprint = hashlib.sha256(json.dumps(
+                        {"id": clean_query.get("id"), "version": expected_version},
+                        sort_keys=True,
+                    ).encode()).hexdigest()
+                    receipt = receipt_ref.get(transaction=tr)
+                    if receipt.exists:
+                        if receipt.to_dict().get("fingerprint") != fingerprint:
+                            raise HTTPException(409, "Identificador de exclusão reutilizado.")
+                        # If the first HTTP response was lost, do not delete
+                        # any additional record or report a false 404.
+                        return SimpleNamespace(deleted_count=1)
+                docs = [d for d in rows(db, uid, self.name, tr) if matches(d, clean_query)]
                 if not docs:
                     return SimpleNamespace(deleted_count=0)
                 doc = docs[0]
+                if expected_version is not None and doc.get("version", 1) != expected_version:
+                    raise HTTPException(409, "Conflito: lançamento alterado antes da exclusão.")
                 if self.name == "transactions":
                     validate_refs(db, uid, self.name, doc, tr, original_tx=doc)
                 if self.name == "cards" and doc.get("invoice_cycles"):
@@ -444,6 +473,11 @@ class Collection:
                     root(db, uid).collection(self.name).document(resource_id(doc["id"]))
                 )
                 record_event(tr, root(db, uid), self.name, "deleted", doc, None)
+                if receipt_ref is not None:
+                    tr.create(receipt_ref, {
+                        "fingerprint": fingerprint, "target_id": doc["id"],
+                        "operation": "transaction.delete",
+                    })
                 return SimpleNamespace(deleted_count=1)
 
             return atomic(db, uid, action)
