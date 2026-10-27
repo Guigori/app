@@ -152,6 +152,14 @@ def test_flow_breakdown_preserves_net_refunds_without_negative_bars(monkeypatch)
         kind: Collection(kind) for kind in docs
     }))
     monkeypatch.setattr(analytics, "today_iso", lambda: F["today"])
+    async def revision(uid):
+        assert uid == "owner"
+        return 1
+    async def history(uid, months, selected_cards, expected):
+        assert (uid, expected) == ("owner", 1)
+        return txs
+    monkeypatch.setattr(analytics, "finance_revision", revision)
+    monkeypatch.setattr(analytics, "read_projection_history", history)
     result = asyncio.run(analytics.flow(
         month=F["month"], months=2, from_month=None, to_month=None,
         category_id=None, user={"id": "owner"},
