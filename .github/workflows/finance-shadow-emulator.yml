@@ -53,4 +53,4 @@ jobs:
             --project demo-finnos \
             --config .github/test-fixtures/firebase.shadow.json \
             --only firestore \
-            'FIRESTORE_EMULATOR_HOST=127.0.0.1:8089 python -m pytest -q frontend/finnos/tests/test_finance_shadow_emulator_live.py'
+            'FIRESTORE_EMULATOR_HOST=127.0.0.1:8089 python -m pytest -q frontend/finnos/tests/test_finance_shadow_emulator_live.py frontend/finnos/tests/test_finance_shadow_emulator_routes.py'
