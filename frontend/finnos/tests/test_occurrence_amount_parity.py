@@ -55,6 +55,16 @@ def test_pending_legacy_installment_projects_in_flow_and_calendar(monkeypatch):
         subscriptions=Collection([]),
     ))
     monkeypatch.setattr(analytics, "today_iso", lambda: "2026-10-26")
+    async def revision(uid):
+        assert uid == "synthetic-uid"
+        return 1
+
+    async def history(uid, months, cards, expected):
+        assert (uid, months, expected) == ("synthetic-uid", ["2026-10"], 1)
+        return [tx]
+
+    monkeypatch.setattr(analytics, "finance_revision", revision)
+    monkeypatch.setattr(analytics, "read_projection_history", history)
     calendar = asyncio.run(analytics.calendar_month(
         month="2026-10", user={"id": "synthetic-uid"},
     ))
