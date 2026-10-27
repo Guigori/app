@@ -245,3 +245,9 @@ def test_source_count_is_in_integrity_checksum():
     tampered["source_count"] += 1
     assert snapshot_checksum(tampered) != snap["checksum"]
     assert reconcile_months(tampered, source, cards, 11)["match"] is False
+    # A self-consistent but incomplete candidate must still fail against the
+    # actual number of source transactions, not just against its own hash.
+    tampered["checksum"] = snapshot_checksum(tampered)
+    result = reconcile_months(tampered, source, cards, 11)
+    assert result["reason"] == "source_count_mismatch"
+    assert result["diffs"]["source_count"]["expected"] == len(source)
