@@ -82,12 +82,13 @@ async def list_cards(user: dict = Depends(require_user)) -> List[CardOut]:
 
 
 @router.post("", response_model=CardOut, status_code=201)
-async def create_card(payload: CardIn, user: dict = Depends(require_user)) -> CardOut:
+async def create_card(payload: CardIn, user: dict = Depends(require_user), x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80)) -> CardOut:
     """Create a UID-scoped Firestore card, checking payment account ownership atomically."""
     doc = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
         **payload.model_dump(),
+        **({"operation_id": x_finnos_operation_id} if x_finnos_operation_id else {}),
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
