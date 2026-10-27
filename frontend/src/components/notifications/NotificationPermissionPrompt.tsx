@@ -3,7 +3,7 @@ import { BellRing, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { fetchNotifications, fetchNotifyPrefs, fetchRadar } from "@/lib/data";
 import { isLocalMode } from "@/lib/mode";
-import { enablePush, pushAvailable } from "@/lib/push";
+import { enablePush, pushAvailable, pushServerAvailable } from "@/lib/push";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -52,11 +52,22 @@ export function NotificationPermissionPrompt() {
 
   useEffect(() => {
     if (!("Notification" in window)) return;
-    if (Notification.permission !== "default") return;
-    if (!shouldAskAgain()) return;
-    const timer = window.setTimeout(() => setOpen(true), 1200);
-    return () => window.clearTimeout(timer);
-  }, []);
+    if (Notification.permission !== "default" || !shouldAskAgain()) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const schedule = () => {
+      if (!cancelled) timer = window.setTimeout(() => setOpen(true), 1200);
+    };
+    // An unavailable dispatcher must not trigger a misleading permission modal.
+    if (local) schedule();
+    else void pushServerAvailable().then((available) => {
+      if (available) schedule();
+    });
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [local]);
 
   const activate = async () => {
     setWorking(true);
