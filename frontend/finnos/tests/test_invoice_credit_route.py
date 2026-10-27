@@ -85,6 +85,7 @@ def fixture(monkeypatch, *, paid=0):
     monkeypatch.setattr(store, "client", lambda: object())
     monkeypatch.setattr(store, "root", lambda instance, uid: owner)
     monkeypatch.setattr(store, "rows", lambda instance, uid, name, tr: txs if name == "transactions" else [])
+    monkeypatch.setattr(store, "card_purchase_rows", lambda instance, uid, card_id, tr: txs)
     monkeypatch.setattr(store, "atomic", lambda instance, uid, action: action(Transaction()))
     return initial
 
