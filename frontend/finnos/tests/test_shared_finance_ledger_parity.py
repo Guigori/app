@@ -9,10 +9,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from finnos.lib.competency import monthly_competency
+from finnos.lib.account_balances import AccountLedger
 from finnos.lib.money import cents
 from finnos.lib.stats import balance_effects
 from finnos.lib.subscription_projection import planned_subscriptions
-from finnos.routers import analytics
+from finnos.routers import analytics, dashboard
 
 
 FILE = Path(__file__).resolve().parents[2] / "fixtures" / "finance-ledger-parity.json"
@@ -51,6 +52,66 @@ def test_shared_monthly_competency_bank_ledger_and_future_subscription():
     assert len(forecast) == 1
     assert forecast[0][1].isoformat() == "2026-10-29"
     assert cents(forecast[0][0]["value"]) == cents(expected["projected_expense"])
+
+
+def test_account_ledger_and_dashboard_share_the_same_cash_total(monkeypatch):
+    txs, cards, _ = records()
+    ledger = AccountLedger(F["accounts"], F["today"])
+    for tx in txs:
+        ledger.add(tx)
+    expected = F["expected"]
+    assert cents(ledger.total_balance) == cents(expected["total_balance"])
+    for identifier, value in expected["balance_by_account"].items():
+        assert cents(ledger.result(identifier)[0]) == cents(value)
+
+    categories = [
+        {"id": "rent", "name": "Moradia", "group": "necessidades"},
+        {"id": "shopping", "name": "Compras", "group": "desejos"},
+    ]
+    docs = {
+        "accounts": F["accounts"], "categories": categories,
+        "transactions": txs, "cards": cards,
+    }
+
+    class Cursor:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def sort(self, *args):
+            return self
+
+        async def to_list(self, maximum, **kwargs):
+            return self.rows[:maximum]
+
+    class Collection:
+        def __init__(self, name):
+            self.name = name
+
+        def find(self, query):
+            assert query["user_id"] == "owner"
+            rows = docs[self.name]
+            if self.name == "transactions" and "date" in query:
+                low, high = query["date"]["$gte"], query["date"]["$lte"]
+                rows = [tx for tx in rows if low <= tx["date"] <= high]
+            return Cursor(rows)
+
+    monkeypatch.setattr(dashboard, "db", SimpleNamespace(**{
+        name: Collection(name) for name in docs
+    }))
+    monkeypatch.setattr(dashboard, "today_iso", lambda: F["today"])
+
+    async def maps(uid):
+        assert uid == "owner"
+        return (
+            {a["id"]: {"name": a["id"]} for a in F["accounts"]},
+            {cat["id"]: cat for cat in categories},
+        )
+
+    monkeypatch.setattr(dashboard, "_ref_maps", maps)
+    result = asyncio.run(dashboard.dashboard(month=F["month"], user={"id": "owner"}))
+    assert cents(result.total_balance) == cents(ledger.total_balance)
+    assert cents(result.income) == cents(expected["income"])
+    assert cents(result.expense) == cents(expected["expense"])
 
 
 def test_flow_breakdown_preserves_net_refunds_without_negative_bars(monkeypatch):
