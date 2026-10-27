@@ -106,3 +106,47 @@ def test_flow_totals_include_subscription_only_as_future_plan(monkeypatch):
     assert november.projected_expense == Decimal("49.90")
     assert november.expense == 0
     assert result.expense == 0
+
+
+
+def test_calendar_subscription_forecast_is_not_a_paid_purchase(monkeypatch):
+    docs = {
+        "transactions": [{
+            "id": "salary", "name": "Salário", "type": "receita",
+            "status": "pago", "date": "2026-10-05", "value": 2500,
+            "account_id": "bank",
+        }],
+        "cards": [], "subscriptions": [sub(next_charge="2026-10-29")],
+    }
+    class Cursor:
+        def __init__(self, rows): self.rows = rows
+        async def to_list(self, max_count): return self.rows
+    class Coll:
+        def __init__(self, name): self.name = name
+        def find(self, query):
+            assert query["user_id"] == "owner"
+            return Cursor(docs[self.name])
+
+    monkeypatch.setattr(analytics, "db", SimpleNamespace(**{
+        name: Coll(name) for name in docs
+    }))
+    monkeypatch.setattr(analytics, "today_iso", lambda: "2026-10-26")
+    calendar = asyncio.run(analytics.calendar_month(month="2026-10", user={"id": "owner"}))
+    day = next(item for item in calendar.days if item.date == "2026-10-29")
+    assert day.count == 0
+    assert day.income == 0
+    assert day.expense == 0
+    assert day.projected_expense == Decimal("49.90")
+    assert calendar.projected_expense == Decimal("49.90")
+    assert calendar.expense == 0
+
+    docs["transactions"].append({
+        "id": "scheduled", "name": "Netflix",
+        "type": "despesa", "status": "agendado",
+        "date": "2026-10-29", "value": 49.90, "account_id": "bank",
+        "category_id": "streaming", "card_id": None,
+    })
+    calendar = asyncio.run(analytics.calendar_month(month="2026-10", user={"id": "owner"}))
+    day = next(item for item in calendar.days if item.date == "2026-10-29")
+    assert day.count == 1
+    assert calendar.projected_expense == Decimal("49.90")
