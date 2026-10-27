@@ -190,25 +190,32 @@ export default function Transactions() {
     return f;
   }, [month, periodMode, rollingRange, scope, selectedDate, deferredSearch, type, status, categoryId, accountId]);
 
-  // Indexed cursor only for unfiltered, descending monthly views. Other
-  // views keep the legacy API until their filtered aggregates can migrate.
-  // Calendar totals never depend on how many pages have been loaded.
-  const pagedList = flowView === "lista" && periodMode === "month" && scope === "mes"
-    && !deferredSearch.trim() && type === "todos" && status === "todos"
-    && categoryId === "todas" && accountId === "todas" && sortDir === "desc"
-    && !highlightedTransactionId && online && !hasPendingSync;
+  // Paginate every online List filter using bounded Firestore date scans.
+  // Offline or unresolved sync entries keep the local overlay/legacy path;
+  // calendars and charts retain their independent aggregate data source.
+  const pagedList = flowView === "lista" && !highlightedTransactionId
+    && online && !hasPendingSync;
   const transactionsQuery = useQuery({
     queryKey: ["transactions", filters],
     queryFn: () => fetchTransactions(filters),
     enabled: !pagedList,
   });
   const pagesQuery = useInfiniteQuery({
-    queryKey: ["transactions", "pages", month],
-    queryFn: ({ pageParam }) => fetchTransactionsPage(month, pageParam ?? undefined, 50),
+    queryKey: ["transactions", "pages", filters, sortDir],
+    queryFn: ({ pageParam }) =>
+      fetchTransactionsPage(filters, pageParam ?? undefined, 50, sortDir),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor,
     enabled: pagedList,
   });
+  // Search may return zero matches in a bounded batch while more records
+  // remain. Advance the cursor rather than showing a misleading empty state.
+  useEffect(() => {
+    if (!pagedList || !pagesQuery.hasNextPage || pagesQuery.isFetching) return;
+    if (pagesQuery.data?.pages.at(-1)?.items.length === 0) {
+      void pagesQuery.fetchNextPage();
+    }
+  }, [pagedList, pagesQuery.data, pagesQuery.hasNextPage, pagesQuery.isFetching, pagesQuery.fetchNextPage]);
   const monthTransactions = transactionsQuery.data ?? [];
   const transactions = pagedList
     ? pagesQuery.data?.pages.flatMap(page => page.items) ?? []
@@ -243,12 +250,33 @@ export default function Transactions() {
   }, [transactions]);
 
   const dayFlow = calendar?.days.find((d) => d.date === selectedDate);
+  // Independent complete-calendar aggregation, never totals of partial
+  // transaction pages. Both months are needed for a 30-day rolling window.
+  const rollingStart = rollingRange.start.slice(0, 7);
+  const rollingEnd = rollingRange.end.slice(0, 7);
+  const rollingCalendarsQuery = useQuery({
+    queryKey: ["calendar", "rolling30", rollingStart, rollingEnd],
+    queryFn: async () => Promise.all(
+      [...new Set([rollingStart, rollingEnd])].map(fetchCalendar),
+    ),
+    enabled: periodMode === "rolling30" && scope === "mes" && pagedList,
+  });
   const periodTotals = useMemo(() => {
-    if (periodMode === "rolling30" && scope === "mes") {
-      return settledTotals(monthTransactions);
-    }
-    return null;
-  }, [periodMode, scope, monthTransactions]);
+    if (periodMode !== "rolling30" || scope !== "mes") return null;
+    if (!pagedList) return settledTotals(monthTransactions);
+    const days = (rollingCalendarsQuery.data ?? []).flatMap(c => c.days)
+      .filter(day => day.date >= rollingRange.start && day.date <= rollingRange.end);
+    return days.reduce(
+      (total, day) => ({
+        income: total.income + day.income,
+        expense: total.expense + day.expense,
+        projectedIncome: total.projectedIncome + day.projected_income,
+        projectedExpense: total.projectedExpense + day.projected_expense,
+      }),
+      { income: 0, expense: 0, projectedIncome: 0, projectedExpense: 0 },
+    );
+  }, [periodMode, scope, pagedList, monthTransactions,
+      rollingCalendarsQuery.data, rollingRange]);
 
   const strip =
     scope === "dia"
@@ -261,8 +289,8 @@ export default function Transactions() {
       : {
           income: periodTotals?.income ?? calendar?.income ?? 0,
           expense: periodTotals?.expense ?? calendar?.expense ?? 0,
-          projectedIncome: calendar?.projected_income ?? 0,
-          projectedExpense: calendar?.projected_expense ?? 0,
+          projectedIncome: periodTotals?.projectedIncome ?? calendar?.projected_income ?? 0,
+          projectedExpense: periodTotals?.projectedExpense ?? calendar?.projected_expense ?? 0,
         };
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
 
