@@ -7,6 +7,7 @@ from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, month_bounds, month_portion, months_between
 from finnos.lib.recurrence import monthly_projection_sources
+from finnos.lib.subscription_projection import planned_subscriptions
 from finnos.lib.category_pace import monthly_pace
 from finnos.lib.competency import monthly_competency, credit_events
 from finnos.models.analytics import (
@@ -189,8 +190,11 @@ async def flow(
         window += [add_months(focus, 1), add_months(focus, 2)]
     txs = await db.transactions.find({"user_id": user["id"]}).to_list(20000)
     cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
+    subscriptions = await db.subscriptions.find({"user_id": user["id"]}).to_list(500)
+    source_txs = txs  # preserve all bills for subscription duplicate detection
     if category_id:
         txs = [tx for tx in txs if tx.get("category_id") == category_id]
+        subscriptions = [sub for sub in subscriptions if sub.get("category_id") == category_id]
     categories = await db.categories.find({"user_id": user["id"]}).to_list(500)
     cat_by_id = {c["id"]: c for c in categories}
     today_month = today_iso()[:7]
@@ -213,6 +217,10 @@ async def flow(
                 p_income += _amount(source)
             else:
                 p_expense += _amount(source)
+        # Subscription is a plan, not a paid transaction. Add only future
+        # billing dates absent from explicit and recurring transactions.
+        for sub, _ in planned_subscriptions(subscriptions, source_txs, m, today_iso()):
+            p_expense += D(sub["value"])
         series.append(
             FlowPoint(
                 month=m,
