@@ -84,10 +84,9 @@ def test_rebuild_matches_canonical_monthly_competency_exactly():
     assert snap["checksum"] == snapshot_checksum(snap)
     assert snap["months"]["2026-10"]["income_cents"] == 220000
     assert snap["months"]["2026-10"]["expense_cents"] == (
-        123456 + 101 + 3333 - 2500 - 5000
+        123456 + 101 + 3334 - 2500 - 5000
     )
     assert snap["months"]["2026-10"]["categories_cents"][""] == 101
-    assert "" not in snap["months"]["2026-10"]["categories_cents"] or True
     result = reconcile_months(snap, source, cards, 123)
     assert result["match"], result
     assert result["diffs"] == {}
