@@ -4,6 +4,8 @@ from finnos.lib.money import D, quantize_brl
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
 from finnos.lib.db import db
+from finnos.lib.account_balances import finance_revision
+from finnos.lib.financial_summaries import stream_financial_window
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, month_bounds, month_portion, months_between
 from finnos.lib.recurrence import monthly_projection_sources
@@ -54,11 +56,12 @@ async def trends(
     """Income/expense/net per month, oldest first — powers the cash-flow table and bars."""
     last = end_month or today_iso()[:7]
     window = [add_months(last, -i) for i in range(months - 1, -1, -1)]
-    txs = await db.transactions.find({"user_id": user["id"]}).to_list(20000)
+    revision = await finance_revision(user["id"])
     cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
+    statement = await stream_financial_window(user["id"], window, cards, revision)
     rows: list[MonthTrend] = []
     for m in window:
-        monthly = monthly_competency(txs, cards, m)
+        monthly = statement.monthly(m)
         income, expense = monthly["income"], monthly["expense"]
         rows.append(
             MonthTrend(
