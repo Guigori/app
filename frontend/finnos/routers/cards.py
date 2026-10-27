@@ -84,6 +84,17 @@ async def _context_all_cards(user_id: str, cards: List[dict]) -> tuple[dict, dic
     return by_card, {a["id"]: a for a in accounts}
 
 
+async def _context(user_id: str) -> tuple[List[dict], dict]:
+    """Backward-compatible Radar/Simulation context, indexed by card.
+
+    These consumers still receive a flat purchase list, but this helper never
+    scans bank transactions or imposes the old 20k limit across all cards.
+    """
+    docs = await db.cards.find({"user_id": user_id}).to_list(200)
+    purchases, accounts = await _context_all_cards(user_id, docs)
+    return [tx for doc in docs for tx in purchases[doc["id"]]], accounts
+
+
 async def _context_one_card(user_id: str, card_id: str) -> tuple[List[dict], dict]:
     """Return only one card's purchases after an UID-scoped revision check.
 
