@@ -136,6 +136,17 @@ def test_emulator_real_finance_http_endpoints_and_offline_retries(monkeypatch):
                 f"/api/transactions/{purchase_id}",
                 json=update_data, headers=update_headers,
             ), 200)
+            # Another operation with an old offline base version must fail
+            # without advancing the canonical finance revision.
+            stale = await client.put(
+                f"/api/transactions/{purchase_id}",
+                json=payload("Compra importada", 300),
+                headers={
+                    "X-Finnos-Operation-Id": "stale-offline-edit",
+                    "X-Finnos-Base-Version": "1",
+                },
+            )
+            assert stale.status_code == 409
 
             credit_data = {
                 "cycle": "2026-10-29", "purchase_id": purchase_id,
@@ -173,6 +184,17 @@ def test_emulator_real_finance_http_endpoints_and_offline_retries(monkeypatch):
             require_status(await post(
                 "/api/cards/card/refunds", refund_data, "bank-refund-1",
             ), 200)
+            # A finalized purchase cannot be rewritten under a fresh offline
+            # operation ID after settlement.
+            changed_paid = await client.put(
+                f"/api/transactions/{purchase_id}",
+                json=payload("Compra alterada indevidamente", 250),
+                headers={
+                    "X-Finnos-Operation-Id": "edit-after-settlement",
+                    "X-Finnos-Base-Version": "2",
+                },
+            )
+            assert changed_paid.status_code == 409
 
             temp = require_status(await post(
                 "/api/transactions", payload(
