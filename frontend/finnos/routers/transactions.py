@@ -342,8 +342,21 @@ async def update_transaction(
 
 
 @router.delete("/{tx_id}", status_code=204)
-async def delete_transaction(tx_id: str, user: dict = Depends(require_user)) -> None:
-    result = await db.transactions.delete_one({"id": tx_id, "user_id": user["id"]})
+async def delete_transaction(
+    tx_id: str,
+    user: dict = Depends(require_user),
+    x_finnos_operation_id: Optional[str] = Header(default=None),
+    x_finnos_base_version: Optional[int] = Header(default=None),
+) -> None:
+    # SYNC-02: a lost DELETE response is safe to retry with the same
+    # operation ID. A concurrent update must block an old offline deletion.
+    # Without sync headers, preserve the original online API contract.
+    query = {"id": tx_id, "user_id": user["id"]}
+    if x_finnos_operation_id:
+        query["_operation_id"] = x_finnos_operation_id
+    if x_finnos_base_version is not None:
+        query["_expected_version"] = x_finnos_base_version
+    result = await db.transactions.delete_one(query)
     if not result.deleted_count:
         raise HTTPException(status_code=404, detail="Transação não encontrada.")
 
