@@ -34,8 +34,8 @@
 | ID | Escopo | Estado da branch | Prioridade | Evidência / lacuna |
 | --- | --- | --- | --- | --- |
 | ARQ-01 | Rotas Vercel de onboarding/instituições/APIs | Código implementado; falta E2E | P0 | Testes estáticos; smoke Preview autenticado pendente |
-| ARQ-02 | Consultas indexadas e agregados Firestore | Parcial | P0 | Fluxo/Orçamentos paginados; GET fatura e escritas de pagamento/estorno filtram card_id; Dashboard/Tendências consolidados. Agregados persistidos e outras rotas pendentes |
-| ARQ-03 | Paginação por cursor em todas as visualizações relevantes | Parcial | P0 | Fluxo/Orçamento V1 e V2/sugestão usam páginas internas; fatura escrita filtra por cartão dentro da transação. Calendário, listagem de cartões, FIINT e outras telas pendentes |
+| ARQ-02 | Consultas indexadas e agregados Firestore | Parcial | P0 | Calendário e lista de cartões paginados; protótipo incremental mensal e reconciliação read-only em shadow. Sem hooks de escrita ou uso em produção |
+| ARQ-03 | Paginação por cursor em todas as visualizações relevantes | Parcial | P0 | Calendário via histórico paginado; cartões via consulta indexada por cartão e revisão. FIINT, Radar, Simulação e outras telas ainda pendentes |
 | ARQ-04 | Núcleo financeiro compartilhado e versionado | Parcial | P0 | AccountLedger compartilhado por Contas/Dashboard, competência/fixtures; caixa projetado e ledger TS completo pendentes |
 | ARQ-05 | Build e lockfile determinísticos | Código implementado | P0 | npm ci/lockfile; conflito pywebpush/cryptography corrigido |
 | ARQ-06 | Job de notificações e transporte Push | Parcial; não ativo em produção | P1 | Contrato GET+Bearer, dispatcher e regras; VAPID/Preview/deploy pendentes |
@@ -56,7 +56,7 @@
 | ID | Escopo | Estado da branch | Prioridade | Relação / lacuna |
 | --- | --- | --- | --- | --- |
 | FNS-001 | Bloquear edição/exclusão de pagamento liquidado | Código implementado | P0 | FIN-01/02 e trilha de auditoria |
-| FNS-002 | Índices e agregados mensais Firestore | Parcial | P0 | Leitura mensal paginada (Dashboard/Tendências/sugestão), histórico projetado seletivo (Fluxo/Orçamentos) e índices por cartão nas faturas. Sem agregados materializados |
+| FNS-002 | Índices e agregados mensais Firestore | Parcial | P0 | Motor mensal incremental e persistência shadow opt-in; duplo scan de reconciliação implementado em código. Integração ativa ainda pendente |
 | FNS-003 | Dashboard Web v3, hooks e testes de renderização | Pendente de validação específica | P1 | UI Dashboard |
 | FNS-004 | FIINT no FastAPI | Pendente | P1 | ARQ-07 |
 | FNS-005 | Lançamentos pagos futuros | Código implementado | P0 | FIN-06 |
@@ -182,6 +182,14 @@ O arquivo original forneceu **grupos** de IDs e objetivos, não descrição indi
 - **Regressão adicional:** `test_invoice_payment_atomic_route.py` verifica idempotência do pagamento parcial, compra nova após antecipação, quitação na mesma fatura e ausência de débitos bancários repetidos, usando somente dados e transações Firestore sintéticos.
 - **Criação e edição de cartão:** `frontend/finnos/routers/cards.py::_context_one_card` passou a obter somente as compras do cartão criado/alterado, com a revisão financeira e a consulta indexada existente. `test_card_mutation_context.py` confirma que nenhuma leitura global de transações é necessária. A **listagem geral de cartões** continua com o caminho legado e requer lote específico.
 - **Pendências reais:** Firestore ainda cobra leitura de todo histórico por usuário no leitor de projeções; índices específicos, agregados financeiros incrementais/versionados, operações de fatura com mais de 20 mil compras no mesmo cartão, listagem geral de cartões e `/analytics/calendar` continuam fora deste lote. Validar tempo/índices em Preview com UID de teste autorizado. Nenhum código autorizou merge, mudança de Auth/Rules ou migração/correção dos dados reais.
+
+## Continuidade — Calendário, cartões e agregados mensais shadow (27/10/2026)
+
+- **Calendário:** calendar_month agora usa um único read_projection_history(uid,[mês],cards,revisão), removendo teto 5000 e rescans 20000. Entradas explícitas do mês alimentam dias; documentos originais de estornos e séries fixas antigas permanecem para cálculo de compensações e supressão de assinatura. Teste test_calendar_paged_history.py cobre 5009 eventos em um mês.
+- **Lista de cartões:** _context_all_cards usa read_card_purchases indexado para cada cartão, verificando finance_revision no início/fim. O contrato anterior _context foi restaurado para Radar/Simulação, mas usa essa seleção em vez de scan de todas as transações. Teste test_card_list_indexed.py cobre dois cartões e revisão concorrente. Trade-off: uma consulta paginada por cartão, não consulta única com batches.
+- **Agregador v1 somente código:** monthly_aggregate_shadow.py implementa deltas incrementais em centavos exatos para criação/edição/exclusão de lançamentos e mudanças de créditos/reembolsos. Reusa month_portion, installment indices e credit_events. Snapshot versionado com SHA-256, finance_revision e status shadow_only. O escritor stage_shadow_snapshot requer aprovação explícita e revisão vigente e escreve apenas namespace isolado; NÃO é chamado pelos endpoints ou pelo adaptador ativo.
+- **Reconciliação:** monthly_aggregate_shadow_reads.py reconstrói um candidato lendo todo o histórico em páginas de 300 e realiza uma segunda leitura independente com FinancialWindow, cruzando centavos, categorias, meses, contagens e revisão. Falha fechada em concorrência, drift e referências inválidas. Testes test_monthly_aggregate_shadow.py e test_monthly_aggregate_shadow_reads.py, inclusive >20k registros sintéticos.
+- **Gates antes do uso real:** homologar emulador/Preview com UID de teste, instrumentar todos os caminhos de escrita transacional e offline, certificar baseline por revisão, comparar dual-read no mesmo SHA e observar custo/latência. Não existe ativação automática nem alteração de saldos reais. ARQ-02/FNS-002 continuam parciais até integração e aceite; produção e regras permanecem inalteradas.
 
 ## Regra de manutenção
 Toda implementação futura deve atualizar a linha correspondente: **estado → arquivo/commit/teste → evidência Preview/Firestore → aceite**. Não apagar itens por parecerem duplicados; registrar a equivalência (ex.: FNS-021 ↔ FIN-15) e manter o vínculo. Alterar estados para "homologado" somente após os gates completos.
