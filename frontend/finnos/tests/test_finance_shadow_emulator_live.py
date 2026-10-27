@@ -129,12 +129,14 @@ def test_emulator_outbox_revision_replay_credit_and_second_pass(cloud, monkeypat
     # Replay from an independently seeded empty revision is exact for simple
     # transaction changes; card credits MUST force a full rebuild instead.
     empty = IncrementalMonthlyLedger().snapshot(0, source_count=0)
-    replayed = replay_shadow_events(
-        empty, events[:2], user_id="test-shadow-finance", target_revision=2
-    )
-    assert replayed["source_count"] == 1
-    assert replayed["months"]["2026-09"]["expense_cents"] == 33031
+    # Even before the explicit credit, a card purchase can reference
+    # adjustments recorded in another financial month.
     with pytest.raises(HTTPException) as requires_rebuild:
+        replay_shadow_events(
+            empty, events[:2], user_id="test-shadow-finance",
+            target_revision=2,
+        )
+    with pytest.raises(HTTPException):
         replay_shadow_events(
             empty, events, user_id="test-shadow-finance", target_revision=4
         )
