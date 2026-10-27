@@ -23,6 +23,7 @@ def tx(identifier, *, kind, value, when, category=None, card=None, **extra):
 def fake_db(monkeypatch, *, transactions, cards, categories):
     data = {
         "transactions": transactions, "cards": cards, "categories": categories,
+        "subscriptions": [],
     }
 
     class Find:
