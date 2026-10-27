@@ -3,3 +3,4 @@ firebase-admin==7.7.0
 
 cryptography>=44.0.0,<47
 uvicorn==0.52.1
+pywebpush==2.5.0
