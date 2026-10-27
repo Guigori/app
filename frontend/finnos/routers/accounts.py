@@ -4,7 +4,7 @@ from finnos.lib.money import D, quantize_brl
 import uuid
 from datetime import datetime, timezone
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Header
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import aware, balance_effects
@@ -90,12 +90,14 @@ async def get_account(
 
 @router.post("", response_model=AccountOut, status_code=201)
 async def create_account(
-    payload: AccountIn, user: dict = Depends(require_user)
+    payload: AccountIn, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80)
 ) -> AccountOut:
     doc = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
         **payload.model_dump(),
+        **({"operation_id": x_finnos_operation_id} if x_finnos_operation_id else {}),
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
