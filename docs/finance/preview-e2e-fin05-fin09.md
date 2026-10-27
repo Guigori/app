@@ -40,3 +40,68 @@ Regressões adicionadas **sem acessar Firestore real**:
 **Não substituir a homologação em Preview:** esses testes não comprovam autenticação,
 cabeçalhos de sessão, transações reais Firestore, permissão por UID ou integração da UI.
 O merge continua condicionado à matriz acima e à autorização explícita.
+
+
+## Plano de homologação ampliado — 27/10/2026
+
+**Somente Preview autenticado do SHA exato.** Esta matriz é um roteiro
+de execução, **não comprovação de que a execução remota ocorreu**.
+
+### Preparação
+- Usar UID de teste separado e identificado como sintético, previamente
+  autorizado, sem copiar cookies ou credenciais pessoais do titular.
+- Confirmar Preview READY e SHA no Vercel; testar login real no domínio exato
+  antes de gravar quaisquer dados.
+- Firestore Firebase Auth, regras, projetos e sessão existentes **não devem**
+  ser alterados para facilitar testes. Nenhuma escrita em produção.
+- Tirar inventário dos registros do UID de teste, com backup e plano de limpeza
+  restrito aos documentos sintéticos criados nessa sessão.
+
+### Jornada financeira sintética
+1. Conta bancária com saldo inicial **−R$ 500,23**; outra conta zerada;
+   verificar saldo inicial no Dashboard, API e modo local.
+2. Salário recebido R$ 3.000; despesa paga R$ 1.000;
+   transferir R$ 120 e conferir ambos os lados do lançamento.
+3. Cartão com limite e compras parceladas importadas 7/10;
+   conferir ciclos, centavos e limite disponível, sem duplicar parcelas.
+4. Pagar parcialmente fatura (R$ 40), adicionar nova compra no ciclo
+   aberto e confirmar saldo devedor, snapshot imutável e histórico.
+5. Registrar crédito comercial e reembolso bancário de fatura quitada;
+   verificar competência negativa na categoria, saldo bancário aumentado
+   apenas uma vez e Radar/Fluxo/Dashboard consistentes.
+6. Cadastrar assinatura mensal com cobrança dia 31 e anual;
+   confirmar projeção de fevereiro e supressão se existir lançamento
+   manual/agendado correspondente.
+7. Comparar faturas e extratos artificiais em
+   `POST /api/finance/reconciliation/preview`; divergências devem ser
+   **somente relatório**, sem completar pagamentos automaticamente.
+8. Consultar transações por período, busca, conta, categoria, status,
+   asc/desc; avançar mesmo em páginas sem resultados filtrados,
+   evitando duplicações e mantendo os totais do Calendário.
+9. Registrar offline, editar offline, tentar excluir offline com versão
+   armazenada, restabelecer a conexão e verificar FIFO, idempotência
+   da exclusão e tratamento de 409 / 422 sem descarte automático.
+10. Recarregar a sessão e repetir leituras; confirmar isolamento UID,
+    histórico auditável e nenhuma exposição de dados de outro usuário.
+
+### Evidências e critérios
+- Exigir **R$ 0,00** de diferença nas fixtures compartilhadas do backend
+  e modo local; documentar diferenças do Firestore real, se houver.
+- Fluxos de acesso não autenticado retornam 401 JSON e nunca HTML da SPA.
+- O teste unitário/integrado sintético no CI não substitui teste no Preview
+  autenticado. Não usar o smoke de Firestore ou qualquer conta pessoal como
+  substituto do UID sintético autorizado.
+- Capturar IDs de cada operação e dos recibos `sync_receipts`, hash SHA,
+  horário e status. Não expor tokens ou informações pessoais no relatório.
+- Se falhar, preservar registros de auditoria e abrir nova correção; nunca
+  limpar dados reais nem efetuar rollback de produção sem autorização.
+
+### Restrições verificadas no repositório
+- ARQ-06: `frontend/vercel.json` declara `crons: []`. O backend informa
+  que notificações Push remotas permanecem desabilitadas por falta de
+  dispatcher VAPID registrado. As notificações locais/central permanecem.
+- Cron Jobs da Vercel são associados a **deployments de produção**; um
+  Preview READY não prova que uma agenda antiga foi desativada. Verificar
+  Settings → Cron Jobs antes de liberação futura.
+- A consulta programática por uma URL protegida pode exigir autenticação
+  de Preview; não remover proteção nem inventar aprovação de E2E.
