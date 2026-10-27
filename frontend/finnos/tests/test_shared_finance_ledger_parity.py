@@ -188,6 +188,14 @@ def test_shared_ledger_calendar_uses_the_same_competency(monkeypatch):
         kind: Collection(kind) for kind in docs
     }))
     monkeypatch.setattr(analytics, "today_iso", lambda: F["today"])
+    async def revision(uid):
+        assert uid == "owner"
+        return 1
+    async def history(uid, months, selected_cards, expected):
+        assert (uid, expected, months) == ("owner", 1, [F["month"]])
+        return txs
+    monkeypatch.setattr(analytics, "finance_revision", revision)
+    monkeypatch.setattr(analytics, "read_projection_history", history)
     day = asyncio.run(analytics.calendar_month(month=F["month"], user={"id": "owner"}))
     expected = F["expected"]
     assert cents(day.income) == cents(expected["income"])
