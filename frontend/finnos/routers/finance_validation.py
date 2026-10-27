@@ -1,6 +1,9 @@
 """Authenticated, read-only Firestore finance validation endpoint."""
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import Field
+from finnos.lib.money import FinanceModel, Money
+from finnos.lib.reconciliation_preview import compare_invoice_evidence
 from starlette.concurrency import run_in_threadpool
 from finnos.lib.db import db
 from finnos.lib.finance_audit import KINDS, audit_finance
@@ -16,6 +19,35 @@ async def validation(user: dict = Depends(require_user)):
     for kind in KINDS:
         records[kind] = await getattr(db, kind).find({"user_id": uid}).to_list(20000)
     return audit_finance(records)
+
+
+class InvoiceEvidenceIn(FinanceModel):
+    card_id: str = Field(min_length=1, max_length=1500)
+    cycle: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    declared_invoice_total: Money = Field(ge=0)
+    declared_paid: Money = Field(ge=0)
+    reference: str | None = Field(default=None, max_length=100)
+
+
+class ReconciliationPreviewIn(FinanceModel):
+    invoices: list[InvoiceEvidenceIn] = Field(min_length=1, max_length=100)
+
+
+@router.post("/reconciliation/preview")
+async def reconciliation_preview(
+    input: ReconciliationPreviewIn, user: dict = Depends(require_user)
+):
+    """Compare imported statement amounts with current UID-scoped records.
+
+    Strictly read only. The caller's statement is not authenticated evidence
+    of a historical bank debit; never change a card cycle or bank balance.
+    """
+    uid = user["id"]
+    cards = await db.cards.find({"user_id": uid}).to_list(200)
+    txs = await db.transactions.find({"user_id": uid}).to_list(20000)
+    return compare_invoice_evidence(
+        cards, txs, [item.model_dump() for item in input.invoices]
+    )
 
 
 @router.get("/history")
