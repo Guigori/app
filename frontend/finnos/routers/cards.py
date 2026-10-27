@@ -72,6 +72,21 @@ async def _context(user_id: str) -> tuple[List[dict], dict]:
     return (txs, {a["id"]: a for a in accounts})
 
 
+async def _context_one_card(user_id: str, card_id: str) -> tuple[List[dict], dict]:
+    """Return only one card's purchases after an UID-scoped revision check.
+
+    Creating or editing a card must not reread every transaction from all
+    the user's other cards and bank accounts.
+    """
+    from finnos.lib.account_balances import finance_revision
+    from finnos.lib.card_transaction_reads import read_card_purchases
+
+    revision = await finance_revision(user_id)
+    accounts = await db.accounts.find({"user_id": user_id}).to_list(500)
+    purchases = await read_card_purchases(user_id, card_id, revision)
+    return purchases, {a["id"]: a for a in accounts}
+
+
 @router.get("", response_model=List[CardOut])
 async def list_cards(user: dict = Depends(require_user)) -> List[CardOut]:
     docs = (
@@ -93,7 +108,7 @@ async def create_card(payload: CardIn, user: dict = Depends(require_user), x_fin
         "updated_at": datetime.now(timezone.utc),
     }
     await db.cards.insert_one(doc)
-    txs, accounts = await _context(user["id"])
+    txs, accounts = await _context_one_card(user["id"], doc["id"])
     return await _build(doc, txs, accounts)
 
 
@@ -107,7 +122,7 @@ async def update_card(card_id: str, payload: CardIn, user: dict = Depends(requir
     if not result.matched_count:
         raise HTTPException(404, "Cartão não encontrado.")
     doc = await db.cards.find_one({"id": card_id, "user_id": user["id"]})
-    txs, accounts = await _context(user["id"])
+    txs, accounts = await _context_one_card(user["id"], doc["id"])
     return await _build(doc, txs, accounts)
 
 
