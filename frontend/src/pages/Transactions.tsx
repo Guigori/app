@@ -263,7 +263,7 @@ export default function Transactions() {
   });
   const periodTotals = useMemo(() => {
     if (periodMode !== "rolling30" || scope !== "mes") return null;
-    if (!pagedList) return settledTotals(monthTransactions);
+    if (!pagedList) return { ...settledTotals(monthTransactions), projectedIncome: calendar?.projected_income ?? 0, projectedExpense: calendar?.projected_expense ?? 0 };
     const days = (rollingCalendarsQuery.data ?? []).flatMap(c => c.days)
       .filter(day => day.date >= rollingRange.start && day.date <= rollingRange.end);
     return days.reduce(
