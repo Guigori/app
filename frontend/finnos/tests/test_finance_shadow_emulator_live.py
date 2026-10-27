@@ -20,6 +20,10 @@ from finnos.lib.account_balances import finance_revision
 from finnos.lib.monthly_aggregate_shadow_reads import (
     build_shadow_candidate, check_shadow_candidate,
 )
+from finnos.lib.monthly_aggregate_shadow import IncrementalMonthlyLedger
+from finnos.lib.finance_shadow_replay import replay_shadow_events
+from fastapi import HTTPException
+
 
 
 @pytest.fixture
@@ -122,6 +126,19 @@ def test_emulator_outbox_revision_replay_credit_and_second_pass(cloud, monkeypat
     assert events[1]["events"][0]["delta_months"]["2026-09"]["expense_cents"] == 3031
     assert events[2]["requires_rebuild"]
     assert events[3]["is_noop"]
+    # Replay from an independently seeded empty revision is exact for simple
+    # transaction changes; card credits MUST force a full rebuild instead.
+    empty = IncrementalMonthlyLedger().snapshot(0, source_count=0)
+    replayed = replay_shadow_events(
+        empty, events[:2], user_id="test-shadow-finance", target_revision=2
+    )
+    assert replayed["source_count"] == 1
+    assert replayed["months"]["2026-09"]["expense_cents"] == 33031
+    with pytest.raises(HTTPException) as requires_rebuild:
+        replay_shadow_events(
+            empty, events, user_id="test-shadow-finance", target_revision=4
+        )
+    assert requires_rebuild.value.status_code == 409
     assert not list(parent.collection("_finance_month_shadows_v1").limit(1).stream())
 
     # Read-only rebuild; the independent second scan uses the actual
