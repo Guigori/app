@@ -223,30 +223,47 @@ async def list_transactions(
 
 @router.get("/page")
 async def list_transactions_page(
-    month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
+    month: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    start_date: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    end_date: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    type: Optional[TxType] = Query(default=None),
+    status: Optional[TxStatus] = Query(default=None),
+    category_id: Optional[str] = Query(default=None, max_length=1500),
+    account_id: Optional[str] = Query(default=None, max_length=1500),
+    search: Optional[str] = Query(default=None, max_length=80),
+    sort_dir: str = Query(default="desc", pattern="^(asc|desc)$"),
     limit: int = Query(default=50, ge=1, le=100),
     cursor: Optional[str] = Query(default=None, max_length=1500),
     user: dict = Depends(require_user),
 ):
-    """Indexed, read-only monthly page using a Firestore document cursor.
+    """One bounded date-indexed scan; resume at the last examined document.
 
-    The existing /transactions array contract stays unchanged until UI
-    migration and aggregate tests. This endpoint deliberately requires a
-    bounded month and never streams all 20,000 user transactions.
+    Name searches, account OR and combined filters are applied on each bounded
+    batch because they cannot safely rely on undocumented composite indexes.
+    Empty matched pages can legitimately have next_cursor: clients continue
+    until it becomes null, never calculating totals from partial pages.
     """
     from finnos.lib import db as store
+    from finnos.lib.transaction_pages import (
+        transaction_date_window, bounded_scan_size, decode_page,
+    )
     from firebase_admin import firestore
     from starlette.concurrency import run_in_threadpool
 
-    start, end = month_bounds(month)
+    start, end = transaction_date_window(month, start_date, end_date)
     uid = store.scoped({"user_id": user["id"]})
+    filters = dict(kind=type, status=status, category_id=category_id,
+                   account_id=account_id, search=search.strip() if search else None)
+    scan_size = bounded_scan_size(limit, any(filters.values()))
+    direction = (firestore.Query.ASCENDING if sort_dir == "asc"
+                 else firestore.Query.DESCENDING)
 
     def read_page():
         collection = store.root(store.client(), uid).collection("transactions")
         query = (
             collection.where("date", ">=", start)
             .where("date", "<=", end)
-            .order_by("date", direction=firestore.Query.DESCENDING)
+            .order_by("date", direction=direction)
         )
         if cursor:
             previous = collection.document(store.resource_id(cursor)).get()
@@ -254,22 +271,23 @@ async def list_transactions_page(
                 raise HTTPException(422, "Cursor financeiro expirado ou inválido.")
             previous_date = (previous.to_dict() or {}).get("date")
             if not isinstance(previous_date, str) or not start <= previous_date <= end:
-                raise HTTPException(422, "Cursor não pertence ao mês solicitado.")
+                raise HTTPException(422, "Cursor não pertence ao período solicitado.")
             query = query.start_after(previous)
-        snapshots = list(query.limit(limit + 1).stream(timeout=15))
-        has_more = len(snapshots) > limit
-        selected = snapshots[:limit]
+        snapshots = list(query.limit(scan_size).stream(timeout=15))
+        selected, next_cursor = decode_page(
+            snapshots, limit=limit, filters=filters, scan_size=scan_size,
+        )
         docs = [
-            dict(store.decode(snapshot.to_dict()), id=snapshot.id, user_id=uid)
-            for snapshot in selected
+            dict(store.decode(snap.to_dict()), id=snap.id, user_id=uid)
+            for snap in selected
         ]
-        return docs, (selected[-1].id if has_more and selected else None)
+        return docs, next_cursor
 
     docs, next_cursor = await run_in_threadpool(read_page)
     accounts_by_id, categories_by_id = await _ref_maps(uid)
     cards_by_id = await _cards_by_id(uid)
     return {
-        "month": month,
+        "month": month or start[:7],
         "items": [
             enrich_transaction(doc, accounts_by_id, categories_by_id, cards_by_id)
             for doc in docs
