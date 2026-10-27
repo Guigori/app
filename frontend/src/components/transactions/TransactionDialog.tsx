@@ -85,6 +85,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   });
   const lockedSyncAttempt = Boolean(syncOperationId && (syncReviewQuery.data?.attempts ?? 0) > 0);
   const conflicted = syncReviewQuery.data?.status === "conflict";
+  const reviewingOfflineDelete = syncReviewQuery.data?.kind === "transaction.delete";
 
   useEffect(() => {
     if (!open) return;
@@ -267,9 +268,11 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="font-heading">{transaction ? "Editar transação" : "Nova transação"}</DialogTitle>
+          <DialogTitle className="font-heading">{reviewingOfflineDelete ? "Revisar exclusão pendente" : transaction ? "Editar transação" : "Nova transação"}</DialogTitle>
           <DialogDescription>
-            Registre receitas, despesas e transferências com status, categoria e parcelamento.
+            {reviewingOfflineDelete
+              ? "Esta exclusão é protegida por versão e pode já ter sido aplicada no servidor. Confira o histórico antes de descartar."
+              : "Registre receitas, despesas e transferências com status, categoria e parcelamento."}
           </DialogDescription>
         </DialogHeader>
 
@@ -288,7 +291,36 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
             )}
           </div>
         )}
-        {accounts.length === 0 && !accountsQuery.isPending ? (
+        {reviewingOfflineDelete ? (
+          <div className="space-y-3 rounded-xl border p-4" data-testid="tx-offline-delete-review">
+            <p className="text-sm font-medium">Exclusão de lançamento aguardando reconciliação</p>
+            <p className="text-sm text-muted-foreground">
+              Lançamento: {syncReviewQuery.data?.payload.name ?? "Desconhecido"}
+              {syncReviewQuery.data?.entityId ? " · ID: " + syncReviewQuery.data.entityId : ""}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              O servidor pode ter recebido a operação mesmo que a resposta tenha falhado.
+              Não registre ou exclua novamente antes de verificar o Histórico.
+            </p>
+            {conflicted && (
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" data-testid="tx-copy-delete-review"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(JSON.stringify(syncReviewQuery.data, null, 2));
+                      toast.success("Detalhes da exclusão copiados.");
+                    } catch {
+                      setFormError("Não foi possível copiar o registro.");
+                    }
+                  }}>Copiar dados</Button>
+                <Button type="button" variant="destructive" data-testid="tx-discard-delete-review"
+                  onClick={() => setConfirmDiscard(true)}>Descartar tentativa local</Button>
+              </div>
+            )}
+            {formError ? <p role="alert" className="text-sm text-destructive">{formError}</p> : null}
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Fechar</Button>
+          </div>
+        ) : accounts.length === 0 && !accountsQuery.isPending ? (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-foreground" data-testid="tx-no-accounts-warning">
             Cadastre uma conta bancária antes de registrar movimentações.{" "}
             <Link to="/contas" className="font-semibold text-primary hover:underline">
@@ -612,7 +644,9 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       open={confirmDiscard}
       onOpenChange={setConfirmDiscard}
       title="Descartar tentativa de sincronização?"
-      description="Esta ação remove a cópia pendente neste aparelho e libera os próximos envios. Ela não exclui nada do servidor, mas o lançamento pode ser perdido se nunca tiver sido recebido. Confira no histórico financeiro e copie os dados antes de confirmar."
+      description={reviewingOfflineDelete
+        ? "Descartar a tentativa local não restaura dados já excluídos no servidor. Confira no histórico e copie o registro antes de liberar as operações seguintes."
+        : "Esta ação remove a cópia pendente neste aparelho e libera os próximos envios. Ela não exclui nada do servidor, mas o lançamento pode ser perdido se nunca tiver sido recebido. Confira no histórico financeiro e copie os dados antes de confirmar."}
       confirmLabel="Descartar tentativa"
       destructive
       loading={discardMutation.isPending}
