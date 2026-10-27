@@ -34,9 +34,9 @@
 | ID | Escopo | Estado da branch | Prioridade | Evidência / lacuna |
 | --- | --- | --- | --- | --- |
 | ARQ-01 | Rotas Vercel de onboarding/instituições/APIs | Código implementado; falta E2E | P0 | Testes estáticos; smoke Preview autenticado pendente |
-| ARQ-02 | Consultas indexadas e agregados Firestore | Parcial | P0 | Transações e lookup por ID; contas/faturas/agregados ainda têm scans |
+| ARQ-02 | Consultas indexadas e agregados Firestore | Parcial | P0 | Contas: ledger paginado por ID sem limite 20k, com revisão; ainda O(N) leituras. Dashboard/faturas/agregados pendentes |
 | ARQ-03 | Paginação por cursor em todas as visualizações relevantes | Parcial | P0 | Lista de transações paginada; outras telas ainda usam legado |
-| ARQ-04 | Núcleo financeiro compartilhado e versionado | Parcial | P0 | Competência e fixtures; ledger central completo pendente |
+| ARQ-04 | Núcleo financeiro compartilhado e versionado | Parcial | P0 | AccountLedger compartilhado por Contas/Dashboard, competência/fixtures; caixa projetado e ledger TS completo pendentes |
 | ARQ-05 | Build e lockfile determinísticos | Código implementado | P0 | npm ci/lockfile; conflito pywebpush/cryptography corrigido |
 | ARQ-06 | Job de notificações e transporte Push | Parcial; não ativo em produção | P1 | Contrato GET+Bearer, dispatcher e regras; VAPID/Preview/deploy pendentes |
 | ARQ-07 | FIINT no FastAPI ativo; arquivar backend legado | Pendente | P1 | Migrar contratos e testes antes de desativar legado |
@@ -56,7 +56,7 @@
 | ID | Escopo | Estado da branch | Prioridade | Relação / lacuna |
 | --- | --- | --- | --- | --- |
 | FNS-001 | Bloquear edição/exclusão de pagamento liquidado | Código implementado | P0 | FIN-01/02 e trilha de auditoria |
-| FNS-002 | Índices e agregados mensais Firestore | Parcial | P0 | ARQ-02/03 |
+| FNS-002 | Índices e agregados mensais Firestore | Parcial | P0 | ARQ-02/03; saldo de contas paginado sem truncar, agregados materializados ainda pendentes |
 | FNS-003 | Dashboard Web v3, hooks e testes de renderização | Pendente de validação específica | P1 | UI Dashboard |
 | FNS-004 | FIINT no FastAPI | Pendente | P1 | ARQ-07 |
 | FNS-005 | Lançamentos pagos futuros | Código implementado | P0 | FIN-06 |
@@ -143,7 +143,7 @@ O arquivo original forneceu **grupos** de IDs e objetivos, não descrição indi
 ## Evidências técnicas verificadas nesta conferência
 - PR #47 HEAD `f9da102a8c2f8214b45b6f6a7fcb4e5f173cd853` antes da criação deste documento.
 - Regressões nesse SHA: **207 testes Python, 113 testes frontend**, typecheck e build aprovados; adaptador Firestore **sintético**, não E2E real.
-- `frontend/finnos/routers/accounts.py` ainda possui leitura de até 20.000 transações por usuário na agregação de contas: ARQ-02 não está concluído.
+- `frontend/finnos/routers/accounts.py` agora usa `stream_account_balances` (páginas de 300), sem teto 20.000; **ainda percorre todo o histórico** e precisa de agregados persistentes após validação. Dashboard/Fluxo e outros módulos ainda têm `to_list(20000)`: ARQ-02 permanece parcial.
 - `frontend/finnos/models/cards.py` e `frontend/src/components/cards/CardDialog.tsx` ainda não expõem regra por cartão para compra no dia de fechamento: FIN-15/FNS-021 pendentes.
 - `.github/workflows/quality.yml` usa GET + Bearer para o dispatcher, mas não comprova agendamento efetivo em produção.
 - O Preview READY visto anteriormente correspondia a SHA mais antigo; não é homologação do HEAD.
@@ -156,6 +156,14 @@ O arquivo original forneceu **grupos** de IDs e objetivos, não descrição indi
 - **Corrigido em código:** a lista de categorias do Fluxo reutiliza o cálculo de pesos positivos já existente no Dashboard; estornos que tornem uma categoria negativa **continuam no gasto líquido real**, mas não produzem barra negativa ou percentual maior que 100%. Testes de integração Python/TS usam o ledger sintético compartilhado.
 - **Estado:** FIN-07/08/ARQ-04 continuam **parciais**. Não refazer estes patches; seguir para centralização do ledger/caixa, consultas agregadas, faturas históricas e E2E Firestore real. Não afirmar homologação no Preview sem SHA exato e UID de teste autorizado.
 - **Validação:** workflows no SHA `e7f7ef51d0bbac24e73e92fa9d0cd6a3ba5f3ff8` foram aprovados. Os commits posteriores de categorias e testes exigem novo CI no SHA final.
+
+## Continuidade — ledger paginado de contas e Dashboard (27/10/2026)
+
+- **Implementado:** `frontend/finnos/lib/account_balances.py` define `AccountLedger`, que reutiliza `balance_effects` para saldos, entradas e saídas em `Decimal`. `/accounts` faz leitura paginada por `__name__` (300 documentos por página) sem truncar após 20 mil. O Dashboard reutiliza o mesmo ledger puro para o saldo total, mantendo sua consulta legada de competência até a próxima etapa.
+- **Integridade:** revisão financeira capturada **antes** de ler os saldos iniciais e revalidada após o histórico; uma escrita concorrente pelo adaptador resulta em HTTP 409 em vez de exibir saldo parcial. Movimento liquidado com conta ausente resulta em 409; registro monetário corrompido resulta em 503.
+- **Testes:** `test_account_balances_streaming.py` cobre mais de 20 mil lançamentos sintéticos, transferências, pagamento de fatura, saldo negativo, histórico legado, UID, corrupção e concorrência; `test_shared_finance_ledger_parity.py` compara Dashboard/contas com a fixture compartilhada.
+- **Limitação importante:** paginação reduz uso de memória e remove o limite rígido de 20 mil, **mas não reduz o número total de leituras históricas**. Índices/agregados incrementais, tempo de resposta real e regras de consistência sob escrita direta externa continuam pendentes. Não alterar saldos armazenados ou criar eventos compensatórios automaticamente.
+- **Gate:** testes do SHA final, Preview do mesmo SHA e E2E com UID sintético autorizado ainda são necessários para homologação; nenhuma mudança em Auth/Rules ou produção.
 
 ## Regra de manutenção
 Toda implementação futura deve atualizar a linha correspondente: **estado → arquivo/commit/teste → evidência Preview/Firestore → aceite**. Não apagar itens por parecerem duplicados; registrar a equivalência (ex.: FNS-021 ↔ FIN-15) e manter o vínculo. Alterar estados para "homologado" somente após os gates completos.
