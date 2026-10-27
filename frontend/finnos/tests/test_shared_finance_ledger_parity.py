@@ -65,8 +65,10 @@ def test_account_ledger_and_dashboard_share_the_same_cash_total(monkeypatch):
         assert cents(ledger.result(identifier)[0]) == cents(value)
 
     categories = [
-        {"id": "rent", "name": "Moradia", "group": "necessidades"},
-        {"id": "shopping", "name": "Compras", "group": "desejos"},
+        {"id": "rent", "name": "Moradia", "group": "necessidades",
+         "color": "#070F52", "icon": "home"},
+        {"id": "shopping", "name": "Compras", "group": "desejos",
+         "color": "#070F52", "icon": "bag"},
     ]
     docs = {
         "accounts": F["accounts"], "categories": categories,
