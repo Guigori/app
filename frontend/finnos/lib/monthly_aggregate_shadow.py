@@ -150,23 +150,23 @@ class IncrementalMonthlyLedger:
             engine.card_credits_changed(None, card, originals)
         return engine
 
-    def snapshot(self, revision: int) -> dict:
+    def snapshot(self, revision: int, *, source_count: int | None = None) -> dict:
         if type(revision) is not int or revision < 0:
             raise ValueError("Revisão financeira inválida.")
+        if source_count is not None and (type(source_count) is not int or source_count < 0):
+            raise ValueError("Contagem de histórico inválida.")
         rows = {month: item.row()
                 for month, item in sorted(self.months.items())}
-        canonical = json.dumps(
-            {"schema_version": SCHEMA_VERSION, "finance_revision": revision,
-             "months": rows},
-            sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-        )
-        return {
+        result = {
             "schema_version": SCHEMA_VERSION,
             "finance_revision": revision,
             "status": "shadow_only",
             "months": rows,
-            "checksum": hashlib.sha256(canonical.encode()).hexdigest(),
         }
+        if source_count is not None:
+            result["source_count"] = source_count
+        result["checksum"] = snapshot_checksum(result)
+        return result
 
 
 def snapshot_checksum(snapshot: dict) -> str:
@@ -175,6 +175,9 @@ def snapshot_checksum(snapshot: dict) -> str:
         "finance_revision": snapshot["finance_revision"],
         "months": snapshot["months"],
     }
+    # Include source count when present; it is part of historical coverage.
+    if "source_count" in snapshot:
+        payload["source_count"] = snapshot["source_count"]
     canonical = json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
     )
@@ -227,7 +230,8 @@ def reconcile_months(
 
 
 def stage_shadow_snapshot(transaction, parent, snapshot: dict, expected_revision: int,
-                          *, approval: bool = False) -> None:
+                          *, approval: bool = False,
+                          verification_report: dict | None = None) -> None:
     """Opt-in shadow writer: unreachable from live routers.
 
     Revision guard uses the same transaction as shadow writes. The candidate
@@ -240,6 +244,18 @@ def stage_shadow_snapshot(transaction, parent, snapshot: dict, expected_revision
             or snapshot.get("schema_version") != SCHEMA_VERSION
             or snapshot.get("checksum") != snapshot_checksum(snapshot)):
         raise HTTPException(409, "Agregado incompatível com a revisão financeira.")
+    # No shadow writes unless a separate pass against the canonical finance
+    # compiler independently verified the *same* checksum, revision and all
+    # candidate months. Even a manual opt-in cannot bypass reconciliation.
+    report = verification_report or {}
+    if (report.get("match") is not True
+            or report.get("finance_revision") != expected_revision
+            or report.get("candidate_checksum") != snapshot["checksum"]
+            or report.get("production_eligible") is not False
+            or report.get("diffs") != {}
+            or sorted(report.get("checked_months") or []) != sorted(snapshot["months"])
+            or report.get("source_count") != snapshot.get("source_count")):
+        raise HTTPException(409, "Agregado sem reconciliação completa do histórico.")
     rev_doc = parent.collection("_meta").document("finance").get(transaction=transaction)
     current = (rev_doc.to_dict() or {}).get("revision", 0) if rev_doc.exists else 0
     if current != expected_revision:
