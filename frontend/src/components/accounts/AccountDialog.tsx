@@ -69,7 +69,11 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
 
   const mutation = useMutation({
     mutationFn: async (input: AccountInput) => {
-      const resolved = await resolveInstitutionChoice(institutionChoice, input.institution, institutions);
+      // Offline registration is a draft. Do not attempt to create a related
+      // financial institution before the primary entity has been synced.
+      const resolved = !navigator.onLine && !account
+        ? { institution: input.institution, institution_id: institutionChoice === "new" ? null : input.institution_id }
+        : await resolveInstitutionChoice(institutionChoice, input.institution, institutions);
       const payload = { ...input, ...resolved };
       return account ? updateAccount(account.id, payload) : createAccount(payload);
     },
@@ -83,7 +87,16 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
       ]);
       onOpenChange(false);
     },
-    onError: (error) => setFormError(getApiErrorMessage(error)),
+    onError: (error) => {
+      if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+        toast.info("Cadastro de conta salvo neste aparelho", {
+          description: "Aguardando sincronização. Ainda não está confirmado no servidor.",
+        });
+        onOpenChange(false);
+        return;
+      }
+      setFormError(getApiErrorMessage(error));
+    },
   });
 
   const submit = () => {
