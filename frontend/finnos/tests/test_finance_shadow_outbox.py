@@ -85,7 +85,9 @@ def test_multiple_transaction_changes_are_cent_exact_in_one_revision(emulator):
     assert document["previous_revision"] == 7
     assert document["finance_revision"] == 8
     assert document["user_id"] == "test-owner"
-    assert not document["requires_rebuild"]
+    # Card purchases may have historical credits in other months; never
+    # replay their delta without a full rebuild.
+    assert document["requires_rebuild"]
     assert len(document["events"]) == 2
     events = document["events"]
     assert events[0]["delta_months"]["2026-09"]["expense_cents"] == 30000
