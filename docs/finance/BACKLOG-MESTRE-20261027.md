@@ -16,7 +16,7 @@
 | --- | --- | --- | --- | --- |
 | FIN-01 | Estados de faturas; priorizar fechada não paga | Código implementado | P0 | Fatura aberta/fechada/paga/parcial/atrasada; falta E2E |
 | FIN-02 | Compra após pagamento parcial/antecipado | Código implementado | P0 | Regressão sintética; falta Firestore real |
-| FIN-03 | Séries recorrentes estáveis e sem duplicação | Parcial | P0 | Deduplicação inicial; IDs e edição por escopo pendentes |
+| FIN-03 | Séries recorrentes estáveis e sem duplicação | Parcial | P0 | Leitura paginada preserva fontes fixas legadas e supressão por ocorrências; IDs e edição por escopo pendentes |
 | FIN-04 | Parcelamento em andamento k/n | Código implementado | P0 | Testes de parcelas; importação real pendente |
 | FIN-05 | Estornos sem receita bancária fictícia | Parcial | P0 | Crédito comercial e reembolso bancário; ciclo futuro/E2E pendentes |
 | FIN-06 | Pagamento futuro não inflar saldo realizado | Código implementado | P0 | Bloqueio e testes; histórico legado requer revisão |
@@ -26,7 +26,7 @@
 | FIN-10 | Saldo inicial negativo | Código implementado | P0 | API, formulário, modo local e testes |
 | FIN-11 | Arredondamento monetário em centavos | Código implementado | P0 | HALF_UP e fixtures cruzadas |
 | FIN-12 | Radar: parcelas, recorrências e alertas | Parcial | P1 | Competência/estornos ajustados; periodicidade completa pendente |
-| FIN-13 | Assinaturas em projeções e orçamento | Parcial | P0 | Projeções implementadas; paridade/E2E pendentes |
+| FIN-13 | Assinaturas em projeções e orçamento | Parcial | P0 | Leitura paginada mantém deduplicação por lançamentos explícitos e séries antigas; E2E pendente |
 | FIN-14 | Parcelas e recorrências no mês correto | Parcial | P0 | Calendário parcialmente ajustado; saldo diário futuro completo pendente |
 | FIN-15 | Regra de compra no dia de fechamento por cartão | Pendente | P1 | Contrato, persistência, backend, modo local, UI e testes |
 
@@ -34,8 +34,8 @@
 | ID | Escopo | Estado da branch | Prioridade | Evidência / lacuna |
 | --- | --- | --- | --- | --- |
 | ARQ-01 | Rotas Vercel de onboarding/instituições/APIs | Código implementado; falta E2E | P0 | Testes estáticos; smoke Preview autenticado pendente |
-| ARQ-02 | Consultas indexadas e agregados Firestore | Parcial | P0 | Dashboard/Tendências: resumo em scan paginado único, sem 20k; GET fatura filtra card_id indexado. Fluxo/rotas de escrita e agregados persistidos pendentes |
-| ARQ-03 | Paginação por cursor em todas as visualizações relevantes | Parcial | P0 | Lista de transações paginada; Dashboard/Tendências e fatura específica fazem leitura paginada. Fluxo, orçamento e outras telas ainda usam legado |
+| ARQ-02 | Consultas indexadas e agregados Firestore | Parcial | P0 | Fluxo/Orçamentos paginados; GET fatura e escritas de pagamento/estorno filtram card_id; Dashboard/Tendências consolidados. Agregados persistidos e outras rotas pendentes |
+| ARQ-03 | Paginação por cursor em todas as visualizações relevantes | Parcial | P0 | Fluxo/Orçamento V1 e V2/sugestão usam páginas internas; fatura escrita filtra por cartão dentro da transação. Calendário, listagem de cartões, FIINT e outras telas pendentes |
 | ARQ-04 | Núcleo financeiro compartilhado e versionado | Parcial | P0 | AccountLedger compartilhado por Contas/Dashboard, competência/fixtures; caixa projetado e ledger TS completo pendentes |
 | ARQ-05 | Build e lockfile determinísticos | Código implementado | P0 | npm ci/lockfile; conflito pywebpush/cryptography corrigido |
 | ARQ-06 | Job de notificações e transporte Push | Parcial; não ativo em produção | P1 | Contrato GET+Bearer, dispatcher e regras; VAPID/Preview/deploy pendentes |
@@ -56,7 +56,7 @@
 | ID | Escopo | Estado da branch | Prioridade | Relação / lacuna |
 | --- | --- | --- | --- | --- |
 | FNS-001 | Bloquear edição/exclusão de pagamento liquidado | Código implementado | P0 | FIN-01/02 e trilha de auditoria |
-| FNS-002 | Índices e agregados mensais Firestore | Parcial | P0 | ARQ-02/03; resumo mensal em memória durante scan único, sem persistência incremental. Fatura GET filtra por cartão; outros caminhos pendentes |
+| FNS-002 | Índices e agregados mensais Firestore | Parcial | P0 | Leitura mensal paginada (Dashboard/Tendências/sugestão), histórico projetado seletivo (Fluxo/Orçamentos) e índices por cartão nas faturas. Sem agregados materializados |
 | FNS-003 | Dashboard Web v3, hooks e testes de renderização | Pendente de validação específica | P1 | UI Dashboard |
 | FNS-004 | FIINT no FastAPI | Pendente | P1 | ARQ-07 |
 | FNS-005 | Lançamentos pagos futuros | Código implementado | P0 | FIN-06 |
@@ -143,7 +143,7 @@ O arquivo original forneceu **grupos** de IDs e objetivos, não descrição indi
 ## Evidências técnicas verificadas nesta conferência
 - PR #47 HEAD `f9da102a8c2f8214b45b6f6a7fcb4e5f173cd853` antes da criação deste documento.
 - Regressões nesse SHA: **207 testes Python, 113 testes frontend**, typecheck e build aprovados; adaptador Firestore **sintético**, não E2E real.
-- `frontend/finnos/routers/accounts.py` usa `stream_account_balances` (300 registros/página), sem teto 20.000; Dashboard/Tendências usam `stream_financial_window` e fatura GET usa leitor indexado por cartão. **Fluxo, orçamento e processamento de faturas com escrita ainda usam `to_list(20000)` ou `rows`**: ARQ-02 permanece parcial. Resumos de leitura ainda percorrem todo o histórico.
+- `frontend/finnos/routers/accounts.py` usa `stream_account_balances` (300 registros/página); Dashboard/Tendências/sugestão usam `stream_financial_window`; Fluxo/Orçamento usam `read_projection_history` (páginas de 300 sem limite 20.000). GET de fatura e escrita de pagamento/crédito/reembolso usam filtros `card_id` indexados. **Calendário, listagem de cartões, outras rotas e agregados persistidos continuam pendentes**. Projeções ainda percorrem todos os documentos no Firestore, mas só retêm os necessários.
 - `frontend/finnos/models/cards.py` e `frontend/src/components/cards/CardDialog.tsx` ainda não expõem regra por cartão para compra no dia de fechamento: FIN-15/FNS-021 pendentes.
 - `.github/workflows/quality.yml` usa GET + Bearer para o dispatcher, mas não comprova agendamento efetivo em produção.
 - O Preview READY visto anteriormente correspondia a SHA mais antigo; não é homologação do HEAD.
@@ -172,6 +172,14 @@ O arquivo original forneceu **grupos** de IDs e objetivos, não descrição indi
 - **Faturas (GET):** `/cards/{card_id}/invoice` utiliza `read_card_purchases` com filtro `card_id` indexado por Firestore e páginas de 300 em ordem documental. Não mistura compras de outros cartões, mantém compras antigas de parcelas futuras e verifica revisão ao concluir. As operações **de pagamento, créditos, reembolsos e a listagem geral de cartões** continuam com as leituras legadas: não estão otimizadas neste lote.
 - **Testes novos:** `test_financial_window_streaming.py` valida paridade contra `monthly_competency`, 20.007 movimentos, receitas sem reembolso fictício, parcelas antigas, ordenação de recentes, UID e escrita concorrente; `test_card_transaction_reads.py` cobre mais de 20 mil compras, isolamento por cartão/UID e revisão financeira. `test_shared_finance_ledger_parity.py` passa pelo novo Dashboard.
 - **Gates pendentes:** nenhum agregado financeiro materializado foi gravado no Firestore; persiste custo O(histórico) no Dashboard/Tendências. Não há evidência de E2E autorizado com Firestore real/Preview do SHA final. Próximas frentes: Fluxo e Orçamento com projeções/recorrência sem perda de contexto, consultas transacionais de fatura com consistência e arquitetura de agregados incrementais versionados. Produção, Auth, Rules e dados reais inalterados.
+
+## Continuidade — Fluxo, Orçamento e escrita atômica de faturas (27/10/2026)
+
+- **Fluxo e Orçamento V1/V2:** `frontend/finnos/lib/projection_reads.py` varre o UID em páginas de 300 e só mantém em memória lançamentos do período, **todas** as fontes fixas, **todas** as parcelas e compras originais referenciadas por créditos/reembolsos. Esse conjunto é suficiente para `monthly_competency`, `monthly_pace`, `monthly_projection_sources`, `planned_subscriptions`, `_occurrences_in_cycle` e projeções de orçamento sem apagar precedência de parcelas antigas. O Fluxo (inclusive filtragem de categoria), Orçamento mensal e progresso do Orçamento V2 agora usam essa consulta sob revisão financeira.
+- **Sugestão de orçamento:** eliminada leitura histórica inteira em memória, reutilizando o `FinancialWindow` mensal em uma passagem paginada para calcular exatamente os três meses anteriores (com créditos bancários fora de receita salarial).
+- **Pagamentos/estornos/reembolsos:** criada `finnos.lib.db.card_purchase_rows` para buscar **somente compras do cartão** no índice `card_id`, usando a **mesma transação Firestore** de pagamento/crédito/reembolso. Regras imutáveis, idempotência, cálculo `invoice_state`, snapshots históricos e efeitos bancários não foram alterados. Manteve-se o limite conservador de 20.000 compras **do mesmo cartão** por transação: acima disso a escrita falha explicitamente com 413 e não executa pagamento parcial. Não realizar prefetch fora de transação de escrita.
+- **Testes de segurança e regressão:** `test_projection_reads.py` cobre >20 mil registros, recorrência legada, mês explicitamente agendado, parcelas históricas, categoria de estorno, UID e alteração concorrente; `test_card_atomic_queries.py` comprova filtro por cartão, operação dentro da transação, limite fail-closed e rejeição de dados incorretos. Testes existentes de Fluxo, assinaturas, reembolsos e Orçamento V2 foram adaptados à nova interface e continuam exercitando cálculos idênticos.
+- **Pendências reais:** Firestore ainda cobra leitura de todo histórico por usuário no leitor de projeções; índices específicos, agregados financeiros incrementais/versionados, operações de fatura com mais de 20 mil compras no mesmo cartão, listagem geral de cartões e `/analytics/calendar` continuam fora deste lote. Validar tempo/índices em Preview com UID de teste autorizado. Nenhum código autorizou merge, mudança de Auth/Rules ou migração/correção dos dados reais.
 
 ## Regra de manutenção
 Toda implementação futura deve atualizar a linha correspondente: **estado → arquivo/commit/teste → evidência Preview/Firestore → aceite**. Não apagar itens por parecerem duplicados; registrar a equivalência (ex.: FNS-021 ↔ FIN-15) e manter o vínculo. Alterar estados para "homologado" somente após os gates completos.
