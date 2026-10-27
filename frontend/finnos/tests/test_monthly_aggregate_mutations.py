@@ -17,7 +17,7 @@ from finnos.lib.monthly_aggregate_mutations import apply_shadow_mutations
 def money_tx(identifier, *, value=100, kind="despesa", when="2026-09-15",
              category="shopping", **kwargs):
     return {
-        "id": identifier, "name": identifier, "date": when,
+        "id": identifier, "user_id": "shadow-uid", "name": identifier, "date": when,
         "value": Decimal(str(value)), "type": kind, "status": "pago",
         "account_id": "bank", "category_id": category, **kwargs,
     }
@@ -29,7 +29,7 @@ def initial():
                       when="2026-10-05", category=None)
     bank_debit = money_tx("invoice-payment", value="300.00",
                           when="2026-10-07", invoice_payment=True)
-    card = {"id": "card", "name": "Cartão", "invoice_adjustments": {},
+    card = {"id": "card", "user_id": "shadow-uid", "name": "Cartão", "invoice_adjustments": {},
             "invoice_refunds": {}}
     transactions = {x["id"]: x for x in (original, salary, bank_debit)}
     cards = {card["id"]: card}
@@ -42,7 +42,7 @@ def initial():
 def _step(ledger, transactions, cards, changes=None, card_changes=None,
           revision=1):
     result = apply_shadow_mutations(
-        ledger, transactions, cards, before_revision=revision,
+        ledger, transactions, cards, user_id="shadow-uid", before_revision=revision,
         after_revision=revision + 1, transaction_changes=changes,
         card_changes=card_changes,
     )
@@ -120,6 +120,7 @@ def test_offline_replay_stale_preimage_is_rejected_without_double_count():
     with pytest.raises(ValueError, match="Criação repetida"):
         apply_shadow_mutations(
             result.ledger, result.transactions, result.cards,
+            user_id="shadow-uid",
             transaction_changes=[(None, imported)],
             before_revision=2, after_revision=3,
         )
@@ -142,7 +143,7 @@ def test_referencing_deleted_original_fails_without_touching_previous_snapshot()
     before_snapshot = ledger.snapshot(1)
     with pytest.raises(ValueError, match="compra original"):
         apply_shadow_mutations(
-            ledger, txs, cards,
+            ledger, txs, cards, user_id="shadow-uid",
             transaction_changes=[(original, None)],
             card_changes=[(card_before, revised_card)],
             before_revision=1, after_revision=2,
@@ -152,17 +153,31 @@ def test_referencing_deleted_original_fails_without_touching_previous_snapshot()
     assert cards["card"]["invoice_adjustments"] == {}
 
 
+def test_foreign_uid_cannot_contaminate_incremental_totals():
+    ledger, txs, cards = initial()
+    before = ledger.snapshot(1)
+    fake = money_tx("injection", value="9999.99")
+    fake["user_id"] = "another-user"
+    with pytest.raises(ValueError, match="outro usuário"):
+        apply_shadow_mutations(
+            ledger, txs, cards, user_id="shadow-uid",
+            transaction_changes=[(None, fake)],
+            before_revision=1, after_revision=2,
+        )
+    assert ledger.snapshot(1) == before
+
+
 def test_card_credit_revision_must_be_consecutive_and_preimage_exact():
     ledger, txs, cards = initial()
     with pytest.raises(ValueError, match="consecutiva"):
         apply_shadow_mutations(
-            ledger, txs, cards,
+            ledger, txs, cards, user_id="shadow-uid",
             transaction_changes=[(None, money_tx("bonus", kind="receita"))],
             before_revision=1, after_revision=3,
         )
     with pytest.raises(ValueError, match="desatualizada"):
         apply_shadow_mutations(
-            ledger, txs, cards,
+            ledger, txs, cards, user_id="shadow-uid",
             transaction_changes=[(
                 {**txs["salary"], "value": Decimal("1")},
                 {**txs["salary"], "value": Decimal("2")},
@@ -171,7 +186,7 @@ def test_card_credit_revision_must_be_consecutive_and_preimage_exact():
         )
     with pytest.raises(ValueError, match="duplicada"):
         apply_shadow_mutations(
-            ledger, txs, cards,
+            ledger, txs, cards, user_id="shadow-uid",
             transaction_changes=[
                 (None, money_tx("bonus")),
                 (None, money_tx("bonus")),
