@@ -1,8 +1,9 @@
 {
   "framework": "vite",
+  "crons": [],
   "routes": [
     {
-      "src": "/api/(auth/(me|firebase-session|logout|firestore-smoke)|accounts(?:/.*)?|institutions(?:/.*)?|onboarding(?:/.*)?|categories(?:/.*)?|transactions(?:/.*)?|dashboard|analytics(?:/.*)?|cards(?:/.*)?|notifications(?:/.*)?|push(?:/.*)?|subscriptions(?:/.*)?|budgets(?:/.*)?|goals(?:/.*)?|radar(?:/.*)?|ai(?:/.*)?|simulate(?:/.*)?|finance/(integrity|history)|validation/finance(?:/.*)?)",
+      "src": "/api/(auth/(me|firebase-session|logout|firestore-smoke)|accounts(?:/.*)?|institutions(?:/.*)?|onboarding(?:/.*)?|categories(?:/.*)?|transactions(?:/.*)?|dashboard|analytics(?:/.*)?|cards(?:/.*)?|notifications(?:/.*)?|push(?:/.*)?|subscriptions(?:/.*)?|budgets(?:/.*)?|goals(?:/.*)?|radar(?:/.*)?|ai(?:/.*)?|simulate(?:/.*)?|finance/(integrity|history|reconciliation/preview)|validation/finance(?:/.*)?)",
       "dest": "/api"
     },
     {
