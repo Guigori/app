@@ -9,7 +9,7 @@ from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_UP
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Header
 from pydantic import Field
 
 from finnos.lib.db import db
@@ -136,12 +136,13 @@ async def get_subscription(subscription_id: str, user: dict = Depends(require_us
 
 
 @router.post("", response_model=SubscriptionItem, status_code=201)
-async def create_subscription(payload: SubscriptionIn, user: dict = Depends(require_user)):
+async def create_subscription(payload: SubscriptionIn, user: dict = Depends(require_user), x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80)):
     uid = user["id"]
     maps = await _validate(uid, payload)
     now = datetime.now(timezone.utc)
     document = {
         **payload.model_dump(),
+        **({"operation_id": x_finnos_operation_id} if x_finnos_operation_id else {}),
         "id": str(uuid.uuid4()), "user_id": uid,
         "created_at": now, "updated_at": now,
     }
