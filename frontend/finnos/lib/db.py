@@ -144,6 +144,27 @@ def rows(db, uid, name, transaction=None):
     return docs
 
 
+
+def matching_rows(db, uid, name, query, transaction=None):
+    """Read a UID-scoped document directly when filtering by exact ID.
+
+    The old adapter streamed up to 20,001 documents for a single account,
+    category, card or transaction update. Exact-ID reads preserve all other
+    predicates and avoid per-record collection scans. Complex queries keep
+    the original adapter until an indexed equivalent is proven.
+    """
+    key = query.get("id")
+    if isinstance(key, str):
+        snapshot = (
+            root(db, uid).collection(name)
+            .document(resource_id(key)).get(transaction=transaction)
+        )
+        if not snapshot.exists:
+            return []
+        document = dict(decode(snapshot.to_dict()), id=snapshot.id, user_id=uid)
+        return [document] if matches(document, query) else []
+    return [doc for doc in rows(db, uid, name, transaction) if matches(doc, query)]
+
 def atomic(db, uid, action):
     @firestore.transactional
     def execute(transaction):
@@ -262,6 +283,12 @@ class Collection:
         return Cursor(self, query)
 
     async def find_one(self, query, sort=None):
+        uid = scoped(query)
+        if not sort and isinstance(query.get("id"), str):
+            def single():
+                docs = matching_rows(client(), uid, self.name, query)
+                return docs[0] if docs else None
+            return await run_in_threadpool(single)
         cursor = self.find(query)
         if sort: cursor.sort(sort)
         docs = await cursor.to_list(20000)
@@ -338,7 +365,7 @@ class Collection:
             db = client()
 
             def action(tr):
-                docs = [d for d in rows(db, uid, self.name, tr) if matches(d, query)]
+                docs = matching_rows(db, uid, self.name, query, tr)
                 if not docs and not upsert:
                     return SimpleNamespace(matched_count=0)
                 doc = docs[0] if docs else dict(query, id=str(uuid.uuid4()))
@@ -416,7 +443,7 @@ class Collection:
                         # If the first HTTP response was lost, do not delete
                         # any additional record or report a false 404.
                         return SimpleNamespace(deleted_count=1)
-                docs = [d for d in rows(db, uid, self.name, tr) if matches(d, clean_query)]
+                docs = matching_rows(db, uid, self.name, clean_query, tr)
                 if not docs:
                     return SimpleNamespace(deleted_count=0)
                 doc = docs[0]
