@@ -201,9 +201,15 @@ def atomic(db, uid, action):
         revision = root(db, uid).collection("_meta").document("finance")
         before = revision.get(transaction=transaction)
         version = (before.to_dict() or {}).get("revision", 0)
-        result = action(transaction)
-        transaction.set(revision, {"revision": version + 1})
-        return result
+        from finnos.lib import finance_shadow_outbox
+        token = finance_shadow_outbox.begin(uid, version)
+        try:
+            result = action(transaction)
+            finance_shadow_outbox.finish(transaction, root(db, uid), version)
+            transaction.set(revision, {"revision": version + 1})
+            return result
+        finally:
+            finance_shadow_outbox.end(token)
 
     return execute(db.transaction(max_attempts=5))
 
