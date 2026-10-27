@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
+import { toast } from "sonner";
 import { Pencil, Plus, Repeat, Search, Trash2 } from "lucide-react";
 import {
   createSubscription,
@@ -56,8 +57,15 @@ export default function Subscriptions() {
       setSelectedId(result.id);
       await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
       closeEditor();
-    } catch {
-      setError("Não foi possível salvar a assinatura. Verifique a conta, o cartão e a conexão.");
+    } catch (error) {
+      if (!editing && error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+        toast.info("Assinatura salva neste aparelho", {
+          description: "Cadastro aguardando sincronização, ainda não confirmado no servidor.",
+        });
+        closeEditor();
+      } else {
+        setError("Não foi possível salvar a assinatura. Verifique a conta, o cartão e a conexão.");
+      }
     } finally {
       setSaving(false);
     }
