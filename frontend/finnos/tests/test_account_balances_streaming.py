@@ -91,11 +91,13 @@ def account(identifier, opening=0):
 
 
 def paid(identifier, kind, value, account_id="bank", **kwargs):
-    return {
+    row = {
         "id": identifier, "type": kind, "status": "pago",
         "date": "2026-10-25", "value_cents": value,
-        "account_id": account_id, "card_id": None, **kwargs,
+        "account_id": account_id, "card_id": None,
     }
+    row.update(kwargs)
+    return row
 
 
 def test_over_20000_movements_preserve_every_cent_without_materializing_history(monkeypatch):
@@ -110,7 +112,6 @@ def test_over_20000_movements_preserve_every_cent_without_materializing_history(
         {"id": "legacy", "type": "despesa", "status": "pago",
          "date": "2026-10-25", "value_cents": 25, "account_id": "bank"},
     ]
-    # Avoid duplicate keyword arguments while building synthetic fixtures.
     metrics, token = setup(monkeypatch, rows)
     try:
         opening = [account("bank", "-500.23"), account("wallet")]
