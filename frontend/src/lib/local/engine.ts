@@ -95,6 +95,17 @@ function firstRemainingInstallment(tx: { current_installment?: number | null; to
   return current - 1;
 }
 
+/** One occurrence, including imported k/n rows without installment_value.
+ * Mirror: finnos.lib.transaction_amount.occurrence_amount. Never project a
+ * missing installment as R$ 0,00; preserve an explicitly stored legacy value.
+ */
+export function occurrenceAmount(tx: Pick<Transaction, "value"> &
+  Partial<Pick<Transaction, "installment" | "total_installments" | "current_installment" | "installment_value">>): number {
+  if (!tx.installment) return round2(tx.value);
+  if (tx.installment_value != null) return round2(tx.installment_value);
+  return installmentPortion(tx.value, tx.total_installments ?? 1, firstRemainingInstallment(tx));
+}
+
 function monthsBetween(a: string, b: string): number {
   const [ya, ma] = [Number(a.slice(0, 4)), Number(a.slice(5, 7))];
   const [yb, mb] = [Number(b.slice(0, 4)), Number(b.slice(5, 7))];
@@ -778,7 +789,7 @@ export function localFlow(params: FlowParams): Flow {
   const creditEvents = localCreditEvents(db).filter(item => !params.category_id || item.category_id === params.category_id);
   const todayMonth = todayISO().slice(0, 7);
 
-  const amount = (t: Transaction) => round2(t.installment ? t.installment_value ?? 0 : t.value);
+  const amount = occurrenceAmount;
   const recurrenceKey = (t: Transaction): string => JSON.stringify([
     t.type, t.account_id, t.card_id, t.category_id, t.name.trim().toLowerCase(),
   ]);
@@ -898,7 +909,7 @@ export function localCalendar(month: string): CalendarMonth {
       { date: tx.date, income: 0, expense: 0, projected_income: 0, projected_expense: 0, count: 0, active_count: 0 };
     day.count += 1;
     if (tx.type !== "transferencia" && !tx.invoice_payment && !tx.invoice_refund) {
-      const value = round2(tx.installment ? installmentPortion(tx.value, tx.total_installments ?? 1, firstRemainingInstallment(tx)) : tx.value);
+      const value = occurrenceAmount(tx);
       if (tx.status === "pago") {
         if (tx.type === "receita") day.income = round2(day.income + value);
         else day.expense = round2(day.expense + value);
