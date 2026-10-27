@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from finnos.lib.db import db
 from finnos.lib.account_balances import finance_revision
 from finnos.lib.financial_summaries import stream_financial_window
+from finnos.lib.projection_reads import read_projection_history
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, month_bounds, month_portion, months_between
 from finnos.lib.recurrence import monthly_projection_sources
@@ -91,8 +92,9 @@ async def budget(
         .sort("created_at", 1)
         .to_list(500)
     )
-    txs = await db.transactions.find({"user_id": user["id"]}).to_list(20000)
+    revision = await finance_revision(user["id"])
     cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
+    txs = await read_projection_history(user["id"], [m], cards, revision)
     monthly = monthly_competency(txs, cards, m)
     spent_by_cat, income = monthly["by_category"], monthly["income"]
     adjustments = credit_events(cards, txs)
@@ -185,9 +187,14 @@ async def flow(
     else:
         window = [add_months(focus, -i) for i in range(months - 1, -1, -1)]
         window += [add_months(focus, 1), add_months(focus, 2)]
-    txs = await db.transactions.find({"user_id": user["id"]}).to_list(20000)
+    revision = await finance_revision(user["id"])
     cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
     subscriptions = await db.subscriptions.find({"user_id": user["id"]}).to_list(500)
+    # Keep historical recurrence anchors, imported installments and refund
+    # originals while discarding unrelated one-off months after each page.
+    txs = await read_projection_history(
+        user["id"], list(dict.fromkeys([*window, focus])), cards, revision,
+    )
     source_txs = txs  # preserve all bills for subscription duplicate detection
     if category_id:
         txs = [tx for tx in txs if tx.get("category_id") == category_id]
