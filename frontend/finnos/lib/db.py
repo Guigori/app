@@ -145,6 +145,36 @@ def rows(db, uid, name, transaction=None):
 
 
 
+def card_purchase_rows(db, uid, card_id, transaction):
+    """Read only this card's purchases *inside* the finance transaction.
+
+    Preserve the existing 20k fail-closed write limit, but no longer scan
+    every bank movement and other card to calculate one invoice. Unlike a
+    non-transactional prefetch, these rows share the atomic revision and
+    Firestore's conflict/retry semantics with the actual payment or credit.
+    No date filter: old purchases may have installments in recent invoices.
+    """
+    scoped({"user_id": uid})
+    resource_id(card_id)
+    snapshots = (
+        root(db, uid).collection("transactions")
+        .where("card_id", "==", card_id)
+        .limit(20001)
+        .stream(transaction=transaction, timeout=15)
+    )
+    docs = []
+    for snap in snapshots:
+        raw = snap.to_dict()
+        if not isinstance(raw, dict) or raw.get("card_id") != card_id:
+            raise HTTPException(503, "Compra de cartão inválida.")
+        docs.append(dict(decode(raw), id=snap.id, user_id=uid))
+        if len(docs) > 20000:
+            raise HTTPException(
+                413, "Fatura excede o limite transacional; nenhuma alteração foi aplicada."
+            )
+    return docs
+
+
 def matching_rows(db, uid, name, query, transaction=None):
     """Read a UID-scoped document directly when filtering by exact ID.
 
