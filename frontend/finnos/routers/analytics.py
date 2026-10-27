@@ -8,7 +8,7 @@ from finnos.lib.account_balances import finance_revision
 from finnos.lib.financial_summaries import stream_financial_window
 from finnos.lib.projection_reads import read_projection_history
 from finnos.lib.dates import today_iso
-from finnos.lib.stats import add_months, month_bounds, month_portion, months_between
+from finnos.lib.stats import add_months, month_portion, months_between
 from finnos.lib.recurrence import monthly_projection_sources
 from finnos.lib.subscription_projection import planned_subscriptions
 from finnos.lib.category_pace import monthly_pace
@@ -288,10 +288,16 @@ async def calendar_month(
 ) -> CalendarOut:
     """Per-day entradas/saídas of the month, plus what is still only expected."""
     m = month or today_iso()[:7]
-    start, end = month_bounds(m)
-    txs = await db.transactions.find(
-        {"user_id": user["id"], "date": {"$gte": start, "$lte": end}}
-    ).to_list(5000)
+    # Capture revision before cards/subscriptions. The projection scan keeps
+    # the current month's entries, fixed historical series and original card
+    # purchases referenced by refunds, avoiding three inconsistent reads.
+    revision = await finance_revision(user["id"])
+    cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
+    subscriptions = await db.subscriptions.find(
+        {"user_id": user["id"]}
+    ).to_list(500)
+    history = await read_projection_history(user["id"], [m], cards, revision)
+    txs = [tx for tx in history if tx.get("date", "")[:7] == m]
     buckets: dict[str, DayFlow] = {}
     for tx in txs:
         day = buckets.setdefault(
@@ -323,7 +329,6 @@ async def calendar_month(
     # FIN-08/14: reverse a purchase as a negative expense on the actual
     # compensation date. An invoice bank refund must not be counted as new
     # salary or income, even when the original purchase was in a prior month.
-    cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
     if any(
         entry.get("date", "")[:7] == m
         for card in cards
@@ -331,10 +336,7 @@ async def calendar_month(
         for events in (card.get(ledger) or {}).values()
         for entry in events
     ):
-        originals = await db.transactions.find(
-            {"user_id": user["id"]}
-        ).to_list(20000)
-        for credit in credit_events(cards, originals):
+        for credit in credit_events(cards, history):
             day_key = credit["date"]
             if day_key[:7] != m:
                 continue
@@ -351,17 +353,11 @@ async def calendar_month(
             # count; do not duplicate it on the calendar.
     # A subscription is a forecast only. It does not turn into a bank debit,
     # and an existing or recurring transaction suppresses its projection.
-    subscriptions = await db.subscriptions.find(
-        {"user_id": user["id"]}
-    ).to_list(500)
     if subscriptions:
-        # Historical fixed expenses may already forecast the same plan; the
-        # current-month subset alone cannot detect such a prior recurring row.
-        all_txs = await db.transactions.find(
-            {"user_id": user["id"]}
-        ).to_list(20000)
+        # Historical fixed expenses suppress double forecasting even if their
+        # original date is years before this calendar month.
         for sub, charge in planned_subscriptions(
-            subscriptions, all_txs, m, today_iso()
+            subscriptions, history, m, today_iso()
         ):
             key = charge.isoformat()
             day = buckets.setdefault(
