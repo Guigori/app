@@ -5,6 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
+from finnos.lib.account_balances import AccountLedger
 from finnos.lib.stats import add_months, balance_effects, month_bounds, month_portion
 from finnos.lib.competency import monthly_competency, positive_category_slices
 from finnos.models.finnos import CategorySlice, DashboardOut, RuleItem
@@ -34,10 +35,13 @@ async def dashboard(
     txs = await db.transactions.find({"user_id": user_id}).to_list(20000)
     cards = await db.cards.find({"user_id": user_id}).to_list(200)
     cat_by_id = {c["id"]: c for c in categories}
-    total_balance = sum((D(a.get("initial_balance") or D("0.0")) for a in accounts))
+    # Same canonical cash ledger used by /accounts, rather than a second
+    # implementation of balance math. Dashboard's competency scan is still
+    # legacy and will be paginated separately before exceeding 20k rows.
+    cash_ledger = AccountLedger(accounts, today)
     for tx in txs:
-        for _acc, amount in balance_effects(tx, today):
-            total_balance += amount
+        cash_ledger.add(tx)
+    total_balance = cash_ledger.total_balance
     month_actual = monthly_competency(txs, cards, m)
     last_actual = monthly_competency(txs, cards, prev_month)
     income, expense = month_actual["income"], month_actual["expense"]
