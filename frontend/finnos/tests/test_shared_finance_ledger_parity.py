@@ -53,6 +53,43 @@ def test_shared_monthly_competency_bank_ledger_and_future_subscription():
     assert cents(forecast[0][0]["value"]) == cents(expected["projected_expense"])
 
 
+def test_flow_breakdown_preserves_net_refunds_without_negative_bars(monkeypatch):
+    txs, cards, subs = records()
+    categories = [
+        {"id": "rent", "name": "Moradia", "color": "#070F52", "icon": "home"},
+        {"id": "shopping", "name": "Compras", "color": "#070F52", "icon": "bag"},
+    ]
+    docs = {"transactions": txs, "cards": cards, "subscriptions": subs,
+            "categories": categories}
+
+    class Cursor:
+        def __init__(self, rows):
+            self.rows = rows
+
+        async def to_list(self, maximum):
+            return self.rows[:maximum]
+
+    class Collection:
+        def __init__(self, name):
+            self.name = name
+
+        def find(self, query):
+            assert query["user_id"] == "owner"
+            return Cursor(docs[self.name])
+
+    monkeypatch.setattr(analytics, "db", SimpleNamespace(**{
+        kind: Collection(kind) for kind in docs
+    }))
+    monkeypatch.setattr(analytics, "today_iso", lambda: F["today"])
+    result = asyncio.run(analytics.flow(
+        month=F["month"], months=2, from_month=None, to_month=None,
+        category_id=None, user={"id": "owner"},
+    ))
+    assert cents(result.expense) == cents(F["expected"]["expense"])
+    assert [(row.category_id, cents(row.total), row.percent)
+            for row in result.categories] == [("rent", 100000, 100)]
+
+
 def test_shared_ledger_calendar_uses_the_same_competency(monkeypatch):
     txs, cards, subs = records()
     docs = {"transactions": txs, "cards": cards, "subscriptions": subs}
