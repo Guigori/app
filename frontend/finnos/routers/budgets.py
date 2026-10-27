@@ -9,6 +9,7 @@ from finnos.lib.dates import today_iso
 from finnos.lib.recurrence import projections_in_period
 from finnos.lib.subscription_projection import planned_subscriptions_in_period
 from finnos.lib.competency import credit_events, monthly_competency
+from finnos.lib.transaction_amount import occurrence_amount as _tx_amount
 from finnos.models.budget import BudgetAllocationOut, BudgetAllocationProgress, BudgetCycleIn, BudgetCycleOut, BudgetCycleProgress
 from finnos.routers.auth import require_user
 router = APIRouter(prefix='/budgets', tags=['budgets'])
@@ -29,9 +30,6 @@ async def _out(cycle: dict) -> BudgetCycleOut:
     allocations = [BudgetAllocationOut(**allocation, name=by_id.get(allocation['category_id'], {}).get('name'), icon=by_id.get(allocation['category_id'], {}).get('icon'), color=by_id.get(allocation['category_id'], {}).get('color')) for allocation in cycle.get('allocations', [])]
     payload = {k: v for (k, v) in cycle.items() if k not in {'_id', 'user_id', 'allocations', 'status'}}
     return BudgetCycleOut(**payload, allocations=allocations, status=_status(cycle, date.fromisoformat(today_iso())))
-
-def _tx_amount(tx: dict) -> float:
-    return quantize_brl(D(tx.get('installment_value') or 0)) if tx.get('installment') else quantize_brl(D(tx.get('value') or 0))
 
 def _occurrences_in_cycle(tx: dict, start: date, end: date):
     if tx.get('invoice_payment') or tx.get('invoice_refund') or tx.get('type') == 'transferencia':
