@@ -66,9 +66,7 @@ async def build_shadow_candidate(
             raise HTTPException(409, str(exc)) from exc
         if _revision(parent) != expected_revision:
             raise HTTPException(409, "Histórico alterado durante o recálculo.")
-        snapshot = engine.snapshot(expected_revision)
-        snapshot["source_count"] = count
-        return snapshot
+        return engine.snapshot(expected_revision, source_count=count)
 
     return await run_in_threadpool(read)
 
@@ -138,6 +136,7 @@ async def check_shadow_candidate(
             "match": not mismatches, "finance_revision": expected_revision,
             "checked_months": sorted(set(months) | touched),
             "source_count": source_count, "diffs": mismatches,
+            "candidate_checksum": candidate["checksum"],
             "production_eligible": False,
         }
 
