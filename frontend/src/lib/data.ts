@@ -7,7 +7,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { localRadar } from "@/lib/local/radar";
 import { isLocalMode, getMode } from "@/lib/mode";
 import { loadSessionProfile } from "@/lib/profileIdentity";
-import { queueTransaction, queueTransactionDelete, queueEntityCreate, flushSyncQueue, listSyncOperations, type OperationSource } from "@/lib/sync/queue";
+import { queueTransaction, queueTransactionDelete, queueEntityCreate, flushSyncQueue, listSyncOperations, isTransactionSyncOperation, type OperationSource } from "@/lib/sync/queue";
 import { cacheSet, cachedFetch } from "@/lib/offline/accountCache";
 import {
   localFinanceHistory,
@@ -177,7 +177,7 @@ function applyPendingToDashboard(base: Dashboard, pending: { id: string; payload
 export async function fetchDashboard(month: string | null): Promise<Dashboard> {
   if (isLocalMode()) return localDashboard(month);
   const base = await cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(month ? `/dashboard?month=${month}` : "/dashboard"));
-  const pending = (await listSyncOperations()).filter((o) => o.kind === "transaction.create");
+  const pending = (await listSyncOperations()).filter(isTransactionSyncOperation).filter((o) => o.kind === "transaction.create");
   return applyPendingToDashboard(base, pending);
 }
 
@@ -235,7 +235,7 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
     if (value) search.set(key, String(value));
   }
   const base = await cachedFetch(`flow:${search.toString()}`, () => apiGet<Flow>(`/analytics/flow?${search.toString()}`));
-  const pending = (await listSyncOperations()).filter((o) => o.kind === "transaction.create" && o.payload.status === "pago");
+  const pending = (await listSyncOperations()).filter(isTransactionSyncOperation).filter((o) => o.kind === "transaction.create" && o.payload.status === "pago");
   let incomeDelta = 0, expenseDelta = 0;
   const series = base.series.map((point) => {
     const ops = pending.filter((o) => o.payload.date.slice(0, 7) === point.month && (!params.category_id || o.payload.category_id === params.category_id));
@@ -385,7 +385,7 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
   const base = await cachedFetch(key, () => apiGet<Transaction[]>(`/transactions?${params.toString()}`));
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   if (navigator.onLine && uid) await Promise.all(base.map(t => cacheSet(`firebase:${uid}:transaction:${t.id}`, t)));
-  const operations = await listSyncOperations();
+  const operations = (await listSyncOperations()).filter(isTransactionSyncOperation);
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   const pending = operations.filter((o) => o.kind === "transaction.create");
   const updated = base.map(t => { const op = operations.filter(o => o.kind === "transaction.update" && o.entityId === t.id).at(-1); return op ? {...t,...op.payload} : t; });
