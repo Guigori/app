@@ -7,7 +7,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { localRadar } from "@/lib/local/radar";
 import { isLocalMode, getMode } from "@/lib/mode";
 import { loadSessionProfile } from "@/lib/profileIdentity";
-import { queueTransaction, queueTransactionDelete, flushSyncQueue, listSyncOperations, type OperationSource } from "@/lib/sync/queue";
+import { queueTransaction, queueTransactionDelete, queueEntityCreate, flushSyncQueue, listSyncOperations, type OperationSource } from "@/lib/sync/queue";
 import { cacheSet, cachedFetch } from "@/lib/offline/accountCache";
 import {
   localFinanceHistory,
@@ -329,6 +329,10 @@ export async function fetchAccount(id: string): Promise<AccountDetail> {
 
 export async function createAccount(input: AccountInput): Promise<Account> {
   if (isLocalMode()) return localCreateAccount(input);
+  if (!navigator.onLine) {
+    await queueEntityCreate("account.create", input);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
   return apiPost<Account>("/accounts", input);
 }
 
@@ -351,6 +355,10 @@ export async function fetchCategories(): Promise<Category[]> {
 
 export async function createCategory(input: CategoryInput): Promise<Category> {
   if (isLocalMode()) return localCreateCategory(input);
+  if (!navigator.onLine) {
+    await queueEntityCreate("category.create", input);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
   return apiPost<Category>("/categories", input);
 }
 
@@ -498,6 +506,10 @@ export async function fetchCards(): Promise<CreditCard[]> {
 
 export async function createCard(input: CardInput): Promise<CreditCard> {
   if (isLocalMode()) return localCreateCard(input);
+  if (!navigator.onLine) {
+    await queueEntityCreate("card.create", input);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
   return apiPost<CreditCard>("/cards", input);
 }
 
@@ -574,7 +586,12 @@ export async function fetchSubscriptions(): Promise<Subscriptions> {
 }
 
 export async function createSubscription(input: SubscriptionInput): Promise<SubscriptionItem> {
-  return isLocalMode() ? localCreateSubscription(input) : apiPost<SubscriptionItem>("/subscriptions", input);
+  if (isLocalMode()) return localCreateSubscription(input);
+  if (!navigator.onLine) {
+    await queueEntityCreate("subscription.create", input);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiPost<SubscriptionItem>("/subscriptions", input);
 }
 
 export async function updateSubscription(id: string, input: SubscriptionInput): Promise<SubscriptionItem> {
