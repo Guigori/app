@@ -150,3 +150,41 @@ def test_calendar_subscription_forecast_is_not_a_paid_purchase(monkeypatch):
     day = next(item for item in calendar.days if item.date == "2026-10-29")
     assert day.count == 1
     assert calendar.projected_expense == Decimal("49.90")
+
+
+
+def test_subscription_income_ratio_excludes_bank_refund_receipts(monkeypatch):
+    from finnos.routers import subscriptions as router
+    collections = {
+        "subscriptions": [{
+            "id": "sub", "name": "Assinatura", "value": 10,
+            "recurrence": "mensal", "next_charge": "2026-10-30",
+            "account_id": "bank", "category_id": None,
+            "card_id": None, "active": True,
+        }],
+        "transactions": [
+            {"id": "salary", "value": 100, "type": "receita",
+             "date": "2026-10-05", "status": "pago"},
+            {"id": "refund", "value": 100, "type": "receita",
+             "date": "2026-10-26", "status": "pago",
+             "invoice_refund": True},
+        ],
+    }
+    class Cursor:
+        def __init__(self, rows): self.rows = rows
+        async def to_list(self, count): return self.rows
+    class Collection:
+        def __init__(self, name): self.name = name
+        def find(self, query):
+            assert query["user_id"] == "owner"
+            return Cursor(collections[self.name])
+    monkeypatch.setattr(router, "db", SimpleNamespace(**{
+        key: Collection(key) for key in collections
+    }))
+    monkeypatch.setattr(router, "today_iso", lambda: "2026-10-26")
+    async def maps(uid):
+        return {"bank": {"name": "Conta"}}, {}, {}
+    monkeypatch.setattr(router, "_maps", maps)
+    result = asyncio.run(router.list_subscriptions(user={"id": "owner"}))
+    assert result.monthly_total == 10
+    assert result.income_percent == 10
