@@ -7,7 +7,7 @@
 - `finnos/lib/finance_shadow_outbox.py`: envelope de eventos por revisão financeira, capturando em centavos os deltas de transações criadas, editadas e excluídas; preserva revisões sem alterações (respostas offline idempotentes). Alterações em cartão, estornos ou dados insuficientes declaram `requires_rebuild=True`.
 - `finnos/lib/finance_shadow_replay.py`: replay somente leitura que exige UID sintético, baseline com checksum e `source_count`, revisões estritamente consecutivas e envelopes íntegros. Qualquer lacuna, evento de cartão ou estorno interrompe o replay e exige reconstrução e segunda conferência.
 - `test_finance_shadow_outbox.py` e `test_finance_shadow_replay.py`: deltas exatos, UID, criação/edição/exclusão, operações repetidas, revisões ausentes e rollback de contextos.
-- `test_finance_shadow_emulator_live.py`: prova transacional **isolada** num projeto `demo-finnos`; verifica criação, alteração, cartão com crédito, revisão/noop, reconstrução e dupla reconciliação. Usa credenciais anônimas, sem conta de serviço, e não é importada pelo servidor.
+- `test_finance_shadow_emulator_live.py`: prova transacional **isolada** num projeto `demo-finnos`; verifica criação, alteração, cartão com crédito, revisão/noop, **replay dos envelopes persistidos em revisões consecutivas**, rejeição do replay quando aparece um crédito, reconstrução e dupla reconciliação. Usa credenciais anônimas, sem conta de serviço, e não é importada pelo servidor.
 - `.github/workflows/finance-shadow-emulator.yml` executa o teste no emulador real com configuração em `.github/test-fixtures`; as regras permissivas nesse diretório são **exclusivamente do projeto demo** e jamais devem ser implantadas em produção.
 
 ## Como executar localmente, sem credenciais de produção
