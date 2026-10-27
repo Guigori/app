@@ -5,7 +5,7 @@ vi.mock("@/lib/mode", () => ({ getMode: () => "local", isLocalMode: () => true }
 
 import { freshDb, readDb, writeDb, type LocalCard } from "@/lib/local/store";
 import { fetchTransactionsPage } from "@/lib/data";
-import { localInvoice, localListCards, localFlow, localCreateTransaction, localCreditInvoice, localBankRefund, localDeleteTransaction, localDashboard, localBudget, localFinanceHistory, localCreateAccount, localListAccounts } from "@/lib/local/engine";
+import { localInvoice, localListCards, localFlow, localCreateTransaction, localCreditInvoice, localBankRefund, localDeleteTransaction, localDashboard, localBudget, localFinanceHistory, localCreateAccount, localListAccounts, localCalendar } from "@/lib/local/engine";
 import type { Transaction, TransactionInput } from "@/types/finnos";
 
 const date = "2026-10-20";
@@ -196,6 +196,12 @@ it("returns bank money after a fully paid bill without booking artificial income
   const home = localDashboard("2026-10");
   expect(home.income).toBe(0);
   expect(home.expense).toBe(-100);
+  const calendar = localCalendar("2026-10");
+  expect(calendar.income).toBe(0);
+  expect(calendar.expense).toBe(-100);
+  expect(calendar.net).toBe(100);
+  expect(calendar.days.find(day => day.date === "2026-10-26")?.expense).toBe(-100);
+  expect(calendar.days.find(day => day.date === "2026-10-26")?.income).toBe(0);
   expect(home.categories).toEqual([]); // refund-only month has no negative donut arcs
   expect(home.total_balance).toBe(5100);
   const budget = localBudget("2026-10");
