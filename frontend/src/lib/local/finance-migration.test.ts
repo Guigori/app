@@ -57,6 +57,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it("projects a legacy pending k/n installment in Flow and Calendar instead of R$ 0,00", () => {
+  const legacy: Transaction = {
+    ...purchase("legacy-pending", 100, 3, 3),
+    status: "pendente",
+    installment_value: null,
+  };
+  setScenario([legacy]);
+  const flow = localFlow({ month: "2026-10", months: 2 });
+  const calendar = localCalendar("2026-10");
+  expect(flow.expense).toBe(0);
+  expect(flow.projected_expense).toBe(33.34);
+  expect(calendar.expense).toBe(0);
+  expect(calendar.projected_expense).toBe(33.34);
+  expect(calendar.days.find(day => day.date === date)?.projected_expense).toBe(33.34);
+});
+
 it("places imported installment 7/10 in the current invoice and only three future cycles", () => {
   setScenario([purchase("Notebook", 1000, 7, 10)]);
   const invoice = localInvoice("card");
