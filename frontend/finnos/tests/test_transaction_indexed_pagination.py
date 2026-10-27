@@ -172,7 +172,8 @@ def test_sparse_search_advances_cursor_across_empty_pages(monkeypatch):
             break
         assert result["next_cursor"] != cursor
         cursor = result["next_cursor"]
-    assert len(collected) == 1000
+    assert collected == ["tx-0000"]  # one match at the oldest edge of 2,300 records
+    assert len(metrics["limits"]) > 5  # crossed multiple match-free scan pages
     assert len(set(collected)) == len(collected)
     assert all(1 <= n <= 400 for n in metrics["limits"])
 
