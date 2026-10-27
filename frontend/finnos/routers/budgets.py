@@ -5,6 +5,9 @@ from datetime import date, datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from finnos.lib.db import db
+from finnos.lib.account_balances import finance_revision
+from finnos.lib.financial_summaries import stream_financial_window
+from finnos.lib.projection_reads import read_projection_history
 from finnos.lib.dates import today_iso
 from finnos.lib.recurrence import projections_in_period
 from finnos.lib.subscription_projection import planned_subscriptions_in_period
@@ -52,10 +55,15 @@ def _occurrences_in_cycle(tx: dict, start: date, end: date):
 
 async def _progress(cycle: dict, user_id: str) -> BudgetCycleProgress:
     (start, end, today) = (date.fromisoformat(str(cycle['start_date'])), date.fromisoformat(str(cycle['end_date'])), date.fromisoformat(today_iso()))
-    txs = await db.transactions.find({'user_id': user_id}).to_list(20000)
+    revision = await finance_revision(user_id)
     categories = await db.categories.find({'user_id': user_id}).to_list(500)
     cards = await db.cards.find({'user_id': user_id}).to_list(200)
     subscriptions = await db.subscriptions.find({'user_id': user_id}).to_list(500)
+    first_idx = start.year * 12 + start.month - 1
+    last_idx = end.year * 12 + end.month - 1
+    months = [f'{idx // 12:04d}-{idx % 12 + 1:02d}'
+              for idx in range(first_idx, last_idx + 1)]
+    txs = await read_projection_history(user_id, months, cards, revision)
     by_id = {cat['id']: cat for cat in categories}
     (spent_by_cat, committed_by_cat) = ({}, {})
     received_income = committed_income = D('0.0')
@@ -122,12 +130,13 @@ async def budget_suggestion(user: dict=Depends(require_user)):
     # installments, merchant credits and bank refunds are all reconciled in
     # cents. In particular a refunded card purchase must not inflate the
     # suggested salary/income or generate a second spent category.
-    txs = await db.transactions.find({'user_id': user['id']}).to_list(20000)
+    revision = await finance_revision(user['id'])
     cards = await db.cards.find({'user_id': user['id']}).to_list(200)
     cats = await db.categories.find({'user_id': user['id']}).to_list(500)
     by_id = {cat['id']: cat for cat in cats}
     month_keys = [f'{(start_idx + i) // 12:04d}-{(start_idx + i) % 12 + 1:02d}' for i in range(3)]
-    monthly = {key: monthly_competency(txs, cards, key) for key in month_keys}
+    statement = await stream_financial_window(user['id'], month_keys, cards, revision)
+    monthly = {key: statement.monthly(key) for key in month_keys}
     suggestions = []
     for cid, cat in by_id.items():
         # Net refunds may make a month negative; the prospective spending
