@@ -177,7 +177,7 @@ async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(
             acc = owner.collection("accounts").document(store.resource_id(payload.account_id)).get(transaction=tr)
             if not acc.exists:
                 raise HTTPException(400,"Conta de pagamento inválida.")
-            txs = store.rows(instance,uid,"transactions",tr)
+            txs = store.card_purchase_rows(instance, uid, card_id, tr)
             cats = {c['id']:c for c in store.rows(instance,uid,"categories",tr)}
             cycle = payload.cycle or default_invoice_cycle(card,txs,date.fromisoformat(today_iso()))
             try:
@@ -263,7 +263,7 @@ async def credit_invoice(
                 item for entries in (card.get("invoice_adjustments") or {}).values()
                 for item in entries if item.get("id") == entry_id
             ), None)
-            txs = store.rows(instance, uid, "transactions", tr)
+            txs = store.card_purchase_rows(instance, uid, card_id, tr)
             if previous is not None:
                 if previous.get("fingerprint") != fingerprint:
                     raise HTTPException(409, "Identificador reutilizado para outro estorno.")
@@ -363,7 +363,7 @@ async def bank_refund_invoice(
                 entry for entries in (card.get("invoice_refunds") or {}).values()
                 for entry in entries if entry["id"] == refund_id
             ), None)
-            txs = store.rows(instance, uid, "transactions", tr)
+            txs = store.card_purchase_rows(instance, uid, card_id, tr)
             if previous:
                 if previous.get("fingerprint") != fingerprint:
                     raise HTTPException(409, "Identificador de reembolso reutilizado.")
