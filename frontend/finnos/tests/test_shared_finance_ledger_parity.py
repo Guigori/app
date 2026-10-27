@@ -103,14 +103,6 @@ def test_account_ledger_and_dashboard_share_the_same_cash_total(monkeypatch):
     }))
     monkeypatch.setattr(dashboard, "today_iso", lambda: F["today"])
 
-    async def maps(uid):
-        assert uid == "owner"
-        return (
-            {a["id"]: {"name": a["id"]} for a in F["accounts"]},
-            {cat["id"]: cat for cat in categories},
-        )
-
-    monkeypatch.setattr(dashboard, "_ref_maps", maps)
     async def revision(uid):
         assert uid == "owner"
         return 7
