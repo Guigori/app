@@ -903,6 +903,18 @@ export function localCalendar(month: string): CalendarMonth {
     }
     buckets.set(tx.date, day);
   }
+  // FIN-08/14: bank refund is a cash receipt but NOT ordinary income.
+  // Both bank reimbursements and merchant credits reverse the purchase as
+  // negative spend in the calendar on the event date.
+  for (const credit of creditsForMonth(localCreditEvents(db), month)) {
+    const day = buckets.get(credit.date) ?? {
+      date: credit.date, income: 0, expense: 0, projected_income: 0,
+      projected_expense: 0, count: 0, active_count: 0,
+    };
+    day.expense = round2(day.expense - credit.amount);
+    if (credit.kind === "merchant_credit") day.count += 1;
+    buckets.set(credit.date, day);
+  }
   const days = [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date));
   const income = round2(days.reduce((s, d) => s + d.income, 0));
   const expense = round2(days.reduce((s, d) => s + d.expense, 0));
