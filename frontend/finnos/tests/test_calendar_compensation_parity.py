@@ -67,6 +67,7 @@ def scenario():
 
 def test_calendar_refunds_reverse_spending_without_increasing_income(monkeypatch):
     rows = scenario()
+    rows["subscriptions"] = []
     monkeypatch.setattr(analytics, "db", SimpleNamespace(**{
         kind: Collection(rows, kind) for kind in rows
     }))
