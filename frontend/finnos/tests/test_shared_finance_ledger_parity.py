@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 from finnos.lib.competency import monthly_competency
 from finnos.lib.account_balances import AccountLedger
+from finnos.lib.financial_summaries import FinancialWindow
 from finnos.lib.money import cents
 from finnos.lib.stats import balance_effects
 from finnos.lib.subscription_projection import planned_subscriptions
@@ -110,6 +111,21 @@ def test_account_ledger_and_dashboard_share_the_same_cash_total(monkeypatch):
         )
 
     monkeypatch.setattr(dashboard, "_ref_maps", maps)
+    async def revision(uid):
+        assert uid == "owner"
+        return 7
+
+    async def summary(uid, months, cards_arg, revision_arg, **kwargs):
+        assert (uid, revision_arg) == ("owner", 7)
+        statement = FinancialWindow(months, cards_arg, accounts=kwargs["accounts"],
+                                    today=kwargs["today"],
+                                    recent_month=kwargs["recent_month"])
+        for tx in txs:
+            statement.add(tx)
+        return statement.finalize()
+
+    monkeypatch.setattr(dashboard, "finance_revision", revision)
+    monkeypatch.setattr(dashboard, "stream_financial_window", summary)
     result = asyncio.run(dashboard.dashboard(month=F["month"], user={"id": "owner"}))
     assert cents(result.total_balance) == cents(ledger.total_balance)
     assert cents(result.income) == cents(expected["income"])
