@@ -1,9 +1,10 @@
 """Authenticated, read-only Firestore finance validation endpoint."""
-from datetime import datetime
+from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 from finnos.lib.money import FinanceModel, Money
-from finnos.lib.reconciliation_preview import compare_invoice_evidence
+from finnos.lib.reconciliation_preview import compare_invoice_evidence, compare_account_evidence
+from finnos.lib.dates import today_iso
 from starlette.concurrency import run_in_threadpool
 from finnos.lib.db import db
 from finnos.lib.finance_audit import KINDS, audit_finance
@@ -29,8 +30,16 @@ class InvoiceEvidenceIn(FinanceModel):
     reference: str | None = Field(default=None, max_length=100)
 
 
+class AccountEvidenceIn(FinanceModel):
+    account_id: str = Field(min_length=1, max_length=1500)
+    statement_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    statement_balance: Money
+    reference: str | None = Field(default=None, max_length=100)
+
+
 class ReconciliationPreviewIn(FinanceModel):
-    invoices: list[InvoiceEvidenceIn] = Field(min_length=1, max_length=100)
+    invoices: list[InvoiceEvidenceIn] = Field(default_factory=list, max_length=100)
+    accounts: list[AccountEvidenceIn] = Field(default_factory=list, max_length=100)
 
 
 @router.post("/reconciliation/preview")
@@ -42,12 +51,33 @@ async def reconciliation_preview(
     Strictly read only. The caller's statement is not authenticated evidence
     of a historical bank debit; never change a card cycle or bank balance.
     """
+    if not input.accounts and not input.invoices:
+        raise HTTPException(422, "Informe pelo menos uma fatura ou conta.")
+    for item in input.accounts:
+        try:
+            statement = date.fromisoformat(item.statement_date)
+        except ValueError as exc:
+            raise HTTPException(422, "Data de extrato inválida.") from exc
+        if statement > date.fromisoformat(today_iso()):
+            raise HTTPException(422, "Extrato futuro não é uma conciliação histórica.")
     uid = user["id"]
-    cards = await db.cards.find({"user_id": uid}).to_list(200)
+    cards = await db.cards.find({"user_id": uid}).to_list(200) if input.invoices else []
+    accounts = await db.accounts.find({"user_id": uid}).to_list(500) if input.accounts else []
     txs = await db.transactions.find({"user_id": uid}).to_list(20000)
-    return compare_invoice_evidence(
+    invoices = compare_invoice_evidence(
         cards, txs, [item.model_dump() for item in input.invoices]
     )
+    accounts_report = compare_account_evidence(
+        accounts, txs, [item.model_dump() for item in input.accounts]
+    )
+    return {
+        **invoices,
+        "accounts": accounts_report,
+        "review_count": invoices["review_count"] + accounts_report["review_count"],
+        "matched_count": invoices["matched_count"] + accounts_report["matched_count"],
+        "migration_reconciled": False,
+        "writes_data": False,
+    }
 
 
 @router.get("/history")
