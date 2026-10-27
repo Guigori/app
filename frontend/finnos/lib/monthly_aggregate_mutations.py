@@ -63,6 +63,7 @@ def apply_shadow_mutations(
     transactions: dict[str, dict],
     cards: dict[str, dict],
     *,
+    user_id: str,
     transaction_changes: list[tuple[dict | None, dict | None]] | None = None,
     card_changes: list[tuple[dict | None, dict | None]] | None = None,
     before_revision: int,
@@ -78,8 +79,19 @@ def apply_shadow_mutations(
             or type(after_revision) is not int
             or after_revision != before_revision + 1):
         raise ValueError("Revisão incremental não é consecutiva.")
+    if not isinstance(user_id, str) or not user_id or "/" in user_id:
+        raise ValueError("Identidade financeira inválida.")
     tx_changes = transaction_changes or []
     card_deltas = card_changes or []
+    # UID ownership is part of the pure batch contract, not a post-hoc filter.
+    # A single foreign preimage/source would otherwise contaminate totals.
+    for doc in [
+        *transactions.values(), *cards.values(),
+        *(part for pair in tx_changes for part in pair if part is not None),
+        *(part for pair in card_deltas for part in pair if part is not None),
+    ]:
+        if doc.get("user_id") != user_id:
+            raise ValueError("Mutação com documento de outro usuário.")
     if not tx_changes and not card_deltas:
         raise ValueError("Lote financeiro vazio.")
 
