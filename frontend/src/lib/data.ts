@@ -7,7 +7,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { localRadar } from "@/lib/local/radar";
 import { isLocalMode, getMode } from "@/lib/mode";
 import { loadSessionProfile } from "@/lib/profileIdentity";
-import { queueTransaction, flushSyncQueue, listSyncOperations, type OperationSource } from "@/lib/sync/queue";
+import { queueTransaction, queueTransactionDelete, flushSyncQueue, listSyncOperations, type OperationSource } from "@/lib/sync/queue";
 import { cacheSet, cachedFetch } from "@/lib/offline/accountCache";
 import {
   localFinanceHistory,
@@ -431,6 +431,11 @@ export async function fetchTransactionsPage(
   const uid = firebaseAuth?.currentUser?.uid;
   const result = await apiGet<TransactionPage>(`/transactions/page?${params.toString()}`);
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  if (navigator.onLine && uid) {
+    await Promise.all(result.items.map(row =>
+      cacheSet(`firebase:${uid}:transaction:${row.id}`, row)));
+    if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  }
   return result;
 }
 
@@ -456,7 +461,14 @@ export { flushSyncQueue };
 
 export async function deleteTransaction(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteTransaction(id);
-  return apiDelete<void>(`/transactions/${id}`);
+  if (!navigator.onLine) {
+    if (id.startsWith("offline:")) {
+      throw new Error("Revise o lançamento ainda não sincronizado antes de excluí-lo.");
+    }
+    await queueTransactionDelete(id);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiDelete<void>(`/transactions/${encodeURIComponent(id)}`);
 }
 
 // --- Demo data --------------------------------------------------------------
