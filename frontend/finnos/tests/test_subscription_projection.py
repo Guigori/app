@@ -99,6 +99,14 @@ def test_flow_totals_include_subscription_only_as_future_plan(monkeypatch):
         name: Coll(name) for name in docs
     }))
     monkeypatch.setattr(analytics, "today_iso", lambda: "2026-10-26")
+    async def revision(uid):
+        assert uid == "owner"
+        return 1
+    async def history(uid, months, selected_cards, expected):
+        assert (uid, expected) == ("owner", 1)
+        return docs["transactions"]
+    monkeypatch.setattr(analytics, "finance_revision", revision)
+    monkeypatch.setattr(analytics, "read_projection_history", history)
     result = asyncio.run(analytics.flow(month="2026-10", months=2,
                                         from_month=None, to_month=None,
                                         category_id=None, user={"id": "owner"}))
