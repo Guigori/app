@@ -7,7 +7,8 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Response, Header
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
-from finnos.lib.stats import aware, balance_effects
+from finnos.lib.stats import aware
+from finnos.lib.account_balances import finance_revision, stream_account_balances
 from finnos.models.finnos import AccountDetailOut, AccountIn, AccountOut
 from finnos.routers.auth import require_user
 from finnos.routers.transactions import _ref_maps, enrich_transaction
@@ -17,22 +18,16 @@ router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 async def _enriched_accounts(user_id: str) -> list[AccountOut]:
     today = today_iso()
+    # Capture revision before reading opening balances; a concurrent write
+    # must not produce an apparently valid but inconsistent account total.
+    revision = await finance_revision(user_id)
     accounts = (
         await db.accounts.find({"user_id": user_id}).sort("created_at", 1).to_list(500)
     )
-    txs = await db.transactions.find({"user_id": user_id}).to_list(20000)
-    balance = {a["id"]: D(a.get("initial_balance") or D("0.0")) for a in accounts}
-    income = {a["id"]: D("0.0") for a in accounts}
-    expense = {a["id"]: D("0.0") for a in accounts}
-    for tx in txs:
-        for acc_id, amount in balance_effects(tx, today):
-            balance[acc_id] = balance.get(acc_id, D("0.0")) + amount
-            if tx.get("type") == "receita":
-                income[acc_id] += amount
-            elif tx.get("type") == "despesa":
-                expense[acc_id] -= amount
+    ledger = await stream_account_balances(user_id, accounts, today, revision)
     out = []
     for a in accounts:
+        balance, total_income, total_expense = ledger.result(a["id"])
         out.append(
             AccountOut(
                 id=a["id"],
@@ -43,9 +38,9 @@ async def _enriched_accounts(user_id: str) -> list[AccountOut]:
                 color=a.get("color", "#070F52"),
                 initial_balance=D(a.get("initial_balance") or D("0.0")),
                 active=a.get("active", True),
-                balance=quantize_brl(balance[a["id"]]),
-                total_income=quantize_brl(max(income[a["id"]], D("0.0"))),
-                total_expense=quantize_brl(max(expense[a["id"]], D("0.0"))),
+                balance=balance,
+                total_income=total_income,
+                total_expense=total_expense,
                 created_at=aware(a.get("created_at")) or datetime.now(timezone.utc),
             )
         )
