@@ -116,7 +116,9 @@ async def list_subscriptions(user: dict = Depends(require_user)):
         "user_id": uid, "type": "receita", "status": "pago",
         "date": {"$regex": f"^{month}"},
     }).to_list(20000)
-    income = sum((D(tx["value"]) for tx in realized_income), D(0))
+    # A settled card refund is a bank receipt, not recurring salary.
+    income = sum((D(tx["value"]) for tx in realized_income
+                  if not tx.get("invoice_refund")), D(0))
     percent = _money(monthly / income * 100) if income > 0 else D(0)
     return SubscriptionsOut(
         items=items, monthly_total=monthly, yearly_total=yearly,
