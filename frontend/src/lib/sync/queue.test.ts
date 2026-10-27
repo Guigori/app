@@ -1,12 +1,12 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
-const mocks=vi.hoisted(()=>({auth:{currentUser:{uid:"A"} as {uid:string}|null},post:vi.fn(),put:vi.fn()}));
+const mocks=vi.hoisted(()=>({auth:{currentUser:{uid:"A"} as {uid:string}|null},post:vi.fn(),put:vi.fn(),del:vi.fn()}));
 vi.mock("@/lib/firebase",()=>({firebaseAuth:mocks.auth}));
-vi.mock("@/lib/api",()=>({ApiError: class ApiError extends Error { status:number; constructor(status:number,message:string){super(message);this.status=status;} },apiPost:mocks.post,apiPut:mocks.put,apiGet:vi.fn()}));
+vi.mock("@/lib/api",()=>({ApiError: class ApiError extends Error { status:number; constructor(status:number,message:string){super(message);this.status=status;} },apiPost:mocks.post,apiPut:mocks.put,apiDelete:mocks.del,apiGet:vi.fn()}));
 import { cacheSet,cachedFetch } from "@/lib/offline/accountCache";
-import { queueTransaction,listSyncOperations,flushSyncQueue,discardConflictedOperation } from "./queue";
+import { queueTransaction,queueTransactionDelete,listSyncOperations,flushSyncQueue,discardConflictedOperation } from "./queue";
 const input={name:"Offline",type:"despesa" as const,status:"pago" as const,value:12.34,date:"2026-10-12",account_id:"bank",card_id:null,to_account_id:null,category_id:null,fixed:false,recurrence:null,installment:false,total_installments:null,current_installment:null,adjusted_value:null,attachment:null,notes:null,notify_enabled:true};
-beforeEach(()=>{vi.stubGlobal("indexedDB",new IDBFactory());vi.stubGlobal("navigator",{onLine:false});vi.stubGlobal("window",{dispatchEvent:vi.fn()});mocks.auth.currentUser={uid:"A"};mocks.post.mockReset();mocks.put.mockReset();});
+beforeEach(()=>{vi.stubGlobal("indexedDB",new IDBFactory());vi.stubGlobal("navigator",{onLine:false});vi.stubGlobal("window",{dispatchEvent:vi.fn()});mocks.auth.currentUser={uid:"A"};mocks.post.mockReset();mocks.put.mockReset();mocks.del.mockReset();});
 it("commits the offline queue to IndexedDB and isolates user switches",async()=>{
   await queueTransaction(input);
   expect(await listSyncOperations()).toHaveLength(1);
@@ -137,4 +137,55 @@ it("only an explicit UID-scoped reviewed discard unblocks a failed operation", a
   expect(mocks.post.mock.calls.map(call => call[2]["X-FINNOS-Operation-ID"]))
     .toEqual([first.id, second.id]);
   expect(await listSyncOperations()).toHaveLength(0);
+});
+
+
+it("queues a bank transaction delete with a cached version and replays one idempotent DELETE", async () => {
+  await cacheSet("firebase:A:transaction:existing", { ...input, id: "existing", version: 4 });
+  const operation = await queueTransactionDelete("existing");
+  expect(operation.kind).toBe("transaction.delete");
+  expect(operation.baseVersion).toBe(4);
+  expect((await listSyncOperations()).map(item => item.id)).toEqual([operation.id]);
+  vi.stubGlobal("navigator", { onLine: true });
+  mocks.del.mockRejectedValueOnce(new Error("response lost"));
+  await flushSyncQueue();
+  expect((await listSyncOperations())[0].status).toBe("error");
+  mocks.del.mockResolvedValue(undefined);
+  await flushSyncQueue();
+  expect(mocks.del.mock.calls).toEqual([
+    ["/transactions/existing", {
+      "X-FINNOS-Operation-ID": operation.id, "X-FINNOS-Base-Version": "4",
+    }],
+    ["/transactions/existing", {
+      "X-FINNOS-Operation-ID": operation.id, "X-FINNOS-Base-Version": "4",
+    }],
+  ]);
+  expect(await listSyncOperations()).toEqual([]);
+});
+
+it("never retries a conflicted offline deletion or leaks it to another account", async () => {
+  const { ApiError } = await import("@/lib/api");
+  await cacheSet("firebase:A:transaction:existing", { ...input, id: "existing", version: 7 });
+  const removed = await queueTransactionDelete("existing");
+  const next = await queueTransaction({ ...input, name: "After delete" });
+  vi.stubGlobal("navigator", { onLine: true });
+  mocks.del.mockRejectedValueOnce(new ApiError(409, "version conflict"));
+  await flushSyncQueue();
+  expect((await listSyncOperations()).map(item => [item.id,item.status]))
+    .toEqual([[removed.id,"conflict"],[next.id,"pending"]]);
+  expect(mocks.post).not.toHaveBeenCalled();
+  await flushSyncQueue();
+  expect(mocks.del).toHaveBeenCalledTimes(1);
+  mocks.auth.currentUser = {uid:"B"};
+  expect(await listSyncOperations()).toEqual([]);
+  mocks.auth.currentUser = {uid:"A"};
+  await discardConflictedOperation(removed.id);
+  mocks.post.mockResolvedValue({});
+  await flushSyncQueue();
+  expect(await listSyncOperations()).toHaveLength(0);
+});
+
+it("rejects offline deletion without a previously verified version", async () => {
+  await expect(queueTransactionDelete("uncached")).rejects.toThrow("FINNOS_OFFLINE_NO_CACHE");
+  expect(await listSyncOperations()).toEqual([]);
 });
