@@ -177,23 +177,71 @@ class Txn:
         self.writes.append((doc, value))
 
 
-def test_shadow_materialization_requires_opt_in_and_matching_revision():
+def test_shadow_materialization_requires_opt_in_reconciliation_and_revision():
     source, cards = sample()
-    snapshot = IncrementalMonthlyLedger.from_history(source, cards).snapshot(10)
+    snapshot = IncrementalMonthlyLedger.from_history(source, cards).snapshot(
+        10, source_count=len(source)
+    )
+    report = {
+        "match": True, "finance_revision": 10,
+        "candidate_checksum": snapshot["checksum"],
+        "source_count": len(source),
+        "checked_months": sorted(snapshot["months"]),
+        "diffs": {}, "production_eligible": False,
+    }
     parent, transaction = Parent(10), Txn()
     with pytest.raises(HTTPException) as prohibited:
-        stage_shadow_snapshot(transaction, parent, snapshot, 10)
+        stage_shadow_snapshot(
+            transaction, parent, snapshot, 10, verification_report=report
+        )
     assert prohibited.value.status_code == 403
     assert transaction.writes == []
 
+    with pytest.raises(HTTPException) as not_verified:
+        stage_shadow_snapshot(transaction, parent, snapshot, 10, approval=True)
+    assert not_verified.value.status_code == 409
+    assert transaction.writes == []
+
+    for patch in (
+        {"match": False},
+        {"candidate_checksum": "wrong"},
+        {"source_count": 999},
+        {"checked_months": []},
+        {"diffs": {"2026-10": {"error": 1}}},
+        {"production_eligible": True},
+    ):
+        with pytest.raises(HTTPException) as rejected:
+            stage_shadow_snapshot(
+                transaction, parent, snapshot, 10, approval=True,
+                verification_report={**report, **patch},
+            )
+        assert rejected.value.status_code == 409
+        assert transaction.writes == []
+
     parent.current = 11
     with pytest.raises(HTTPException) as conflict:
-        stage_shadow_snapshot(transaction, parent, snapshot, 10, approval=True)
+        stage_shadow_snapshot(
+            transaction, parent, snapshot, 10, approval=True,
+            verification_report=report,
+        )
     assert conflict.value.status_code == 409
     assert transaction.writes == []
 
     parent.current = 10
-    stage_shadow_snapshot(transaction, parent, snapshot, 10, approval=True)
+    stage_shadow_snapshot(
+        transaction, parent, snapshot, 10, approval=True,
+        verification_report=report,
+    )
     assert len(transaction.writes) == len(snapshot["months"])
     assert all(value["status"] == "shadow_only" for _, value in transaction.writes)
     assert all(value["finance_revision"] == 10 for _, value in transaction.writes)
+
+
+def test_source_count_is_in_integrity_checksum():
+    source, cards = sample()
+    engine = IncrementalMonthlyLedger.from_history(source, cards)
+    snap = engine.snapshot(11, source_count=len(source))
+    tampered = deepcopy(snap)
+    tampered["source_count"] += 1
+    assert snapshot_checksum(tampered) != snap["checksum"]
+    assert reconcile_months(tampered, source, cards, 11)["match"] is False
