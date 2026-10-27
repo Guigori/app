@@ -17,7 +17,7 @@ class Query:
         self.rows = rows
 
     async def to_list(self, count):
-        assert count in (200, 5000, 20000)
+        assert count in (200, 500, 5000, 20000)
         return self.rows
 
 
