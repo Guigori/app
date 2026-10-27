@@ -395,24 +395,39 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
 /** ARQ-03 staged indexed pagination. The legacy list endpoint and its totals
  * remain untouched until all visual consumers migrate to paginated contracts.
  */
-export async function fetchTransactionsPage(month: string, cursor?: string, limit = 50): Promise<TransactionPage> {
-  if (!/^\d{4}-\d{2}$/.test(month) || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+export async function fetchTransactionsPage(
+  input: LocalTxFilters | string,
+  cursor?: string,
+  limit = 50,
+  sortDir: "asc" | "desc" = "desc",
+): Promise<TransactionPage> {
+  const filters: LocalTxFilters = typeof input === "string" ? { month: input } : input;
+  const hasMonth = Boolean(filters.month);
+  const hasRange = Boolean(filters.start_date && filters.end_date);
+  if ((!hasMonth && !hasRange)
+    || (hasRange && (filters.start_date! > filters.end_date!))
+    || !Number.isInteger(limit) || limit < 1 || limit > 100) {
     throw new Error("Página financeira inválida.");
   }
+  const params = new URLSearchParams({ limit: String(limit), sort_dir: sortDir });
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, String(value));
+  }
+  if (cursor) params.set("cursor", cursor);
   if (isLocalMode()) {
-    const rows = localListTransactions({ month })
-      .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+    const rows = localListTransactions(filters)
+      .sort((a, b) => (sortDir === "desc"
+        ? b.date.localeCompare(a.date) || b.id.localeCompare(a.id)
+        : a.date.localeCompare(b.date) || a.id.localeCompare(b.id)));
     const start = cursor ? rows.findIndex(row => row.id === cursor) + 1 : 0;
     if (cursor && start === 0) throw new Error("Cursor financeiro inválido.");
     const items = rows.slice(start, start + limit);
     return {
-      month,
+      month: filters.month ?? filters.start_date!.slice(0, 7),
       items,
       next_cursor: start + limit < rows.length ? items.at(-1)?.id ?? null : null,
     };
   }
-  const params = new URLSearchParams({ month, limit: String(limit) });
-  if (cursor) params.set("cursor", cursor);
   const uid = firebaseAuth?.currentUser?.uid;
   const result = await apiGet<TransactionPage>(`/transactions/page?${params.toString()}`);
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
