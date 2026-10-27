@@ -90,6 +90,12 @@ it("matches the shared Python ledger's cash, income, refunds, categories, calend
   expect(flow.expense).toBe(expected.expense);
   expect(flow.projected_expense).toBe(expected.projected_expense);
 
+  // The net month includes a -R$150 refund in shopping, but the visual
+  // spending breakdown must not render negative bars or 117% rent.
+  expect(flow.categories.map(item => ({
+    category_id: item.category_id, total: item.total, percent: item.percent,
+  }))).toEqual([{ category_id: "rent", total: 1000, percent: 100 }]);
+
   const calendar = localCalendar(parity.month);
   expect(calendar.income).toBe(expected.income);
   expect(calendar.expense).toBe(expected.expense);
