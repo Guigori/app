@@ -119,6 +119,7 @@ def test_refund_handler_idempotent_and_cash_only(monkeypatch):
     monkeypatch.setattr(store, "client", lambda: object())
     monkeypatch.setattr(store, "root", lambda db, uid: Owner())
     monkeypatch.setattr(store, "rows", lambda db, uid, name, tr: purchases if name == "transactions" else [])
+    monkeypatch.setattr(store, "card_purchase_rows", lambda db, uid, card_id, tr: purchases)
     monkeypatch.setattr(store, "atomic", lambda db, uid, action: action(Tx()))
     input = BankRefundIn(cycle="2026-09-29", purchase_id="purchase",
                          account_id="bank", date="2026-10-26", value=100,
