@@ -4,7 +4,7 @@ const mocks=vi.hoisted(()=>({auth:{currentUser:{uid:"A"} as {uid:string}|null},p
 vi.mock("@/lib/firebase",()=>({firebaseAuth:mocks.auth}));
 vi.mock("@/lib/api",()=>({ApiError: class ApiError extends Error { status:number; constructor(status:number,message:string){super(message);this.status=status;} },apiPost:mocks.post,apiPut:mocks.put,apiDelete:mocks.del,apiGet:vi.fn()}));
 import { cacheSet,cachedFetch } from "@/lib/offline/accountCache";
-import { queueTransaction,queueTransactionDelete,listSyncOperations,flushSyncQueue,discardConflictedOperation } from "./queue";
+import { queueTransaction,queueTransactionDelete,queueEntityCreate,listSyncOperations,flushSyncQueue,discardConflictedOperation } from "./queue";
 const input={name:"Offline",type:"despesa" as const,status:"pago" as const,value:12.34,date:"2026-10-12",account_id:"bank",card_id:null,to_account_id:null,category_id:null,fixed:false,recurrence:null,installment:false,total_installments:null,current_installment:null,adjusted_value:null,attachment:null,notes:null,notify_enabled:true};
 beforeEach(()=>{vi.stubGlobal("indexedDB",new IDBFactory());vi.stubGlobal("navigator",{onLine:false});vi.stubGlobal("window",{dispatchEvent:vi.fn()});mocks.auth.currentUser={uid:"A"};mocks.post.mockReset();mocks.put.mockReset();mocks.del.mockReset();});
 it("commits the offline queue to IndexedDB and isolates user switches",async()=>{
@@ -187,5 +187,47 @@ it("never retries a conflicted offline deletion or leaks it to another account",
 
 it("rejects offline deletion without a previously verified version", async () => {
   await expect(queueTransactionDelete("uncached")).rejects.toThrow("FINNOS_OFFLINE_NO_CACHE");
+  expect(await listSyncOperations()).toEqual([]);
+});
+
+
+it.each([
+  ["account.create", "/accounts", { name: "Banco", initial_balance: -200, type: "corrente", institution: "", institution_id: null, color: "#070F52", active: true }],
+  ["category.create", "/categories", { name: "Alimentação", group: "necessidades", color: "#070F52", icon: "wallet", monthly_budget: 300, monthly_goal: 0 }],
+  ["card.create", "/cards", { name: "Cartão", institution: "", institution_id: null, color: "#070F52", limit: 1000, closing_day: 10, due_day: 20, payment_account_id: "server-bank", active: true }],
+  ["subscription.create", "/subscriptions", { name: "Streaming", value: 49.9, recurrence: "mensal", next_charge: "2026-10-29", account_id: "server-bank", card_id: null, category_id: null, active: true, notes: null }],
+] as const)("persists a %s draft and replays one idempotent server create", async (kind, path, payload) => {
+  const op = await queueEntityCreate(kind, payload);
+  expect((await listSyncOperations())[0].status).toBe("pending");
+  vi.stubGlobal("navigator", { onLine: true });
+  mocks.post.mockRejectedValueOnce(new Error("lost response"));
+  await flushSyncQueue();
+  expect((await listSyncOperations())[0].status).toBe("error");
+  mocks.post.mockResolvedValue({ id: "deterministic-server-id" });
+  await flushSyncQueue();
+  expect(mocks.post.mock.calls).toEqual([
+    [path, payload, { "X-FINNOS-Operation-ID": op.id }],
+    [path, payload, { "X-FINNOS-Operation-ID": op.id }],
+  ]);
+  expect(await listSyncOperations()).toEqual([]);
+});
+
+it("blocks a rejected category draft and never sends the next account until resolved", async () => {
+  const { ApiError } = await import("@/lib/api");
+  const first = await queueEntityCreate("category.create", { name: "Teste", group: "desejos", monthly_budget: 0, monthly_goal: 0, color: "#070F52", icon: "wallet" });
+  await queueEntityCreate("account.create", { name: "Banco", initial_balance: 0, institution: "", institution_id: null, type: "corrente", color: "#070F52", active: true });
+  vi.stubGlobal("navigator", { onLine: true });
+  mocks.post.mockRejectedValueOnce(new ApiError(422, "invalid category"));
+  await flushSyncQueue();
+  const rows = await listSyncOperations();
+  expect(rows.map(op => op.status)).toEqual(["conflict", "pending"]);
+  expect(mocks.post).toHaveBeenCalledTimes(1);
+  mocks.auth.currentUser = { uid: "B" };
+  expect(await listSyncOperations()).toEqual([]);
+  mocks.auth.currentUser = { uid: "A" };
+  await discardConflictedOperation(first.id);
+  mocks.post.mockResolvedValue({ id: "bank-created" });
+  await flushSyncQueue();
+  expect(mocks.post).toHaveBeenCalledTimes(2);
   expect(await listSyncOperations()).toEqual([]);
 });
