@@ -149,5 +149,13 @@ O arquivo original forneceu **grupos** de IDs e objetivos, não descrição indi
 - O Preview READY visto anteriormente correspondia a SHA mais antigo; não é homologação do HEAD.
 - Não declarar nenhum P0/P1 encerrado somente com CI verde.
 
+## Continuidade após a consolidação — FIN-07/08 (27/10/2026)
+
+- **Corrigido em código:** parcelas legadas k/n sem `installment_value` não projetam mais R$ 0,00 no Fluxo/Calendário. A função canônica `finnos.lib.transaction_amount.occurrence_amount` é usada por Analytics e Orçamento V2; o modo local usa `occurrenceAmount` em Flow/Calendar. Valores explícitos antigos são preservados, sem mutação do Firestore.
+- **Fixture nova:** `frontend/fixtures/finance-occurrence-amount-parity.json` verifica primeira/última parcela, 7/10, centavos residuais e valor legado explícito nos dois motores. Testes: `test_occurrence_amount_parity.py`, `occurrenceAmount.test.ts`, integração em `finance-migration.test.ts`.
+- **Corrigido em código:** a lista de categorias do Fluxo reutiliza o cálculo de pesos positivos já existente no Dashboard; estornos que tornem uma categoria negativa **continuam no gasto líquido real**, mas não produzem barra negativa ou percentual maior que 100%. Testes de integração Python/TS usam o ledger sintético compartilhado.
+- **Estado:** FIN-07/08/ARQ-04 continuam **parciais**. Não refazer estes patches; seguir para centralização do ledger/caixa, consultas agregadas, faturas históricas e E2E Firestore real. Não afirmar homologação no Preview sem SHA exato e UID de teste autorizado.
+- **Validação:** workflows no SHA `e7f7ef51d0bbac24e73e92fa9d0cd6a3ba5f3ff8` foram aprovados. Os commits posteriores de categorias e testes exigem novo CI no SHA final.
+
 ## Regra de manutenção
 Toda implementação futura deve atualizar a linha correspondente: **estado → arquivo/commit/teste → evidência Preview/Firestore → aceite**. Não apagar itens por parecerem duplicados; registrar a equivalência (ex.: FNS-021 ↔ FIN-15) e manter o vínculo. Alterar estados para "homologado" somente após os gates completos.
