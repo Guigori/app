@@ -326,6 +326,49 @@ async def calendar_month(
             day.projected_income = quantize_brl(D(day.projected_income) + value)
         else:
             day.projected_expense = quantize_brl(D(day.projected_expense) + value)
+    # A purchase imported as installment k/n remains one stored transaction,
+    # but its later competency portions belong on those later calendar days.
+    # Do not fabricate a clickable transaction count on those dates.
+    from calendar import monthrange
+    year, month_number = map(int, m.split("-"))
+    last_day = monthrange(year, month_number)[1]
+    for source in history:
+        if not source.get("installment") or source["date"][:7] == m:
+            continue
+        portion = month_portion(source, m)
+        if portion is None:
+            continue
+        occurrence_day = min(int(source["date"][8:10]), last_day)
+        key = f"{m}-{occurrence_day:02d}"
+        day = buckets.setdefault(
+            key, DayFlow(date=key, income=D("0.0"), expense=D("0.0"),
+                         projected_income=D("0.0"), projected_expense=D("0.0"),
+                         count=0),
+        )
+        if source["type"] == "receita":
+            day.income = quantize_brl(D(day.income) + portion)
+        elif source["type"] == "despesa":
+            day.expense = quantize_brl(D(day.expense) + portion)
+
+    # Forecast fixed series only for future occurrences not represented by a
+    # real paid, scheduled or pending row in this month. Same-series bills
+    # already suppress planned subscriptions below.
+    for source, date_key in monthly_projection_sources(history, m):
+        if date_key < today_iso():
+            continue
+        day = buckets.setdefault(
+            date_key, DayFlow(date=date_key, income=D("0.0"),
+                              expense=D("0.0"), projected_income=D("0.0"),
+                              projected_expense=D("0.0"), count=0),
+        )
+        if source["type"] == "receita":
+            day.projected_income = quantize_brl(
+                D(day.projected_income) + _amount(source)
+            )
+        elif source["type"] == "despesa":
+            day.projected_expense = quantize_brl(
+                D(day.projected_expense) + _amount(source)
+            )
     # FIN-08/14: reverse a purchase as a negative expense on the actual
     # compensation date. An invoice bank refund must not be counted as new
     # salary or income, even when the original purchase was in a prior month.
