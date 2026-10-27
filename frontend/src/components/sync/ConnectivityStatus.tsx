@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import { firebaseAuth } from "@/lib/firebase";
 import { Cloud, CloudOff, Loader2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { flushSyncQueue, listSyncOperations, type SyncOperation } from "@/lib/sync/queue";
+import { describeSyncQueue } from "@/lib/sync/presentation";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { SyncEntityReviewDialog } from "./SyncEntityReviewDialog";
 import type { TransactionInput } from "@/types/finnos";
@@ -13,12 +16,14 @@ type NetworkState = "online" | "offline";
 export function ConnectivityStatus() {
   const { openTransaction } = useDialogs();
   const [state, setState] = useState<NetworkState>(() => navigator.onLine ? "online" : "offline");
-  const [pending, setPending] = useState(0);
-  const [blocker, setBlocker] = useState<SyncOperation | null>(null);
+  const [operations, setOperations] = useState<SyncOperation[]>([]);
   const [reviewEntity, setReviewEntity] = useState<SyncOperation | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const collapseTimer = useRef<number | null>(null);
+  const pending = operations.length;
+  const presentation = describeSyncQueue(operations, state, syncing);
+  const blocker = presentation.blocker;
 
   const collapseLater = useCallback((delay = 4200) => {
     if (collapseTimer.current) window.clearTimeout(collapseTimer.current);
@@ -27,17 +32,23 @@ export function ConnectivityStatus() {
 
   const refresh = useCallback(async () => {
     const operations = await listSyncOperations();
-    setPending(operations.length);
-    setBlocker(operations.find(op => op.status === "conflict") ?? null);
+    setOperations(operations);
     return operations;
   }, []);
 
   const runSync = useCallback(async (announceReconnect = false) => {
     if (!navigator.onLine) return;
     setState("online");
+    const syncUid = firebaseAuth?.currentUser?.uid;
+    if (!syncUid) {
+      setOperations([]);
+      setSyncing(false);
+      setExpanded(false);
+      return;
+    }
     const before = await listSyncOperations();
     if (before.length === 0) {
-      setPending(0);
+      setOperations([]);
       setSyncing(false);
       setExpanded(false);
       if (announceReconnect) {
@@ -49,18 +60,24 @@ export function ConnectivityStatus() {
       return;
     }
 
-    setPending(before.length);
+    setOperations(before);
     setSyncing(true);
     setExpanded(true);
     if (announceReconnect) {
       toast.success("Conexão restabelecida", {
-        description: "O FINNOS voltou a ficar online. Seus dados estão sendo sincronizados.",
+        description: "O FINNOS tentará enviar os registros pendentes ao servidor.",
         duration: 3200,
       });
     }
 
     try {
       await flushSyncQueue();
+      // A late HTTP acknowledgement from another login must not be shown
+      // as this user\'s successful synchronization.
+      if (syncUid !== firebaseAuth?.currentUser?.uid) {
+        await refresh();
+        return;
+      }
       const after = await refresh();
       if (after.length === 0) {
         toast.success("Sincronização concluída", {
@@ -73,6 +90,9 @@ export function ConnectivityStatus() {
         // Keep its status visible until the user explicitly reviews it.
         setExpanded(after.some(op => op.status === "conflict"));
       }
+    } catch {
+      await refresh();
+      toast.error("Não foi possível verificar a sincronização. Os registros locais foram preservados.");
     } finally {
       setSyncing(false);
     }
@@ -117,10 +137,20 @@ export function ConnectivityStatus() {
     window.addEventListener("finnos:sync-error", syncError);
     document.addEventListener("visibilitychange", visible);
 
+    const stopAuth = firebaseAuth
+      ? onAuthStateChanged(firebaseAuth, () => {
+          // Never retain another UID\'s pending record in an on-screen dialog.
+          setReviewEntity(null);
+          setOperations([]);
+          if (navigator.onLine) void runSync(false);
+          else void refresh();
+        })
+      : () => {};
     if (!navigator.onLine) offline();
     else void runSync(false);
 
     return () => {
+      stopAuth();
       window.removeEventListener("offline", offline);
       window.removeEventListener("online", online);
       window.removeEventListener("finnos:sync-state", syncState);
@@ -164,7 +194,7 @@ export function ConnectivityStatus() {
       role="status"
       aria-live="polite"
       aria-expanded={expanded}
-      aria-label={blocker ? "Sincronização bloqueada. Revisar lançamento" : state === "offline" ? "Sem conexão" : syncing ? "Sincronizando" : "Sincronização pendente"}
+      aria-label={presentation.ariaLabel}
       data-testid="offline-status"
     >
       <span className="grid size-5 shrink-0 place-items-center">
@@ -175,14 +205,7 @@ export function ConnectivityStatus() {
       </span>
       {expanded && (
         <span className="min-w-0 whitespace-normal text-left leading-snug">
-          {syncing
-            ? `Sincronizando ${pending} lançamento${pending === 1 ? "" : "s"}…`
-            : blocker ? `Sincronização bloqueada · revisar ${pending} lançamento${pending === 1 ? "" : "s"}`
-            : state === "offline"
-              ? (pending
-                ? `Você está offline · ${pending} lançamento${pending === 1 ? "" : "s"} salvo${pending === 1 ? "" : "s"} neste aparelho`
-                : "Você está offline · os dados disponíveis neste aparelho continuam funcionando")
-              : `${pending} lançamento${pending === 1 ? "" : "s"} aguardando sincronização`}
+          {presentation.text}
         </span>
       )}
     </button>
