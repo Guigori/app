@@ -88,7 +88,15 @@ def capture_event(entity: str, action: str, before: dict | None,
             delta = {}
             rebuild = True
         else:
-            rebuild = False
+            # A historic card purchase might have refunds/merchant credits
+            # in other months. Its category or amount cannot be updated
+            # safely without reading those ledgers in this transaction.
+            # The envelope captures exact transaction cents, but replay
+            # MUST rebuild instead of treating that delta as complete.
+            rebuild = bool(
+                (before is not None and before.get("card_id"))
+                or (after is not None and after.get("card_id"))
+            )
         source_count_delta = int(after is not None) - int(before is not None)
     else:
         delta = {}
