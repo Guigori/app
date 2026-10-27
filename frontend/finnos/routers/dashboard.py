@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.account_balances import AccountLedger
-from finnos.lib.stats import add_months, balance_effects, month_bounds, month_portion
+from finnos.lib.stats import add_months, month_bounds, month_portion
 from finnos.lib.competency import monthly_competency, positive_category_slices
 from finnos.models.finnos import CategorySlice, DashboardOut, RuleItem
 from finnos.routers.auth import require_user
