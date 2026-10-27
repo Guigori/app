@@ -254,3 +254,35 @@ it("paginates the local monthly history with stable cursor parity and no duplica
   await expect(fetchTransactionsPage("invalid-month")).rejects.toThrow("Página financeira inválida.");
   await expect(fetchTransactionsPage("2026-10", "not-in-records")).rejects.toThrow("Cursor");
 });
+
+
+it("shows the next subscription charge on local calendar as forecast without a paid debit", () => {
+  setScenario([]);
+  const db = readDb();
+  db.subscriptions = [{
+    id: "stream", name: "Streaming", value: 49.9,
+    category_id: null, category_name: null, category_color: null,
+    account_id: "bank", account_name: "Banco", card_id: null,
+    card_name: null, recurrence: "mensal", next_charge: "2026-10-29",
+    active: true, notes: null,
+  }];
+  writeDb(db);
+  let calendar = localCalendar("2026-10");
+  expect(calendar.income).toBe(0);
+  expect(calendar.expense).toBe(0);
+  expect(calendar.projected_expense).toBe(49.9);
+  expect(calendar.days.find(day => day.date === "2026-10-29")?.count).toBe(0);
+  expect(localFlow({ month: "2026-10", months: 2 }).projected_expense).toBe(49.9);
+
+  const updated = readDb();
+  updated.transactions.push({
+    ...purchase("stream-explicit", 49.9),
+    name: "Streaming", status: "agendado", date: "2026-10-29",
+    card_id: null,
+  });
+  writeDb(updated);
+  calendar = localCalendar("2026-10");
+  expect(calendar.projected_expense).toBe(49.9);
+  expect(calendar.days.find(day => day.date === "2026-10-29")?.count).toBe(1);
+  expect(localFlow({ month: "2026-10", months: 2 }).projected_expense).toBe(49.9);
+});
