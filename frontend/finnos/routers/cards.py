@@ -64,12 +64,24 @@ async def _build(doc: dict, txs: List[dict], accounts: dict) -> CardOut:
     )
 
 
-async def _context(user_id: str) -> tuple[List[dict], dict]:
-    txs = await db.transactions.find(
-        {"user_id": user_id, "card_id": {"$ne": None}}
-    ).to_list(20000)
+async def _context_all_cards(user_id: str, cards: List[dict]) -> tuple[dict, dict]:
+    """Read only indexed per-card purchases; no global 20k-document scan.
+
+    A final revision read covers the entire series of card queries, so a
+    concurrent purchase or invoice payment cannot mix cards from two states.
+    """
+    from finnos.lib.account_balances import finance_revision
+    from finnos.lib.card_transaction_reads import read_card_purchases
+    revision = await finance_revision(user_id)
     accounts = await db.accounts.find({"user_id": user_id}).to_list(500)
-    return (txs, {a["id"]: a for a in accounts})
+    by_card = {}
+    for card in cards:
+        by_card[card["id"]] = await read_card_purchases(user_id, card["id"], revision)
+    if await finance_revision(user_id) != revision:
+        raise HTTPException(
+            409, "Cartões alterados durante a consulta; atualize para recalcular."
+        )
+    return by_card, {a["id"]: a for a in accounts}
 
 
 async def _context_one_card(user_id: str, card_id: str) -> tuple[List[dict], dict]:
@@ -89,11 +101,16 @@ async def _context_one_card(user_id: str, card_id: str) -> tuple[List[dict], dic
 
 @router.get("", response_model=List[CardOut])
 async def list_cards(user: dict = Depends(require_user)) -> List[CardOut]:
+    # Read the revision before the cards themselves as well as the purchases.
+    from finnos.lib.account_balances import finance_revision
+    start_revision = await finance_revision(user["id"])
     docs = (
         await db.cards.find({"user_id": user["id"]}).sort("created_at", 1).to_list(200)
     )
-    txs, accounts = await _context(user["id"])
-    return [await _build(doc, txs, accounts) for doc in docs]
+    by_card, accounts = await _context_all_cards(user["id"], docs)
+    if await finance_revision(user["id"]) != start_revision:
+        raise HTTPException(409, "Cartões alterados durante a consulta; tente novamente.")
+    return [await _build(doc, by_card[doc["id"]], accounts) for doc in docs]
 
 
 @router.post("", response_model=CardOut, status_code=201)
