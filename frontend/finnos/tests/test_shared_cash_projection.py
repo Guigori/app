@@ -19,10 +19,9 @@ def tx(identifier, value, *, when="2026-11-01", kind="despesa",
 
 def test_paid_card_purchase_and_invoice_payment_are_not_double_counted():
     rows = [
-        tx("purchase", "300.00", card_id_override=False)
+        tx("purchase", "300.00")
     ]
     # Card purchases never directly debit bank balances.
-    rows[0].pop("card_id_override")
     rows[0]["card_id"] = "card"
     rows.append(tx("settled", "300.00", invoice_payment=True))
     rows.append(tx("scheduled", "40.05"))
@@ -41,7 +40,7 @@ def test_fixed_salary_and_explicit_occurrence_are_not_duplicated():
                  kind="receita", fixed=False, recurrence_id="salary-1")
     # November has a single projection from the last fixed source.
     result = project_scheduled_cash(
-        [fixed, current], 0, date(2026, 10, 01), date(2026, 11, 30),
+        [fixed, current], 0, date(2026, 10, 1), date(2026, 11, 30),
     )
     assert result["daily_deltas_cents"]["2026-10-05"] == 210000
     assert result["daily_deltas_cents"]["2026-11-05"] == 200000
