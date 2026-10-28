@@ -53,6 +53,7 @@ def test_radar_deducts_merchant_credit_on_inactive_card(monkeypatch):
         }],
         "cards": [archived],
         "accounts": [{"id": "bank", "initial_balance": 1000}],
+        "subscriptions": [],
     }
     monkeypatch.setattr(radar, "today_iso", lambda: "2026-10-26")
     monkeypatch.setattr(radar, "db", SimpleNamespace(**{
