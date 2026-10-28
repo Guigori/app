@@ -7,7 +7,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { localRadar } from "@/lib/local/radar";
 import { isLocalMode, getMode } from "@/lib/mode";
 import { loadSessionProfile } from "@/lib/profileIdentity";
-import { queueTransaction, queueTransactionDelete, queueEntityCreate, flushSyncQueue, listSyncOperations, isTransactionSyncOperation, type OperationSource } from "@/lib/sync/queue";
+import { queueTransaction, queueTransactionDelete, queueEntityCreate, queueEntityMutation, flushSyncQueue, listSyncOperations, isTransactionSyncOperation, type OperationSource } from "@/lib/sync/queue";
 import { cacheSet, cachedFetch } from "@/lib/offline/accountCache";
 import {
   localFinanceHistory,
@@ -338,12 +338,29 @@ export async function createAccount(input: AccountInput): Promise<Account> {
 
 export async function updateAccount(id: string, input: AccountInput): Promise<Account> {
   if (isLocalMode()) return localUpdateAccount(id, input);
-  return apiPut<Account>(`/accounts/${id}`, input);
+  if (!navigator.onLine) {
+    const original = (await fetchAccounts()).find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão da conta indisponível offline.");
+    await queueEntityMutation("account.update", id, input, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiPut<Account>(`/accounts/${encodeURIComponent(id)}`, input);
 }
 
 export async function deleteAccount(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteAccount(id);
-  return apiDelete<void>(`/accounts/${id}`);
+  if (!navigator.onLine) {
+    const original = (await fetchAccounts()).find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão da conta indisponível offline.");
+    await queueEntityMutation("account.delete", id, {
+      name: original.name, institution: original.institution,
+      institution_id: original.institution_id, type: original.type,
+      color: original.color, initial_balance: original.initial_balance,
+      active: original.active,
+    }, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiDelete<void>(`/accounts/${encodeURIComponent(id)}`);
 }
 
 // --- Categories -------------------------------------------------------------
@@ -364,12 +381,28 @@ export async function createCategory(input: CategoryInput): Promise<Category> {
 
 export async function updateCategory(id: string, input: CategoryInput): Promise<Category> {
   if (isLocalMode()) return localUpdateCategory(id, input);
-  return apiPut<Category>(`/categories/${id}`, input);
+  if (!navigator.onLine) {
+    const original = (await fetchCategories()).find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão da categoria indisponível offline.");
+    await queueEntityMutation("category.update", id, input, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiPut<Category>(`/categories/${encodeURIComponent(id)}`, input);
 }
 
 export async function deleteCategory(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteCategory(id);
-  return apiDelete<void>(`/categories/${id}`);
+  if (!navigator.onLine) {
+    const original = (await fetchCategories()).find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão da categoria indisponível offline.");
+    await queueEntityMutation("category.delete", id, {
+      name: original.name, icon: original.icon, color: original.color,
+      group: original.group, monthly_budget: original.monthly_budget,
+      monthly_goal: original.monthly_goal,
+    }, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiDelete<void>(`/categories/${encodeURIComponent(id)}`);
 }
 
 // --- Transactions -----------------------------------------------------------
@@ -515,12 +548,30 @@ export async function createCard(input: CardInput): Promise<CreditCard> {
 
 export async function updateCard(id: string, input: CardInput): Promise<CreditCard> {
   if (isLocalMode()) return localUpdateCard(id, input);
-  return apiPut<CreditCard>(`/cards/${id}`, input);
+  if (!navigator.onLine) {
+    const original = (await fetchCards()).find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão do cartão indisponível offline.");
+    await queueEntityMutation("card.update", id, input, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiPut<CreditCard>(`/cards/${encodeURIComponent(id)}`, input);
 }
 
 export async function deleteCard(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteCard(id);
-  return apiDelete<void>(`/cards/${id}`);
+  if (!navigator.onLine) {
+    const original = (await fetchCards()).find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão do cartão indisponível offline.");
+    await queueEntityMutation("card.delete", id, {
+      name: original.name, institution: original.institution,
+      institution_id: original.institution_id, color: original.color,
+      limit: original.limit, closing_day: original.closing_day,
+      due_day: original.due_day, payment_account_id: original.payment_account_id,
+      active: original.active,
+    }, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiDelete<void>(`/cards/${encodeURIComponent(id)}`);
 }
 
 // --- Notificações ----------------------------------------------------------
@@ -595,13 +646,31 @@ export async function createSubscription(input: SubscriptionInput): Promise<Subs
 }
 
 export async function updateSubscription(id: string, input: SubscriptionInput): Promise<SubscriptionItem> {
-  return isLocalMode() ? localUpdateSubscription(id, input) : apiPut<SubscriptionItem>(`/subscriptions/${encodeURIComponent(id)}`, input);
+  if (isLocalMode()) return localUpdateSubscription(id, input);
+  if (!navigator.onLine) {
+    const original = (await fetchSubscriptions()).items.find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão da assinatura indisponível offline.");
+    await queueEntityMutation("subscription.update", id, input, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiPut<SubscriptionItem>(`/subscriptions/${encodeURIComponent(id)}`, input);
 }
 
 export async function deleteSubscription(id: string): Promise<void> {
   if (isLocalMode()) {
     localDeleteSubscription(id);
     return;
+  }
+  if (!navigator.onLine) {
+    const original = (await fetchSubscriptions()).items.find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão da assinatura indisponível offline.");
+    await queueEntityMutation("subscription.delete", id, {
+      name: original.name, value: original.value, recurrence: original.recurrence,
+      next_charge: original.next_charge, account_id: original.account_id,
+      category_id: original.category_id, card_id: original.card_id,
+      active: original.active, notes: original.notes,
+    }, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
   }
   await apiDelete<void>(`/subscriptions/${encodeURIComponent(id)}`);
 }
