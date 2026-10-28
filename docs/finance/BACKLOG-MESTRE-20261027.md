@@ -214,7 +214,7 @@ Consultar **[LOTE-P0-P1-20261028.md](./LOTE-P0-P1-20261028.md)** para arquivos, 
 - **FIN-03/07/08/13/14 — avanço parcial:** novas séries fixas têm `recurrence_id` determinístico; planejador puro admite mudanças esta/próximas/todas futuras sem alterar histórico pago; Radar e Simulação compartilham projeção de caixa em centavos. **Ainda parcial**: o fluxo de edição por escopo não está ligado ao formulário ou a uma escrita atômica de série; sem migração automática do legado ou paridade global Python/TS.
 - **SYNC-01/02/FNS-007 — avanço parcial:** CRUD de quatro cadastros aceita versões/recibos idempotentes; a fila TS prepara update/delete UID-scoped; regressão sintética e HTTP emulador exercitam reenvios. **Ainda parcial**: integração dos formulários offline e ensaio PWA/reconexão em navegador real.
 - **FNS-011 — avanço em código:** headers de segurança API e preservação do smoke HTML; **FNS-008/012 e ARQ-08 pendentes**: Rules reais, rate limiting distribuído, observabilidade e autenticação real.
-- **FNS-003/010/017 — avanço parcial UX/performance:** code splitting de rotas e dashboards, estados de erro Radar/Patrimônio; **FNS-004 e FIN-15 pendentes**, revisão visual e responsiva real pendente.
+- **FNS-003/010/017 — avanço parcial UX/performance:** code splitting de rotas, dashboards e Registro Inteligente móvel, estados de erro Radar/Patrimônio; **FNS-004 e FIN-15 pendentes**, revisão visual e responsiva real pendente.
 - **Gate:** PR #47 continua Draft, nenhuma mudança de produção/Rules/Auth, nenhuma ativação de agregado materializado como fonte de saldos. Registrar o CI no SHA final antes de classificar qualquer item como homologado.
 
 ## Regra de manutenção
