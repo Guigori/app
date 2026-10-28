@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Plus } from "lucide-react";
-import SmartRegister from "@/pages/SmartRegister";
+const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
 import { cn } from "@/lib/utils";
 import { type NavItem } from "@/components/layout/nav";
 import { navItemsFor, useNavigationPreferences } from "@/lib/navigationPreferences";
@@ -158,7 +158,11 @@ export function MobileNav() {
               initial={{ y: "110%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "110%", opacity: 0 }}
               transition={{ type: "spring", stiffness: 330, damping: 34 }}>
               <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/25" aria-hidden="true" />
-              <div className="min-h-0 flex-1 overflow-hidden"><SmartRegister embedded /></div>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-white/70">Preparando o registro...</div>}>
+                  <SmartRegister embedded />
+                </Suspense>
+              </div>
             </motion.section>
           </>
         )}
