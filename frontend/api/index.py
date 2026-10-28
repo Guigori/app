@@ -31,6 +31,19 @@ async def preview_only(request: Request, call_next):
         return JSONResponse({"detail": "Not found"}, status_code=404)
     response = await call_next(request)
     response.headers["Cache-Control"] = "private, no-store"
+    # Security headers for API endpoints only: a blanket browser CSP would
+    # break Firebase auth popups and external frontend assets.
+    if request.url.path.startswith("/api/"):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=()"
+        )
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; "
+            "form-action 'none'"
+        )
     return response
 
 
