@@ -105,10 +105,14 @@ async def create_account(
 
 @router.put("/{account_id}", response_model=AccountOut)
 async def update_account(
-    account_id: str, payload: AccountIn, user: dict = Depends(require_user)
+    account_id: str, payload: AccountIn, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
+    x_finnos_base_version: int | None = Header(default=None, ge=1)
 ) -> AccountOut:
     result = await db.accounts.update_one(
-        {"id": account_id, "user_id": user["id"]},
+        {"id": account_id, "user_id": user["id"],
+         "_operation_id": x_finnos_operation_id,
+         "_expected_version": x_finnos_base_version},
         {"$set": {**payload.model_dump(), "updated_at": datetime.now(timezone.utc)}},
     )
     if not result.matched_count:
@@ -120,7 +124,9 @@ async def update_account(
 
 
 @router.delete("/{account_id}", status_code=204)
-async def delete_account(account_id: str, user: dict = Depends(require_user)) -> None:
+async def delete_account(account_id: str, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
+    x_finnos_base_version: int | None = Header(default=None, ge=1)) -> None:
     used = await db.transactions.count_documents(
         {
             "user_id": user["id"],
@@ -132,7 +138,9 @@ async def delete_account(account_id: str, user: dict = Depends(require_user)) ->
             status_code=409,
             detail="Esta conta tem transações vinculadas. Exclua ou mova as transações antes de excluir a conta.",
         )
-    result = await db.accounts.delete_one({"id": account_id, "user_id": user["id"]})
+    result = await db.accounts.delete_one({"id": account_id, "user_id": user["id"],
+         "_operation_id": x_finnos_operation_id,
+         "_expected_version": x_finnos_base_version})
     if not result.deleted_count:
         raise HTTPException(status_code=404, detail="Conta não encontrada.")
 
