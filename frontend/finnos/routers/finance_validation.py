@@ -22,6 +22,47 @@ async def validation(user: dict = Depends(require_user)):
     return audit_finance(records)
 
 
+@router.get("/fiint")
+async def fiint_maturity(user: dict = Depends(require_user)):
+    """FIINT D1..12m: authenticated, revision-consistent, read-only report.
+
+    Never treats bank refunds as income or pending movements as settled
+    history, and never returns silently truncated transaction samples.
+    """
+    from finnos.lib.account_balances import finance_revision
+    from finnos.lib.financial_summaries import stream_financial_window
+    from finnos.lib.fiint import fiint_report, fiint_months
+
+    uid = user["id"]
+    today = date.fromisoformat(today_iso())
+    revision = await finance_revision(uid)
+    accounts = await db.accounts.find({"user_id": uid}).to_list(500)
+    categories = await db.categories.find({"user_id": uid}).to_list(500)
+    cards = await db.cards.find({"user_id": uid}).to_list(200)
+    budgets = await db.budget_cycles.find({"user_id": uid}).to_list(500)
+    subscriptions = await db.subscriptions.find({"user_id": uid}).to_list(500)
+    months = fiint_months(today)
+    summary = await stream_financial_window(uid, months, cards, revision)
+    entries = [
+        {
+            "month": month,
+            "income": float(summary.monthly(month)["income"]),
+            "expense": float(summary.monthly(month)["expense"]),
+            "net": float(summary.monthly(month)["net"]),
+            "count": summary.monthly(month)["count"],
+        }
+        for month in months
+    ]
+    if await finance_revision(uid) != revision:
+        raise HTTPException(409, "Histórico alterado durante a análise FIINT.")
+    result = fiint_report(
+        today=today, monthly=entries, accounts=accounts,
+        categories=categories, budget_cycles=budgets,
+        subscriptions=subscriptions,
+    )
+    return {**result, "finance_revision": revision}
+
+
 class InvoiceEvidenceIn(FinanceModel):
     card_id: str = Field(min_length=1, max_length=1500)
     cycle: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
