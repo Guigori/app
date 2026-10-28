@@ -30,6 +30,7 @@ async def _enriched_accounts(user_id: str) -> list[AccountOut]:
         balance, total_income, total_expense = ledger.result(a["id"])
         out.append(
             AccountOut(
+                version=a.get("version", 1),
                 id=a["id"],
                 name=a["name"],
                 institution=a.get("institution", ""),
