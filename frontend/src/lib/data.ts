@@ -512,12 +512,13 @@ export async function editRecurrence(
   scope: RecurrenceEditScope,
   effective_date: string,
   changes: { name?: string; value?: number },
+  operationId: string,
 ): Promise<Transaction> {
   if (isLocalMode()) throw new Error("Edição de séries requer conta sincronizada.");
   if (!navigator.onLine) throw new Error("Conecte-se para editar uma série recorrente. Nenhuma alteração foi perdida.");
   if (!Number.isSafeInteger(version) || version < 1) throw new Error("Versão de recorrência indisponível.");
   if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(effective_date)) throw new Error("Data inválida.");
-  const operationId = crypto.randomUUID();
+  if (!operationId) throw new Error("Identificador de edição inválido.");
   return apiPost<Transaction>(`/transactions/${encodeURIComponent(id)}/recurrence`, {
     scope, effective_date, changes,
   }, {
