@@ -9,7 +9,9 @@ const STORE = "operations";
 
 export type OperationSource = "manual" | "ios_shortcut" | "bank_notification" | "import" | "system";
 export type OfflineCreateKind = "account.create" | "category.create" | "card.create" | "subscription.create";
-type OperationKind = "transaction.create" | "transaction.update" | "transaction.delete" | OfflineCreateKind;
+export type OfflineEntity = "account" | "category" | "card" | "subscription";
+export type OfflineMutationKind = `${OfflineEntity}.update` | `${OfflineEntity}.delete`;
+type OperationKind = "transaction.create" | "transaction.update" | "transaction.delete" | OfflineCreateKind | OfflineMutationKind;
 export type OfflineCreateInput = AccountInput | CategoryInput | CardInput | SubscriptionInput;
 
 export interface SyncOperation {
@@ -90,6 +92,35 @@ export async function queueEntityCreate(
     id: crypto.randomUUID(), uid, kind, payload,
     source: "manual", createdAt: new Date().toISOString(),
     attempts: 0, status: "pending",
+  };
+  if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  await persistNewOperation(operation);
+  return operation;
+}
+
+/** Queue conditional non-transaction edits/deletes only with a server version
+ * previously obtained under this UID. No optimistic guessing is permitted.
+ * The queue intentionally does not write temporary financial entities.
+ */
+export async function queueEntityMutation(
+  kind: OfflineMutationKind,
+  entityId: string,
+  payload: OfflineCreateInput,
+  baseVersion: number,
+): Promise<SyncOperation> {
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (!uid) throw new Error("FINNOS_AUTH_REQUIRED");
+  if (!entityId || entityId.includes("/") || !Number.isSafeInteger(baseVersion) || baseVersion < 1) {
+    throw new Error("Versão e identificador do cadastro são obrigatórios.");
+  }
+  const pending = await listSyncOperations();
+  if (pending.some(item => item.entityId === entityId && item.uid === uid)) {
+    throw new Error("Revise a alteração pendente antes de editar ou excluir este cadastro.");
+  }
+  const operation: SyncOperation = {
+    id: crypto.randomUUID(), uid, kind, entityId, baseVersion, payload,
+    source: "manual", createdAt: new Date().toISOString(), attempts: 0,
+    status: "pending",
   };
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   await persistNewOperation(operation);
@@ -200,6 +231,28 @@ export async function flushSyncQueue(): Promise<void> {
           if (!path) throw new Error("Cadastro offline não permitido.");
           await apiPost(path, op.payload, {
             "X-FINNOS-Operation-ID": op.id,
+          });
+        } else if (op.kind.endsWith(".update") && op.kind !== "transaction.update" && op.entityId) {
+          const paths: Record<OfflineEntity, string> = {
+            account: "/accounts", category: "/categories",
+            card: "/cards", subscription: "/subscriptions",
+          };
+          const kind = op.kind.split(".")[0] as OfflineEntity;
+          if (!Object.prototype.hasOwnProperty.call(paths, kind)) throw new Error("Cadastro offline não permitido.");
+          await apiPut(`${paths[kind]}/${encodeURIComponent(op.entityId)}`, op.payload, {
+            "X-FINNOS-Operation-ID": op.id,
+            "X-FINNOS-Base-Version": String(op.baseVersion),
+          });
+        } else if (op.kind.endsWith(".delete") && op.kind !== "transaction.delete" && op.entityId) {
+          const paths: Record<OfflineEntity, string> = {
+            account: "/accounts", category: "/categories",
+            card: "/cards", subscription: "/subscriptions",
+          };
+          const kind = op.kind.split(".")[0] as OfflineEntity;
+          if (!Object.prototype.hasOwnProperty.call(paths, kind)) throw new Error("Cadastro offline não permitido.");
+          await apiDelete<void>(`${paths[kind]}/${encodeURIComponent(op.entityId)}`, {
+            "X-FINNOS-Operation-ID": op.id,
+            "X-FINNOS-Base-Version": String(op.baseVersion),
           });
         } else if (op.kind === "transaction.delete" && op.entityId) {
           await apiDelete<void>(`/transactions/${encodeURIComponent(op.entityId)}`, {
