@@ -23,6 +23,7 @@ DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 
 
 class AccountOut(BaseModel):
+    version: int = 1
     id: str
     name: str
     institution: str = ""
@@ -57,6 +58,7 @@ class AccountDetailOut(BaseModel):
 
 
 class CategoryOut(BaseModel):
+    version: int = 1
     id: str
     name: str
     icon: str = "more-horizontal"
