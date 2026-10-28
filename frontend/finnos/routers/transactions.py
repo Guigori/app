@@ -4,7 +4,15 @@ from finnos.lib.money import D, cents, installment_portion, quantize_brl
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Literal
+import hashlib
+import json
+from pydantic import Field
+from starlette.concurrency import run_in_threadpool
+from finnos.lib.money import FinanceModel, Money
+from finnos.lib import db as store
+from finnos.lib.history import record_event
+from finnos.lib.recurrence_scopes import plan_recurrence_edit
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from finnos.lib.db import db
 from finnos.lib.stats import aware, month_bounds, paid_future_is_inconsistent
@@ -356,6 +364,118 @@ async def update_transaction(
     return enrich_transaction(
         doc, accounts_by_id, categories_by_id, await _cards_by_id(user["id"])
     )
+
+
+class RecurrenceChanges(FinanceModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    value: Money | None = Field(default=None, gt=0)
+
+
+class RecurrenceScopedEdit(FinanceModel):
+    scope: Literal["esta", "proximas", "todas"]
+    effective_date: str = Field(pattern=r"^\\d{4}-\\d{2}-\\d{2}$")
+    changes: RecurrenceChanges
+
+
+@router.post("/{tx_id}/recurrence", response_model=TransactionOut)
+async def change_recurrence_scope(
+    tx_id: str,
+    payload: RecurrenceScopedEdit,
+    user: dict = Depends(require_user),
+    x_finnos_operation_id: str = Header(min_length=8, max_length=80),
+    x_finnos_base_version: int = Header(ge=1),
+) -> TransactionOut:
+    """Atomic scope edit: receipt, original and reference checks in one attempt.
+
+    Never touches settled historical rows. Reused operation IDs must have an
+    identical payload and cannot create two future occurrences.
+    """
+    uid = user["id"]
+    changes = payload.changes.model_dump(exclude_unset=True)
+    if not changes or any(value is None for value in changes.values()):
+        raise HTTPException(422, "Informe nome e/ou valor válidos.")
+    normalized = payload.model_dump(mode="json")
+    digest = hashlib.sha256(json.dumps({
+        "source": tx_id, "base_version": x_finnos_base_version,
+        "scope": normalized["scope"], "effective_date": normalized["effective_date"],
+        "changes": normalized["changes"],
+    }, sort_keys=True).encode()).hexdigest()
+
+    def write():
+        firebase = store.client()
+        parent = store.root(firebase, uid)
+        source_ref = parent.collection("transactions").document(store.resource_id(tx_id))
+        receipt_key = hashlib.sha256(
+            ("transactions:recurrence:" + x_finnos_operation_id).encode()
+        ).hexdigest()
+        receipt_ref = parent.collection("sync_receipts").document(receipt_key)
+
+        def action(tr):
+            receipt = receipt_ref.get(transaction=tr)
+            if receipt.exists:
+                previous = receipt.to_dict() or {}
+                if previous.get("fingerprint") != digest:
+                    raise HTTPException(409, "Identificador de recorrência reutilizado.")
+                return previous["target_id"]
+            snap = source_ref.get(transaction=tr)
+            if not snap.exists:
+                raise HTTPException(404, "Série recorrente não encontrada.")
+            source = dict(
+                store.decode(snap.to_dict()), id=tx_id, user_id=uid
+            )
+            if source.get("version", 1) != x_finnos_base_version:
+                raise HTTPException(409, "Série mudou desde a última consulta.")
+            try:
+                result = plan_recurrence_edit(
+                    source, changes, scope=payload.scope,
+                    effective_date=payload.effective_date,
+                    operation_id=x_finnos_operation_id, uid=uid,
+                    today=today_iso(),
+                )
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+            new_doc = result["after"]
+            new_doc["updated_at"] = datetime.now(timezone.utc)
+            target = source_ref
+            if result["action"] == "create":
+                # New projected occurrence is not a settled purchase; a fresh
+                # timestamp and new ID keep its audit history independent.
+                new_doc["created_at"] = datetime.now(timezone.utc)
+                target = parent.collection("transactions").document(
+                    store.resource_id(new_doc["id"])
+                )
+                if target.get(transaction=tr).exists:
+                    raise HTTPException(409, "Ocorrência já registrada.")
+            else:
+                new_doc["version"] = source.get("version", 1) + 1
+            store.validate_refs(
+                firebase, uid, "transactions", new_doc, tr,
+                original_tx=source if result["action"] == "replace" else None,
+            )
+            # No reads after this point in the Firestore transaction.
+            if result["action"] == "create":
+                tr.create(target, store.encode(new_doc))
+            else:
+                tr.set(target, store.encode(new_doc))
+            record_event(
+                tr, parent, "transactions",
+                "created" if result["action"] == "create" else "updated",
+                result["before"], new_doc,
+            )
+            tr.create(receipt_ref, {
+                "fingerprint": digest, "target_id": new_doc["id"],
+                "scope": payload.scope, "base_version": x_finnos_base_version,
+            })
+            return new_doc["id"]
+
+        return store.atomic(firebase, uid, action)
+
+    target_id = await run_in_threadpool(write)
+    doc = await db.transactions.find_one({"id": target_id, "user_id": uid})
+    if doc is None:
+        raise HTTPException(409, "Ocorrência registrada, mas leitura indisponível.")
+    accounts, categories = await _ref_maps(uid)
+    return enrich_transaction(doc, accounts, categories, await _cards_by_id(uid))
 
 
 @router.delete("/{tx_id}", status_code=204)
