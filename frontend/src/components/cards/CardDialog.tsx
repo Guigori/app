@@ -261,6 +261,13 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
                     await queryClient.invalidateQueries({ queryKey: ["cards"] });
                     onOpenChange(false);
                   } catch (error) {
+                    if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+                      toast.info("Exclusão do cartão aguardando sincronização", {
+                        description: "O cartão permanecerá visível até a confirmação do servidor.",
+                      });
+                      onOpenChange(false);
+                      return;
+                    }
                     setFormError(getApiErrorMessage(error));
                   }
                 }}
