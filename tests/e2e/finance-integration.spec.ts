@@ -79,7 +79,7 @@ test("FIINT displays twelve audited months and never fabricates a score on HTTP 
   await expect(fiint).toBeVisible();
   await expect(fiint).toContainText("60");
   await expect(fiint).toContainText("revisão financeira 14");
-  await expect(fiint.getByRole("listitem")).toHaveCount(12);
+  await expect(fiint.locator('[role="list"][aria-label="Movimentações por mês"] [role="listitem"]')).toHaveCount(12);
   await expect(fiint).toContainText("não sua saúde financeira");
 });
 
