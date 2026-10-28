@@ -373,7 +373,7 @@ class RecurrenceChanges(FinanceModel):
 
 class RecurrenceScopedEdit(FinanceModel):
     scope: Literal["esta", "proximas", "todas"]
-    effective_date: str = Field(pattern=r"^\\d{4}-\\d{2}-\\d{2}$")
+    effective_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     changes: RecurrenceChanges
 
 
