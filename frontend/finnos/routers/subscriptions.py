@@ -68,6 +68,7 @@ def _out(doc, accounts, categories, cards):
     category = categories.get(doc.get("category_id"), {})
     card = cards.get(doc.get("card_id"), {})
     return SubscriptionItem(
+        version=doc.get("version", 1),
         id=doc["id"], name=doc["name"], value=doc["value"],
         recurrence=doc["recurrence"],
         next_charge=_charge_day(date.fromisoformat(doc["next_charge"]), doc["recurrence"], date.fromisoformat(today_iso())),
