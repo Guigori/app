@@ -76,6 +76,33 @@ export interface HistoricalInvoiceReview {
   legacy_source_compared: false;
 }
 
+export interface FiintMaturity {
+  version: "fiint-v1";
+  status: "read_only";
+  finance_revision: number;
+  score: number;
+  score_max: 100;
+  score_label: string;
+  maturity_month: number;
+  months_observed: number;
+  history_span_months: number;
+  stage: string;
+  history_start: string | null;
+  criteria: Array<{ id: string; label: string; completed: boolean; points: number }>;
+  monthly_history: Array<{
+    month: string; income: number; expense: number; net: number;
+    entries: number; has_confirmed_data: boolean;
+  }>;
+  data_quality: {
+    active_accounts: number; categories: number;
+    months_with_settled_records: number; active_subscriptions: number;
+    has_open_budget: boolean;
+  };
+  is_financial_health_score: false;
+  writes_data: false;
+  disclaimer: string;
+}
+
 export interface FinanceIntegrity {
   storage: "firestore";
   integrity_ok: boolean;
