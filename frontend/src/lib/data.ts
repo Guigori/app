@@ -504,6 +504,28 @@ export async function updateTransaction(id: string, input: TransactionInput, sou
   return apiPut<Transaction>(`/transactions/${id}`, input, { "X-FINNOS-Source": source });
 }
 
+export type RecurrenceEditScope = "esta" | "proximas" | "todas";
+
+export async function editRecurrence(
+  id: string,
+  version: number,
+  scope: RecurrenceEditScope,
+  effective_date: string,
+  changes: { name?: string; value?: number },
+): Promise<Transaction> {
+  if (isLocalMode()) throw new Error("Edição de séries requer conta sincronizada.");
+  if (!navigator.onLine) throw new Error("Conecte-se para editar uma série recorrente. Nenhuma alteração foi perdida.");
+  if (!Number.isSafeInteger(version) || version < 1) throw new Error("Versão de recorrência indisponível.");
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(effective_date)) throw new Error("Data inválida.");
+  const operationId = crypto.randomUUID();
+  return apiPost<Transaction>(`/transactions/${encodeURIComponent(id)}/recurrence`, {
+    scope, effective_date, changes,
+  }, {
+    "X-FINNOS-Operation-ID": operationId,
+    "X-FINNOS-Base-Version": String(version),
+  });
+}
+
 export { flushSyncQueue };
 
 export async function deleteTransaction(id: string): Promise<void> {
