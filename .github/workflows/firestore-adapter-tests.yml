@@ -5,10 +5,14 @@ on:
     paths:
       - "frontend/finnos/**"
       - ".github/workflows/firestore-adapter-tests.yml"
+      - ".github/workflows/finance-shadow-emulator.yml"
+      - "docs/finance/LOTE-P0-P1-20261028.md"
   pull_request:
     paths:
       - "frontend/finnos/**"
       - ".github/workflows/firestore-adapter-tests.yml"
+      - ".github/workflows/finance-shadow-emulator.yml"
+      - "docs/finance/LOTE-P0-P1-20261028.md"
 
 permissions:
   contents: read
