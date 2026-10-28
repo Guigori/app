@@ -392,3 +392,129 @@ def test_entity_crud_offline_replays_are_atomic_and_versioned(monkeypatch):
         asyncio.run(scenario())
     finally:
         firebase_admin.delete_app(app)
+
+
+def test_http_monthly_recurrence_scopes_atomic_replay_and_paid_history(monkeypatch):
+    """Real ASGI + Firestore Emulator: future series edits are versioned."""
+    uid = "test-scope-recurrences"
+    with patch("google.auth.default",
+               return_value=(AnonymousCredentials(), "demo-finnos")):
+        app = firebase_admin.initialize_app(
+            options={"projectId": "demo-finnos"}, name="scope-recurrences-http",
+        )
+        instance = firestore.client(app=app)
+    parent = store.root(instance, uid)
+    parent.collection("accounts").document("bank").set({"name": "Banco", "initial_balance_cents": 0})
+    parent.collection("categories").document("shopping").set({"name": "Serviços"})
+    monkeypatch.setattr(store, "client", lambda: instance)
+    monkeypatch.setenv("VERCEL_ENV", "development")
+    from api import index as api
+    from finnos.routers import transactions
+    monkeypatch.setattr(api, "verified_claims", lambda token, session=False: {
+        "uid": uid, "email": "scope@example.invalid", "email_verified": True,
+    })
+    monkeypatch.setattr(transactions, "today_iso", lambda: "2026-10-28")
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=api.app),
+            base_url="http://testserver", timeout=30,
+            headers={
+                "Origin": "http://testserver", "X-Finnos-User-Id": uid,
+                "Authorization": "Bearer synthetic-only",
+            },
+        ) as client:
+            initial = require_status(await client.post(
+                "/api/transactions", json={
+                    **payload("Internet", 100, date="2026-09-10", card_id=None),
+                    "fixed": True, "recurrence": "mensal",
+                },
+                headers={"X-Finnos-Operation-Id": "recurrence-original"},
+            ), 201)
+            assert initial["recurrence_id"]
+            assert initial["version"] == 1
+
+            url = f"/api/transactions/{initial['id']}/recurrence"
+            headers = {
+                "X-Finnos-Operation-Id": "scope-only-november",
+                "X-Finnos-Base-Version": "1",
+            }
+            data = {
+                "scope": "esta", "effective_date": "2026-11-10",
+                "changes": {"value": 125},
+            }
+            only = require_status(
+                await client.post(url, json=data, headers=headers), 200,
+            )
+            again = require_status(
+                await client.post(url, json=data, headers=headers), 200,
+            )
+            assert only["id"] == again["id"] != initial["id"]
+            assert only["fixed"] is False
+            assert only["recurrence_id"] == initial["recurrence_id"]
+            assert only["status"] == "agendado"
+            assert (await client.post(url, json={
+                **data, "changes": {"value": 130},
+            }, headers=headers)).status_code == 409
+
+            next_data = {
+                "scope": "proximas", "effective_date": "2026-12-10",
+                "changes": {"value": 140},
+            }
+            future = require_status(await client.post(
+                url, json=next_data, headers={
+                    "X-Finnos-Operation-Id": "scope-all-after-december",
+                    "X-Finnos-Base-Version": "1",
+                },
+            ), 200)
+            assert future["fixed"] is True
+            assert future["recurrence_id"] == initial["recurrence_id"]
+            assert (await client.post(url, json={
+                "scope": "todas", "effective_date": "2026-09-10",
+                "changes": {"value": 150},
+            }, headers={
+                "X-Finnos-Operation-Id": "forbidden-paid-history",
+                "X-Finnos-Base-Version": "1",
+            })).status_code == 409
+
+            future_url = f"/api/transactions/{future['id']}/recurrence"
+            all_future = require_status(await client.post(
+                future_url, json={
+                    "scope": "todas", "effective_date": "2026-12-10",
+                    "changes": {"value": 150},
+                }, headers={
+                    "X-Finnos-Operation-Id": "scope-future-root-change",
+                    "X-Finnos-Base-Version": "1",
+                },
+            ), 200)
+            assert all_future["id"] == future["id"]
+            assert all_future["value"] == 150
+            assert all_future["version"] == 2
+            assert (await client.post(future_url, json={
+                "scope": "todas", "effective_date": "2026-12-10",
+                "changes": {"value": 160},
+            }, headers={
+                "X-Finnos-Operation-Id": "scope-stale-root",
+                "X-Finnos-Base-Version": "1",
+            })).status_code == 409
+
+            from finnos.lib.recurrence import monthly_projection_sources
+            transactions = [
+                dict(store.decode(row.to_dict()), id=row.id)
+                for row in parent.collection("transactions").stream()
+            ]
+            assert len(transactions) == 3
+            assert monthly_projection_sources(transactions, "2026-11") == []
+            assert monthly_projection_sources(transactions, "2026-12") == []
+            january = monthly_projection_sources(transactions, "2027-01")
+            assert len(january) == 1
+            assert january[0][0]["value"] == 150
+            assert (await client.get(
+                f"/api/transactions/{initial['id']}"
+            )).json()["value"] == 100
+            assert len(list(parent.collection("sync_receipts").stream())) == 4
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        firebase_admin.delete_app(app)
