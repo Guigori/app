@@ -80,6 +80,7 @@ def test_simulation_reconciles_real_bank_refund_without_recharging_paid_invoice(
     collections = {
         "accounts": [{"id": "bank", "initial_balance": 1000}],
         "transactions": txs, "cards": [card], "budget_cycles": [],
+        "subscriptions": [],
     }
     monkeypatch.setattr(simulation, "db", SimpleNamespace(**{
         name: Collection(items) for name, items in collections.items()
