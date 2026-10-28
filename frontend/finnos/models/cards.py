@@ -25,6 +25,7 @@ class CardIn(BaseModel):
 
 
 class CardOut(BaseModel):
+    version: int = 1
     id: str
     name: str
     institution: str
