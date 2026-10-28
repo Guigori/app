@@ -59,6 +59,7 @@ import type {
   InstitutionInput,
   FinanceHistoryPage,
   FinanceIntegrity,
+  FiintMaturity,
   BudgetSummary,
   BudgetSuggestion,
   BudgetCycle,
@@ -210,6 +211,11 @@ export async function fetchTrends(months: number, endMonth?: string): Promise<Tr
 /** FIN-09 historical invoice review reads only the authenticated user's records.
  * A clean comparison is NOT proof of an earlier MongoDB migration.
  */
+export async function fetchFiintMaturity(): Promise<FiintMaturity> {
+  if (isLocalMode()) throw new Error("FIINT precisa de histórico autenticado e reconciliado.");
+  return apiGet<FiintMaturity>("/finance/fiint");
+}
+
 export async function fetchFinanceIntegrity(): Promise<FinanceIntegrity> {
   if (isLocalMode()) throw new Error("Auditoria Firestore não disponível no modo local.");
   return apiGet<FinanceIntegrity>("/finance/integrity");
