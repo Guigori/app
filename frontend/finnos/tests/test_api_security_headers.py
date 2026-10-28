@@ -25,3 +25,22 @@ def test_unauthenticated_finance_api_has_restrictive_security_headers():
             not_api = await client.get("/")
             assert "Content-Security-Policy" not in not_api.headers
     asyncio.run(check())
+
+
+def test_preview_diagnostic_form_retains_its_existing_same_origin_csp(monkeypatch):
+    from api import index as api
+    monkeypatch.setenv("VERCEL_ENV", "preview")
+    monkeypatch.setattr(api, "smoke_claims", lambda request: {"uid": "test-csp"})
+
+    async def check():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=api.app),
+            base_url="https://testserver",
+        ) as client:
+            response = await client.get("/api/auth/firestore-smoke")
+            assert response.status_code == 200
+            assert "<form" in response.text
+            csp = response.headers["Content-Security-Policy"]
+            assert "form-action 'self'" in csp
+            assert response.headers["X-Frame-Options"] == "DENY"
+    asyncio.run(check())
