@@ -691,7 +691,7 @@ export async function deleteSubscription(id: string): Promise<void> {
       name: original.name, value: original.value, recurrence: original.recurrence,
       next_charge: original.next_charge, account_id: original.account_id,
       category_id: original.category_id, card_id: original.card_id,
-      active: original.active, notes: original.notes,
+      active: original.active, notes: original.notes ?? null,
     }, original.version);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
