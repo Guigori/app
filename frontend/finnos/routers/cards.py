@@ -36,6 +36,7 @@ async def _build(doc: dict, txs: List[dict], accounts: dict) -> CardOut:
     limit = D(doc["limit"])
     account = accounts.get(doc.get("payment_account_id") or "", {})
     return CardOut(
+        version=doc.get("version", 1),
         id=doc["id"],
         name=doc["name"],
         institution=doc.get("institution", ""),
