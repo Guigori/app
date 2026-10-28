@@ -141,10 +141,14 @@ async def create_card(payload: CardIn, user: dict = Depends(require_user), x_fin
 
 
 @router.put("/{card_id}", response_model=CardOut)
-async def update_card(card_id: str, payload: CardIn, user: dict = Depends(require_user)) -> CardOut:
+async def update_card(card_id: str, payload: CardIn, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
+    x_finnos_base_version: int | None = Header(default=None, ge=1)) -> CardOut:
     """Update only the authenticated user's card; preserve metadata and cycle state."""
     result = await db.cards.update_one(
-        {"id": card_id, "user_id": user["id"]},
+        {"id": card_id, "user_id": user["id"],
+         "_operation_id": x_finnos_operation_id,
+         "_expected_version": x_finnos_base_version},
         {"$set": {**payload.model_dump(), "updated_at": datetime.now(timezone.utc)}},
     )
     if not result.matched_count:
@@ -155,9 +159,13 @@ async def update_card(card_id: str, payload: CardIn, user: dict = Depends(requir
 
 
 @router.delete("/{card_id}", status_code=204, response_class=Response)
-async def delete_card(card_id: str, user: dict = Depends(require_user)) -> Response:
+async def delete_card(card_id: str, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
+    x_finnos_base_version: int | None = Header(default=None, ge=1)) -> Response:
     """Reject deletion when linked transactions exist; never orphan card references."""
-    result = await db.cards.delete_one({"id": card_id, "user_id": user["id"]})
+    result = await db.cards.delete_one({"id": card_id, "user_id": user["id"],
+         "_operation_id": x_finnos_operation_id,
+         "_expected_version": x_finnos_base_version})
     if not result.deleted_count:
         raise HTTPException(404, "Cartão não encontrado.")
     return Response(status_code=204)
