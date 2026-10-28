@@ -22,6 +22,9 @@ from finnos.lib.money import D, cents
 from finnos.lib.history import record_event
 
 active_uid = ContextVar("finnos_uid", default=None)
+# Entities accepted by the offline create/edit/delete queue. Old documents
+# without a version read as v1 and acquire a version on their next edit.
+OFFLINE_VERSIONED = frozenset({"transactions", "accounts", "categories", "cards", "subscriptions"})
 firebase_application = None
 MONEY_FIELDS = {
     "value",
@@ -378,7 +381,7 @@ class Collection:
                         doc.update(decode(existing.to_dict()))
                         return
                     raise HTTPException(409, "Registro já existe.")
-                if self.name == "transactions": doc["version"] = 1
+                if self.name in OFFLINE_VERSIONED: doc["version"] = 1
                 tr.create(ref, encode(doc))
                 record_event(tr, root(db, uid), self.name, "created", None, doc)
                 if operation_ref is not None:
@@ -401,7 +404,8 @@ class Collection:
             db = client()
 
             def action(tr):
-                docs = matching_rows(db, uid, self.name, query, tr)
+                clean_query = {k: v for k, v in query.items() if not k.startswith("_")}
+                docs = matching_rows(db, uid, self.name, clean_query, tr)
                 if not docs and not upsert:
                     return SimpleNamespace(matched_count=0)
                 doc = docs[0] if docs else dict(query, id=str(uuid.uuid4()))
@@ -413,15 +417,36 @@ class Collection:
                     root(db, uid).collection(self.name).document(resource_id(doc["id"]))
                 )
                 previous_version = doc.get("version", 1)
-                expected_version = update.get("_expected_version")
+                expected_version = (
+                    update.get("_expected_version") if replace
+                    else query.get("_expected_version")
+                )
+                op_id = (
+                    update.get("operation_id") if replace
+                    else query.get("_operation_id")
+                )
                 operation_ref = None
-                if replace and update.get("operation_id"):
-                    op = hashlib.sha256((self.name + ":update:" + update["operation_id"]).encode()).hexdigest()
+                if op_id:
+                    resource_id(op_id)
+                    op = hashlib.sha256(
+                        (self.name + ":update:" + op_id).encode()
+                    ).hexdigest()
                     operation_ref = root(db, uid).collection("sync_receipts").document(op)
                     receipt = operation_ref.get(transaction=tr)
-                    fingerprint = hashlib.sha256(json.dumps(encode({k:v for k,v in update.items() if k not in {"created_at", "updated_at", "_expected_version"}}), default=str, sort_keys=True).encode()).hexdigest()
+                    payload = update if replace else update.get("$set", {})
+                    fingerprint = hashlib.sha256(json.dumps(
+                        {
+                            "id": clean_query.get("id"),
+                            "base_version": expected_version,
+                            "payload": encode({
+                                k: v for k, v in payload.items()
+                                if k not in {"created_at", "updated_at", "_expected_version"}
+                            }),
+                        },
+                        default=str, sort_keys=True,
+                    ).encode()).hexdigest()
                     if receipt.exists:
-                        if receipt.to_dict()['fingerprint'] != fingerprint:
+                        if receipt.to_dict().get("fingerprint") != fingerprint:
                             raise HTTPException(409, "Identificador de operação reutilizado.")
                         return SimpleNamespace(matched_count=1)
                 if expected_version is not None and expected_version != previous_version:
@@ -433,7 +458,7 @@ class Collection:
                     if not docs:
                         doc.update(update.get("$setOnInsert", {}))
                     doc.update(update["$set"])
-                if self.name == 'transactions': doc['version'] = previous_version + 1
+                if self.name in OFFLINE_VERSIONED: doc['version'] = previous_version + 1
                 validate_refs(db, uid, self.name, doc, tr, original_tx=original_tx)
                 tr.set(ref, encode(doc))
                 record_event(tr, root(db, uid), self.name, "updated" if previous_doc else "created", previous_doc, doc)
@@ -447,8 +472,8 @@ class Collection:
 
     async def delete_one(self, query):
         uid = scoped(query)
-        op_id = query.get("_operation_id") if self.name == "transactions" else None
-        expected_version = query.get("_expected_version") if self.name == "transactions" else None
+        op_id = query.get("_operation_id") if self.name in OFFLINE_VERSIONED else None
+        expected_version = query.get("_expected_version") if self.name in OFFLINE_VERSIONED else None
         clean_query = {key: value for key, value in query.items() if not key.startswith("_")}
         if op_id is not None:
             resource_id(op_id)
@@ -539,7 +564,7 @@ class Collection:
                 if receipt_ref is not None:
                     tr.create(receipt_ref, {
                         "fingerprint": fingerprint, "target_id": doc["id"],
-                        "operation": "transaction.delete",
+                        "operation": self.name + ".delete",
                     })
                 return SimpleNamespace(deleted_count=1)
 
