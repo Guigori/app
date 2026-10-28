@@ -1,36 +1,61 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { AppShell } from "@/components/layout/AppShell";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
-import DashboardEntry from "@/pages/DashboardEntry";
-import Transactions from "@/pages/Transactions";
-import Accounts from "@/pages/Accounts";
-import Categories from "@/pages/Categories";
-import Settings from "@/pages/Settings";
-import { SettingsHub } from "@/pages/SettingsHub";
-import SettingsIntegrations from "@/pages/SettingsIntegrations";
-import ChartSettings from "@/pages/ChartSettings";
-import Budget from "@/pages/Budget";
-import BudgetSettings from "@/pages/BudgetSettings";
-import FinanceHistory from "@/pages/FinanceHistory";
-import Flow from "@/pages/Flow";
-import Cards from "@/pages/Cards";
-import CardInvoice from "@/pages/CardInvoice";
-import Subscriptions from "@/pages/Subscriptions";
-import Radar from "@/pages/Radar";
-import RadarDetail from "@/pages/RadarDetail";
-import Onboarding from "@/pages/Onboarding";
-import Analysis from "@/pages/Analysis";
-import Patrimonio from "@/pages/Patrimonio";
-import PreviewValidation from "@/pages/PreviewValidation";
-import SmartRegister from "@/pages/SmartRegister";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const DashboardEntry = lazy(() => import("@/pages/DashboardEntry"));
+const Transactions = lazy(() => import("@/pages/Transactions"));
+const Accounts = lazy(() => import("@/pages/Accounts"));
+const Categories = lazy(() => import("@/pages/Categories"));
+const Settings = lazy(() => import("@/pages/Settings"));
+const SettingsIntegrations = lazy(() => import("@/pages/SettingsIntegrations"));
+const ChartSettings = lazy(() => import("@/pages/ChartSettings"));
+const Budget = lazy(() => import("@/pages/Budget"));
+const BudgetSettings = lazy(() => import("@/pages/BudgetSettings"));
+const FinanceHistory = lazy(() => import("@/pages/FinanceHistory"));
+const Flow = lazy(() => import("@/pages/Flow"));
+const Cards = lazy(() => import("@/pages/Cards"));
+const CardInvoice = lazy(() => import("@/pages/CardInvoice"));
+const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
+const Radar = lazy(() => import("@/pages/Radar"));
+const RadarDetail = lazy(() => import("@/pages/RadarDetail"));
+const Onboarding = lazy(() => import("@/pages/Onboarding"));
+const Analysis = lazy(() => import("@/pages/Analysis"));
+const Patrimonio = lazy(() => import("@/pages/Patrimonio"));
+const PreviewValidation = lazy(() => import("@/pages/PreviewValidation"));
+const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
+const SettingsHub = lazy(() => import("@/pages/SettingsHub").then(module => ({ default: module.SettingsHub })));
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
   return (
     <>
+      <Suspense fallback={<div className="mx-auto flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground" role="status" aria-live="polite">Abrindo módulo FINNOS...</div>}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />
@@ -65,6 +90,7 @@ export default function App() {
           </Route>
         </Route>
       </Routes>
+      </Suspense>
       {/* bottom-center keeps toasts clear of the right-side FAB/Finn cluster, which they
           would otherwise cover and swallow clicks on */}
       <Toaster richColors position="bottom-center" offset={{ bottom: "5.5rem" }} />
