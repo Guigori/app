@@ -1,4 +1,4 @@
-from finnos.lib.money import D, installment_portion, FinanceModel, Money
+from finnos.lib.money import D, cents, installment_portion, FinanceModel, Money
 """FINNOS Radar Intelligence Engine.
 
 Deterministic by design: builds a personal 90-day baseline, detects anomalies,
@@ -123,14 +123,16 @@ async def _signals(user_id: str) -> list[dict]:
         signals.append(dict(id=f"overdue-{t['id']}", type='risk', severity='critical' if late >= 7 else 'high', title=f"Pagamento em atraso: {t.get('name', 'Despesa')}", description=f"{brl(value)} venceu há {late} dia{('s' if late != 1 else '')}", explanation='Este compromisso está cadastrado como pendente ou agendado e a data prevista já passou. Confirme o pagamento ou revise o lançamento.', metric=brl(value), score=99 if late >= 7 else 94, related_entity_type='transaction', related_entity_id=t['id'], expires_at=None, evidence=[{'label': 'Vencimento', 'value': t['date']}, {'label': 'Dias em atraso', 'value': str(late)}, {'label': 'Valor', 'value': brl(value)}]))
     accounts = await db.accounts.find({'user_id': user_id}).to_list(500)
     balance = _settled_cash_balance(accounts, txs, today_s)
-    projected = balance
-    negative_date = None
-    future = sorted([t for t in txs if t.get('status') in ('pendente', 'agendado') and not t.get('card_id') and today_s <= t['date'] <= (today + timedelta(days=30)).isoformat()], key=lambda x: x['date'])
-    for t in future:
-        v = D(t.get('adjusted_value') or t['value'])
-        projected += v if t['type'] == 'receita' else -v if t['type'] == 'despesa' else 0
-        if projected < 0 and (not negative_date):
-            negative_date = t['date']
+    # Same bank forecast semantics as Simulação: explicit unpaid movements,
+    # installment portions, legacy recurring rows and subscriptions.
+    from finnos.lib.cash_projection import project_scheduled_cash
+    subscriptions = await db.subscriptions.find({'user_id': user_id}).to_list(500)
+    forecast = project_scheduled_cash(
+        txs, cents(balance), today, today + timedelta(days=30), subscriptions,
+    )
+    projected = D(forecast["projected_cents"]) / 100
+    negative_date = forecast["first_negative_date"]
+    future = forecast["event_count"]
     if negative_date:
         signals.append(dict(id=f'cash-negative-{negative_date}', type='risk', severity='critical', title='Seu saldo projetado pode ficar negativo', description=f'Projeção indica saldo abaixo de zero em {negative_date[8:10]}/{negative_date[5:7]}', explanation='O FINNOS somou seu saldo atual aos lançamentos pendentes e agendados dos próximos 30 dias.', metric=brl(projected), score=100, related_entity_type='cashflow', expires_at=negative_date, evidence=[{'label': 'Saldo atual', 'value': brl(balance)}, {'label': 'Projeção 30 dias', 'value': brl(projected)}]))
     elif future and projected > balance and (projected >= 200):
