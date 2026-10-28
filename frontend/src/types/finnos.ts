@@ -30,6 +30,7 @@ export interface InstitutionInput {
 }
 
 export interface Account {
+  version?: number;
   id: string;
   name: string;
   institution: string;
@@ -101,6 +102,7 @@ export interface FinanceHistoryPage {
 }
 
 export interface Category {
+  version?: number;
   id: string;
   name: string;
   icon: string;
@@ -121,6 +123,7 @@ export interface CategoryInput {
 }
 
 export interface Transaction {
+  recurrence_id?: string | null;
   invoice_payment?: boolean;
   invoice_refund?: boolean;
   version?: number;
@@ -419,6 +422,7 @@ export interface CardInput {
 }
 
 export interface CreditCard {
+  version?: number;
   id: string;
   name: string;
   institution: string;
@@ -507,6 +511,7 @@ export interface SubscriptionInput {
 // --- Assinaturas (mirror: backend/models/notify.py SubscriptionItem) ---
 
 export interface SubscriptionItem {
+  version?: number;
   id: string;
   name: string;
   value: number;
