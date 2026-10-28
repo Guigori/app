@@ -80,8 +80,15 @@ export default function Subscriptions() {
       setSelectedId(null);
       setConfirmDelete(false);
       await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
-    } catch {
-      setError("Não foi possível excluir esta assinatura. Tente novamente.");
+    } catch (error) {
+      if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+        toast.info("Exclusão da assinatura aguardando sincronização", {
+          description: "A assinatura continuará no servidor até a confirmação.",
+        });
+        setConfirmDelete(false);
+      } else {
+        setError("Não foi possível excluir esta assinatura. Tente novamente.");
+      }
     } finally {
       setSaving(false);
     }
