@@ -46,7 +46,16 @@ export default function Categories() {
         queryClient.invalidateQueries({ queryKey: ["budget"] }),
       ]);
     },
-    onError: (error) => toast.error(getApiErrorMessage(error)),
+    onError: (error) => {
+      if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+        setPendingDelete(null);
+        toast.info("Exclusão da categoria aguardando sincronização", {
+          description: "A categoria permanece no servidor até a confirmação.",
+        });
+        return;
+      }
+      toast.error(getApiErrorMessage(error));
+    },
   });
 
   return (
