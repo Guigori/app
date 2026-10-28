@@ -101,6 +101,7 @@ class TransactionOut(BaseModel):
     category_icon: Optional[str] = None
     fixed: bool = False
     recurrence: Optional[str] = None
+    recurrence_id: Optional[str] = None
     installment: bool = False
     total_installments: Optional[int] = None
     current_installment: Optional[int] = None
