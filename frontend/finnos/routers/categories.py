@@ -15,6 +15,7 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 
 def _out(doc: dict) -> CategoryOut:
     return CategoryOut(
+        version=doc.get("version", 1),
         id=doc["id"],
         name=doc["name"],
         icon=doc.get("icon", "more-horizontal"),
