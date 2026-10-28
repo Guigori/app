@@ -153,11 +153,15 @@ async def create_subscription(payload: SubscriptionIn, user: dict = Depends(requ
 @router.put("/{subscription_id}", response_model=SubscriptionItem)
 async def update_subscription(
     subscription_id: str, payload: SubscriptionIn, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
+    x_finnos_base_version: int | None = Header(default=None, ge=1),
 ):
     uid = user["id"]
     maps = await _validate(uid, payload)
     result = await db.subscriptions.update_one(
-        {"id": subscription_id, "user_id": uid},
+        {"id": subscription_id, "user_id": uid,
+         "_operation_id": x_finnos_operation_id,
+         "_expected_version": x_finnos_base_version},
         {"$set": {**payload.model_dump(), "updated_at": datetime.now(timezone.utc)}},
     )
     if not result.matched_count:
@@ -169,8 +173,12 @@ async def update_subscription(
 
 
 @router.delete("/{subscription_id}", status_code=204)
-async def delete_subscription(subscription_id: str, user: dict = Depends(require_user)):
-    result = await db.subscriptions.delete_one({"id": subscription_id, "user_id": user["id"]})
+async def delete_subscription(subscription_id: str, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
+    x_finnos_base_version: int | None = Header(default=None, ge=1)):
+    result = await db.subscriptions.delete_one({"id": subscription_id, "user_id": user["id"],
+         "_operation_id": x_finnos_operation_id,
+         "_expected_version": x_finnos_base_version})
     if not result.deleted_count:
         raise HTTPException(404, "Assinatura não encontrada.")
     return Response(status_code=204)
