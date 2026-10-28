@@ -22,6 +22,7 @@ from finnos.lib.monthly_aggregate_shadow_reads import (
 )
 from finnos.lib.monthly_aggregate_shadow import IncrementalMonthlyLedger
 from finnos.lib.finance_shadow_replay import replay_shadow_events
+from finnos.lib.shadow_certification import certify_shadow_baseline, recover_shadow_gap
 from fastapi import HTTPException
 
 
@@ -161,4 +162,23 @@ def test_emulator_outbox_revision_replay_credit_and_second_pass(cloud, monkeypat
     assert report["match"], report
     assert report["candidate_checksum"] == candidate["checksum"]
     assert report["production_eligible"] is False
+    # A stable revision and two independent scans certify this *demo*
+    # baseline, not any production account. A missing outbox envelope causes
+    # full reconstruction from the canonical Firestore history.
+    certificate = asyncio.run(certify_shadow_baseline("test-shadow-finance"))
+    assert certificate["status"] == "certified_emulator_only"
+    assert certificate["baseline"]["checksum"] == candidate["checksum"]
+    assert certificate["verification"]["match"]
+    recovery = asyncio.run(recover_shadow_gap(
+        "test-shadow-finance",
+        IncrementalMonthlyLedger().snapshot(0, source_count=0),
+        events[0:1], revision,
+    ))
+    assert recovery["status"] == "reconstructed"
+    assert recovery["certificate"]["baseline"]["checksum"] == candidate["checksum"]
+    with pytest.raises(HTTPException) as stale:
+        asyncio.run(recover_shadow_gap(
+            "test-shadow-finance", candidate, [], revision + 1,
+        ))
+    assert stale.value.status_code == 409
     assert not list(parent.collection("_finance_month_shadows_v1").limit(1).stream())
