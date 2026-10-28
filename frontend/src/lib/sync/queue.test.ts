@@ -231,3 +231,52 @@ it("blocks a rejected category draft and never sends the next account until reso
   expect(mocks.post).toHaveBeenCalledTimes(2);
   expect(await listSyncOperations()).toEqual([]);
 });
+
+
+it("replays conditional account/category/card/subscription edits and deletes in FIFO order", async () => {
+  const { queueEntityMutation } = await import("./queue");
+  const payload = {
+    name: "Revisado", institution: "", type: "corrente" as const,
+    color: "#070F52", initial_balance: 0, active: true,
+  };
+  const edit = await queueEntityMutation("account.update", "bank-2", payload, 3);
+  const remove = await queueEntityMutation("category.delete", "category-4",
+    { name: "Antiga", icon: "tag", color: "#64748B", group: "necessidades",
+      monthly_budget: 0, monthly_goal: 0 }, 2);
+  vi.stubGlobal("navigator", { onLine: true });
+  mocks.put.mockResolvedValue({});
+  mocks.del.mockResolvedValue(undefined);
+  await flushSyncQueue();
+  expect(mocks.put).toHaveBeenCalledWith("/accounts/bank-2", payload, {
+    "X-FINNOS-Operation-ID": edit.id, "X-FINNOS-Base-Version": "3",
+  });
+  expect(mocks.del).toHaveBeenCalledWith("/categories/category-4", {
+    "X-FINNOS-Operation-ID": remove.id, "X-FINNOS-Base-Version": "2",
+  });
+  expect(await listSyncOperations()).toEqual([]);
+});
+
+it("blocks stale offline entity mutations and isolates UID-scoped drafts", async () => {
+  const { queueEntityMutation } = await import("./queue");
+  const subscription = {
+    name: "Plano", value: 19.90, recurrence: "mensal" as const,
+    next_charge: "2026-11-01", account_id: "bank", category_id: null,
+    card_id: null, active: true, notes: null,
+  };
+  await expect(queueEntityMutation("subscription.update", "plan", subscription, 0))
+    .rejects.toThrow("Versão");
+  const first = await queueEntityMutation("subscription.update", "plan", subscription, 1);
+  await expect(queueEntityMutation("subscription.delete", "plan", subscription, 1))
+    .rejects.toThrow("pendente");
+  mocks.auth.currentUser = { uid: "B" };
+  expect(await listSyncOperations()).toEqual([]);
+  vi.stubGlobal("navigator", { onLine: true });
+  await flushSyncQueue();
+  expect(mocks.put).not.toHaveBeenCalled();
+  mocks.auth.currentUser = { uid: "A" };
+  const { ApiError } = await import("@/lib/api");
+  mocks.put.mockRejectedValueOnce(new ApiError(409, "Conflito de versão"));
+  await flushSyncQueue();
+  expect((await listSyncOperations())[0].id).toBe(first.id);
+  expect((await listSyncOperations())[0].status).toBe("conflict");
+});
