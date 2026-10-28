@@ -273,3 +273,122 @@ def test_emulator_real_finance_http_endpoints_and_offline_retries(monkeypatch):
         asyncio.run(scenario())
     finally:
         firebase_admin.delete_app(demo_app)
+
+
+def test_entity_crud_offline_replays_are_atomic_and_versioned(monkeypatch):
+    """All four entity kinds use the same real Firestore transaction contract."""
+    uid = "test-shadow-entities"
+    with patch("google.auth.default",
+               return_value=(AnonymousCredentials(), "demo-finnos")):
+        app = firebase_admin.initialize_app(
+            options={"projectId": "demo-finnos"}, name="shadow-entities-http",
+        )
+        instance = firestore.client(app=app)
+    owner = store.root(instance, uid)
+    owner.collection("accounts").document("bank").set({
+        "name": "Conta permanente", "initial_balance_cents": 0,
+    })
+    monkeypatch.setattr(store, "client", lambda: instance)
+    monkeypatch.setenv("VERCEL_ENV", "development")
+    from api import index as api
+    monkeypatch.setattr(
+        api, "verified_claims",
+        lambda token, session=False: {
+            "uid": uid, "email": "synthetic@example.invalid",
+            "email_verified": True,
+        },
+    )
+    cases = [
+        ("/accounts", {
+            "name": "Conta temporária", "institution": "", "type": "corrente",
+            "color": "#070F52", "initial_balance": 0, "active": True,
+        }),
+        ("/categories", {
+            "name": "Categoria temporária", "icon": "tag",
+            "color": "#64748B", "group": "necessidades",
+            "monthly_budget": 0, "monthly_goal": 0,
+        }),
+        ("/cards", {
+            "name": "Cartão temporário", "institution": "", "color": "#5B3FE4",
+            "limit": 1000, "closing_day": 29, "due_day": 7,
+            "payment_account_id": None, "active": True,
+        }),
+        ("/subscriptions", {
+            "name": "Assinatura temporária", "value": 19.90,
+            "recurrence": "mensal", "next_charge": "2026-11-03",
+            "account_id": "bank", "category_id": None, "card_id": None,
+            "active": True, "notes": None,
+        }),
+    ]
+
+    async def scenario():
+        headers = {
+            "Origin": "http://testserver", "X-Finnos-User-Id": uid,
+            "Authorization": "Bearer isolated-identity",
+        }
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=api.app),
+            base_url="http://testserver", headers=headers, timeout=30,
+        ) as client:
+            for index, (path, payload) in enumerate(cases):
+                original = require_status(await client.post(
+                    "/api" + path, json=payload,
+                    headers={"X-Finnos-Operation-Id": f"entity-create-{index}"},
+                ), 201)
+                assert original["version"] == 1
+                entity_id = original["id"]
+                again = require_status(await client.post(
+                    "/api" + path, json=payload,
+                    headers={"X-Finnos-Operation-Id": f"entity-create-{index}"},
+                ), 201)
+                assert again["id"] == entity_id
+                updated = {**payload, "name": "Nome alterado"}
+                edit_headers = {
+                    "X-Finnos-Operation-Id": f"entity-edit-{index}",
+                    "X-Finnos-Base-Version": "1",
+                }
+                edited = require_status(await client.put(
+                    f"/api{path}/{entity_id}", json=updated,
+                    headers=edit_headers,
+                ), 200)
+                assert edited["version"] == 2
+                assert require_status(await client.put(
+                    f"/api{path}/{entity_id}", json=updated,
+                    headers=edit_headers,
+                ), 200)["version"] == 2
+                assert (await client.put(
+                    f"/api{path}/{entity_id}", json=payload,
+                    headers={
+                        "X-Finnos-Operation-Id": f"stale-{index}",
+                        "X-Finnos-Base-Version": "1",
+                    },
+                )).status_code == 409
+                delete_headers = {
+                    "X-Finnos-Operation-Id": f"entity-delete-{index}",
+                    "X-Finnos-Base-Version": "2",
+                }
+                require_status(await client.delete(
+                    f"/api{path}/{entity_id}", headers=delete_headers,
+                ), 204)
+                require_status(await client.delete(
+                    f"/api{path}/{entity_id}", headers=delete_headers,
+                ), 204)
+            token = store.active_uid.set(uid)
+            try:
+                rev = await finance_revision(uid)
+                assert rev == 24
+                shadow_docs = list(owner.collection(
+                    "_finance_shadow_outbox_v1"
+                ).order_by("__name__").stream())
+                assert len(shadow_docs) == rev
+                assert sum(doc.to_dict()["is_noop"] for doc in shadow_docs) == 12
+                assert not list(
+                    owner.collection("_finance_month_shadows_v1").limit(1).stream()
+                )
+            finally:
+                store.active_uid.reset(token)
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        firebase_admin.delete_app(app)
