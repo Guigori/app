@@ -27,10 +27,10 @@ async def purchase(payload:PurchaseSimulationIn,user=Depends(require_user)):
     cards=await db.cards.find({'user_id':uid}).to_list(200)
     balance=sum(cents(a.get('initial_balance',0)) for a in accounts)
     balance+=sum(cents(amount) for tx in txs for _,amount in balance_effects(tx,today.isoformat()))
-    projected=balance
-    for tx in txs:
-        if not tx.get('card_id') and tx.get('status') in {'pendente','agendado'} and today.isoformat()<=tx['date']<=horizon.isoformat():
-            projected+=sum(cents(v) for _,v in balance_effects({**tx,'status':'pago'},tx['date']))
+    from finnos.lib.cash_projection import project_scheduled_cash
+    subscriptions=await db.subscriptions.find({'user_id':uid}).to_list(500)
+    forecast=project_scheduled_cash(txs,balance,today,horizon,subscriptions)
+    projected=forecast['projected_cents']
     for card in cards:
         keys={key for tx in txs for key,_,_ in occurrences(card,tx)}|set((card.get('invoice_cycles') or {}))
         for key in keys:
