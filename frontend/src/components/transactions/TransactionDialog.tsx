@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { isLocalMode } from "@/lib/mode";
+import { RecurrenceScopeDialog } from "@/components/transactions/RecurrenceScopeDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -60,6 +62,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [recurrenceScopeOpen, setRecurrenceScopeOpen] = useState(false);
 
   const accountsQuery = useQuery({
     queryKey: ["accounts"],
@@ -276,6 +279,16 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
           </DialogDescription>
         </DialogHeader>
 
+        {transaction?.fixed && transaction.recurrence_id && !transaction.installment && !syncOperationId && !isLocalMode() && (
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+            <p className="text-sm font-semibold">Lançamento de uma série mensal</p>
+            <p className="mt-1 text-xs text-muted-foreground">Para editar esta ocorrência, as próximas ou a série futura sem alterar períodos pagos, use o controle de recorrência.</p>
+            <Button type="button" variant="outline" className="mt-2" data-testid="open-recurrence-scope"
+              onClick={() => { onOpenChange(false); setRecurrenceScopeOpen(true); }}>
+              Editar recorrência
+            </Button>
+          </div>
+        )}
         {lockedSyncAttempt && (
           <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm" data-testid="tx-sync-conflict-warning">
             <strong>{conflicted ? "Operação bloqueada para revisão" : "Lançamento enviado anteriormente"}</strong>
@@ -640,6 +653,12 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
         )}
       </DialogContent>
     </Dialog>
+    {transaction && <RecurrenceScopeDialog
+      open={recurrenceScopeOpen}
+      onOpenChange={setRecurrenceScopeOpen}
+      transaction={transaction}
+      onSaved={() => { void refreshFinancialViews(); }}
+    />}
     <ConfirmDialog
       open={confirmDiscard}
       onOpenChange={setConfirmDiscard}
