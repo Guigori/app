@@ -40,10 +40,14 @@ async def preview_only(request: Request, call_next):
         response.headers["Permissions-Policy"] = (
             "camera=(), microphone=(), geolocation=()"
         )
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; "
-            "form-action 'none'"
-        )
+        # The Preview diagnostic intentionally serves an HTML form with a
+        # stricter, preexisting same-origin policy. Preserve that response
+        # header instead of overriding its valid form-action 'self'.
+        if "Content-Security-Policy" not in response.headers:
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; "
+                "form-action 'none'"
+            )
     return response
 
 
