@@ -182,3 +182,55 @@ def test_emulator_outbox_revision_replay_credit_and_second_pass(cloud, monkeypat
         ))
     assert stale.value.status_code == 409
     assert not list(parent.collection("_finance_month_shadows_v1").limit(1).stream())
+
+
+def test_certified_baseline_persistence_and_stale_month_tombstones(
+    cloud, monkeypatch,
+):
+    """Only the synthetic emulator writes materialized shadow documents."""
+    from finnos.lib.shadow_baseline_storage import persist_emulator_baseline
+    uid = "test-shadow-certified"
+    token = store.active_uid.set(uid)
+    monkeypatch.setattr(store, "client", lambda: cloud)
+    try:
+        owner = store.root(cloud, uid)
+        tx_ref = owner.collection("transactions").document("purchase")
+        tx_ref.set(store.encode({
+            "id": "purchase", "user_id": uid,
+            "date": "2026-09-20", "status": "pago", "type": "despesa",
+            "name": "Teste", "value": Decimal("42.15"),
+            "account_id": "bank", "card_id": None,
+            "category_id": "shopping", "installment": False,
+        }))
+        certificate = asyncio.run(certify_shadow_baseline(uid))
+        assert certificate["baseline"]["months"]["2026-09"]["expense_cents"] == 4215
+        written = asyncio.run(persist_emulator_baseline(uid, certificate))
+        assert written["status"] == "persisted_emulator_only"
+        assert written["months"] == 1
+        meta = owner.collection("_meta").document(
+            "finance_shadow_baseline_v1"
+        ).get().to_dict()
+        assert meta["production_eligible"] is False
+        assert meta["checksum"] == certificate["baseline"]["checksum"]
+        assert owner.collection(
+            "_finance_month_shadows_v1"
+        ).document("2026-09").get().exists
+        second = asyncio.run(persist_emulator_baseline(uid, certificate))
+        assert second["status"] == "already_persisted_emulator_only"
+
+        # A concurrent canonical deletion and revision advance invalidates
+        # the old certificate; it cannot overwrite the newer baseline.
+        store.atomic(cloud, uid, lambda tr: tr.delete(tx_ref))
+        with pytest.raises(HTTPException) as stale:
+            asyncio.run(persist_emulator_baseline(uid, certificate))
+        assert stale.value.status_code == 409
+        fresh = asyncio.run(certify_shadow_baseline(uid))
+        assert fresh["finance_revision"] == 1
+        assert fresh["baseline"]["months"] == {}
+        rebuilt = asyncio.run(persist_emulator_baseline(uid, fresh))
+        assert rebuilt["deleted_stale_months"] == 1
+        assert not owner.collection(
+            "_finance_month_shadows_v1"
+        ).document("2026-09").get().exists
+    finally:
+        store.active_uid.reset(token)
