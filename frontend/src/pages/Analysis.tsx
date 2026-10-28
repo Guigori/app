@@ -5,6 +5,7 @@ import { CalendarDays, ChevronRight, Eye, EyeOff, LayoutGrid, ChartPie, SlidersH
 import { fetchBudget, fetchDashboard, fetchTrends } from "@/lib/data";
 import { currentMonth, monthLabel } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { FiintSection } from "@/components/analytics/FiintSection";
 import { Card, CardContent } from "@/components/ui/card";
 
 const money = (v:number) => new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(v);
@@ -50,6 +51,7 @@ export default function Analysis() {
       <div className="flex gap-2"><Button variant={!yearMode?"default":"outline"} onClick={()=>setYearMode(false)}>Mês</Button><Button variant={yearMode?"default":"outline"} onClick={()=>setYearMode(true)}>Ano</Button><Button variant="outline" onClick={()=>setPanel(null)}>Concluir</Button></div>
     </div>}
     {panel==="filters" && <div className="rounded-2xl border bg-card p-4 shadow-sm"><p className="mb-3 font-semibold">Filtrar análises</p><div className="flex flex-wrap gap-2">{(["all","income","expense"] as const).map(v=><Button key={v} variant={filter===v?"default":"outline"} onClick={()=>setFilter(v)}>{v==="all"?"Todos":v==="income"?"Receitas":"Despesas"}</Button>)}</div><Button className="mt-3" variant="outline" onClick={()=>setPanel(null)}>Concluir</Button></div>}
+    <FiintSection hidden={hidden} />
     <Card className="rounded-[24px]"><CardContent className="p-5">
       <div className="mb-4 flex items-center justify-between"><h2 className="font-heading font-semibold">Visão do período</h2><ChevronRight className="h-4 w-4 text-muted-foreground"/></div>
       {mode==="cards" ? <div className="grid grid-cols-3 divide-x">
