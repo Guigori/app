@@ -58,7 +58,7 @@ export default function Subscriptions() {
       await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
       closeEditor();
     } catch (error) {
-      if (!editing && error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+      if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
         toast.info("Assinatura salva neste aparelho", {
           description: "Cadastro aguardando sincronização, ainda não confirmado no servidor.",
         });
