@@ -72,6 +72,7 @@ def enrich_transaction(
         category_icon=category.get("icon") or None,
         fixed=doc.get("fixed", False),
         recurrence=doc.get("recurrence"),
+        recurrence_id=doc.get("recurrence_id"),
         installment=doc.get("installment", False),
         total_installments=doc.get("total_installments"),
         current_installment=doc.get("current_installment"),
@@ -306,6 +307,14 @@ async def create_transaction(
     await _validate(user["id"], payload)
     doc = _document(user["id"], payload)
     doc["operation_id"] = x_finnos_operation_id
+    if payload.fixed and not payload.installment:
+        # The same offline operation always resolves to the same series.
+        # The client cannot choose a foreign or colliding series ID.
+        doc["recurrence_id"] = str(uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            "finnos:series:" + user["id"] + ":" +
+            (x_finnos_operation_id or doc["id"]),
+        ))
     doc["source"] = normalized_operation_source(x_finnos_source)
     await db.transactions.insert_one(doc)
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
@@ -329,6 +338,14 @@ async def update_transaction(
     await _validate(user["id"], payload)
     doc = _document(user["id"], payload)
     doc["id"] = tx_id
+    # Do not assign a new ID to an existing legacy fixed series: its old
+    # rows still use the conservative composite key in projections.
+    if existing.get("recurrence_id"):
+        doc["recurrence_id"] = existing["recurrence_id"]
+    elif payload.fixed and not existing.get("fixed"):
+        doc["recurrence_id"] = str(uuid.uuid5(
+            uuid.NAMESPACE_URL, "finnos:series:" + user["id"] + ":" + tx_id,
+        ))
     doc["created_at"] = existing.get("created_at")
     doc["operation_id"] = x_finnos_operation_id
     doc["_expected_version"] = x_finnos_base_version
