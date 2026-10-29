@@ -1,11 +1,19 @@
-from finnos.lib.money import D
+from finnos.lib.money import D, quantize_brl
 
 """Analytics: month-over-month trends and the monthly budget view."""
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
 from finnos.lib.db import db
+from finnos.lib.account_balances import finance_revision
+from finnos.lib.financial_summaries import stream_financial_window
+from finnos.lib.projection_reads import read_projection_history
 from finnos.lib.dates import today_iso
-from finnos.lib.stats import add_months, month_bounds, month_portion, months_between
+from finnos.lib.stats import add_months, month_portion, months_between
+from finnos.lib.recurrence import monthly_projection_sources
+from finnos.lib.subscription_projection import planned_subscriptions
+from finnos.lib.category_pace import monthly_pace
+from finnos.lib.competency import monthly_competency, credit_events, positive_category_slices
+from finnos.lib.transaction_amount import occurrence_amount as _amount
 from finnos.models.analytics import (
     BudgetRow,
     BudgetSummary,
@@ -49,31 +57,26 @@ async def trends(
     """Income/expense/net per month, oldest first — powers the cash-flow table and bars."""
     last = end_month or today_iso()[:7]
     window = [add_months(last, -i) for i in range(months - 1, -1, -1)]
-    txs = await db.transactions.find({"user_id": user["id"]}).to_list(20000)
+    revision = await finance_revision(user["id"])
+    cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
+    statement = await stream_financial_window(user["id"], window, cards, revision)
     rows: list[MonthTrend] = []
     for m in window:
-        income = expense = D("0.0")
-        for tx in txs:
-            portion = month_portion(tx, m)
-            if portion is None:
-                continue
-            if tx["type"] == "receita":
-                income += portion
-            else:
-                expense += portion
+        monthly = statement.monthly(m)
+        income, expense = monthly["income"], monthly["expense"]
         rows.append(
             MonthTrend(
                 month=m,
                 label=_label(m),
-                income=round(income, 2),
-                expense=round(expense, 2),
-                net=round(income - expense, 2),
+                income=quantize_brl(income),
+                expense=quantize_brl(expense),
+                net=quantize_brl(income - expense),
             )
         )
     return TrendsOut(
         months=rows,
-        total_income=round(sum((r.income for r in rows)), 2),
-        total_expense=round(sum((r.expense for r in rows)), 2),
+        total_income=quantize_brl(sum((r.income for r in rows))),
+        total_expense=quantize_brl(sum((r.expense for r in rows))),
     )
 
 
@@ -89,22 +92,17 @@ async def budget(
         .sort("created_at", 1)
         .to_list(500)
     )
-    txs = await db.transactions.find({"user_id": user["id"]}).to_list(20000)
-    spent_by_cat: dict[str | None, float] = {}
-    income = D("0.0")
-    for tx in txs:
-        portion = month_portion(tx, m)
-        if portion is None:
-            continue
-        if tx["type"] == "receita":
-            income += portion
-        else:
-            key = tx.get("category_id")
-            spent_by_cat[key] = spent_by_cat.get(key, D("0.0")) + portion
+    revision = await finance_revision(user["id"])
+    cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
+    txs = await read_projection_history(user["id"], [m], cards, revision)
+    monthly = monthly_competency(txs, cards, m)
+    spent_by_cat, income = monthly["by_category"], monthly["income"]
+    adjustments = credit_events(cards, txs)
     rows: list[BudgetRow] = []
     for cat in categories:
-        budget_value = round(D(cat.get("monthly_budget") or D("0.0")), 2)
-        spent = round(spent_by_cat.get(cat["id"], D("0.0")), 2)
+        budget_value = quantize_brl(D(cat.get("monthly_budget") or D("0.0")))
+        spent = quantize_brl(spent_by_cat.get(cat["id"], D("0.0")))
+        pace = monthly_pace(budget_value, txs, cat["id"], m, as_of=today_iso(), credits=adjustments)
         if budget_value <= 0:
             status = "sem_limite"
             percent = D("0.0")
@@ -124,49 +122,43 @@ async def budget(
                 group=cat.get("group", "necessidades"),
                 budget=budget_value,
                 spent=spent,
-                remaining=round(budget_value - spent, 2),
+                remaining=quantize_brl(budget_value - spent),
                 percent=percent,
                 status=status,
+                pace_day=pace["day"],
+                pace_days_in_month=pace["days_in_month"],
+                pace_ideal=D(pace["ideal_cents"]) / 100,
+                pace_daily_allowance=D(pace["daily_allowance_cents"]) / 100,
+                pace_projected_close=D(pace["projected_month_end_cents"]) / 100,
+                pace_difference=D(pace["diff_from_ideal_cents"]) / 100,
+                pace_cumulative=[D(value) / 100 for value in pace["cumulative_cents"]],
             )
         )
     rows.sort(key=lambda r: (r.budget <= 0, -r.percent, -r.spent))
-    planned = round(sum((r.budget for r in rows)), 2)
-    spent_total = round(sum((r.spent for r in rows)), 2)
-    budgeted_spent = round(sum((r.spent for r in rows if r.budget > 0)), 2)
+    planned = quantize_brl(sum((r.budget for r in rows)))
+    spent_total = quantize_brl(sum((r.spent for r in rows)))
+    budgeted_spent = quantize_brl(sum((r.spent for r in rows if r.budget > 0)))
     return BudgetSummary(
         month=m,
         planned=planned,
         spent=spent_total,
-        remaining=round(planned - budgeted_spent, 2),
+        remaining=quantize_brl(planned - budgeted_spent),
         percent=round(budgeted_spent / planned * 100, 1) if planned else D("0.0"),
-        income=round(income, 2),
-        unbudgeted_spent=round(spent_total - budgeted_spent, 2),
+        income=quantize_brl(income),
+        unbudgeted_spent=quantize_brl(spent_total - budgeted_spent),
         rows=rows,
     )
 
 
-def _amount(tx: dict) -> float:
-    """What a single occurrence of the transaction is worth."""
-    if tx.get("installment"):
-        return round(D(tx.get("installment_value") or D("0.0")), 2)
-    return round(D(tx["value"]), 2)
+def _projection(tx: dict, month: str) -> float | None:
+    """An explicitly scheduled/pending entry projects only on its own month.
 
-
-def _projection(tx: dict, month: str, settled_keys: set) -> float | None:
-    """Money still expected in `month`: pending/scheduled entries on their own month,
-    plus "fixa mensal" entries repeating into later months (skipped when a real
-    transaction with the same name already exists in that month, so nothing doubles)."""
-    if tx.get("type") == "transferencia":
+    Monthly recurrence projections are emitted separately by the shared helper.
+    """
+    if tx.get("invoice_payment") or tx.get("type") == "transferencia":
         return None
-    tx_month = tx["date"][:7]
-    if tx.get("status") != "pago" and tx_month == month:
+    if tx.get("status") != "pago" and tx["date"][:7] == month:
         return _amount(tx)
-    if tx.get("fixed") and (tx.get("recurrence") or "mensal") == "mensal":
-        if (
-            months_between(tx_month, month) > 0
-            and (tx["name"].strip().lower(), month) not in settled_keys
-        ):
-            return _amount(tx)
     return None
 
 
@@ -195,51 +187,62 @@ async def flow(
     else:
         window = [add_months(focus, -i) for i in range(months - 1, -1, -1)]
         window += [add_months(focus, 1), add_months(focus, 2)]
-    txs = await db.transactions.find({"user_id": user["id"]}).to_list(20000)
+    revision = await finance_revision(user["id"])
+    cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
+    subscriptions = await db.subscriptions.find({"user_id": user["id"]}).to_list(500)
+    # Keep historical recurrence anchors, imported installments and refund
+    # originals while discarding unrelated one-off months after each page.
+    txs = await read_projection_history(
+        user["id"], list(dict.fromkeys([*window, focus])), cards, revision,
+    )
+    source_txs = txs  # preserve all bills for subscription duplicate detection
     if category_id:
         txs = [tx for tx in txs if tx.get("category_id") == category_id]
+        subscriptions = [sub for sub in subscriptions if sub.get("category_id") == category_id]
     categories = await db.categories.find({"user_id": user["id"]}).to_list(500)
     cat_by_id = {c["id"]: c for c in categories}
-    settled_keys = {(tx["name"].strip().lower(), tx["date"][:7]) for tx in txs}
     today_month = today_iso()[:7]
     series: list[FlowPoint] = []
     for m in window:
-        income = expense = p_income = p_expense = D("0.0")
+        monthly = monthly_competency(txs, cards, m)
+        income, expense = monthly["income"], monthly["expense"]
+        p_income = p_expense = D("0.0")
         for tx in txs:
-            portion = month_portion(tx, m)
-            if portion is not None:
-                if tx["type"] == "receita":
-                    income += portion
-                else:
-                    expense += portion
-            projected = _projection(tx, m, settled_keys)
+            projected = _projection(tx, m)
             if projected is not None:
                 if tx["type"] == "receita":
                     p_income += projected
                 else:
                     p_expense += projected
+        # Emit one future recurring expense/income per logical series, not one
+        # for every fixed transaction ever entered.
+        for source, _ in monthly_projection_sources(txs, m):
+            if source["type"] == "receita":
+                p_income += _amount(source)
+            else:
+                p_expense += _amount(source)
+        # Subscription is a plan, not a paid transaction. Add only future
+        # billing dates absent from explicit and recurring transactions.
+        for sub, _ in planned_subscriptions(subscriptions, source_txs, m, today_iso()):
+            p_expense += D(sub["value"])
         series.append(
             FlowPoint(
                 month=m,
                 label=_label(m),
                 year=f"'{m[2:4]}",
-                income=round(income, 2),
-                expense=round(expense, 2),
-                net=round(income - expense, 2),
-                projected_income=round(p_income, 2),
-                projected_expense=round(p_expense, 2),
-                projected_net=round(p_income - p_expense, 2),
+                income=quantize_brl(income),
+                expense=quantize_brl(expense),
+                net=quantize_brl(income - expense),
+                projected_income=quantize_brl(p_income),
+                projected_expense=quantize_brl(p_expense),
+                projected_net=quantize_brl(p_income - p_expense),
                 future=m > today_month,
             )
         )
-    by_cat: dict[str | None, float] = {}
-    for tx in txs:
-        portion = month_portion(tx, focus)
-        if portion is None or tx["type"] == "receita":
-            continue
-        key = tx.get("category_id")
-        by_cat[key] = by_cat.get(key, D("0.0")) + portion
-    focus_expense = round(sum(by_cat.values()), 2)
+    by_cat = monthly_competency(txs, cards, focus)["by_category"]
+    # FIN-08: refunds may make a category negative. The signed values remain
+    # in net expense/budget, but "Onde foi o dinheiro" is a positive-spend
+    # breakdown and must not show negative bars or percentages above 100%.
     breakdown = [
         FlowCategory(
             category_id=key,
@@ -254,12 +257,10 @@ async def flow(
                 if key
                 else "more-horizontal"
             ),
-            total=round(value, 2),
-            percent=(
-                round(value / focus_expense * 100, 1) if focus_expense else D("0.0")
-            ),
+            total=quantize_brl(value),
+            percent=percent,
         )
-        for key, value in sorted(by_cat.items(), key=lambda kv: -kv[1])
+        for key, value, percent in positive_category_slices(by_cat)
     ]
     point = next((p for p in series if p.month == focus), None)
     return FlowOut(
@@ -272,9 +273,9 @@ async def flow(
         projected_income=point.projected_income if point else D("0.0"),
         projected_expense=point.projected_expense if point else D("0.0"),
         projected_net=point.projected_net if point else D("0.0"),
-        total_income=round(sum((p.income for p in series)), 2),
-        total_expense=round(sum((p.expense for p in series)), 2),
-        total_net=round(sum((p.net for p in series)), 2),
+        total_income=quantize_brl(sum((p.income for p in series))),
+        total_expense=quantize_brl(sum((p.expense for p in series))),
+        total_net=quantize_brl(sum((p.net for p in series))),
         series=series,
         categories=breakdown,
     )
@@ -287,10 +288,16 @@ async def calendar_month(
 ) -> CalendarOut:
     """Per-day entradas/saídas of the month, plus what is still only expected."""
     m = month or today_iso()[:7]
-    start, end = month_bounds(m)
-    txs = await db.transactions.find(
-        {"user_id": user["id"], "date": {"$gte": start, "$lte": end}}
-    ).to_list(5000)
+    # Capture revision before cards/subscriptions. The projection scan keeps
+    # the current month's entries, fixed historical series and original card
+    # purchases referenced by refunds, avoiding three inconsistent reads.
+    revision = await finance_revision(user["id"])
+    cards = await db.cards.find({"user_id": user["id"]}).to_list(200)
+    subscriptions = await db.subscriptions.find(
+        {"user_id": user["id"]}
+    ).to_list(500)
+    history = await read_projection_history(user["id"], [m], cards, revision)
+    txs = [tx for tx in history if tx.get("date", "")[:7] == m]
     buckets: dict[str, DayFlow] = {}
     for tx in txs:
         day = buckets.setdefault(
@@ -306,30 +313,118 @@ async def calendar_month(
         )
         day.count += 1
         # Invoice payment is a bank movement, not a second purchase expense.
-        if tx["type"] == "transferencia" or tx.get("invoice_payment"):
+        if (tx["type"] == "transferencia" or tx.get("invoice_payment")
+                or tx.get("invoice_refund")):
             continue
         value = _amount(tx)
         if tx.get("status") == "pago":
             if tx["type"] == "receita":
-                day.income = round(D(day.income) + value, 2)
+                day.income = quantize_brl(D(day.income) + value)
             else:
-                day.expense = round(D(day.expense) + value, 2)
+                day.expense = quantize_brl(D(day.expense) + value)
         elif tx["type"] == "receita":
-            day.projected_income = round(D(day.projected_income) + value, 2)
+            day.projected_income = quantize_brl(D(day.projected_income) + value)
         else:
-            day.projected_expense = round(D(day.projected_expense) + value, 2)
+            day.projected_expense = quantize_brl(D(day.projected_expense) + value)
+    # A purchase imported as installment k/n remains one stored transaction,
+    # but its later competency portions belong on those later calendar days.
+    # Do not fabricate a clickable transaction count on those dates.
+    from calendar import monthrange
+    year, month_number = map(int, m.split("-"))
+    last_day = monthrange(year, month_number)[1]
+    for source in history:
+        if not source.get("installment") or source["date"][:7] == m:
+            continue
+        portion = month_portion(source, m)
+        if portion is None:
+            continue
+        occurrence_day = min(int(source["date"][8:10]), last_day)
+        key = f"{m}-{occurrence_day:02d}"
+        day = buckets.setdefault(
+            key, DayFlow(date=key, income=D("0.0"), expense=D("0.0"),
+                         projected_income=D("0.0"), projected_expense=D("0.0"),
+                         count=0),
+        )
+        if source["type"] == "receita":
+            day.income = quantize_brl(D(day.income) + portion)
+        elif source["type"] == "despesa":
+            day.expense = quantize_brl(D(day.expense) + portion)
+
+    # Forecast fixed series only for future occurrences not represented by a
+    # real paid, scheduled or pending row in this month. Same-series bills
+    # already suppress planned subscriptions below.
+    for source, date_key in monthly_projection_sources(history, m):
+        if date_key < today_iso():
+            continue
+        day = buckets.setdefault(
+            date_key, DayFlow(date=date_key, income=D("0.0"),
+                              expense=D("0.0"), projected_income=D("0.0"),
+                              projected_expense=D("0.0"), count=0),
+        )
+        if source["type"] == "receita":
+            day.projected_income = quantize_brl(
+                D(day.projected_income) + _amount(source)
+            )
+        elif source["type"] == "despesa":
+            day.projected_expense = quantize_brl(
+                D(day.projected_expense) + _amount(source)
+            )
+    # FIN-08/14: reverse a purchase as a negative expense on the actual
+    # compensation date. An invoice bank refund must not be counted as new
+    # salary or income, even when the original purchase was in a prior month.
+    if any(
+        entry.get("date", "")[:7] == m
+        for card in cards
+        for ledger in ("invoice_adjustments", "invoice_refunds")
+        for events in (card.get(ledger) or {}).values()
+        for entry in events
+    ):
+        for credit in credit_events(cards, history):
+            day_key = credit["date"]
+            if day_key[:7] != m:
+                continue
+            is_new_day = day_key not in buckets
+            day = buckets.setdefault(
+                day_key, DayFlow(date=day_key, income=D("0.0"),
+                                 expense=D("0.0"), projected_income=D("0.0"),
+                                 projected_expense=D("0.0"), count=0),
+            )
+            day.expense = quantize_brl(D(day.expense) - D(credit["cents"]) / 100)
+            if credit["kind"] == "merchant_credit":
+                day.count += 1
+            # A bank-refund transaction has already contributed its own day
+            # count; do not duplicate it on the calendar.
+    # A subscription is a forecast only. It does not turn into a bank debit,
+    # and an existing or recurring transaction suppresses its projection.
+    if subscriptions:
+        # Historical fixed expenses suppress double forecasting even if their
+        # original date is years before this calendar month.
+        for sub, charge in planned_subscriptions(
+            subscriptions, history, m, today_iso()
+        ):
+            key = charge.isoformat()
+            day = buckets.setdefault(
+                key, DayFlow(date=key, income=D("0.0"),
+                             expense=D("0.0"), projected_income=D("0.0"),
+                             projected_expense=D("0.0"), count=0),
+            )
+            day.projected_expense = quantize_brl(
+                D(day.projected_expense) + D(sub["value"])
+            )
+            # This is not an actual transaction. Preserve count = recorded
+            # rows so clicking the day does not imply a nonexistent entry.
     days = sorted(buckets.values(), key=lambda d: d.date)
-    income = round(sum((d.income for d in days)), 2)
-    expense = round(sum((d.expense for d in days)), 2)
-    p_income = round(sum((d.projected_income for d in days)), 2)
-    p_expense = round(sum((d.projected_expense for d in days)), 2)
+    income = quantize_brl(sum((d.income for d in days)))
+    expense = quantize_brl(sum((d.expense for d in days)))
+    p_income = quantize_brl(sum((d.projected_income for d in days)))
+    p_expense = quantize_brl(sum((d.projected_expense for d in days)))
     return CalendarOut(
         month=m,
         days=days,
         income=income,
         expense=expense,
-        net=round(income - expense, 2),
+        net=quantize_brl(income - expense),
         projected_income=p_income,
         projected_expense=p_expense,
-        projected_balance=round(income - expense + p_income - p_expense, 2),
+        projected_balance=quantize_brl(income - expense + p_income - p_expense),
     )

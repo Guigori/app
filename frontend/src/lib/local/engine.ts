@@ -24,6 +24,8 @@ import type {
   CreditCard,
   Invoice,
   InvoiceItem,
+  CreditInvoiceInput,
+  BankRefundInput,
   NotificationItem,
   PayInvoiceInput,
   SubscriptionInput,
@@ -39,7 +41,37 @@ import type {
   Trends,
 } from "@/types/finnos";
 
-const round2 = (v: number) => Math.round(v * 100) / 100;
+import { spendingPace } from "@/lib/budgetPace";
+import { roundBRL } from "@/lib/roundMoney";
+import { localCreditEvents, creditsForMonth } from "@/lib/local/competency";
+import { localSubscriptionProjections } from "@/lib/local/subscriptionProjection";
+
+/** Sanitized, append-only history. Mirrors the server record_event contract. */
+function localAudit(db: LocalDb, entity: string, action: "created" | "updated" | "deleted",
+  before: { id: string; name?: string; value?: number; monthly_budget?: number; date?: string } | null,
+  after: { id: string; name?: string; value?: number; monthly_budget?: number; date?: string } | null): void {
+  const summary = (item: typeof before) => item ? {
+    ...(item.name ? { name: item.name } : {}),
+    ...(item.date ? { date: item.date } : {}),
+    ...(item.value != null ? { value_cents: Math.round(item.value * 100) } : {}),
+    ...(item.monthly_budget != null ? { monthly_budget_cents: Math.round(item.monthly_budget * 100) } : {}),
+  } : null;
+  db.audit_events ??= [];
+  db.audit_events.push({
+    id: newId(), entity, entity_id: (after ?? before)!.id, action,
+    summary: `${action}: ${entity}`, created_at: new Date().toISOString(),
+    before: summary(before), after: summary(after),
+  });
+}
+
+export function localFinanceHistory(limit = 50, before?: string) {
+  const items = [...(readDb().audit_events ?? [])]
+    .filter(item => !before || item.created_at < before)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+  return { items: items.slice(0, limit), next_cursor: items.length > limit ? items[limit - 1]?.created_at ?? null : null };
+}
+
+const round2 = roundBRL;
 
 /** Mirror of finnos.lib.money.installment_portion: no negative/zero installments. */
 function installmentPortion(value: number, count: number, offset: number): number {
@@ -51,6 +83,27 @@ function installmentPortion(value: number, count: number, offset: number): numbe
   const base = Math.floor(cents / count);
   const remaining = cents % count;
   return (base + (offset >= count - remaining ? 1 : 0)) / 100;
+}
+
+/** First remaining installment (0-based) of a k/n purchase. */
+function firstRemainingInstallment(tx: { current_installment?: number | null; total_installments?: number | null }): number {
+  const n = tx.total_installments ?? 1;
+  const current = tx.current_installment ?? 1;
+  if (!Number.isInteger(n) || n < 1 || !Number.isInteger(current) || current < 1 || current > n) {
+    throw new Error("Parcela atual inválida.");
+  }
+  return current - 1;
+}
+
+/** One occurrence, including imported k/n rows without installment_value.
+ * Mirror: finnos.lib.transaction_amount.occurrence_amount. Never project a
+ * missing installment as R$ 0,00; preserve an explicitly stored legacy value.
+ */
+export function occurrenceAmount(tx: Pick<Transaction, "value"> &
+  Partial<Pick<Transaction, "installment" | "total_installments" | "current_installment" | "installment_value">>): number {
+  if (!tx.installment) return round2(tx.value);
+  if (tx.installment_value != null) return round2(tx.installment_value);
+  return installmentPortion(tx.value, tx.total_installments ?? 1, firstRemainingInstallment(tx));
 }
 
 function monthsBetween(a: string, b: string): number {
@@ -68,23 +121,25 @@ function monthBounds(month: string): [string, string] {
 
 /** Positive amount the transaction contributes to `month`'s income/expense stats. */
 function monthPortion(tx: Transaction, month: string): number | null {
-  if (tx.invoice_payment || tx.type === "transferencia" || tx.status !== "pago") return null;
+  if (tx.invoice_payment || tx.invoice_refund || tx.type === "transferencia" || tx.status !== "pago") return null;
   if (tx.installment) {
     const n = tx.total_installments ?? 1;
     const offset = monthsBetween(tx.date.slice(0, 7), month);
-    return offset >= 0 && offset < n ? installmentPortion(tx.value, n, offset) : null;
+    const start = firstRemainingInstallment(tx);
+    return offset >= 0 && start + offset < n ? installmentPortion(tx.value, n, start + offset) : null;
   }
   return tx.date.slice(0, 7) === month ? round2(tx.value) : null;
 }
 
 /** Signed effect on each account balance — "pago" moves money, pending/scheduled never does. */
 function balanceEffects(tx: Transaction, today: string): [string, number][] {
-  if (tx.card_id || tx.status !== "pago") return [];
+  if (tx.card_id || tx.status !== "pago" || tx.date > today) return [];
   let v = tx.value;
   if (tx.installment) {
     const n = tx.total_installments ?? 1;
     const due = monthsBetween(tx.date.slice(0, 7), today.slice(0, 7)) + 1;
-    v = round2(Array.from({ length: Math.max(0, Math.min(due, n)) }, (_, i) => installmentPortion(tx.value, n, i)).reduce((total, amount) => total + amount, 0));
+    const first = firstRemainingInstallment(tx);
+    v = round2(Array.from({ length: Math.max(0, Math.min(due, n - first)) }, (_, i) => installmentPortion(tx.value, n, first + i)).reduce((total, amount) => total + amount, 0));
   }
   if (tx.type === "receita") return [[tx.account_id, round2(v)]];
   if (tx.type === "despesa") return [[tx.account_id, round2(-v)]];
@@ -228,6 +283,7 @@ export function localCreateCategory(input: CategoryInput): Category {
   const db = readDb();
   const category: Category = { ...input, id: newId(), created_at: new Date().toISOString() };
   db.categories.push(category);
+  localAudit(db, "categories", "created", null, category);
   writeDb(db);
   return category;
 }
@@ -236,7 +292,9 @@ export function localUpdateCategory(id: string, input: CategoryInput): Category 
   const db = readDb();
   const index = db.categories.findIndex((c) => c.id === id);
   if (index < 0) throw new Error("Categoria não encontrada.");
+  const before = { ...db.categories[index] };
   db.categories[index] = { ...db.categories[index], ...input };
+  localAudit(db, "categories", "updated", before, db.categories[index]);
   writeDb(db);
   return db.categories[index];
 }
@@ -249,7 +307,9 @@ export function localDeleteCategory(id: string): void {
     );
   }
   if (db.subscriptions.some(sub => sub.category_id === id)) throw new Error("Categoria vinculada a uma assinatura.");
+  const previous = db.categories.find(c => c.id === id) ?? null;
   db.categories = db.categories.filter((c) => c.id !== id);
+  if (previous) localAudit(db, "categories", "deleted", previous, null);
   writeDb(db);
 }
 
@@ -290,6 +350,9 @@ export function localListTransactions(filters: LocalTxFilters): Transaction[] {
 }
 
 function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Transaction): Transaction {
+  if (input.status === "pago" && input.date > todayISO()) {
+    throw new Error("Lançamento futuro não pode estar pago. Use agendado ou pendente.");
+  }
   if (!db.accounts.some((a) => a.id === input.account_id)) {
     throw new Error("Conta inválida: selecione uma conta cadastrada.");
   }
@@ -303,6 +366,7 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
     if (!input.total_installments || input.total_installments < 2 || input.total_installments > 120) {
       throw new Error("Informe de 2 a 120 parcelas.");
     }
+    firstRemainingInstallment(input);
     if (Math.round((input.adjusted_value ?? input.value) * 100) < input.total_installments) {
       throw new Error("Cada parcela deve valer ao menos R$ 0,01.");
     }
@@ -330,7 +394,7 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
     installment: input.installment,
     total_installments: input.installment ? input.total_installments : null,
     current_installment: input.installment ? input.current_installment ?? 1 : null,
-    installment_value: input.installment && input.total_installments ? installmentPortion(total, input.total_installments, 0) : null,
+    installment_value: input.installment && input.total_installments ? installmentPortion(total, input.total_installments, (input.current_installment ?? 1) - 1) : null,
     adjusted_value: input.adjusted_value,
     attachment: input.attachment,
     notes: input.notes,
@@ -343,18 +407,23 @@ export function localCreateTransaction(input: TransactionInput): Transaction {
   const db = readDb();
   const tx = buildTransaction(db, input);
   db.transactions.push(tx);
+  localAudit(db, "transactions", "created", null, tx);
   writeDb(db);
   return enrich(db, tx);
 }
 
 /** A paid invoice locks its purchase breakdown until an audited refund exists. */
 function assertPurchaseNotSettled(db: LocalDb, transaction: Transaction): void {
-  if (transaction.invoice_payment) throw new Error("Pagamento de fatura não pode ser alterado manualmente.");
+  if (transaction.invoice_payment || transaction.invoice_refund) throw new Error("Movimento de fatura não pode ser alterado manualmente.");
   if (!transaction.card_id) return;
   const card = db.cards.find(c => c.id === transaction.card_id);
-  if (!card?.paid_cycles) return;
+  if (!card) return;
+  if (Object.values(card.invoice_adjustments ?? {}).some(items => items.some(item => item.purchase_id === transaction.id))) {
+    throw new Error("Compra possui estorno auditado e não pode ser alterada ou excluída.");
+  }
+  if (!card.paid_cycles) return;
   const firstClosing = cycleBounds(transaction.date, card.closing_day)[1];
-  const count = transaction.installment ? transaction.total_installments ?? 1 : 1;
+  const count = transaction.installment ? (transaction.total_installments ?? 1) - firstRemainingInstallment(transaction) : 1;
   for (let i = 0; i < count; i++) {
     const cycle = configuredDayInMonth(firstClosing, i, card.closing_day);
     if (card.paid_cycles[cycle]?.amount) throw new Error("Compra pertence a uma fatura com pagamento; faça um estorno auditado.");
@@ -367,7 +436,9 @@ export function localUpdateTransaction(id: string, input: TransactionInput): Tra
   if (index < 0) throw new Error("Transação não encontrada.");
   assertPurchaseNotSettled(db, db.transactions[index]);
   const tx = buildTransaction(db, input, db.transactions[index]);
+  const before = { ...db.transactions[index] };
   db.transactions[index] = tx;
+  localAudit(db, "transactions", "updated", before, tx);
   writeDb(db);
   return enrich(db, tx);
 }
@@ -394,6 +465,7 @@ export function localDashboard(month?: string | null): Dashboard {
   const today = todayISO();
   const m = month ?? currentMonth();
   const prev = addMonth(m, -1);
+  const creditEvents = localCreditEvents(db);
 
   let totalBalance = db.accounts.reduce((sum, a) => sum + a.initial_balance, 0);
   for (const tx of db.transactions) {
@@ -429,10 +501,22 @@ export function localDashboard(month?: string | null): Dashboard {
     }
   }
 
+  for (const event of creditsForMonth(creditEvents, m)) {
+    expense -= event.amount;
+    const category = event.category_id ? db.categories.find(item => item.id === event.category_id) : undefined;
+    byCategory.set(event.category_id, (byCategory.get(event.category_id) ?? 0) - event.amount);
+    if (category) byGroup[category.group] -= event.amount;
+  }
+  for (const event of creditsForMonth(creditEvents, prev)) prevExpense -= event.amount;
   income = round2(income);
   expense = round2(expense);
 
+  // Negative category balances from refunds remain in net expense and budget,
+  // but SVG donut wedges must represent only nonnegative spend.
+  const positiveCategoryTotal = [...byCategory.values()]
+    .reduce((sum, value) => sum + Math.max(0, value), 0);
   const categories: CategorySlice[] = [...byCategory.entries()]
+    .filter(([, total]) => total > 0)
     .sort((a, b) => b[1] - a[1])
     .map(([catId, total]) => {
       const category = catId ? db.categories.find((c) => c.id === catId) : undefined;
@@ -442,7 +526,7 @@ export function localDashboard(month?: string | null): Dashboard {
         color: category?.color ?? "#94A3B8",
         icon: category?.icon ?? "more-horizontal",
         total: round2(total),
-        percent: expense ? Math.round((total / expense) * 1000) / 10 : 0,
+        percent: positiveCategoryTotal ? Math.round((total / positiveCategoryTotal) * 1000) / 10 : 0,
       };
     });
 
@@ -485,6 +569,7 @@ export function localTrends(months: number, endMonth?: string): Trends {
   const window: string[] = [];
   for (let i = months - 1; i >= 0; i -= 1) window.push(addMonth(last, -i));
 
+  const creditEvents = localCreditEvents(db);
   const rows: MonthTrend[] = window.map((m) => {
     let income = 0;
     let expense = 0;
@@ -494,6 +579,7 @@ export function localTrends(months: number, endMonth?: string): Trends {
       if (tx.type === "receita") income += portion;
       else expense += portion;
     }
+    expense -= creditsForMonth(creditEvents, m).reduce((total, item) => total + item.amount, 0);
     return {
       month: m,
       label: MONTH_ABBR[Number(m.slice(5, 7)) - 1],
@@ -521,6 +607,10 @@ export function localBudget(month: string): BudgetSummary {
     else spentByCat.set(tx.category_id, (spentByCat.get(tx.category_id) ?? 0) + portion);
   }
 
+  const credits = creditsForMonth(localCreditEvents(db), month);
+  for (const event of credits) {
+    spentByCat.set(event.category_id, (spentByCat.get(event.category_id) ?? 0) - event.amount);
+  }
   const rows: BudgetRow[] = [];
   for (const cat of db.categories) {
     const budget = round2(cat.monthly_budget);
@@ -529,7 +619,19 @@ export function localBudget(month: string): BudgetSummary {
     const percent = budget > 0 ? Math.round((spent / budget) * 1000) / 10 : 0;
     const status: BudgetStatus =
       budget <= 0 ? "sem_limite" : percent <= 80 ? "dentro" : percent <= 100 ? "proximo" : "acima";
+    const pace = spendingPace(
+      budget,
+      db.transactions.filter(tx => tx.category_id === cat.id && tx.type === "despesa")
+        .map(tx => ({ date: tx.date, amount: monthPortion(tx, month) ?? 0 }))
+        .filter(event => event.amount > 0)
+        .concat(credits.filter(event => event.category_id === cat.id).map(event => ({
+          date: event.date, amount: -event.amount,
+        }))),
+      month,
+      todayISO(),
+    );
     rows.push({
+      ...pace,
       category_id: cat.id,
       name: cat.name,
       icon: cat.icon,
@@ -684,20 +786,30 @@ export function localFlow(params: FlowParams): Flow {
   const txs = params.category_id
     ? db.transactions.filter((t) => t.category_id === params.category_id)
     : db.transactions;
-  const settled = new Set(txs.map((t) => `${t.name.trim().toLowerCase()}|${t.date.slice(0, 7)}`));
+  const creditEvents = localCreditEvents(db).filter(item => !params.category_id || item.category_id === params.category_id);
   const todayMonth = todayISO().slice(0, 7);
 
-  const amount = (t: Transaction) => round2(t.installment ? t.installment_value ?? 0 : t.value);
-  const projection = (t: Transaction, month: string): number | null => {
-    if (t.type === "transferencia") return null;
-    const txMonth = t.date.slice(0, 7);
-    if (t.status !== "pago" && txMonth === month) return amount(t);
-    if (t.fixed && (t.recurrence ?? "mensal") === "mensal") {
-      if (monthsBetween(txMonth, month) > 0 && !settled.has(`${t.name.trim().toLowerCase()}|${month}`)) {
-        return amount(t);
-      }
+  const amount = occurrenceAmount;
+  const recurrenceKey = (t: Transaction): string => JSON.stringify([
+    t.type, t.account_id, t.card_id, t.category_id, t.name.trim().toLowerCase(),
+  ]);
+  const recurringSources = (month: string): Transaction[] => {
+    const present = new Set<string>();
+    const latest = new Map<string, Transaction>();
+    for (const tx of txs) {
+      if (tx.invoice_payment || tx.type === "transferencia") continue;
+      const key = recurrenceKey(tx);
+      const txMonth = tx.date.slice(0, 7);
+      if (txMonth === month) present.add(key);
+      if (!tx.fixed || tx.installment || (tx.recurrence ?? "mensal") !== "mensal" || txMonth >= month) continue;
+      const prev = latest.get(key);
+      if (!prev || tx.date > prev.date) latest.set(key, tx);
     }
-    return null;
+    return [...latest.entries()].filter(([key]) => !present.has(key)).map(([, tx]) => tx);
+  };
+  const projection = (t: Transaction, month: string): number | null => {
+    if (t.type === "transferencia" || t.invoice_payment) return null;
+    return t.status !== "pago" && t.date.slice(0, 7) === month ? amount(t) : null;
   };
 
   const series: FlowPoint[] = window.map((m) => {
@@ -716,6 +828,17 @@ export function localFlow(params: FlowParams): Flow {
         if (tx.type === "receita") pIncome += projected;
         else pExpense += projected;
       }
+    }
+    expense -= creditsForMonth(creditEvents, m).reduce((total, item) => total + item.amount, 0);
+    for (const source of recurringSources(m)) {
+      if (source.type === "receita") pIncome += amount(source);
+      else pExpense += amount(source);
+    }
+    for (const projected of localSubscriptionProjections(
+      db.subscriptions.filter(sub => !params.category_id || sub.category_id === params.category_id),
+      db.transactions, m, todayISO(),
+    )) {
+      pExpense += projected.subscription.value;
     }
     return {
       month: m,
@@ -737,8 +860,15 @@ export function localFlow(params: FlowParams): Flow {
     if (portion === null || tx.type === "receita") continue;
     byCat.set(tx.category_id, (byCat.get(tx.category_id) ?? 0) + portion);
   }
-  const focusExpense = round2([...byCat.values()].reduce((s, v) => s + v, 0));
-  const categories: FlowCategory[] = [...byCat.entries()]
+  for (const event of creditsForMonth(creditEvents, focus)) {
+    byCat.set(event.category_id, (byCat.get(event.category_id) ?? 0) - event.amount);
+  }
+  // FIN-08: signed refunds remain in expense/net; the visual breakdown
+  // displays only positive spending with percentages normalized to its own
+  // positive denominator (no negative bars or percentages over 100%).
+  const positiveCategories = [...byCat.entries()].filter(([, value]) => value > 0);
+  const positiveExpense = round2(positiveCategories.reduce((sum, [, value]) => sum + value, 0));
+  const categories: FlowCategory[] = positiveCategories
     .sort((a, b) => b[1] - a[1])
     .map(([key, value]) => {
       const category = key ? db.categories.find((c) => c.id === key) : undefined;
@@ -748,7 +878,7 @@ export function localFlow(params: FlowParams): Flow {
         color: category?.color ?? "#94A3B8",
         icon: category?.icon ?? "more-horizontal",
         total: round2(value),
-        percent: focusExpense ? Math.round((value / focusExpense) * 1000) / 10 : 0,
+        percent: positiveExpense ? Math.round((value / positiveExpense) * 1000) / 10 : 0,
       };
     });
 
@@ -782,8 +912,8 @@ export function localCalendar(month: string): CalendarMonth {
       buckets.get(tx.date) ??
       { date: tx.date, income: 0, expense: 0, projected_income: 0, projected_expense: 0, count: 0, active_count: 0 };
     day.count += 1;
-    if (tx.type !== "transferencia" && !tx.invoice_payment) {
-      const value = round2(tx.installment ? installmentPortion(tx.value, tx.total_installments ?? 1, 0) : tx.value);
+    if (tx.type !== "transferencia" && !tx.invoice_payment && !tx.invoice_refund) {
+      const value = occurrenceAmount(tx);
       if (tx.status === "pago") {
         if (tx.type === "receita") day.income = round2(day.income + value);
         else day.expense = round2(day.expense + value);
@@ -794,6 +924,32 @@ export function localCalendar(month: string): CalendarMonth {
       }
     }
     buckets.set(tx.date, day);
+  }
+  // FIN-08/14: bank refund is a cash receipt but NOT ordinary income.
+  // Both bank reimbursements and merchant credits reverse the purchase as
+  // negative spend in the calendar on the event date.
+  for (const credit of creditsForMonth(localCreditEvents(db), month)) {
+    const day = buckets.get(credit.date) ?? {
+      date: credit.date, income: 0, expense: 0, projected_income: 0,
+      projected_expense: 0, count: 0, active_count: 0,
+    };
+    day.expense = round2(day.expense - credit.amount);
+    if (credit.kind === "merchant_credit") day.count += 1;
+    buckets.set(credit.date, day);
+  }
+  for (const projected of localSubscriptionProjections(
+    db.subscriptions, db.transactions, month, todayISO(),
+  )) {
+    const key = projected.date;
+    const day = buckets.get(key) ?? {
+      date: key, income: 0, expense: 0, projected_income: 0,
+      projected_expense: 0, count: 0, active_count: 0,
+    };
+    day.projected_expense = round2(
+      day.projected_expense + projected.subscription.value
+    );
+    // A planned subscription is not a recorded transaction.
+    buckets.set(key, day);
   }
   const days = [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date));
   const income = round2(days.reduce((s, d) => s + d.income, 0));
@@ -855,18 +1011,31 @@ function dueDate(nextClosing: string, closingDay: number, dueDay: number): strin
 function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): CreditCard {
   const today = todayISO();
   const [start, closing] = cycleBounds(today, doc.closing_day);
-  const totals = new Map<string, number>();
+  const purchaseLines = new Map<string, Map<string, number>>();
   for (const tx of txs) {
     if (tx.card_id !== doc.id || tx.type !== "despesa") continue;
     const firstClosing = cycleBounds(tx.date, doc.closing_day)[1];
     const n = tx.installment ? (tx.total_installments ?? 1) : 1;
-    for (let i = 0; i < n; i++) {
-      const key = configuredDayInMonth(firstClosing, i, doc.closing_day);
-      const value = tx.installment ? installmentPortion(tx.value, n, i) : tx.value;
-      totals.set(key, round2((totals.get(key) ?? 0) + value));
+    const first = tx.installment ? firstRemainingInstallment(tx) : 0;
+    for (let offset = 0; first + offset < n; offset++) {
+      const key = configuredDayInMonth(firstClosing, offset, doc.closing_day);
+      const value = tx.installment ? installmentPortion(tx.value, n, first + offset) : tx.value;
+      if (!purchaseLines.has(key)) purchaseLines.set(key, new Map());
+      purchaseLines.get(key)!.set(tx.id, value);
     }
   }
   const paidCycles = doc.paid_cycles ?? {};
+  for (const [cycle, paid] of Object.entries(paidCycles)) {
+    if (!purchaseLines.has(cycle)) purchaseLines.set(cycle, new Map());
+    for (const item of paid.items ?? []) purchaseLines.get(cycle)!.set(item.id, item.value);
+  }
+  const totals = new Map([...purchaseLines].map(([cycle, purchases]) => [
+    cycle, round2([...purchases.values()].reduce((sum, value) => sum + value, 0)),
+  ]));
+  for (const [cycle, credits] of Object.entries(doc.invoice_adjustments ?? {})) {
+    const creditTotal = credits.reduce((sum, item) => sum + item.value, 0);
+    totals.set(cycle, round2((totals.get(cycle) ?? 0) - creditTotal));
+  }
   let used = 0, future = 0;
   for (const [cycle, total] of totals) {
     const outstanding = round2(Math.max(0, total - (paidCycles[cycle]?.amount ?? 0)));
@@ -986,39 +1155,44 @@ export function localNotifications(windowDays = 7): Notifications {
 
 /** Invoice occurrences mirror finnos.lib.invoices.occurrences, including after-closing purchases. */
 function cycleItems(card: LocalCard, txs: Transaction[], start: string, closing: string, cats: Category[]): InvoiceItem[] {
-  const frozen = card.paid_cycles?.[closing]?.items;
-  if (frozen) return frozen;
+  const frozen = card.paid_cycles?.[closing]?.items ?? [];
   const items: InvoiceItem[] = [];
   for (const tx of txs) {
     if (tx.card_id !== card.id || tx.type !== "despesa") continue;
     const firstClosing = cycleBounds(tx.date, card.closing_day)[1];
     const total = tx.installment ? tx.total_installments ?? 1 : 1;
     const offset = monthsBetween(firstClosing.slice(0, 7), closing.slice(0, 7));
-    if (offset < 0 || offset >= total || configuredDayInMonth(firstClosing, offset, card.closing_day) !== closing) continue;
+    const first = tx.installment ? firstRemainingInstallment(tx) : 0;
+    if (offset < 0 || first + offset >= total || configuredDayInMonth(firstClosing, offset, card.closing_day) !== closing) continue;
     const category = cats.find((c) => c.id === tx.category_id);
     items.push({
       id: tx.id,
       name: tx.name,
       date: tx.date,
-      value: tx.installment ? installmentPortion(tx.value, total, offset) : tx.value,
+      value: tx.installment ? installmentPortion(tx.value, total, first + offset) : tx.value,
       category_name: category?.name ?? null,
       category_color: category?.color ?? null,
-      installment_label: total > 1 ? `${offset + 1}/${total}` : null,
+      installment_label: total > 1 ? `${first + offset + 1}/${total}` : null,
     });
   }
-  return items.sort((a, b) => b.date.localeCompare(a.date));
+  const seen = new Set(frozen.map(item => item.id));
+  return [...frozen, ...items.filter(item => !seen.has(item.id))]
+    .sort((a, b) => b.date.localeCompare(a.date));
 }
-export function localInvoice(cardId: string): Invoice {
-  const db = readDb();
-  const card = db.cards.find((c) => c.id === cardId);
-  if (!card) throw new Error("Cartão não encontrado.");
-  const [start, closing] = cycleBounds(todayISO(), card.closing_day);
+function invoiceForCycle(db: LocalDb, card: LocalCard, closing: string): Invoice {
+  if (closing !== configuredDayInMonth(closing, 0, card.closing_day)) {
+    throw new Error("Ciclo de fatura inválido.");
+  }
+  const start = addDays(configuredDayInMonth(closing, -1, card.closing_day), 1);
   const items = cycleItems(card, db.transactions, start, closing, db.categories);
   const payment = card.paid_cycles?.[closing];
-  const total = round2(items.reduce((sum, item) => sum + item.value, 0));
+  const adjustments = card.invoice_adjustments?.[closing] ?? [];
+  const refunds = card.invoice_refunds?.[closing] ?? [];
+  const adjustmentTotal = round2(adjustments.reduce((sum, item) => sum + item.value, 0));
+  const total = round2(items.reduce((sum, item) => sum + item.value, 0) - adjustmentTotal);
   const paidAmount = round2(payment?.amount ?? 0);
   return {
-    card_id: cardId,
+    card_id: card.id,
     card_name: card.name,
     cycle_start: start,
     cycle_end: closing,
@@ -1029,7 +1203,40 @@ export function localInvoice(cardId: string): Invoice {
     paid_amount: paidAmount,
     paid_at: payment?.paid_at ?? null,
     items,
+    adjustments,
+    adjustment_total: adjustmentTotal,
+    refunds,
+    refund_total: round2(refunds.reduce((total, item) => total + item.value, 0)),
   };
+}
+
+function defaultLocalInvoiceCycle(db: LocalDb, card: LocalCard): string {
+  const today = todayISO();
+  const open = cycleBounds(today, card.closing_day)[1];
+  const cycles = new Set<string>([
+    ...Object.keys(card.paid_cycles ?? {}),
+    ...Object.keys(card.invoice_adjustments ?? {}),
+  ]);
+  for (const tx of db.transactions) {
+    if (tx.card_id !== card.id || tx.type !== "despesa") continue;
+    const first = cycleBounds(tx.date, card.closing_day)[1];
+    const count = tx.installment ? (tx.total_installments ?? 1) - firstRemainingInstallment(tx) : 1;
+    for (let offset = 0; offset < count; offset++) {
+      const closing = configuredDayInMonth(first, offset, card.closing_day);
+      if (closing < today) cycles.add(closing);
+    }
+  }
+  for (const cycle of [...cycles].filter(cycle => cycle < today).sort()) {
+    if ((invoiceForCycle(db, card, cycle).outstanding ?? 0) > 0) return cycle;
+  }
+  return open;
+}
+
+export function localInvoice(cardId: string, selectedCycle?: string): Invoice {
+  const db = readDb();
+  const card = db.cards.find(item => item.id === cardId);
+  if (!card) throw new Error("Cartão não encontrado.");
+  return invoiceForCycle(db, card, selectedCycle ?? defaultLocalInvoiceCycle(db, card));
 }
 
 export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice {
@@ -1040,13 +1247,12 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || Number.isNaN(Date.parse(input.date + "T12:00:00")) || input.date > todayISO()) {
     throw new Error("A data do pagamento precisa ser válida e não pode estar no futuro.");
   }
-  const currentClosing = cycleBounds(todayISO(), card.closing_day)[1];
-  const closing = input.cycle ?? currentClosing;
+  const closing = input.cycle ?? defaultLocalInvoiceCycle(db, card);
   if (closing !== configuredDayInMonth(closing, 0, card.closing_day)) throw new Error("Ciclo de fatura inválido.");
   const first = configuredDayInMonth(closing, -1, card.closing_day);
   const start = addDays(first, 1);
   const items = cycleItems(card, db.transactions, start, closing, db.categories);
-  const total = round2(items.reduce((sum, item) => sum + item.value, 0));
+  const total = invoiceForCycle(db, card, closing).total;
   const previous = card.paid_cycles?.[closing]?.amount ?? 0;
   const outstanding = round2(total - previous);
   const amount = round2(input.value ?? outstanding);
@@ -1070,7 +1276,115 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   };
   db.cards = db.cards.map((c) => c.id === cardId ? card : c);
   writeDb(db);
-  return localInvoice(cardId);
+  return localInvoice(cardId, closing);
+}
+
+
+/** Append-only merchant credit in local mode; no simulated bank reimbursement. */
+export function localCreditInvoice(cardId: string, input: CreditInvoiceInput, operationId: string): Invoice {
+  const db = readDb();
+  const card = db.cards.find(item => item.id === cardId);
+  if (!card) throw new Error("Cartão não encontrado.");
+  if (!operationId || operationId.length > 200) throw new Error("Identificador de operação inválido.");
+  const reason = input.reason.trim();
+  if (reason.length < 5 || reason.length > 300) throw new Error("Descreva o motivo do estorno.");
+  const valueCents = Math.round(input.value * 100);
+  if (!Number.isSafeInteger(valueCents) || valueCents <= 0 || Math.abs(input.value * 100 - valueCents) > 1e-6) {
+    throw new Error("O valor do estorno deve ter no máximo duas casas decimais.");
+  }
+  const id = `${cardId}:${operationId}`;
+  const fingerprint = JSON.stringify({
+    cardId, cycle: input.cycle, purchaseId: input.purchase_id, amountCents: valueCents, reason,
+  });
+  const previous = Object.values(card.invoice_adjustments ?? {}).flat()
+    .find(item => item.id === id);
+  if (previous) {
+    if (previous.fingerprint !== fingerprint) throw new Error("Identificador reutilizado para outro estorno.");
+    return invoiceForCycle(db, card, input.cycle);
+  }
+  const invoice = invoiceForCycle(db, card, input.cycle);
+  const purchase = invoice.items.find(item => item.id === input.purchase_id);
+  if (!purchase) throw new Error("Compra não encontrada nesta fatura.");
+  const priorCents = (invoice.adjustments ?? [])
+    .filter(item => item.purchase_id === input.purchase_id)
+    .reduce((total, item) => total + Math.round(item.value * 100), 0);
+  if (priorCents + valueCents > Math.round(purchase.value * 100)) {
+    throw new Error("O estorno excede o valor ainda disponível dessa compra.");
+  }
+  if (valueCents > Math.round((invoice.outstanding ?? 0) * 100)) {
+    throw new Error("O estorno excede o saldo não pago. Faturas quitadas exigem reembolso bancário.");
+  }
+  card.invoice_adjustments = {
+    ...card.invoice_adjustments,
+    [input.cycle]: [
+      ...(card.invoice_adjustments?.[input.cycle] ?? []),
+      {
+        id, purchase_id: input.purchase_id, date: todayISO(),
+        reason, value: valueCents / 100, fingerprint,
+      },
+    ],
+  };
+  localAudit(db, "cards", "updated", { id: card.id, name: card.name }, { id: card.id, name: card.name });
+  writeDb(db);
+  return invoiceForCycle(db, card, input.cycle);
+}
+
+/** Bank refund of a settled purchase: real cash movement, preserved invoice. */
+export function localBankRefund(cardId: string, input: BankRefundInput, operationId: string): Invoice {
+  const db = readDb();
+  const card = db.cards.find(item => item.id === cardId);
+  if (!card) throw new Error("Cartão não encontrado.");
+  if (!operationId || operationId.length > 200) throw new Error("Identificador inválido.");
+  if (!db.accounts.some(account => account.id === input.account_id)) throw new Error("Conta bancária inválida.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || input.date > todayISO()) {
+    throw new Error("Reembolso não pode ser realizado no futuro.");
+  }
+  const reason = input.reason.trim();
+  if (reason.length < 5 || reason.length > 300) throw new Error("Descreva o motivo do reembolso.");
+  const cents = Math.round(input.value * 100);
+  if (!Number.isSafeInteger(cents) || cents <= 0 || Math.abs(input.value * 100 - cents) > 1e-6) {
+    throw new Error("Valor inválido.");
+  }
+  const key = `${cardId}:refund:${operationId}`;
+  const fingerprint = JSON.stringify({ ...input, reason, cents });
+  const previous = Object.values(card.invoice_refunds ?? {}).flat().find(item => item.id === key);
+  if (previous) {
+    if (previous.fingerprint !== fingerprint) throw new Error("Identificador de reembolso reutilizado.");
+    return invoiceForCycle(db, card, input.cycle);
+  }
+  const invoice = invoiceForCycle(db, card, input.cycle);
+  if (!invoice.paid) throw new Error("Reembolso bancário exige fatura quitada.");
+  const purchase = invoice.items.find(item => item.id === input.purchase_id);
+  if (!purchase) throw new Error("Compra não encontrada nesta fatura.");
+  const refunded = (invoice.refunds ?? []).filter(item => item.purchase_id === input.purchase_id)
+    .reduce((total, item) => total + Math.round(item.value * 100), 0);
+  const credited = (invoice.adjustments ?? []).filter(item => item.purchase_id === input.purchase_id)
+    .reduce((total, item) => total + Math.round(item.value * 100), 0);
+  if (refunded + credited + cents > Math.round(purchase.value * 100)) {
+    throw new Error("Devoluções ultrapassam o valor da compra.");
+  }
+  const credit = buildTransaction(db, {
+    name: `Reembolso ${card.name}`, type: "receita",
+    value: cents / 100, status: "pago", date: input.date,
+    account_id: input.account_id, card_id: null, to_account_id: null,
+    category_id: null, fixed: false, recurrence: null, installment: false,
+    total_installments: null, current_installment: null,
+    adjusted_value: null, attachment: null, notes: input.reason,
+  });
+  credit.id = key;
+  credit.invoice_refund = true;
+  db.transactions.push(credit);
+  card.invoice_refunds = {
+    ...card.invoice_refunds,
+    [input.cycle]: [
+      ...(card.invoice_refunds?.[input.cycle] ?? []),
+      { id: key, account_id: input.account_id, purchase_id: input.purchase_id,
+        date: input.date, reason, value: cents / 100, fingerprint },
+    ],
+  };
+  localAudit(db, "transactions", "created", null, credit);
+  writeDb(db);
+  return invoiceForCycle(db, card, input.cycle);
 }
 
 /** Subscriptions are independent from fixed transactions in local and demo mode. */
@@ -1153,7 +1467,7 @@ export function localSubscriptions(): Subscriptions {
   const monthly = round2(yearly / 12);
   const month = todayISO().slice(0, 7);
   const income = round2(db.transactions.filter(tx =>
-    tx.type === "receita" && tx.status === "pago" && tx.date.startsWith(month)
+    tx.type === "receita" && !tx.invoice_refund && tx.status === "pago" && tx.date.startsWith(month)
   ).reduce((sum, tx) => sum + tx.value, 0));
   return {
     items, monthly_total: monthly, yearly_total: yearly,

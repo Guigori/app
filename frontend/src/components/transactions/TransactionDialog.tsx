@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { isLocalMode } from "@/lib/mode";
+import { RecurrenceScopeDialog } from "@/components/transactions/RecurrenceScopeDialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createTransaction, fetchAccounts, fetchCards, fetchCategories, updateTransaction } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
-import { updateQueuedTransaction, flushSyncQueue, queueTransaction } from "@/lib/sync/queue";
+import { updateQueuedTransaction, flushSyncQueue, queueTransaction, getSyncOperation, discardConflictedOperation } from "@/lib/sync/queue";
 import { formatBRL, parseAmount, todayISO, TX_STATUS_LABEL, TX_TYPE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Account, Category, Transaction, TransactionInput, TxStatus, TxType } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -58,6 +61,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   const [notes, setNotes] = useState("");
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [recurrenceScopeOpen, setRecurrenceScopeOpen] = useState(false);
 
   const accountsQuery = useQuery({
     queryKey: ["accounts"],
@@ -75,6 +80,15 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   const cards = (cardsQuery.data ?? []).filter((c) => c.active);
   const accounts = accountsQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
+  const syncReviewQuery = useQuery({
+    queryKey: ["sync-operation", syncOperationId],
+    queryFn: () => getSyncOperation(syncOperationId!),
+    enabled: open && Boolean(syncOperationId),
+    staleTime: 0,
+  });
+  const lockedSyncAttempt = Boolean(syncOperationId && (syncReviewQuery.data?.attempts ?? 0) > 0);
+  const conflicted = syncReviewQuery.data?.status === "conflict";
+  const reviewingOfflineDelete = syncReviewQuery.data?.kind === "transaction.delete";
 
   useEffect(() => {
     if (!open) return;
@@ -145,6 +159,22 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     ]);
   };
 
+  const discardMutation = useMutation({
+    mutationFn: () => discardConflictedOperation(syncOperationId!),
+    onSuccess: async () => {
+      setConfirmDiscard(false);
+      onOpenChange(false);
+      toast.warning("Tentativa local descartada após revisão", {
+        description: "Confira no histórico se o lançamento já havia sido gravado.",
+      });
+      if (navigator.onLine) await flushSyncQueue();
+    },
+    onError: (error) => {
+      setConfirmDiscard(false);
+      setFormError(getApiErrorMessage(error));
+    },
+  });
+
   const mutation = useMutation({
     mutationFn: async (input: TransactionInput) => {
       if (syncOperationId) {
@@ -155,7 +185,19 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       return transaction ? updateTransaction(transaction.id, input) : createTransaction(input);
     },
     onSuccess: async () => {
-      toast.success(syncOperationId ? "Registro confirmado e sincronizado." : transaction ? "Transação atualizada." : "Transação registrada.", { duration: 3000 });
+      if (syncOperationId) {
+        const remaining = await getSyncOperation(syncOperationId);
+        if (remaining) {
+          toast.info("Alteração preservada neste aparelho", {
+            description: "O lançamento ainda não foi confirmado pelo servidor. A sincronização continua pendente.",
+            duration: 4500,
+          });
+        } else {
+          toast.success("Registro sincronizado.", { duration: 3000 });
+        }
+      } else {
+        toast.success(transaction ? "Transação atualizada." : "Transação registrada.", { duration: 3000 });
+      }
       await refreshFinancialViews();
       onOpenChange(false);
     },
@@ -176,6 +218,9 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   const submit = () => {
     setFormError(null);
     const value = parseAmount(valueRaw);
+    if (lockedSyncAttempt) {
+      return setFormError("Operação já enviada. Confira o histórico e resolva o conflito antes de criar outro lançamento.");
+    }
     if (!name.trim()) return setFormError("Dê um nome à transação.");
     if (!value || value <= 0) return setFormError("Informe um valor maior que zero.");
     if (!accountId) return setFormError("Selecione a conta.");
@@ -222,16 +267,73 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="font-heading">{transaction ? "Editar transação" : "Nova transação"}</DialogTitle>
+          <DialogTitle className="font-heading">{reviewingOfflineDelete ? "Revisar exclusão pendente" : transaction ? "Editar transação" : "Nova transação"}</DialogTitle>
           <DialogDescription>
-            Registre receitas, despesas e transferências com status, categoria e parcelamento.
+            {reviewingOfflineDelete
+              ? "Esta exclusão é protegida por versão e pode já ter sido aplicada no servidor. Confira o histórico antes de descartar."
+              : "Registre receitas, despesas e transferências com status, categoria e parcelamento."}
           </DialogDescription>
         </DialogHeader>
 
-        {accounts.length === 0 && !accountsQuery.isPending ? (
+        {transaction?.fixed && transaction.recurrence_id && !transaction.installment && !syncOperationId && !isLocalMode() && (
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+            <p className="text-sm font-semibold">Lançamento de uma série mensal</p>
+            <p className="mt-1 text-xs text-muted-foreground">Para editar esta ocorrência, as próximas ou a série futura sem alterar períodos pagos, use o controle de recorrência.</p>
+            <Button type="button" variant="outline" className="mt-2" data-testid="open-recurrence-scope"
+              onClick={() => { onOpenChange(false); setRecurrenceScopeOpen(true); }}>
+              Editar recorrência
+            </Button>
+          </div>
+        )}
+        {lockedSyncAttempt && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm" data-testid="tx-sync-conflict-warning">
+            <strong>{conflicted ? "Operação bloqueada para revisão" : "Lançamento enviado anteriormente"}</strong>
+            <p className="mt-1 text-muted-foreground">
+              Por segurança, não é possível modificar o conteúdo de uma tentativa já enviada.
+              Verifique o histórico financeiro antes de descartar ou registrar novamente.
+              Os próximos lançamentos aguardam esta resolução.
+            </p>
+            {syncReviewQuery.data?.lastError && (
+              <p className="mt-2 break-words text-xs text-muted-foreground">
+                Motivo: {syncReviewQuery.data.lastError}
+              </p>
+            )}
+          </div>
+        )}
+        {reviewingOfflineDelete ? (
+          <div className="space-y-3 rounded-xl border p-4" data-testid="tx-offline-delete-review">
+            <p className="text-sm font-medium">Exclusão de lançamento aguardando reconciliação</p>
+            <p className="text-sm text-muted-foreground">
+              Lançamento: {syncReviewQuery.data?.payload.name ?? "Desconhecido"}
+              {syncReviewQuery.data?.entityId ? " · ID: " + syncReviewQuery.data.entityId : ""}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              O servidor pode ter recebido a operação mesmo que a resposta tenha falhado.
+              Não registre ou exclua novamente antes de verificar o Histórico.
+            </p>
+            {conflicted && (
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" data-testid="tx-copy-delete-review"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(JSON.stringify(syncReviewQuery.data, null, 2));
+                      toast.success("Detalhes da exclusão copiados.");
+                    } catch {
+                      setFormError("Não foi possível copiar o registro.");
+                    }
+                  }}>Copiar dados</Button>
+                <Button type="button" variant="destructive" data-testid="tx-discard-delete-review"
+                  onClick={() => setConfirmDiscard(true)}>Descartar tentativa local</Button>
+              </div>
+            )}
+            {formError ? <p role="alert" className="text-sm text-destructive">{formError}</p> : null}
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Fechar</Button>
+          </div>
+        ) : accounts.length === 0 && !accountsQuery.isPending ? (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-foreground" data-testid="tx-no-accounts-warning">
             Cadastre uma conta bancária antes de registrar movimentações.{" "}
             <Link to="/contas" className="font-semibold text-primary hover:underline">
@@ -524,10 +626,26 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
             ) : null}
 
             <DialogFooter>
+              {conflicted && (
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(JSON.stringify(syncReviewQuery.data?.payload, null, 2));
+                      toast.success("Cópia do lançamento salva na área de transferência.");
+                    } catch {
+                      setFormError("Não foi possível copiar. Mantenha o registro aberto para consultar os dados.");
+                    }
+                  }} data-testid="tx-copy-conflict">
+                    Copiar lançamento
+                  </Button>
+                  <Button type="button" variant="destructive" onClick={() => setConfirmDiscard(true)}
+                    data-testid="tx-discard-conflict">Descartar envio</Button>
+                </div>
+              )}
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={mutation.isPending} data-testid="tx-cancel-button">
                 Cancelar
               </Button>
-              <Button type="submit" disabled={mutation.isPending} data-testid="tx-submit-button">
+              <Button type="submit" disabled={mutation.isPending || lockedSyncAttempt || syncReviewQuery.isPending && Boolean(syncOperationId)} data-testid="tx-submit-button">
                 {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : transaction ? "Salvar alterações" : "Registrar transação"}
               </Button>
             </DialogFooter>
@@ -535,5 +653,24 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
         )}
       </DialogContent>
     </Dialog>
+    {transaction && <RecurrenceScopeDialog
+      open={recurrenceScopeOpen}
+      onOpenChange={setRecurrenceScopeOpen}
+      transaction={transaction}
+      onSaved={() => { void refreshFinancialViews(); }}
+    />}
+    <ConfirmDialog
+      open={confirmDiscard}
+      onOpenChange={setConfirmDiscard}
+      title="Descartar tentativa de sincronização?"
+      description={reviewingOfflineDelete
+        ? "Descartar a tentativa local não restaura dados já excluídos no servidor. Confira no histórico e copie o registro antes de liberar as operações seguintes."
+        : "Esta ação remove a cópia pendente neste aparelho e libera os próximos envios. Ela não exclui nada do servidor, mas o lançamento pode ser perdido se nunca tiver sido recebido. Confira no histórico financeiro e copie os dados antes de confirmar."}
+      confirmLabel="Descartar tentativa"
+      destructive
+      loading={discardMutation.isPending}
+      onConfirm={() => discardMutation.mutate()}
+    />
+    </>
   );
 }

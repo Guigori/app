@@ -9,7 +9,7 @@ from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_UP
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Header
 from pydantic import Field
 
 from finnos.lib.db import db
@@ -68,6 +68,7 @@ def _out(doc, accounts, categories, cards):
     category = categories.get(doc.get("category_id"), {})
     card = cards.get(doc.get("card_id"), {})
     return SubscriptionItem(
+        version=doc.get("version", 1),
         id=doc["id"], name=doc["name"], value=doc["value"],
         recurrence=doc["recurrence"],
         next_charge=_charge_day(date.fromisoformat(doc["next_charge"]), doc["recurrence"], date.fromisoformat(today_iso())),
@@ -116,7 +117,9 @@ async def list_subscriptions(user: dict = Depends(require_user)):
         "user_id": uid, "type": "receita", "status": "pago",
         "date": {"$regex": f"^{month}"},
     }).to_list(20000)
-    income = sum((D(tx["value"]) for tx in realized_income), D(0))
+    # A settled card refund is a bank receipt, not recurring salary.
+    income = sum((D(tx["value"]) for tx in realized_income
+                  if not tx.get("invoice_refund")), D(0))
     percent = _money(monthly / income * 100) if income > 0 else D(0)
     return SubscriptionsOut(
         items=items, monthly_total=monthly, yearly_total=yearly,
@@ -134,12 +137,13 @@ async def get_subscription(subscription_id: str, user: dict = Depends(require_us
 
 
 @router.post("", response_model=SubscriptionItem, status_code=201)
-async def create_subscription(payload: SubscriptionIn, user: dict = Depends(require_user)):
+async def create_subscription(payload: SubscriptionIn, user: dict = Depends(require_user), x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80)):
     uid = user["id"]
     maps = await _validate(uid, payload)
     now = datetime.now(timezone.utc)
     document = {
         **payload.model_dump(),
+        **({"operation_id": x_finnos_operation_id} if x_finnos_operation_id else {}),
         "id": str(uuid.uuid4()), "user_id": uid,
         "created_at": now, "updated_at": now,
     }
@@ -150,11 +154,15 @@ async def create_subscription(payload: SubscriptionIn, user: dict = Depends(requ
 @router.put("/{subscription_id}", response_model=SubscriptionItem)
 async def update_subscription(
     subscription_id: str, payload: SubscriptionIn, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
+    x_finnos_base_version: int | None = Header(default=None, ge=1),
 ):
     uid = user["id"]
     maps = await _validate(uid, payload)
     result = await db.subscriptions.update_one(
-        {"id": subscription_id, "user_id": uid},
+        {"id": subscription_id, "user_id": uid,
+         "_operation_id": x_finnos_operation_id,
+         "_expected_version": x_finnos_base_version},
         {"$set": {**payload.model_dump(), "updated_at": datetime.now(timezone.utc)}},
     )
     if not result.matched_count:
@@ -166,8 +174,12 @@ async def update_subscription(
 
 
 @router.delete("/{subscription_id}", status_code=204)
-async def delete_subscription(subscription_id: str, user: dict = Depends(require_user)):
-    result = await db.subscriptions.delete_one({"id": subscription_id, "user_id": user["id"]})
+async def delete_subscription(subscription_id: str, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
+    x_finnos_base_version: int | None = Header(default=None, ge=1)):
+    result = await db.subscriptions.delete_one({"id": subscription_id, "user_id": user["id"],
+         "_operation_id": x_finnos_operation_id,
+         "_expected_version": x_finnos_base_version})
     if not result.deleted_count:
         raise HTTPException(404, "Assinatura não encontrada.")
     return Response(status_code=204)

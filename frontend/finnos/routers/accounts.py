@@ -1,13 +1,14 @@
-from finnos.lib.money import D
+from finnos.lib.money import D, quantize_brl
 
 """Bank accounts with server-computed balances (money already due up to today)."""
 import uuid
 from datetime import datetime, timezone
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Header
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
-from finnos.lib.stats import aware, balance_effects
+from finnos.lib.stats import aware
+from finnos.lib.account_balances import finance_revision, stream_account_balances
 from finnos.models.finnos import AccountDetailOut, AccountIn, AccountOut
 from finnos.routers.auth import require_user
 from finnos.routers.transactions import _ref_maps, enrich_transaction
@@ -17,24 +18,19 @@ router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 async def _enriched_accounts(user_id: str) -> list[AccountOut]:
     today = today_iso()
+    # Capture revision before reading opening balances; a concurrent write
+    # must not produce an apparently valid but inconsistent account total.
+    revision = await finance_revision(user_id)
     accounts = (
         await db.accounts.find({"user_id": user_id}).sort("created_at", 1).to_list(500)
     )
-    txs = await db.transactions.find({"user_id": user_id}).to_list(20000)
-    balance = {a["id"]: D(a.get("initial_balance") or D("0.0")) for a in accounts}
-    income = {a["id"]: D("0.0") for a in accounts}
-    expense = {a["id"]: D("0.0") for a in accounts}
-    for tx in txs:
-        for acc_id, amount in balance_effects(tx, today):
-            balance[acc_id] = balance.get(acc_id, D("0.0")) + amount
-            if tx.get("type") == "receita":
-                income[acc_id] += amount
-            elif tx.get("type") == "despesa":
-                expense[acc_id] -= amount
+    ledger = await stream_account_balances(user_id, accounts, today, revision)
     out = []
     for a in accounts:
+        balance, total_income, total_expense = ledger.result(a["id"])
         out.append(
             AccountOut(
+                version=a.get("version", 1),
                 id=a["id"],
                 name=a["name"],
                 institution=a.get("institution", ""),
@@ -43,9 +39,9 @@ async def _enriched_accounts(user_id: str) -> list[AccountOut]:
                 color=a.get("color", "#070F52"),
                 initial_balance=D(a.get("initial_balance") or D("0.0")),
                 active=a.get("active", True),
-                balance=round(balance[a["id"]], 2),
-                total_income=round(max(income[a["id"]], D("0.0")), 2),
-                total_expense=round(max(expense[a["id"]], D("0.0")), 2),
+                balance=balance,
+                total_income=total_income,
+                total_expense=total_expense,
                 created_at=aware(a.get("created_at")) or datetime.now(timezone.utc),
             )
         )
@@ -90,12 +86,14 @@ async def get_account(
 
 @router.post("", response_model=AccountOut, status_code=201)
 async def create_account(
-    payload: AccountIn, user: dict = Depends(require_user)
+    payload: AccountIn, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80)
 ) -> AccountOut:
     doc = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
         **payload.model_dump(),
+        **({"operation_id": x_finnos_operation_id} if x_finnos_operation_id else {}),
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
@@ -108,10 +106,14 @@ async def create_account(
 
 @router.put("/{account_id}", response_model=AccountOut)
 async def update_account(
-    account_id: str, payload: AccountIn, user: dict = Depends(require_user)
+    account_id: str, payload: AccountIn, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
+    x_finnos_base_version: int | None = Header(default=None, ge=1)
 ) -> AccountOut:
     result = await db.accounts.update_one(
-        {"id": account_id, "user_id": user["id"]},
+        {"id": account_id, "user_id": user["id"],
+         "_operation_id": x_finnos_operation_id,
+         "_expected_version": x_finnos_base_version},
         {"$set": {**payload.model_dump(), "updated_at": datetime.now(timezone.utc)}},
     )
     if not result.matched_count:
@@ -123,7 +125,9 @@ async def update_account(
 
 
 @router.delete("/{account_id}", status_code=204)
-async def delete_account(account_id: str, user: dict = Depends(require_user)) -> None:
+async def delete_account(account_id: str, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
+    x_finnos_base_version: int | None = Header(default=None, ge=1)) -> None:
     used = await db.transactions.count_documents(
         {
             "user_id": user["id"],
@@ -135,7 +139,9 @@ async def delete_account(account_id: str, user: dict = Depends(require_user)) ->
             status_code=409,
             detail="Esta conta tem transações vinculadas. Exclua ou mova as transações antes de excluir a conta.",
         )
-    result = await db.accounts.delete_one({"id": account_id, "user_id": user["id"]})
+    result = await db.accounts.delete_one({"id": account_id, "user_id": user["id"],
+         "_operation_id": x_finnos_operation_id,
+         "_expected_version": x_finnos_base_version})
     if not result.deleted_count:
         raise HTTPException(status_code=404, detail="Conta não encontrada.")
 

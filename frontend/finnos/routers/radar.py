@@ -1,4 +1,4 @@
-from finnos.lib.money import D, installment_portion, FinanceModel, Money
+from finnos.lib.money import D, cents, installment_portion, FinanceModel, Money
 """FINNOS Radar Intelligence Engine.
 
 Deterministic by design: builds a personal 90-day baseline, detects anomalies,
@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, month_portion, balance_effects
+from finnos.lib.competency import monthly_competency
 from finnos.lib.radar_patterns import recurring_signals
 from finnos.models.radar import RadarActionIn, RadarFeedbackIn, RadarOut, RadarSignalOut
 from finnos.routers.auth import require_user
@@ -56,15 +57,16 @@ async def _signals(user_id: str) -> list[dict]:
     signals = []
     hist = [t for t in txs if t.get('type') == 'despesa' and t.get('status') == 'pago' and (start90 <= t['date'] < today_s)]
     by_cat = defaultdict(list)
-    current_cat = defaultdict(D)
+    # Historical credits/refunds on inactive (or legacy cards missing 'active')
+    # must still reduce the original category. Only card-pressure alerts
+    # should depend on whether a card remains active.
+    card_docs = await db.cards.find({'user_id': user_id}).to_list(200)
+    active_cards = [card for card in card_docs if card.get('active', True)]
+    current_cat = defaultdict(D, monthly_competency(txs, card_docs, month)["by_category"])
     for t in hist:
         if t.get('category_id'):
             by_cat[t['category_id']].append(D(t.get('adjusted_value') or t['value']))
-    for t in txs:
-        if t.get('type') == 'despesa' and t.get('status') == 'pago' and t['date'].startswith(month) and t.get('category_id'):
-            p = month_portion(t, month)
-            if p is not None:
-                current_cat[t['category_id']] += p
+    # Current month category totals already include audited credits and refunds.
     elapsed = max(today.day, 1)
     for (cid, current) in current_cat.items():
         vals = by_cat.get(cid, [])
@@ -96,9 +98,8 @@ async def _signals(user_id: str) -> list[dict]:
         if key in seen:
             signals.append(dict(id=f"duplicate-{t['id']}", type='risk', severity='high', title='Possível cobrança duplicada', description=f"{t['name']} aparece duas vezes por {brl(key[1])}", explanation='Encontramos dois lançamentos com mesmo nome, valor e data. Vale conferir antes de considerar ambos corretos.', metric=brl(key[1]), score=92, related_entity_type='transaction', related_entity_id=t['id'], expires_at=(today + timedelta(days=14)).isoformat(), evidence=[{'label': 'Valor', 'value': brl(key[1])}, {'label': 'Data', 'value': t['date']}]))
         seen[key] = t['id']
-    card_docs = await db.cards.find({'user_id': user_id, 'active': True}).to_list(200)
     (card_txs, accounts) = await card_context(user_id)
-    for doc in card_docs:
+    for doc in active_cards:
         card = await build_card(doc, card_txs, accounts)
         close = days_until(card.next_closing)
         monthly = []
@@ -122,14 +123,16 @@ async def _signals(user_id: str) -> list[dict]:
         signals.append(dict(id=f"overdue-{t['id']}", type='risk', severity='critical' if late >= 7 else 'high', title=f"Pagamento em atraso: {t.get('name', 'Despesa')}", description=f"{brl(value)} venceu há {late} dia{('s' if late != 1 else '')}", explanation='Este compromisso está cadastrado como pendente ou agendado e a data prevista já passou. Confirme o pagamento ou revise o lançamento.', metric=brl(value), score=99 if late >= 7 else 94, related_entity_type='transaction', related_entity_id=t['id'], expires_at=None, evidence=[{'label': 'Vencimento', 'value': t['date']}, {'label': 'Dias em atraso', 'value': str(late)}, {'label': 'Valor', 'value': brl(value)}]))
     accounts = await db.accounts.find({'user_id': user_id}).to_list(500)
     balance = _settled_cash_balance(accounts, txs, today_s)
-    projected = balance
-    negative_date = None
-    future = sorted([t for t in txs if t.get('status') in ('pendente', 'agendado') and not t.get('card_id') and today_s <= t['date'] <= (today + timedelta(days=30)).isoformat()], key=lambda x: x['date'])
-    for t in future:
-        v = D(t.get('adjusted_value') or t['value'])
-        projected += v if t['type'] == 'receita' else -v if t['type'] == 'despesa' else 0
-        if projected < 0 and (not negative_date):
-            negative_date = t['date']
+    # Same bank forecast semantics as Simulação: explicit unpaid movements,
+    # installment portions, legacy recurring rows and subscriptions.
+    from finnos.lib.cash_projection import project_scheduled_cash
+    subscriptions = await db.subscriptions.find({'user_id': user_id}).to_list(500)
+    forecast = project_scheduled_cash(
+        txs, cents(balance), today, today + timedelta(days=30), subscriptions,
+    )
+    projected = D(forecast["projected_cents"]) / 100
+    negative_date = forecast["first_negative_date"]
+    future = forecast["event_count"]
     if negative_date:
         signals.append(dict(id=f'cash-negative-{negative_date}', type='risk', severity='critical', title='Seu saldo projetado pode ficar negativo', description=f'Projeção indica saldo abaixo de zero em {negative_date[8:10]}/{negative_date[5:7]}', explanation='O FINNOS somou seu saldo atual aos lançamentos pendentes e agendados dos próximos 30 dias.', metric=brl(projected), score=100, related_entity_type='cashflow', expires_at=negative_date, evidence=[{'label': 'Saldo atual', 'value': brl(balance)}, {'label': 'Projeção 30 dias', 'value': brl(projected)}]))
     elif future and projected > balance and (projected >= 200):

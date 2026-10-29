@@ -69,7 +69,11 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
 
   const mutation = useMutation({
     mutationFn: async (input: AccountInput) => {
-      const resolved = await resolveInstitutionChoice(institutionChoice, input.institution, institutions);
+      // Offline registration is a draft. Do not attempt to create a related
+      // financial institution before the primary entity has been synced.
+      const resolved = !navigator.onLine && !account
+        ? { institution: input.institution, institution_id: institutionChoice === "new" ? null : input.institution_id }
+        : await resolveInstitutionChoice(institutionChoice, input.institution, institutions);
       const payload = { ...input, ...resolved };
       return account ? updateAccount(account.id, payload) : createAccount(payload);
     },
@@ -83,14 +87,24 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
       ]);
       onOpenChange(false);
     },
-    onError: (error) => setFormError(getApiErrorMessage(error)),
+    onError: (error) => {
+      if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+        toast.info("Cadastro de conta salvo neste aparelho", {
+          description: "Aguardando sincronização. Ainda não está confirmado no servidor.",
+        });
+        onOpenChange(false);
+        return;
+      }
+      setFormError(getApiErrorMessage(error));
+    },
   });
 
   const submit = () => {
     setFormError(null);
     const initial = parseAmount(initialRaw);
     if (!name.trim()) return setFormError("Dê um nome à conta.");
-    if (initial === null || initial < 0) return setFormError("Informe um saldo inicial válido.");
+    if (initial === null || !Number.isSafeInteger(Math.round(initial * 100)) || Math.abs(initial * 100 - Math.round(initial * 100)) > 1e-6)
+      return setFormError("Informe um saldo inicial válido, com até duas casas decimais.");
     mutation.mutate({
       name: name.trim(),
       institution: institution.trim(),
@@ -143,6 +157,7 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
             <div className="space-y-2">
               <Label htmlFor="account-initial">Saldo inicial (R$)</Label>
               <Input id="account-initial" inputMode="decimal" value={initialRaw} onChange={(e) => setInitialRaw(e.target.value)} data-testid="account-initial-input" />
+              <p className="text-xs text-muted-foreground">Use um valor negativo se a conta já estiver no cheque especial (ex.: -500,00).</p>
             </div>
           </div>
           <div className="space-y-2">

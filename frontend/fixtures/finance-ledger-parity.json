@@ -1,0 +1,127 @@
+{
+  "purpose": "FIN-07/08 shared API/local synthetic ledger, never user or production data",
+  "month": "2026-10",
+  "today": "2026-10-26",
+  "accounts": [
+    {
+      "id": "bank",
+      "initial_balance": 1000
+    },
+    {
+      "id": "savings",
+      "initial_balance": 0
+    }
+  ],
+  "transactions": [
+    {
+      "id": "salary",
+      "name": "Salario",
+      "date": "2026-10-05",
+      "type": "receita",
+      "status": "pago",
+      "value": 3000,
+      "account_id": "bank",
+      "card_id": null,
+      "category_id": null
+    },
+    {
+      "id": "rent",
+      "name": "Aluguel",
+      "date": "2026-10-06",
+      "type": "despesa",
+      "status": "pago",
+      "value": 1000,
+      "account_id": "bank",
+      "card_id": null,
+      "category_id": "rent"
+    },
+    {
+      "id": "invoice-payment",
+      "name": "Pagamento fatura",
+      "date": "2026-10-07",
+      "type": "despesa",
+      "status": "pago",
+      "value": 300,
+      "account_id": "bank",
+      "card_id": null,
+      "category_id": null,
+      "invoice_payment": true
+    },
+    {
+      "id": "transfer",
+      "name": "Transferencia",
+      "date": "2026-10-10",
+      "type": "transferencia",
+      "status": "pago",
+      "value": 120,
+      "account_id": "bank",
+      "to_account_id": "savings",
+      "card_id": null,
+      "category_id": null
+    },
+    {
+      "id": "purchase",
+      "name": "Produto devolvido",
+      "date": "2026-09-20",
+      "type": "despesa",
+      "status": "pago",
+      "value": 300,
+      "account_id": "bank",
+      "card_id": "card",
+      "category_id": "shopping"
+    },
+    {
+      "id": "refund",
+      "name": "Estorno bancario",
+      "date": "2026-10-26",
+      "type": "receita",
+      "status": "pago",
+      "value": 100,
+      "account_id": "bank",
+      "card_id": null,
+      "category_id": null,
+      "invoice_refund": true
+    }
+  ],
+  "credit_events": [
+    {
+      "id": "merchant",
+      "kind": "merchant_credit",
+      "purchase_id": "purchase",
+      "date": "2026-10-25",
+      "value": 50,
+      "cycle": "2026-09-29"
+    },
+    {
+      "id": "refund",
+      "kind": "bank_refund",
+      "purchase_id": "purchase",
+      "date": "2026-10-26",
+      "value": 100,
+      "cycle": "2026-09-29"
+    }
+  ],
+  "subscription": {
+    "id": "stream",
+    "name": "Streaming",
+    "value": 49.9,
+    "category_id": "streaming",
+    "account_id": "bank",
+    "card_id": null,
+    "recurrence": "mensal",
+    "next_charge": "2026-10-29",
+    "active": true
+  },
+  "expected": {
+    "income": 3000,
+    "expense": 850,
+    "net": 2150,
+    "balance_by_account": {
+      "bank": 2680,
+      "savings": 120
+    },
+    "total_balance": 2800,
+    "projected_expense": 49.9,
+    "calendar_expense_on_refund_day": -100
+  }
+}

@@ -1,14 +1,18 @@
 import { firebaseAuth } from "@/lib/firebase";
 import { cachedFetch } from "@/lib/offline/accountCache";
-import type { Transaction, TransactionInput } from "@/types/finnos";
-import { ApiError, apiGet, apiPost, apiPut } from "@/lib/api";
+import type { Transaction, TransactionInput, AccountInput, CategoryInput, CardInput, SubscriptionInput } from "@/types/finnos";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 
 const DB_NAME = "finnos-sync";
 const DB_VERSION = 1;
 const STORE = "operations";
 
 export type OperationSource = "manual" | "ios_shortcut" | "bank_notification" | "import" | "system";
-type OperationKind = "transaction.create" | "transaction.update";
+export type OfflineCreateKind = "account.create" | "category.create" | "card.create" | "subscription.create";
+export type OfflineEntity = "account" | "category" | "card" | "subscription";
+export type OfflineMutationKind = `${OfflineEntity}.update` | `${OfflineEntity}.delete`;
+type OperationKind = "transaction.create" | "transaction.update" | "transaction.delete" | OfflineCreateKind | OfflineMutationKind;
+export type OfflineCreateInput = AccountInput | CategoryInput | CardInput | SubscriptionInput;
 
 export interface SyncOperation {
   id: string;
@@ -16,12 +20,21 @@ export interface SyncOperation {
   kind: OperationKind;
   entityId?: string;
   baseVersion?: number;
-  payload: TransactionInput;
+  payload: TransactionInput | OfflineCreateInput;
   source: OperationSource;
   createdAt: string;
   attempts: number;
   status: "pending" | "syncing" | "error" | "conflict";
   lastError?: string;
+}
+
+/** Narrow a mixed offline queue before financial transaction overlays.
+ * Entity drafts must NEVER be treated as movements of money.
+ */
+export function isTransactionSyncOperation(
+  operation: SyncOperation,
+): operation is SyncOperation & { payload: TransactionInput } {
+  return operation.kind.startsWith("transaction.");
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -47,6 +60,73 @@ async function transact<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore,
   });
 }
 
+async function persistNewOperation(op: SyncOperation): Promise<void> {
+  await transact<void>("readwrite", (store, resolve, reject) => {
+    // Always allocate a stable FIFO timestamp inside one IDB transaction.
+    const req = store.getAll();
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const latest = (req.result as SyncOperation[]).reduce(
+        (max, row) => Math.max(max, Date.parse(row.createdAt) || 0), 0,
+      );
+      op.createdAt = new Date(Math.max(Date.now(), latest + 1)).toISOString();
+      const put = store.put(op);
+      put.onsuccess = () => resolve();
+      put.onerror = () => reject(put.error);
+    };
+  });
+  window.dispatchEvent(new CustomEvent("finnos:sync-state"));
+}
+
+/** Other financial entities are queued as *draft creates*, never treated as
+ * existing server-owned IDs until acknowledged. References must already exist
+ * on the server; dependent creations must be performed after synchronization.
+ */
+export async function queueEntityCreate(
+  kind: OfflineCreateKind,
+  payload: OfflineCreateInput,
+): Promise<SyncOperation> {
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (!uid) throw new Error("FINNOS_AUTH_REQUIRED");
+  const operation: SyncOperation = {
+    id: crypto.randomUUID(), uid, kind, payload,
+    source: "manual", createdAt: new Date().toISOString(),
+    attempts: 0, status: "pending",
+  };
+  if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  await persistNewOperation(operation);
+  return operation;
+}
+
+/** Queue conditional non-transaction edits/deletes only with a server version
+ * previously obtained under this UID. No optimistic guessing is permitted.
+ * The queue intentionally does not write temporary financial entities.
+ */
+export async function queueEntityMutation(
+  kind: OfflineMutationKind,
+  entityId: string,
+  payload: OfflineCreateInput,
+  baseVersion: number,
+): Promise<SyncOperation> {
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (!uid) throw new Error("FINNOS_AUTH_REQUIRED");
+  if (!entityId || entityId.includes("/") || !Number.isSafeInteger(baseVersion) || baseVersion < 1) {
+    throw new Error("Versão e identificador do cadastro são obrigatórios.");
+  }
+  const pending = await listSyncOperations();
+  if (pending.some(item => item.entityId === entityId && item.uid === uid)) {
+    throw new Error("Revise a alteração pendente antes de editar ou excluir este cadastro.");
+  }
+  const operation: SyncOperation = {
+    id: crypto.randomUUID(), uid, kind, entityId, baseVersion, payload,
+    source: "manual", createdAt: new Date().toISOString(), attempts: 0,
+    status: "pending",
+  };
+  if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  await persistNewOperation(operation);
+  return operation;
+}
+
 export async function queueTransaction(input: TransactionInput, source: OperationSource = "manual", entityId?: string): Promise<SyncOperation> {
   const uid = firebaseAuth?.currentUser?.uid;
   if (!uid) throw new Error("FINNOS_AUTH_REQUIRED");
@@ -63,13 +143,38 @@ export async function queueTransaction(input: TransactionInput, source: Operatio
     status: "pending",
   };
   if (!op.uid || op.uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
-  await transact<void>("readwrite", (store, resolve, reject) => {
-    const req = store.put(op);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-  window.dispatchEvent(new CustomEvent("finnos:sync-state"));
+  await persistNewOperation(op);
   return op;
+}
+
+/** Queue a delete only if this UID owns a cached server version.
+ * Without a local snapshot we cannot safely form an optimistic conditional
+ * deletion; users must open the record online first.
+ */
+export async function queueTransactionDelete(entityId: string): Promise<SyncOperation> {
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (!uid) throw new Error("FINNOS_AUTH_REQUIRED");
+  const queued = await listSyncOperations();
+  if (queued.some(item => item.entityId === entityId)) {
+    throw new Error("Revise a alteração pendente antes de excluir este lançamento.");
+  }
+  const existing = await cachedFetch(`transaction:${entityId}`,
+    () => apiGet<Transaction>(`/transactions/${encodeURIComponent(entityId)}`));
+  if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  if (!Number.isInteger(existing.version) || (existing.version ?? 0) < 1) {
+    throw new Error("Versão financeira não disponível para exclusão offline.");
+  }
+  const operation: SyncOperation = {
+    uid, id: crypto.randomUUID(), kind: "transaction.delete",
+    entityId, baseVersion: existing.version,
+    // Snapshot provides intelligible name/value for review and is never sent
+    // as the DELETE payload. Existing queue views retain their payload shape.
+    payload: existing as unknown as TransactionInput,
+    source: "manual", createdAt: new Date().toISOString(),
+    attempts: 0, status: "pending",
+  };
+  await persistNewOperation(operation);
+  return operation;
 }
 
 export async function listSyncOperations(): Promise<SyncOperation[]> {
@@ -104,26 +209,83 @@ export async function flushSyncQueue(): Promise<void> {
   window.dispatchEvent(new CustomEvent("finnos:sync-state"));
   try {
     for (const op of await listSyncOperations()) {
-      if (op.status === "conflict") continue;
+      // FIFO is a financial invariant: a later update may depend on the prior
+      // create/update. Never skip a rejected operation and send its successors.
+      // Conflicts and validation errors require explicit resolution.
+      if (op.status === "conflict") break;
       if (!navigator.onLine || op.uid !== firebaseAuth?.currentUser?.uid) break;
       const current = { ...op, status: "syncing" as const, attempts: op.attempts + 1, lastError: undefined };
       await saveSyncOperation(current);
       window.dispatchEvent(new CustomEvent("finnos:sync-state"));
       try {
         if (op.kind === "transaction.create") {
-          await apiPost<Transaction>("/transactions", op.payload, { "X-FINNOS-Operation-ID": op.id, "X-FINNOS-Source": op.source });
-        } else if (op.entityId) {
-          await apiPut<Transaction>(`/transactions/${op.entityId}`, op.payload, { "X-FINNOS-Operation-ID": op.id, "X-FINNOS-Source": op.source, "X-FINNOS-Base-Version": String(op.baseVersion ?? 1) });
+          await apiPost<Transaction>("/transactions", op.payload as TransactionInput, { "X-FINNOS-Operation-ID": op.id, "X-FINNOS-Source": op.source });
+        } else if (op.kind.endsWith(".create")) {
+          const paths: Record<OfflineCreateKind, string> = {
+            "account.create": "/accounts",
+            "category.create": "/categories",
+            "card.create": "/cards",
+            "subscription.create": "/subscriptions",
+          };
+          const path = paths[op.kind as OfflineCreateKind];
+          if (!path) throw new Error("Cadastro offline não permitido.");
+          await apiPost(path, op.payload, {
+            "X-FINNOS-Operation-ID": op.id,
+          });
+        } else if (op.kind.endsWith(".update") && op.kind !== "transaction.update" && op.entityId) {
+          const paths: Record<OfflineEntity, string> = {
+            account: "/accounts", category: "/categories",
+            card: "/cards", subscription: "/subscriptions",
+          };
+          const kind = op.kind.split(".")[0] as OfflineEntity;
+          if (!Object.prototype.hasOwnProperty.call(paths, kind)) throw new Error("Cadastro offline não permitido.");
+          await apiPut(`${paths[kind]}/${encodeURIComponent(op.entityId)}`, op.payload, {
+            "X-FINNOS-Operation-ID": op.id,
+            "X-FINNOS-Base-Version": String(op.baseVersion),
+          });
+        } else if (op.kind.endsWith(".delete") && op.kind !== "transaction.delete" && op.entityId) {
+          const paths: Record<OfflineEntity, string> = {
+            account: "/accounts", category: "/categories",
+            card: "/cards", subscription: "/subscriptions",
+          };
+          const kind = op.kind.split(".")[0] as OfflineEntity;
+          if (!Object.prototype.hasOwnProperty.call(paths, kind)) throw new Error("Cadastro offline não permitido.");
+          await apiDelete<void>(`${paths[kind]}/${encodeURIComponent(op.entityId)}`, {
+            "X-FINNOS-Operation-ID": op.id,
+            "X-FINNOS-Base-Version": String(op.baseVersion),
+          });
+        } else if (op.kind === "transaction.delete" && op.entityId) {
+          await apiDelete<void>(`/transactions/${encodeURIComponent(op.entityId)}`, {
+            "X-FINNOS-Operation-ID": op.id,
+            "X-FINNOS-Base-Version": String(op.baseVersion ?? 1),
+          });
+        } else if (op.kind === "transaction.update" && op.entityId) {
+          await apiPut<Transaction>(`/transactions/${encodeURIComponent(op.entityId)}`, op.payload as TransactionInput, { "X-FINNOS-Operation-ID": op.id, "X-FINNOS-Source": op.source, "X-FINNOS-Base-Version": String(op.baseVersion ?? 1) });
+        } else {
+          throw new Error("Operação financeira offline desconhecida.");
         }
+        // A completed request may have committed on the server while the user
+        // changed accounts. Preserve the operation for an idempotent retry by
+        // the original UID rather than silently deleting its queue record.
+        if (op.uid !== firebaseAuth?.currentUser?.uid) break;
         await remove(op.id);
         window.dispatchEvent(new CustomEvent("finnos:sync-success", { detail: { operation: op } }));
       } catch (error) {
-        const failed = { ...current, status: (error instanceof ApiError && error.status === 409 ? "conflict" : "error") as "conflict" | "error", lastError: error instanceof Error ? error.message : "Falha ao sincronizar" };
+        // 409 conflicts and 422 payload rejections cannot be repaired by
+        // replaying the same operation. Keep them for manual review.
+        const needsReview = error instanceof ApiError && (error.status === 409 || error.status === 422);
+        const failed = {
+          ...current,
+          status: (needsReview ? "conflict" : "error") as "conflict" | "error",
+          lastError: error instanceof Error ? error.message : "Falha ao sincronizar",
+        };
+        // Do not modify a former user's queue after switching accounts.
+        if (op.uid !== firebaseAuth?.currentUser?.uid) break;
         await saveSyncOperation(failed);
         window.dispatchEvent(new CustomEvent("finnos:sync-error", { detail: { operation: failed } }));
-        // A transport/server failure may leave dependent operations unsafe to send.
-        if (!(error instanceof ApiError && (error.status === 409 || error.status === 422))) break;
-        continue;
+        // Stop on *any* failure. This preserves dependency order, including
+        // the next flush; only an explicit resolution can bypass a conflict.
+        break;
       }
     }
   } finally {
@@ -145,9 +307,43 @@ export async function getSyncOperation(id: string): Promise<SyncOperation | null
   });
 }
 
+/** Explicit conflict resolution after the user has reconciled server state.
+ * Never delete an operation that could still be retryable or is being sent.
+ * The UI must clearly warn that an unsent local record may be lost.
+ */
+export async function discardConflictedOperation(id: string): Promise<void> {
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (!uid) throw new Error("FINNOS_AUTH_REQUIRED");
+  const reviewed = await getSyncOperation(id);
+  if (!reviewed || reviewed.uid !== uid) throw new Error("FINNOS_SESSION_CHANGED");
+  if (reviewed.status !== "conflict") {
+    throw new Error("Somente operações bloqueadas podem ser descartadas após revisão.");
+  }
+  await transact<void>("readwrite", (store, resolve, reject) => {
+    const req = store.get(id);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const op = req.result as SyncOperation | undefined;
+      if (!op || op.uid !== uid || firebaseAuth?.currentUser?.uid !== uid) {
+        reject(new Error("FINNOS_SESSION_CHANGED"));
+        return;
+      }
+      if (op.status !== "conflict") {
+        reject(new Error("Somente operações bloqueadas podem ser descartadas após revisão."));
+        return;
+      }
+      const deleted = store.delete(id);
+      deleted.onsuccess = () => resolve();
+      deleted.onerror = () => reject(deleted.error);
+    };
+  });
+  window.dispatchEvent(new CustomEvent("finnos:sync-state"));
+}
+
 export async function updateQueuedTransaction(id: string, payload: TransactionInput): Promise<void> {
   const op = await getSyncOperation(id);
   if (!op) throw new Error("Operação pendente não encontrada.");
+  if (op.kind !== "transaction.create" && op.kind !== "transaction.update") throw new Error("Esta operação não é uma transação editável.");
   // A sent operation is immutable: changing its payload would violate server idempotency.
   if (op.attempts > 0) {
     throw new Error("Esta operação já foi enviada. Revise a sincronização antes de editar.");

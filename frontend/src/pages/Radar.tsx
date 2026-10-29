@@ -17,7 +17,7 @@ function target(signal: RadarSignal) {
 
 export default function Radar() {
   const navigate = useNavigate();
-  const { data, isPending } = useQuery({ queryKey: ["radar"], queryFn: fetchRadar, staleTime: 60_000 });
+  const { data, isPending, isError, refetch } = useQuery({ queryKey: ["radar"], queryFn: fetchRadar, staleTime: 60_000 });
   const items = data?.items ?? [];
   return (
     <div className="mx-auto max-w-3xl space-y-5 animate-fade-up">
@@ -29,8 +29,9 @@ export default function Radar() {
       </div>
       <div className="overflow-hidden rounded-3xl border border-border bg-card">
         {isPending ? <p className="p-6 text-sm text-muted-foreground">Analisando seus dados…</p> : null}
-        {!isPending && items.length === 0 ? <p className="p-6 text-sm text-muted-foreground">Tudo tranquilo no seu Radar por enquanto.</p> : null}
-        {items.map((signal) => (
+        {isError ? <div role="alert" className="p-6 text-sm text-destructive">Não foi possível atualizar seu Radar. Os sinais não foram certificados nesta consulta. <button type="button" onClick={() => void refetch()} className="font-semibold underline">Tentar novamente</button></div> : null}
+        {!isPending && !isError && items.length === 0 ? <p className="p-6 text-sm text-muted-foreground">Tudo tranquilo no seu Radar por enquanto.</p> : null}
+        {!isError && items.map((signal) => (
           <Link key={signal.id} to={target(signal)} className="flex items-center gap-4 border-t border-border/60 p-5 first:border-t-0 hover:bg-muted/30">
             <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: COLOR[signal.type] }} aria-hidden="true" />
             <span className="min-w-0 flex-1">

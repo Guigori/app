@@ -19,8 +19,12 @@ from fastapi import HTTPException
 from google.api_core.exceptions import GoogleAPICallError
 from starlette.concurrency import run_in_threadpool
 from finnos.lib.money import D, cents
+from finnos.lib.history import record_event
 
 active_uid = ContextVar("finnos_uid", default=None)
+# Entities accepted by the offline create/edit/delete queue. Old documents
+# without a version read as v1 and acquire a version on their next edit.
+OFFLINE_VERSIONED = frozenset({"transactions", "accounts", "categories", "cards", "subscriptions"})
 firebase_application = None
 MONEY_FIELDS = {
     "value",
@@ -143,20 +147,77 @@ def rows(db, uid, name, transaction=None):
     return docs
 
 
+
+def card_purchase_rows(db, uid, card_id, transaction):
+    """Read only this card's purchases *inside* the finance transaction.
+
+    Preserve the existing 20k fail-closed write limit, but no longer scan
+    every bank movement and other card to calculate one invoice. Unlike a
+    non-transactional prefetch, these rows share the atomic revision and
+    Firestore's conflict/retry semantics with the actual payment or credit.
+    No date filter: old purchases may have installments in recent invoices.
+    """
+    scoped({"user_id": uid})
+    resource_id(card_id)
+    snapshots = (
+        root(db, uid).collection("transactions")
+        .where("card_id", "==", card_id)
+        .limit(20001)
+        .stream(transaction=transaction, timeout=15)
+    )
+    docs = []
+    for snap in snapshots:
+        raw = snap.to_dict()
+        if not isinstance(raw, dict) or raw.get("card_id") != card_id:
+            raise HTTPException(503, "Compra de cartão inválida.")
+        docs.append(dict(decode(raw), id=snap.id, user_id=uid))
+        if len(docs) > 20000:
+            raise HTTPException(
+                413, "Fatura excede o limite transacional; nenhuma alteração foi aplicada."
+            )
+    return docs
+
+
+def matching_rows(db, uid, name, query, transaction=None):
+    """Read a UID-scoped document directly when filtering by exact ID.
+
+    The old adapter streamed up to 20,001 documents for a single account,
+    category, card or transaction update. Exact-ID reads preserve all other
+    predicates and avoid per-record collection scans. Complex queries keep
+    the original adapter until an indexed equivalent is proven.
+    """
+    key = query.get("id")
+    if isinstance(key, str):
+        snapshot = (
+            root(db, uid).collection(name)
+            .document(resource_id(key)).get(transaction=transaction)
+        )
+        if not snapshot.exists:
+            return []
+        document = dict(decode(snapshot.to_dict()), id=snapshot.id, user_id=uid)
+        return [document] if matches(document, query) else []
+    return [doc for doc in rows(db, uid, name, transaction) if matches(doc, query)]
+
 def atomic(db, uid, action):
     @firestore.transactional
     def execute(transaction):
         revision = root(db, uid).collection("_meta").document("finance")
         before = revision.get(transaction=transaction)
         version = (before.to_dict() or {}).get("revision", 0)
-        result = action(transaction)
-        transaction.set(revision, {"revision": version + 1})
-        return result
+        from finnos.lib import finance_shadow_outbox
+        token = finance_shadow_outbox.begin(uid, version)
+        try:
+            result = action(transaction)
+            finance_shadow_outbox.finish(transaction, root(db, uid), version)
+            transaction.set(revision, {"revision": version + 1})
+            return result
+        finally:
+            finance_shadow_outbox.end(token)
 
     return execute(db.transaction(max_attempts=5))
 
 
-def validate_refs(db, uid, name, doc, transaction):
+def validate_refs(db, uid, name, doc, transaction, original_tx=None):
     from finnos.lib.institutions import institution_key
     fields = []
     if name in {"accounts", "cards"}:
@@ -178,16 +239,15 @@ def validate_refs(db, uid, name, doc, transaction):
     if name == "cards":
         fields.append(("payment_account_id", "accounts"))
     if name == "transactions":
-        if doc.get("invoice_payment"):
+        if doc.get("invoice_payment") or doc.get("invoice_refund"):
             raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
+        from finnos.lib.dates import today_iso
+        from finnos.lib.invoices import purchase_write_conflict
         cards = rows(db, uid, "cards", transaction)
-        if doc.get("card_id"):
-            from finnos.lib.invoices import occurrences
-            card = next((c for c in cards if c["id"] == doc["card_id"]), None)
-            if card and any(key in (card.get("invoice_cycles") or {}) for key, _, _ in occurrences(card, doc)):
-                raise HTTPException(409, "Ciclo com pagamentos está congelado; compra exige ajuste auditado.")
-        if any(any(item["id"] == doc["id"] for cycle in (card.get("invoice_cycles") or {}).values() for item in cycle["items"]) for card in cards):
-            raise HTTPException(409, "Compra pertence a uma fatura com pagamentos; alteração exige estorno auditado.")
+        for card in cards:
+            reason = purchase_write_conflict(card, doc, today_iso(), original_tx)
+            if reason:
+                raise HTTPException(409, reason)
     if name == "cards":
         old = root(db, uid).collection(name).document(doc["id"]).get(transaction=transaction)
         if old.exists and old.to_dict().get("invoice_cycles") and any(doc.get(k) != old.to_dict().get(k) for k in ["closing_day", "due_day"]):
@@ -262,6 +322,12 @@ class Collection:
         return Cursor(self, query)
 
     async def find_one(self, query, sort=None):
+        uid = scoped(query)
+        if not sort and isinstance(query.get("id"), str):
+            def single():
+                docs = matching_rows(client(), uid, self.name, query)
+                return docs[0] if docs else None
+            return await run_in_threadpool(single)
         cursor = self.find(query)
         if sort: cursor.sort(sort)
         docs = await cursor.to_list(20000)
@@ -315,8 +381,9 @@ class Collection:
                         doc.update(decode(existing.to_dict()))
                         return
                     raise HTTPException(409, "Registro já existe.")
-                if self.name == "transactions": doc["version"] = 1
+                if self.name in OFFLINE_VERSIONED: doc["version"] = 1
                 tr.create(ref, encode(doc))
+                record_event(tr, root(db, uid), self.name, "created", None, doc)
                 if operation_ref is not None:
                     tr.create(operation_ref, {"fingerprint": fingerprint, "target_id": identifier})
 
@@ -337,25 +404,49 @@ class Collection:
             db = client()
 
             def action(tr):
-                docs = [d for d in rows(db, uid, self.name, tr) if matches(d, query)]
+                clean_query = {k: v for k, v in query.items() if not k.startswith("_")}
+                docs = matching_rows(db, uid, self.name, clean_query, tr)
                 if not docs and not upsert:
                     return SimpleNamespace(matched_count=0)
                 doc = docs[0] if docs else dict(query, id=str(uuid.uuid4()))
-                if self.name == "transactions" and docs and doc.get("invoice_payment"):
+                original_tx = dict(doc) if self.name == "transactions" and docs else None
+                previous_doc = dict(doc) if docs else None
+                if self.name == "transactions" and docs and (doc.get("invoice_payment") or doc.get("invoice_refund")):
                     raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
                 ref = (
                     root(db, uid).collection(self.name).document(resource_id(doc["id"]))
                 )
                 previous_version = doc.get("version", 1)
-                expected_version = update.get("_expected_version")
+                expected_version = (
+                    update.get("_expected_version") if replace
+                    else query.get("_expected_version")
+                )
+                op_id = (
+                    update.get("operation_id") if replace
+                    else query.get("_operation_id")
+                )
                 operation_ref = None
-                if replace and update.get("operation_id"):
-                    op = hashlib.sha256((self.name + ":update:" + update["operation_id"]).encode()).hexdigest()
+                if op_id:
+                    resource_id(op_id)
+                    op = hashlib.sha256(
+                        (self.name + ":update:" + op_id).encode()
+                    ).hexdigest()
                     operation_ref = root(db, uid).collection("sync_receipts").document(op)
                     receipt = operation_ref.get(transaction=tr)
-                    fingerprint = hashlib.sha256(json.dumps(encode({k:v for k,v in update.items() if k not in {"created_at", "updated_at", "_expected_version"}}), default=str, sort_keys=True).encode()).hexdigest()
+                    payload = update if replace else update.get("$set", {})
+                    fingerprint = hashlib.sha256(json.dumps(
+                        {
+                            "id": clean_query.get("id"),
+                            "base_version": expected_version,
+                            "payload": encode({
+                                k: v for k, v in payload.items()
+                                if k not in {"created_at", "updated_at", "_expected_version"}
+                            }),
+                        },
+                        default=str, sort_keys=True,
+                    ).encode()).hexdigest()
                     if receipt.exists:
-                        if receipt.to_dict()['fingerprint'] != fingerprint:
+                        if receipt.to_dict().get("fingerprint") != fingerprint:
                             raise HTTPException(409, "Identificador de operação reutilizado.")
                         return SimpleNamespace(matched_count=1)
                 if expected_version is not None and expected_version != previous_version:
@@ -367,9 +458,10 @@ class Collection:
                     if not docs:
                         doc.update(update.get("$setOnInsert", {}))
                     doc.update(update["$set"])
-                if self.name == 'transactions': doc['version'] = previous_version + 1
-                validate_refs(db, uid, self.name, doc, tr)
+                if self.name in OFFLINE_VERSIONED: doc['version'] = previous_version + 1
+                validate_refs(db, uid, self.name, doc, tr, original_tx=original_tx)
                 tr.set(ref, encode(doc))
+                record_event(tr, root(db, uid), self.name, "updated" if previous_doc else "created", previous_doc, doc)
                 if operation_ref is not None:
                     tr.create(operation_ref, {'fingerprint':fingerprint, 'target_id':doc['id']})
                 return SimpleNamespace(matched_count=1)
@@ -380,17 +472,46 @@ class Collection:
 
     async def delete_one(self, query):
         uid = scoped(query)
+        op_id = query.get("_operation_id") if self.name in OFFLINE_VERSIONED else None
+        expected_version = query.get("_expected_version") if self.name in OFFLINE_VERSIONED else None
+        clean_query = {key: value for key, value in query.items() if not key.startswith("_")}
+        if op_id is not None:
+            resource_id(op_id)
+        if expected_version is not None and (
+            type(expected_version) is not int or expected_version < 1
+        ):
+            raise HTTPException(422, "Versão de exclusão inválida.")
 
         def write():
             db = client()
 
             def action(tr):
-                docs = [d for d in rows(db, uid, self.name, tr) if matches(d, query)]
+                receipt_ref = None
+                fingerprint = None
+                if op_id:
+                    receipt_key = hashlib.sha256(
+                        (self.name + ":delete:" + op_id).encode()
+                    ).hexdigest()
+                    receipt_ref = root(db, uid).collection("sync_receipts").document(receipt_key)
+                    fingerprint = hashlib.sha256(json.dumps(
+                        {"id": clean_query.get("id"), "version": expected_version},
+                        sort_keys=True,
+                    ).encode()).hexdigest()
+                    receipt = receipt_ref.get(transaction=tr)
+                    if receipt.exists:
+                        if receipt.to_dict().get("fingerprint") != fingerprint:
+                            raise HTTPException(409, "Identificador de exclusão reutilizado.")
+                        # If the first HTTP response was lost, do not delete
+                        # any additional record or report a false 404.
+                        return SimpleNamespace(deleted_count=1)
+                docs = matching_rows(db, uid, self.name, clean_query, tr)
                 if not docs:
                     return SimpleNamespace(deleted_count=0)
                 doc = docs[0]
+                if expected_version is not None and doc.get("version", 1) != expected_version:
+                    raise HTTPException(409, "Conflito: lançamento alterado antes da exclusão.")
                 if self.name == "transactions":
-                    validate_refs(db, uid, self.name, doc, tr)
+                    validate_refs(db, uid, self.name, doc, tr, original_tx=doc)
                 if self.name == "cards" and doc.get("invoice_cycles"):
                     raise HTTPException(409, "Cartão possui histórico de pagamentos.")
                 if self.name in {"accounts", "categories", "cards"}:
@@ -439,6 +560,12 @@ class Collection:
                 tr.delete(
                     root(db, uid).collection(self.name).document(resource_id(doc["id"]))
                 )
+                record_event(tr, root(db, uid), self.name, "deleted", doc, None)
+                if receipt_ref is not None:
+                    tr.create(receipt_ref, {
+                        "fingerprint": fingerprint, "target_id": doc["id"],
+                        "operation": self.name + ".delete",
+                    })
                 return SimpleNamespace(deleted_count=1)
 
             return atomic(db, uid, action)

@@ -27,7 +27,7 @@ export default function Budget() {
   return <div className="space-y-6 animate-fade-up">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h1 className="font-heading text-2xl font-bold tracking-tight">Orçamento</h1><p className="mt-1 text-sm text-muted-foreground">Acompanhe seu plano sem misturar configuração com o dia a dia.</p></div>
-      <Link to="/orcamento/configuracoes" className={buttonVariants({variant:"outline",size:"sm"})} data-testid="budget-settings-button"><Settings2 className="h-4 w-4"/> Configurar orçamento</Link>
+      <div className="flex flex-wrap gap-2"><Link to="/historico" className={buttonVariants({variant:"outline",size:"sm"})} data-testid="finance-history-link"><History className="h-4 w-4"/> Histórico financeiro</Link><Link to="/orcamento/configuracoes" className={buttonVariants({variant:"outline",size:"sm"})} data-testid="budget-settings-button"><Settings2 className="h-4 w-4"/> Configurar orçamento</Link></div>
     </div>
     <div className="inline-flex rounded-xl bg-muted p-1">
       {([["atual","Atual"],["proximo","Próximo ciclo"],["historico","Histórico"]] as const).map(([key,label])=><button key={key} onClick={()=>setTab(key)} className={cn("rounded-lg px-4 py-2 text-sm font-medium transition-colors",tab===key?"bg-background text-foreground shadow-sm":"text-muted-foreground hover:text-foreground")}>{label}</button>)}

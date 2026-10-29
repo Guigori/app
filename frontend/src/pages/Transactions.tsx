@@ -1,10 +1,12 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { ArrowDown, ArrowUp, BellOff, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions } from "@/lib/data";
+import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions, fetchTransactionsPage } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
+import { isLocalMode } from "@/lib/mode";
+import { listSyncOperations } from "@/lib/sync/queue";
 import { settledCents, settledTotals } from "@/lib/settledMoney";
 import { useBalanceHidden } from "@/lib/balance";
 import {
@@ -68,6 +70,34 @@ export default function Transactions() {
   const [showSearch, setShowSearch] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  const [hasPendingSync, setHasPendingSync] = useState(true);
+
+  useEffect(() => {
+    const updateConnection = () => setOnline(navigator.onLine);
+    window.addEventListener("online", updateConnection);
+    window.addEventListener("offline", updateConnection);
+    return () => {
+      window.removeEventListener("online", updateConnection);
+      window.removeEventListener("offline", updateConnection);
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const refreshQueue = () => {
+      if (isLocalMode()) {
+        if (mounted) setHasPendingSync(false);
+        return;
+      }
+      void listSyncOperations()
+        .then((operations) => { if (mounted) setHasPendingSync(operations.length > 0); })
+        .catch(() => { if (mounted) setHasPendingSync(true); });
+    };
+    refreshQueue();
+    window.addEventListener("finnos:sync-state", refreshQueue);
+    return () => { mounted = false; window.removeEventListener("finnos:sync-state", refreshQueue); };
+  }, []);
 
   const deferredSearch = useDeferredValue(search);
 
@@ -160,14 +190,40 @@ export default function Transactions() {
     return f;
   }, [month, periodMode, rollingRange, scope, selectedDate, deferredSearch, type, status, categoryId, accountId]);
 
+  // Paginate every online List filter using bounded Firestore date scans.
+  // Offline or unresolved sync entries keep the local overlay/legacy path;
+  // calendars and charts retain their independent aggregate data source.
+  const pagedList = flowView === "lista" && !highlightedTransactionId
+    && online && !hasPendingSync;
   const transactionsQuery = useQuery({
     queryKey: ["transactions", filters],
     queryFn: () => fetchTransactions(filters),
+    enabled: !pagedList,
   });
+  const pagesQuery = useInfiniteQuery({
+    queryKey: ["transactions", "pages", filters, sortDir],
+    queryFn: ({ pageParam }) =>
+      fetchTransactionsPage(filters, pageParam ?? undefined, 50, sortDir),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.next_cursor,
+    enabled: pagedList,
+  });
+  // Search may return zero matches in a bounded batch while more records
+  // remain. Advance the cursor rather than showing a misleading empty state.
+  useEffect(() => {
+    if (!pagedList || !pagesQuery.hasNextPage || pagesQuery.isFetching) return;
+    if (pagesQuery.data?.pages.at(-1)?.items.length === 0) {
+      void pagesQuery.fetchNextPage();
+    }
+  }, [pagedList, pagesQuery.data, pagesQuery.hasNextPage, pagesQuery.isFetching, pagesQuery.fetchNextPage]);
   const monthTransactions = transactionsQuery.data ?? [];
-  const transactions = monthTransactions
-    .slice()
-    .sort((a, b) => (sortDir === "desc" ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
+  const transactions = pagedList
+    ? pagesQuery.data?.pages.flatMap(page => page.items) ?? []
+    : monthTransactions.slice().sort((a, b) => (sortDir === "desc"
+      ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
+  const listPending = pagedList ? pagesQuery.isPending : transactionsQuery.isPending;
+  const listError = pagedList ? (!pagesQuery.data ? pagesQuery.error : null) : transactionsQuery.error;
+  const retryList = () => { if (pagedList) void pagesQuery.refetch(); else void transactionsQuery.refetch(); };
   useEffect(() => {
     if (!highlightedTransactionId || transactions.length === 0) return;
     const timer = window.setTimeout(() => {
@@ -194,12 +250,33 @@ export default function Transactions() {
   }, [transactions]);
 
   const dayFlow = calendar?.days.find((d) => d.date === selectedDate);
+  // Independent complete-calendar aggregation, never totals of partial
+  // transaction pages. Both months are needed for a 30-day rolling window.
+  const rollingStart = rollingRange.start.slice(0, 7);
+  const rollingEnd = rollingRange.end.slice(0, 7);
+  const rollingCalendarsQuery = useQuery({
+    queryKey: ["calendar", "rolling30", rollingStart, rollingEnd],
+    queryFn: async () => Promise.all(
+      [...new Set([rollingStart, rollingEnd])].map(fetchCalendar),
+    ),
+    enabled: periodMode === "rolling30" && scope === "mes" && pagedList,
+  });
   const periodTotals = useMemo(() => {
-    if (periodMode === "rolling30" && scope === "mes") {
-      return settledTotals(monthTransactions);
-    }
-    return null;
-  }, [periodMode, scope, monthTransactions]);
+    if (periodMode !== "rolling30" || scope !== "mes") return null;
+    if (!pagedList) return { ...settledTotals(monthTransactions), projectedIncome: calendar?.projected_income ?? 0, projectedExpense: calendar?.projected_expense ?? 0 };
+    const days = (rollingCalendarsQuery.data ?? []).flatMap(c => c.days)
+      .filter(day => day.date >= rollingRange.start && day.date <= rollingRange.end);
+    return days.reduce(
+      (total, day) => ({
+        income: total.income + day.income,
+        expense: total.expense + day.expense,
+        projectedIncome: total.projectedIncome + day.projected_income,
+        projectedExpense: total.projectedExpense + day.projected_expense,
+      }),
+      { income: 0, expense: 0, projectedIncome: 0, projectedExpense: 0 },
+    );
+  }, [periodMode, scope, pagedList, monthTransactions,
+      rollingCalendarsQuery.data, rollingRange]);
 
   const strip =
     scope === "dia"
@@ -212,8 +289,8 @@ export default function Transactions() {
       : {
           income: periodTotals?.income ?? calendar?.income ?? 0,
           expense: periodTotals?.expense ?? calendar?.expense ?? 0,
-          projectedIncome: calendar?.projected_income ?? 0,
-          projectedExpense: calendar?.projected_expense ?? 0,
+          projectedIncome: periodTotals?.projectedIncome ?? calendar?.projected_income ?? 0,
+          projectedExpense: periodTotals?.projectedExpense ?? calendar?.projected_expense ?? 0,
         };
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
 
@@ -426,15 +503,15 @@ export default function Transactions() {
       })() : null}
 
       {flowView !== "categorias" || selectedDonutCategory ? (
-      transactionsQuery.isPending ? (
+      listPending ? (
         <FinnosPageLoading title="Carregando transações" description="Buscando seus lançamentos do período." />
-      ) : transactionsQuery.error ? (
+      ) : listError ? (
         <Card>
           <CardContent className="flex flex-col items-start justify-between gap-3 p-5 sm:flex-row sm:items-center">
             <p className="text-sm text-muted-foreground" data-testid="transactions-error-message">
               Não foi possível carregar as transações. Tente novamente.
             </p>
-            <Button variant="outline" onClick={() => transactionsQuery.refetch()} data-testid="transactions-retry-button">
+            <Button variant="outline" onClick={retryList} data-testid="transactions-retry-button">
               Tentar novamente
             </Button>
           </CardContent>
@@ -459,7 +536,7 @@ export default function Transactions() {
       ) : (
         <>
           <p className="text-sm text-muted-foreground" data-testid="transactions-count">
-            {transactions.length} {transactions.length === 1 ? "transação" : "transações"}
+            {transactions.length} {transactions.length === 1 ? "transação" : "transações"}{pagedList ? " carregadas" : ""}
           </p>
 
           <div className="hidden rounded-2xl border border-border bg-card md:block" data-testid="transactions-table">
@@ -636,6 +713,21 @@ export default function Transactions() {
               </section>
             ))}
           </div>
+          {pagedList && pagesQuery.hasNextPage ? (
+            <div className="flex justify-center">
+              <Button type="button" variant="outline" disabled={pagesQuery.isFetchingNextPage}
+                onClick={() => void pagesQuery.fetchNextPage()} data-testid="transactions-load-more">
+                {pagesQuery.isFetchingNextPage ? "Carregando mais..." : "Carregar mais 50 transações"}
+              </Button>
+            </div>
+          ) : null}
+          {pagedList && pagesQuery.isFetchNextPageError ? (
+            <div role="alert" className="space-y-2 rounded-xl border p-3 text-sm">
+              Não foi possível carregar a próxima página. Os lançamentos exibidos foram preservados.
+              <Button type="button" size="sm" variant="outline"
+                onClick={() => void pagesQuery.fetchNextPage()}>Tentar novamente</Button>
+            </div>
+          ) : null}
         </>
       )
       ) : null}

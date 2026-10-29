@@ -7,9 +7,10 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { localRadar } from "@/lib/local/radar";
 import { isLocalMode, getMode } from "@/lib/mode";
 import { loadSessionProfile } from "@/lib/profileIdentity";
-import { queueTransaction, flushSyncQueue, listSyncOperations, type OperationSource } from "@/lib/sync/queue";
+import { queueTransaction, queueTransactionDelete, queueEntityCreate, queueEntityMutation, flushSyncQueue, listSyncOperations, isTransactionSyncOperation, type OperationSource } from "@/lib/sync/queue";
 import { cacheSet, cachedFetch } from "@/lib/offline/accountCache";
 import {
+  localFinanceHistory,
   localClearData,
   localCreateAccount,
   localListInstitutions,
@@ -41,6 +42,8 @@ import {
   localNotifications,
   localInvoice,
   localPayInvoice,
+  localCreditInvoice,
+  localBankRefund,
   localSubscriptions,
   localCreateSubscription,
   localUpdateSubscription,
@@ -54,6 +57,9 @@ import type {
   AccountInput,
   Institution,
   InstitutionInput,
+  FinanceHistoryPage,
+  FinanceIntegrity,
+  FiintMaturity,
   BudgetSummary,
   BudgetSuggestion,
   BudgetCycle,
@@ -66,6 +72,8 @@ import type {
   NotifyPrefsInput,
   Notifications,
   PayInvoiceInput,
+  CreditInvoiceInput,
+  BankRefundInput,
   Subscriptions,
   SubscriptionInput,
   SubscriptionItem,
@@ -76,6 +84,7 @@ import type {
   FlowParams,
   Transaction,
   TransactionInput,
+  TransactionPage,
   Trends,
   User,
   Radar,
@@ -169,7 +178,7 @@ function applyPendingToDashboard(base: Dashboard, pending: { id: string; payload
 export async function fetchDashboard(month: string | null): Promise<Dashboard> {
   if (isLocalMode()) return localDashboard(month);
   const base = await cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(month ? `/dashboard?month=${month}` : "/dashboard"));
-  const pending = (await listSyncOperations()).filter((o) => o.kind === "transaction.create");
+  const pending = (await listSyncOperations()).filter(isTransactionSyncOperation).filter((o) => o.kind === "transaction.create");
   return applyPendingToDashboard(base, pending);
 }
 
@@ -199,6 +208,27 @@ export async function fetchTrends(months: number, endMonth?: string): Promise<Tr
   return cachedFetch(`trends:${params.toString()}`, () => apiGet<Trends>(`/analytics/trends?${params.toString()}`));
 }
 
+/** FIN-09 historical invoice review reads only the authenticated user's records.
+ * A clean comparison is NOT proof of an earlier MongoDB migration.
+ */
+export async function fetchFiintMaturity(): Promise<FiintMaturity> {
+  if (isLocalMode()) throw new Error("FIINT precisa de histórico autenticado e reconciliado.");
+  return apiGet<FiintMaturity>("/finance/fiint");
+}
+
+export async function fetchFinanceIntegrity(): Promise<FinanceIntegrity> {
+  if (isLocalMode()) throw new Error("Auditoria Firestore não disponível no modo local.");
+  return apiGet<FinanceIntegrity>("/finance/integrity");
+}
+
+/** FINN-inspired append-only financial audit history, read-only and UID-scoped. */
+export async function fetchFinanceHistory(limit = 50, before?: string): Promise<FinanceHistoryPage> {
+  if (isLocalMode()) return localFinanceHistory(limit, before);
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (before) params.set("before", before);
+  return apiGet<FinanceHistoryPage>(`/finance/history?${params.toString()}`);
+}
+
 export async function fetchBudget(month: string): Promise<BudgetSummary> {
   if (isLocalMode()) return localBudget(month);
   return cachedFetch(`budget:${month}`, () => apiGet<BudgetSummary>(`/analytics/budget?month=${month}`));
@@ -211,7 +241,7 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
     if (value) search.set(key, String(value));
   }
   const base = await cachedFetch(`flow:${search.toString()}`, () => apiGet<Flow>(`/analytics/flow?${search.toString()}`));
-  const pending = (await listSyncOperations()).filter((o) => o.kind === "transaction.create" && o.payload.status === "pago");
+  const pending = (await listSyncOperations()).filter(isTransactionSyncOperation).filter((o) => o.kind === "transaction.create" && o.payload.status === "pago");
   let incomeDelta = 0, expenseDelta = 0;
   const series = base.series.map((point) => {
     const ops = pending.filter((o) => o.payload.date.slice(0, 7) === point.month && (!params.category_id || o.payload.category_id === params.category_id));
@@ -305,17 +335,38 @@ export async function fetchAccount(id: string): Promise<AccountDetail> {
 
 export async function createAccount(input: AccountInput): Promise<Account> {
   if (isLocalMode()) return localCreateAccount(input);
+  if (!navigator.onLine) {
+    await queueEntityCreate("account.create", input);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
   return apiPost<Account>("/accounts", input);
 }
 
 export async function updateAccount(id: string, input: AccountInput): Promise<Account> {
   if (isLocalMode()) return localUpdateAccount(id, input);
-  return apiPut<Account>(`/accounts/${id}`, input);
+  if (!navigator.onLine) {
+    const original = (await fetchAccounts()).find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão da conta indisponível offline.");
+    await queueEntityMutation("account.update", id, input, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiPut<Account>(`/accounts/${encodeURIComponent(id)}`, input);
 }
 
 export async function deleteAccount(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteAccount(id);
-  return apiDelete<void>(`/accounts/${id}`);
+  if (!navigator.onLine) {
+    const original = (await fetchAccounts()).find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão da conta indisponível offline.");
+    await queueEntityMutation("account.delete", id, {
+      name: original.name, institution: original.institution,
+      institution_id: original.institution_id, type: original.type,
+      color: original.color, initial_balance: original.initial_balance,
+      active: original.active,
+    }, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiDelete<void>(`/accounts/${encodeURIComponent(id)}`);
 }
 
 // --- Categories -------------------------------------------------------------
@@ -327,17 +378,37 @@ export async function fetchCategories(): Promise<Category[]> {
 
 export async function createCategory(input: CategoryInput): Promise<Category> {
   if (isLocalMode()) return localCreateCategory(input);
+  if (!navigator.onLine) {
+    await queueEntityCreate("category.create", input);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
   return apiPost<Category>("/categories", input);
 }
 
 export async function updateCategory(id: string, input: CategoryInput): Promise<Category> {
   if (isLocalMode()) return localUpdateCategory(id, input);
-  return apiPut<Category>(`/categories/${id}`, input);
+  if (!navigator.onLine) {
+    const original = (await fetchCategories()).find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão da categoria indisponível offline.");
+    await queueEntityMutation("category.update", id, input, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiPut<Category>(`/categories/${encodeURIComponent(id)}`, input);
 }
 
 export async function deleteCategory(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteCategory(id);
-  return apiDelete<void>(`/categories/${id}`);
+  if (!navigator.onLine) {
+    const original = (await fetchCategories()).find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão da categoria indisponível offline.");
+    await queueEntityMutation("category.delete", id, {
+      name: original.name, icon: original.icon, color: original.color,
+      group: original.group, monthly_budget: original.monthly_budget,
+      monthly_goal: original.monthly_goal,
+    }, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiDelete<void>(`/categories/${encodeURIComponent(id)}`);
 }
 
 // --- Transactions -----------------------------------------------------------
@@ -353,7 +424,7 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
   const base = await cachedFetch(key, () => apiGet<Transaction[]>(`/transactions?${params.toString()}`));
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   if (navigator.onLine && uid) await Promise.all(base.map(t => cacheSet(`firebase:${uid}:transaction:${t.id}`, t)));
-  const operations = await listSyncOperations();
+  const operations = (await listSyncOperations()).filter(isTransactionSyncOperation);
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   const pending = operations.filter((o) => o.kind === "transaction.create");
   const updated = base.map(t => { const op = operations.filter(o => o.kind === "transaction.update" && o.entityId === t.id).at(-1); return op ? {...t,...op.payload} : t; });
@@ -366,6 +437,59 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
       installment_value: o.payload.installment && o.payload.total_installments ? txAmount(o.payload) / o.payload.total_installments : null,
       created_at: o.createdAt }));
   return [...optimistic, ...updated];
+}
+
+/** ARQ-03 staged indexed pagination. The legacy list endpoint and its totals
+ * remain untouched until all visual consumers migrate to paginated contracts.
+ */
+export async function fetchTransactionsPage(
+  input: LocalTxFilters | string,
+  cursor?: string,
+  limit = 50,
+  sortDir: "asc" | "desc" = "desc",
+): Promise<TransactionPage> {
+  const filters: LocalTxFilters = typeof input === "string" ? { month: input } : input;
+  const hasMonth = Boolean(filters.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(filters.month));
+  const hasRange = Boolean(filters.start_date && filters.end_date);
+  const isDate = (value: string) => /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(value)
+    && !Number.isNaN(Date.parse(value + "T12:00:00Z"))
+    && new Date(value + "T12:00:00Z").toISOString().slice(0, 10) === value;
+  if ((!hasMonth && !hasRange)
+    || (filters.month && !hasMonth)
+    || (Boolean(filters.start_date) !== Boolean(filters.end_date))
+    || (hasRange && (!isDate(filters.start_date!) || !isDate(filters.end_date!)
+      || filters.start_date! > filters.end_date!))
+    || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new Error("Página financeira inválida.");
+  }
+  const params = new URLSearchParams({ limit: String(limit), sort_dir: sortDir });
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, String(value));
+  }
+  if (cursor) params.set("cursor", cursor);
+  if (isLocalMode()) {
+    const rows = localListTransactions(filters)
+      .sort((a, b) => (sortDir === "desc"
+        ? b.date.localeCompare(a.date) || b.id.localeCompare(a.id)
+        : a.date.localeCompare(b.date) || a.id.localeCompare(b.id)));
+    const start = cursor ? rows.findIndex(row => row.id === cursor) + 1 : 0;
+    if (cursor && start === 0) throw new Error("Cursor financeiro inválido.");
+    const items = rows.slice(start, start + limit);
+    return {
+      month: filters.month ?? filters.start_date!.slice(0, 7),
+      items,
+      next_cursor: start + limit < rows.length ? items.at(-1)?.id ?? null : null,
+    };
+  }
+  const uid = firebaseAuth?.currentUser?.uid;
+  const result = await apiGet<TransactionPage>(`/transactions/page?${params.toString()}`);
+  if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  if (navigator.onLine && uid) {
+    await Promise.all(result.items.map(row =>
+      cacheSet(`firebase:${uid}:transaction:${row.id}`, row)));
+    if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  }
+  return result;
 }
 
 export async function createTransaction(input: TransactionInput, source: OperationSource = "manual"): Promise<Transaction> {
@@ -386,11 +510,41 @@ export async function updateTransaction(id: string, input: TransactionInput, sou
   return apiPut<Transaction>(`/transactions/${id}`, input, { "X-FINNOS-Source": source });
 }
 
+export type RecurrenceEditScope = "esta" | "proximas" | "todas";
+
+export async function editRecurrence(
+  id: string,
+  version: number,
+  scope: RecurrenceEditScope,
+  effective_date: string,
+  changes: { name?: string; value?: number },
+  operationId: string,
+): Promise<Transaction> {
+  if (isLocalMode()) throw new Error("Edição de séries requer conta sincronizada.");
+  if (!navigator.onLine) throw new Error("Conecte-se para editar uma série recorrente. Nenhuma alteração foi perdida.");
+  if (!Number.isSafeInteger(version) || version < 1) throw new Error("Versão de recorrência indisponível.");
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(effective_date)) throw new Error("Data inválida.");
+  if (!operationId) throw new Error("Identificador de edição inválido.");
+  return apiPost<Transaction>(`/transactions/${encodeURIComponent(id)}/recurrence`, {
+    scope, effective_date, changes,
+  }, {
+    "X-FINNOS-Operation-ID": operationId,
+    "X-FINNOS-Base-Version": String(version),
+  });
+}
+
 export { flushSyncQueue };
 
 export async function deleteTransaction(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteTransaction(id);
-  return apiDelete<void>(`/transactions/${id}`);
+  if (!navigator.onLine) {
+    if (id.startsWith("offline:")) {
+      throw new Error("Revise o lançamento ainda não sincronizado antes de excluí-lo.");
+    }
+    await queueTransactionDelete(id);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiDelete<void>(`/transactions/${encodeURIComponent(id)}`);
 }
 
 // --- Demo data --------------------------------------------------------------
@@ -414,17 +568,39 @@ export async function fetchCards(): Promise<CreditCard[]> {
 
 export async function createCard(input: CardInput): Promise<CreditCard> {
   if (isLocalMode()) return localCreateCard(input);
+  if (!navigator.onLine) {
+    await queueEntityCreate("card.create", input);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
   return apiPost<CreditCard>("/cards", input);
 }
 
 export async function updateCard(id: string, input: CardInput): Promise<CreditCard> {
   if (isLocalMode()) return localUpdateCard(id, input);
-  return apiPut<CreditCard>(`/cards/${id}`, input);
+  if (!navigator.onLine) {
+    const original = (await fetchCards()).find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão do cartão indisponível offline.");
+    await queueEntityMutation("card.update", id, input, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiPut<CreditCard>(`/cards/${encodeURIComponent(id)}`, input);
 }
 
 export async function deleteCard(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteCard(id);
-  return apiDelete<void>(`/cards/${id}`);
+  if (!navigator.onLine) {
+    const original = (await fetchCards()).find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão do cartão indisponível offline.");
+    await queueEntityMutation("card.delete", id, {
+      name: original.name, institution: original.institution,
+      institution_id: original.institution_id, color: original.color,
+      limit: original.limit, closing_day: original.closing_day,
+      due_day: original.due_day, payment_account_id: original.payment_account_id,
+      active: original.active,
+    }, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiDelete<void>(`/cards/${encodeURIComponent(id)}`);
 }
 
 // --- Notificações ----------------------------------------------------------
@@ -461,14 +637,27 @@ export async function clearNotifications(ids: string[]): Promise<void> {
 
 // --- Fatura / assinaturas / avisos -----------------------------------------
 
-export async function fetchInvoice(cardId: string): Promise<Invoice> {
-  if (isLocalMode()) return localInvoice(cardId);
-  return cachedFetch(`invoice:${cardId}`, () => apiGet<Invoice>(`/cards/${cardId}/invoice`));
+export async function fetchInvoice(cardId: string, cycle?: string): Promise<Invoice> {
+  if (isLocalMode()) return localInvoice(cardId, cycle);
+  const parameter = cycle ? `?cycle=${encodeURIComponent(cycle)}` : "";
+  return cachedFetch(`invoice:${cardId}:${cycle ?? "default"}`, () => apiGet<Invoice>(`/cards/${cardId}/invoice${parameter}`));
 }
 
 export async function payInvoice(cardId: string, input: PayInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
   if (isLocalMode()) return localPayInvoice(cardId, input);
   return apiPost<Invoice>(`/cards/${cardId}/pay`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+
+/** Paid invoice refund creates one bank receipt; the original invoice remains paid. */
+export async function refundInvoiceToBank(cardId: string, input: BankRefundInput, operationId = crypto.randomUUID()): Promise<Invoice> {
+  if (isLocalMode()) return localBankRefund(cardId, input, operationId);
+  return apiPost<Invoice>(`/cards/${encodeURIComponent(cardId)}/refunds`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+
+/** Merchant credit reduces unpaid card debt; it never transfers money to a bank account. */
+export async function creditInvoice(cardId: string, input: CreditInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
+  if (isLocalMode()) return localCreditInvoice(cardId, input, operationId);
+  return apiPost<Invoice>(`/cards/${encodeURIComponent(cardId)}/credits`, input, { "X-FINNOS-Operation-ID": operationId });
 }
 
 export async function fetchSubscriptions(): Promise<Subscriptions> {
@@ -477,17 +666,40 @@ export async function fetchSubscriptions(): Promise<Subscriptions> {
 }
 
 export async function createSubscription(input: SubscriptionInput): Promise<SubscriptionItem> {
-  return isLocalMode() ? localCreateSubscription(input) : apiPost<SubscriptionItem>("/subscriptions", input);
+  if (isLocalMode()) return localCreateSubscription(input);
+  if (!navigator.onLine) {
+    await queueEntityCreate("subscription.create", input);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiPost<SubscriptionItem>("/subscriptions", input);
 }
 
 export async function updateSubscription(id: string, input: SubscriptionInput): Promise<SubscriptionItem> {
-  return isLocalMode() ? localUpdateSubscription(id, input) : apiPut<SubscriptionItem>(`/subscriptions/${encodeURIComponent(id)}`, input);
+  if (isLocalMode()) return localUpdateSubscription(id, input);
+  if (!navigator.onLine) {
+    const original = (await fetchSubscriptions()).items.find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão da assinatura indisponível offline.");
+    await queueEntityMutation("subscription.update", id, input, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
+  return apiPut<SubscriptionItem>(`/subscriptions/${encodeURIComponent(id)}`, input);
 }
 
 export async function deleteSubscription(id: string): Promise<void> {
   if (isLocalMode()) {
     localDeleteSubscription(id);
     return;
+  }
+  if (!navigator.onLine) {
+    const original = (await fetchSubscriptions()).items.find(row => row.id === id);
+    if (!original?.version) throw new Error("Versão da assinatura indisponível offline.");
+    await queueEntityMutation("subscription.delete", id, {
+      name: original.name, value: original.value, recurrence: original.recurrence,
+      next_charge: original.next_charge, account_id: original.account_id,
+      category_id: original.category_id, card_id: original.card_id,
+      active: original.active, notes: original.notes ?? null,
+    }, original.version);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
   }
   await apiDelete<void>(`/subscriptions/${encodeURIComponent(id)}`);
 }

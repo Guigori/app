@@ -4,11 +4,22 @@ Passing this audit does NOT prove that an earlier MongoDB account has been
 migrated. Legacy reconciliation is an independent operator-controlled step.
 """
 from collections import Counter
-from finnos.lib.money import D
+from finnos.lib.money import D, cents
 from finnos.lib.stats import balance_effects
 from finnos.lib.dates import today_iso
+from finnos.lib.legacy_reconciliation import review_historical_invoices
+from finnos.lib.money import quantize_brl
+from decimal import InvalidOperation
 
 KINDS = ("accounts", "categories", "cards", "transactions", "goals", "budget_cycles", "subscriptions")
+
+
+def same_money_in_cents(value, expected):
+    try:
+        return cents(value) == expected
+    except (TypeError, ValueError, InvalidOperation):
+        return False
+
 
 
 def audit_finance(records):
@@ -36,6 +47,49 @@ def audit_finance(records):
             problems["transaction_transfer_invalid"] += 1
         if tx.get("invoice_payment") and tx.get("invoice_card_id") not in cards:
             problems["invoice_payment_card_missing"] += 1
+
+    # FIN-05 integrity: a compensation must reference an original purchase
+    # on the same card. A bank reimbursement must have exactly one matching
+    # cash receipt; otherwise Dashboard and bank balances can silently drift.
+    purchases = {tx["id"]: tx for tx in records["transactions"] if tx.get("id")}
+    refund_ledger_ids = set()
+    for card in records["cards"]:
+        seen_adjustments = set()
+        for kind, ledger, amount_key in (
+            ("credit", card.get("invoice_adjustments") or {}, "credit_cents"),
+            ("refund", card.get("invoice_refunds") or {}, "refund_cents"),
+        ):
+            for cycle, entries in ledger.items():
+                for entry in entries:
+                    entry_id = entry.get("id")
+                    key = (kind, entry_id)
+                    if not entry_id or key in seen_adjustments:
+                        problems["invoice_adjustment_duplicate_id"] += 1
+                    seen_adjustments.add(key)
+                    purchase = purchases.get(entry.get("purchase_id"))
+                    if not purchase or purchase.get("card_id") != card.get("id"):
+                        problems["invoice_adjustment_original_missing"] += 1
+                    amount = entry.get(amount_key)
+                    if type(amount) is not int or amount <= 0:
+                        problems["invoice_adjustment_amount_invalid"] += 1
+                    if kind != "refund":
+                        continue
+                    refund_ledger_ids.add(entry_id)
+                    receipt = purchases.get(entry_id)
+                    if (
+                        not receipt or not receipt.get("invoice_refund")
+                        or receipt.get("invoice_card_id") != card.get("id")
+                        or receipt.get("invoice_cycle") != cycle
+                        or receipt.get("original_purchase_id") != entry.get("purchase_id")
+                        or receipt.get("account_id") != entry.get("account_id")
+                        or receipt.get("status") != "pago"
+                        or type(amount) is not int
+                        or not same_money_in_cents(receipt.get("value"), amount)
+                    ):
+                        problems["invoice_refund_receipt_missing_or_mismatch"] += 1
+    for tx in records["transactions"]:
+        if tx.get("invoice_refund") and tx.get("id") not in refund_ledger_ids:
+            problems["invoice_refund_orphan_receipt"] += 1
 
     for subscription in records["subscriptions"]:
         if subscription.get("account_id") not in accounts:
@@ -69,6 +123,9 @@ def audit_finance(records):
         "issues": dict(sorted(problems.items())),
         "counts": counts,
         "has_financial_records": any(counts[k] for k in ("accounts", "cards", "transactions")),
-        "total_account_balance": float(round(total_balance, 2)) if not problems else None,
+        "total_account_balance": float(quantize_brl(total_balance)) if not problems else None,
         "legacy_reconciliation": "not_verified",
+        "historical_invoices": review_historical_invoices(
+            records["cards"], records["transactions"], today_iso()
+        ),
     }

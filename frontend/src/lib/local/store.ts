@@ -1,7 +1,7 @@
 // Persistence for local (browser-only) mode. Everything is kept under one
 // localStorage key so "apagar meus dados" is a single removeItem.
 
-import type { Account, CardInput, Category, Institution, SubscriptionItem, Transaction } from "@/types/finnos";
+import type { Account, CardInput, Category, Institution, SubscriptionItem, Transaction, FinanceHistoryEvent } from "@/types/finnos";
 
 import { getMode } from "@/lib/mode";
 
@@ -19,6 +19,8 @@ export interface LocalCard extends CardInput {
   id: string;
   created_at: string;
   paid_cycles?: Record<string, { amount: number; paid_at: string; items?: import("@/types/finnos").InvoiceItem[] }>;
+  invoice_adjustments?: Record<string, Array<import("@/types/finnos").InvoiceAdjustment & { fingerprint?: string }>>;
+  invoice_refunds?: Record<string, Array<import("@/types/finnos").BankRefund & { fingerprint?: string }>>;
 }
 
 export interface LocalDb {
@@ -29,6 +31,7 @@ export interface LocalDb {
   transactions: Transaction[];
   cards: LocalCard[];
   subscriptions: SubscriptionItem[];
+  audit_events: FinanceHistoryEvent[];
 }
 
 export const DEFAULT_CATEGORIES: Omit<Category, "id" | "created_at">[] = [
@@ -62,6 +65,7 @@ export function freshDb(name = "Você"): LocalDb {
     transactions: [],
     cards: [],
     subscriptions: [],
+    audit_events: [],
     categories: DEFAULT_CATEGORIES.map((c) => ({ ...c, id: newId(), created_at: now })),
   };
 }
@@ -122,6 +126,7 @@ function normalizeDb(parsed: Partial<LocalDb>): LocalDb {
     transactions: parsed.transactions ?? [],
     cards: parsed.cards ?? [],
     subscriptions: parsed.subscriptions ?? [],
+    audit_events: parsed.audit_events ?? [],
   };
 }
 

@@ -51,8 +51,10 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
       <CardContent>
         {slices.length === 0 ? (
           <EmptyState
-            title="Nenhuma despesa neste mês"
-            description="Quando houver despesas, o gráfico mostra para onde seu dinheiro está indo."
+            title={total < 0 ? "Reembolsos superaram as despesas" : "Sem despesas líquidas positivas"}
+            description={total < 0
+              ? "Seus estornos reduziram o gasto líquido do período. Confira os valores detalhados no Fluxo e no Histórico."
+              : "Quando houver gastos líquidos positivos por categoria, a distribuição aparecerá aqui."}
           />
         ) : (
           <div className="min-w-0">
@@ -86,7 +88,7 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                 </PieChart>
               </ResponsiveContainer>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <p className="text-xs text-muted-foreground">{selected ? selected.name : "Total gasto"}</p>
+                <p className="text-xs text-muted-foreground">{selected ? selected.name : "Gasto líquido"}</p>
                 <p className="max-w-[9rem] overflow-hidden text-ellipsis whitespace-nowrap font-heading text-lg font-bold tabular-nums text-foreground min-[390px]:text-xl" data-testid="donut-total-value">
                   {hidden ? formatHiddenBRL() : formatBRL(displayTotal)}
                 </p>
