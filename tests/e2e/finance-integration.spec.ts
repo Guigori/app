@@ -106,7 +106,7 @@ test("recurrence editor sends scoped changes with a durable operation ID", async
     }));
   });
   await page.goto("/transacoes?metric=caixa");
-  await page.getByTestId("edit-transaction-series-root").click();
+  await page.getByTestId("edit-transaction-series-root").first().click();
   await page.getByTestId("open-recurrence-scope").click();
   const dialog = page.getByTestId("recurrence-scope-dialog");
   await expect(dialog).toBeVisible();
