@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { todayISO } from "@/lib/format";
 import { BellRing, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { fetchNotifications, fetchNotifyPrefs, fetchRadar } from "@/lib/data";
@@ -143,7 +144,7 @@ export function LocalNotificationPulse() {
       try {
         const [notifications, radar, prefs] = await Promise.all([fetchNotifications(), fetchRadar(), fetchNotifyPrefs()]);
         if (cancelled) return;
-        const today = new Date().toISOString().slice(0, 10);
+        const today = todayISO();
         const shown = JSON.parse(localStorage.getItem(LOCAL_SHOWN_KEY) || "{}") as Record<string, string>;
         const registration = await navigator.serviceWorker.ready;
 

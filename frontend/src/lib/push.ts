@@ -58,3 +58,23 @@ export async function disablePush(): Promise<void> {
   await apiDelete<void>(`/push/subscribe?endpoint=${encodeURIComponent(subscription.endpoint)}`);
   await subscription.unsubscribe();
 }
+
+/** AUD-12: called on every sign-out. Never waits for `serviceWorker.ready`
+ * (it never resolves without a registered worker) and never blocks logout.
+ * Unsubscribing the browser kills the endpoint even if the server delete fails
+ * offline, so the previous account's notifications cannot reach the next one. */
+export async function revokePushForSession(): Promise<void> {
+  if (!pushAvailable()) return;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) return;
+    try {
+      await apiDelete<void>(`/push/subscribe?endpoint=${encodeURIComponent(subscription.endpoint)}`);
+    } finally {
+      await subscription.unsubscribe();
+    }
+  } catch {
+    // Best effort: sign-out must still clear the session and caches.
+  }
+}

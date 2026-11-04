@@ -81,8 +81,13 @@ def test_register_same_uid_and_endpoint_is_idempotent(monkeypatch):
         def __init__(self, key): self.key = key
         def set(self, item): saved[self.key] = dict(item)
         def delete(self): saved.pop(self.key, None)
+    def where(field, op, value):
+        # Ownership check (AUD-12): registrations of the same endpoint.
+        rows = [SimpleNamespace(to_dict=lambda item=item: item, reference=Registration(key))
+                for key, item in list(saved.items()) if item["subscription"]["endpoint"] == value]
+        return SimpleNamespace(stream=lambda: rows)
     monkeypatch.setattr(push, "_registration_collection",
-                        lambda: SimpleNamespace(document=lambda key: Registration(key)))
+                        lambda: SimpleNamespace(document=lambda key: Registration(key), where=where))
     endpoint = "https://fcm.googleapis.com/fcm/send/synthetic"
     with TestClient(app_with_user()) as client:
         for _ in range(2):

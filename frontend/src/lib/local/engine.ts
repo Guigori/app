@@ -1,7 +1,7 @@
 // Local-mode data engine: the same business rules as backend/lib/stats.py, run in
 // the browser. Keep the two in sync — a rule change belongs in both places.
 
-import { addMonth, currentMonth, todayISO } from "@/lib/format";
+import { addMonth, currentMonth, todayISO, toLocalISO } from "@/lib/format";
 import { newId, readDb, writeDb, freshDb, wipeDb, type LocalCard, type LocalDb } from "@/lib/local/store";
 import type {
   Account,
@@ -1038,7 +1038,7 @@ function shiftMonths(iso: string, months: number): string {
 function addDays(iso: string, days: number): string {
   const d = new Date(`${iso}T12:00:00`);
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return toLocalISO(d);
 }
 
 /** Advance from a configured closing/day, preserving 29–31 through February. */

@@ -90,6 +90,12 @@ async def subscribe_push(
     info = payload.model_dump()
     def register():
         collection = _registration_collection()
+        # AUD-12: one browser endpoint belongs to one account. When another
+        # account enrols the same device, the previous owner's registrations
+        # are removed so its financial notifications never reach this user.
+        for previous in collection.where("subscription.endpoint", "==", payload.endpoint).stream():
+            if (previous.to_dict() or {}).get("uid") != uid:
+                previous.reference.delete()
         # An explicit overwrite is idempotent for the same Firebase UID.
         collection.document(key).set({
             "uid": uid,

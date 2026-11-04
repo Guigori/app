@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { createBudgetCycle, fetchCategories, fetchCurrentBudgetCycle, fetchNextBudgetCycle, fetchBudgetSuggestion, updateBudgetCycle, type BudgetCyclePayload } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, toLocalISO } from "@/lib/format";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +19,7 @@ type AllocationDraft={planned:string;priority:BudgetPriority;rollover:boolean};
 const MODES:[BudgetMode,string,string][]=[["503020","Regra 50/30/20","Distribuição guiada entre necessidades, desejos e metas."],["personalizado","Personalizado","Você define quanto cada categoria recebe."]];
 const PERIODS:[BudgetPeriod,string][]=[["semanal","Semanal"],["quinzenal","Quinzenal"],["mensal","Mensal"],["anual","Anual"]];
 
-function iso(d:Date){return d.toISOString().slice(0,10)}
+const iso=toLocalISO
 function defaultDates(period:BudgetPeriod,startRaw?:string){
  const s=startRaw?new Date(startRaw+"T12:00:00"):new Date(); const e=new Date(s);
  if(period==="semanal")e.setDate(e.getDate()+6);
