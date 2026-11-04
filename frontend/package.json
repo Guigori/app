@@ -57,7 +57,7 @@
     "@babel/generator": "7.29.7",
     "@babel/parser": "7.29.7",
     "@babel/traverse": "7.29.7",
-    "@babel/types": "7.29.7",
+    "@babel/types": "8.0.10",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "24.13.3",
     "@types/react": "19.2.17",
