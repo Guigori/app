@@ -186,7 +186,7 @@ export default function Onboarding() {
       setImportError("Selecione uma conta e, para faturas, o cartão correspondente.");
       return;
     }
-    const selected = importRows.filter(row => row.selected);
+    const selected = importRows.filter(row => row.selected && !row.blocked);
     if (!selected.length) return;
     setBusy(true);
     setImportError("");

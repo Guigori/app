@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import type { TransactionInput } from "@/types/finnos";
 import { createTransaction, fetchAccounts, fetchCards, fetchCategories } from "@/lib/data";
 import { getAccountPaymentMethods } from "@/lib/accountPaymentPreferences";
-import { isISODate } from "@/lib/format";
+import { isISODate, todayISO } from "@/lib/format";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { ArrowLeft, ArrowUp, Camera, Check, ChevronRight, Mic, Paperclip, Plus, X, Wallet, CreditCard, Landmark, CalendarDays, Repeat2, StickyNote, Bell, Tag, FolderOpen } from "lucide-react";
 
@@ -48,7 +48,7 @@ export default function SmartRegister({ embedded = false }: { embedded?: boolean
   const selectedAccount = accounts.find(a => a.id === account);
   const [destination, setDestination] = useState("");
   const [installments, setInstallments] = useState(1);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
   const [recurring, setRecurring] = useState(false);
   const [attachment, setAttachment] = useState("");

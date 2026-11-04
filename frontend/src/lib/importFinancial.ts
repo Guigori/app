@@ -8,6 +8,10 @@ export type ImportRow = {
   selected: boolean;
   category_id: string | null;
   recurring_candidate: boolean;
+  /** Why the row needs the user's attention before it can be imported. */
+  review_reason?: string | null;
+  /** Rows whose meaning cannot be imported as a purchase/movement (e.g. invoice credits). */
+  blocked?: boolean;
 };
 
 const parseMoney=(raw:string)=>{
@@ -25,7 +29,44 @@ const isoDate=(raw:string)=>{
   if(m)return `${m[3]}-${m[2]}-${m[1]}`;
   return null;
 };
-const splitLine=(line:string)=>line.includes(";")?line.split(";"):line.includes("\t")?line.split("\t"):line.split(",");
+const delimiterOf=(line:string)=>{
+  let quoted=false;const seen={";":0,"\t":0,",":0};
+  for(const ch of line){if(ch==='"')quoted=!quoted;else if(!quoted&&ch in seen)seen[ch as keyof typeof seen]++;}
+  return seen[";"]?";":seen["\t"]?"\t":",";
+};
+/** RFC 4180-style split: delimiters inside quotes (e.g. "-10,50") stay in the field. */
+const splitLine=(line:string,delimiter=delimiterOf(line))=>{
+  const cells:string[]=[];let cell="",quoted=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(ch==='"'){if(quoted&&line[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}
+    else if(ch===delimiter&&!quoted){cells.push(cell);cell="";}
+    else cell+=ch;
+  }
+  cells.push(cell);
+  return cells.map(x=>x.trim());
+};
+const normalizeHeader=(x:string)=>x.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+type Columns={date:number;description:number;value:number};
+/** Map a header row to its columns; the balance ("saldo") column is never the amount. */
+const headerColumns=(cells:string[]):Columns|null=>{
+  const h=cells.map(normalizeHeader);
+  const find=(re:RegExp)=>h.findIndex(x=>re.test(x)&&!/saldo|balance/.test(x));
+  const date=find(/^data|^date|^dt/), value=find(/valor|amount|quantia|montante|^r\$/), description=find(/descri|histor|lancamento|estabelecimento|memo|title|titulo/);
+  return date>=0&&value>=0?{date,value,description}:null;
+};
+const CREDIT_WORDS=/estorno|reembolso|cr[eé]dito|pagamento|pagto|devolu/i;
+const invoiceCredit=(description:string,amount:number,ofx:boolean)=>
+  (ofx?amount>0:amount<0)||CREDIT_WORDS.test(description);
+
+const row=(date:string,description:string,amount:number,kind:ImportKind,ofx:boolean):ImportRow=>{
+  const base={id:crypto.randomUUID(),date,description,value:Math.abs(amount),category_id:null,recurring_candidate:false};
+  if(kind==="invoice"){
+    if(invoiceCredit(description,amount,ofx))return {...base,type:"despesa",selected:false,blocked:true,review_reason:"Crédito, estorno ou pagamento da fatura: não é importado como compra."};
+    return {...base,type:"despesa",selected:true,review_reason:null};
+  }
+  return {...base,type:amount<0?"despesa":"receita",selected:true,review_reason:null};
+};
 
 export function parseFinancialFile(text:string,kind:ImportKind):ImportRow[]{
   const raw=text.replace(/<STMTTRN>/gi,"\n<STMTTRN>").split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
@@ -35,18 +76,31 @@ export function parseFinancialFile(text:string,kind:ImportKind):ImportRow[]{
       const date=(block.match(/<DTPOSTED>(\d{8})/i)?.[1]??"");
       const amount=parseMoney(block.match(/<TRNAMT>([^<\r\n]+)/i)?.[1]??"");
       const description=(block.match(/<(?:NAME|MEMO)>([^<\r\n]+)/i)?.[1]??"Lançamento").trim();
-      if(date&&amount!==null)rows.push({id:crypto.randomUUID(),date:`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`,description,value:Math.abs(amount),type:kind==="invoice"?"despesa":amount<0?"despesa":"receita",selected:true,category_id:null,recurring_candidate:false});
+      if(date&&amount!==null)rows.push(row(`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`,description,amount,kind,true));
     }
   }else{
+    let columns:Columns|null=null;
     for(const line of raw){
-      const cells=splitLine(line).map(x=>x.replace(/^"|"$/g,"").trim()).filter(Boolean);
+      const all=splitLine(line);
+      const header=headerColumns(all);
+      if(header&&!all.some(isoDate)){columns=header;continue;}
+      if(columns){
+        const date=isoDate(all[columns.date]??""), amount=parseMoney(all[columns.value]??"");
+        if(!date||amount===null)continue;
+        const description=(columns.description>=0?all[columns.description]:"")||all.find((x,i)=>i!==columns!.value&&i!==columns!.date&&/[A-Za-zÀ-ÿ]{2}/.test(x))||"Lançamento";
+        rows.push(row(date,description,amount,kind,false));
+        continue;
+      }
+      const cells=all.map(x=>x.replace(/^"|"$/g,"").trim()).filter(Boolean);
       const dateCell=cells.find(isoDate), date=dateCell?isoDate(dateCell):null;
-      const moneyCells=cells.map((x,i)=>({i,v:parseMoney(x)})).filter(x=>x.v!==null&&x.i!==cells.indexOf(dateCell??""));
+      const moneyCells=cells.map((x,i)=>({i,v:parseMoney(x)})).filter(x=>x.v!==null&&x.i!==cells.indexOf(dateCell??"")&&/\d/.test(cells[x.i])&&!/[A-Za-zÀ-ÿ]{2}/.test(cells[x.i]));
       if(!date||!moneyCells.length)continue;
-      const picked=moneyCells[moneyCells.length-1];
-      const amount=picked.v as number;
+      const picked=moneyCells[0];
       const description=cells.find((x,i)=>i!==picked.i&&x!==dateCell&&/[A-Za-zÀ-ÿ]{2}/.test(x))??"Lançamento";
-      rows.push({id:crypto.randomUUID(),date,description,value:Math.abs(amount),type:kind==="invoice"?"despesa":amount<0?"despesa":"receita",selected:true,category_id:null,recurring_candidate:false});
+      const parsed=row(date,description,picked.v as number,kind,false);
+      // Without a header, a second number may be the running balance: never guess silently.
+      if(moneyCells.length>1&&!parsed.blocked)rows.push({...parsed,selected:false,review_reason:"Há mais de um valor nesta linha (ex.: saldo). Confira o valor antes de importar."});
+      else rows.push(parsed);
     }
   }
   const counts=new Map<string,number>();
