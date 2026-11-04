@@ -36,14 +36,14 @@ export default function Analysis() {
   },[d,top]);
 
   return <div className="mx-auto w-full max-w-5xl space-y-4 pb-8 animate-fade-up">
-    <header className="flex items-start justify-between gap-3">
-      <div><h1 className="font-heading text-3xl font-bold tracking-tight">Análise</h1><p className="text-sm text-muted-foreground">{yearMode ? month.slice(0,4) : monthLabel(month)}</p></div>
-      <div className="relative z-20 flex flex-col items-center gap-2 rounded-full border border-[#E5E0FF] bg-white p-1.5 shadow-[0_5px_18px_rgba(7,15,82,.09)] dark:bg-[#03081F]" aria-label="Menu vertical FINNOS">
-        <button type="button" onClick={()=>setPanel(panel==="calendar"?null:"calendar")} aria-label="Selecionar mês ou ano" className="grid h-11 w-11 place-items-center rounded-full text-[#070F52] dark:text-white"><CalendarDays className="h-5 w-5"/></button>
-        <button type="button" onClick={()=>setHidden(!hidden)} aria-label={hidden?"Mostrar valores":"Ocultar valores"} aria-pressed={hidden} className="grid h-11 w-11 place-items-center rounded-full text-[#070F52] dark:text-white">{hidden?<EyeOff className="h-5 w-5"/>:<Eye className="h-5 w-5"/>}</button>
-        <button type="button" onClick={()=>setMode("cards")} aria-label="Modo Cards" aria-pressed={mode==="cards"} className={`grid h-11 w-11 place-items-center rounded-full ${mode==="cards"?"bg-[#4B2CFF] text-white":"text-[#070F52] dark:text-white"}`}><LayoutGrid className="h-5 w-5"/></button>
-        <button type="button" onClick={()=>setMode("charts")} aria-label="Modo Gráficos" aria-pressed={mode==="charts"} className={`grid h-11 w-11 place-items-center rounded-full ${mode==="charts"?"bg-[#4B2CFF] text-white":"text-[#070F52] dark:text-white"}`}><ChartPie className="h-5 w-5"/></button>
-        <button type="button" onClick={()=>setPanel(panel==="filters"?null:"filters")} aria-label="Filtros" className="grid h-11 w-11 place-items-center rounded-full text-[#070F52] dark:text-white"><SlidersHorizontal className="h-5 w-5"/></button>
+    <header className="flex flex-wrap items-center justify-between gap-3 sm:items-start">
+      <div><h1 className="font-heading text-2xl font-bold tracking-tight sm:text-3xl">Análise</h1><p className="text-sm text-muted-foreground">{yearMode ? month.slice(0,4) : monthLabel(month)}</p></div>
+      <div className="relative z-20 flex flex-row items-center gap-1 rounded-full border border-border bg-card p-1 shadow-sm sm:flex-col sm:gap-2 sm:p-1.5" aria-label="Menu vertical FINNOS">
+        <button type="button" onClick={()=>setPanel(panel==="calendar"?null:"calendar")} aria-label="Selecionar mês ou ano" className="grid h-10 w-10 place-items-center rounded-full sm:h-11 sm:w-11 text-foreground"><CalendarDays className="h-5 w-5"/></button>
+        <button type="button" onClick={()=>setHidden(!hidden)} aria-label={hidden?"Mostrar valores":"Ocultar valores"} aria-pressed={hidden} className="grid h-10 w-10 place-items-center rounded-full sm:h-11 sm:w-11 text-foreground">{hidden?<EyeOff className="h-5 w-5"/>:<Eye className="h-5 w-5"/>}</button>
+        <button type="button" onClick={()=>setMode("cards")} aria-label="Modo Cards" aria-pressed={mode==="cards"} className={`grid h-10 w-10 place-items-center rounded-full sm:h-11 sm:w-11 ${mode==="cards"?"bg-primary text-primary-foreground":"text-foreground"}`}><LayoutGrid className="h-5 w-5"/></button>
+        <button type="button" onClick={()=>setMode("charts")} aria-label="Modo Gráficos" aria-pressed={mode==="charts"} className={`grid h-10 w-10 place-items-center rounded-full sm:h-11 sm:w-11 ${mode==="charts"?"bg-primary text-primary-foreground":"text-foreground"}`}><ChartPie className="h-5 w-5"/></button>
+        <button type="button" onClick={()=>setPanel(panel==="filters"?null:"filters")} aria-label="Filtros" className="grid h-10 w-10 place-items-center rounded-full sm:h-11 sm:w-11 text-foreground"><SlidersHorizontal className="h-5 w-5"/></button>
       </div>
     </header>
     {panel==="calendar" && <div className="rounded-2xl border bg-card p-4 shadow-sm">
@@ -88,7 +88,7 @@ export default function Analysis() {
 }
 
 function Metric({label,value,change,negative=false,hidden=false}:{label:string,value:number,change:number,negative?:boolean,hidden?:boolean}) {
-  return <div className="min-w-0 px-3 first:pl-0 last:pr-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 truncate text-base font-bold sm:text-xl">{hidden?"••••••":money(value)}</p><p className={`mt-1 text-xs ${negative&&change>0?"text-rose-500":"text-emerald-600"}`}>{change ? `${change>0?"▲":"▼"} ${pct(change)}` : "• período"}</p></div>
+  return <div className="min-w-0 px-3 first:pl-0 last:pr-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 whitespace-nowrap text-[clamp(0.9rem,4vw,1.25rem)] font-bold tabular-nums">{hidden?"••••••":money(value)}</p><p className={`mt-1 text-xs ${!value?"text-muted-foreground":negative&&change>0?"text-expense":"text-income"}`}>{!value ? "Sem movimento" : change ? `${change>0?"▲":"▼"} ${pct(change)}` : "• período"}</p></div>
 }
 function AnalysisCard({title,value,note,chart}:{title:string,value:string,note:string,chart:boolean}) {
   const bars=[35,52,44,68,61,79,58,86,72];

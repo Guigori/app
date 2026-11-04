@@ -17,15 +17,15 @@ export function FiintSection({ hidden }: { hidden: boolean }) {
   });
   if (local) return (
     <section className="rounded-[24px] border bg-card p-5" aria-label="FIINT">
-      <h2 className="font-heading text-lg font-bold">FIINT · Acompanhamento</h2>
+      <h2 className="font-heading text-lg font-bold">Sua organização financeira</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Entre com sua conta sincronizada para analisar até 12 meses de lançamentos com validação de versão.
+        Entre com sua conta para ver como você acompanhou suas finanças nos últimos 12 meses.
       </p>
     </section>
   );
   if (isPending) return (
     <section className="rounded-[24px] border bg-card p-5" role="status">
-      <h2 className="font-heading text-lg font-bold">FIINT · Acompanhamento</h2>
+      <h2 className="font-heading text-lg font-bold">Sua organização financeira</h2>
       <p className="mt-2 text-sm text-muted-foreground">Conferindo as competências registradas...</p>
     </section>
   );
@@ -41,12 +41,12 @@ export function FiintSection({ hidden }: { hidden: boolean }) {
   const completed = data.criteria.filter(item => item.completed).length;
   const max = Math.max(1, ...data.monthly_history.flatMap(m => [Math.abs(m.income), Math.abs(m.expense)]));
   return (
-    <section className="space-y-5 rounded-[24px] border bg-card p-5" aria-label="FIINT" data-testid="fiint-maturity">
+    <section className="space-y-5 rounded-[24px] border bg-card p-5" aria-label="Sua organização financeira" data-testid="fiint-maturity" data-finance-revision={data.finance_revision}>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[.14em] text-primary">FIINT · D1 até 12 meses</p>
-          <h2 className="mt-1 font-heading text-xl font-bold">Maturidade do seu acompanhamento</h2>
-          <p className="mt-1 max-w-xl text-xs text-muted-foreground">Este índice mede o preenchimento e a continuidade dos registros, não sua saúde financeira.</p>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-primary">Sua organização · últimos 12 meses</p>
+          <h2 className="mt-1 font-heading text-xl font-bold">Como você está acompanhando suas finanças</h2>
+          <p className="mt-1 max-w-xl text-xs text-muted-foreground">Mostra a regularidade dos seus registros — não é uma nota da sua saúde financeira.</p>
         </div>
         <button type="button" title="Atualizar FIINT" aria-label="Atualizar FIINT"
           className="rounded-xl border p-2 hover:bg-muted" disabled={isFetching}
@@ -66,12 +66,11 @@ export function FiintSection({ hidden }: { hidden: boolean }) {
         <div className="rounded-2xl border p-5">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
-            <p className="font-semibold">{data.stage === "D1" ? "Primeiros registros" : `Etapa M${data.maturity_month} de 12`}</p>
+            <p className="font-semibold">{data.stage === "D1" ? "Primeiros registros" : `${data.maturity_month} de 12 meses acompanhados`}</p>
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
             {data.months_observed} {data.months_observed === 1 ? "mês com movimentação confirmada" : "meses com movimentações confirmadas"} no período analisado.
           </p>
-          <p className="mt-2 text-xs text-muted-foreground">Histórico conciliado com a revisão financeira {data.finance_revision}.</p>
         </div>
       </div>
       <div>
@@ -99,7 +98,7 @@ export function FiintSection({ hidden }: { hidden: boolean }) {
                 <div className="w-1/2 rounded-t bg-[#8C5BFF]" style={{ height: `${Math.max(0, Math.min(100, Math.abs(row.income) / max * 100))}%` }} />
                 <div className="w-1/2 rounded-t bg-[#4B2CFF]" style={{ height: `${Math.max(0, Math.min(100, Math.abs(row.expense) / max * 100))}%` }} />
               </div>
-              <span className="text-[10px] text-muted-foreground">{row.month.slice(5)}</span>
+              <span className="text-xs text-muted-foreground">{row.month.slice(5)}</span>
             </div>
           ))}
         </div>

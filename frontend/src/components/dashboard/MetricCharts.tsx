@@ -56,7 +56,7 @@ export function MetricCharts({ month, income, expense, monthBalance, invested, o
                 <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   {item.label}
                   {item.metric === "invested" ? (
-                    <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                    <Badge variant="secondary" className="px-1.5 py-0 text-xs">
                       Em breve
                     </Badge>
                   ) : null}

@@ -59,7 +59,8 @@ export default function Transactions() {
   const [flowView, setFlowView] = useState<"calendario" | "categorias" | "lista">("calendario");
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [scope, setScope] = useState<"dia" | "mes">("mes");
-  const [calendarExpanded, setCalendarExpanded] = useState(true);
+  // Planned behaviour: compact week on phones (drag the handle for more), full month from tablet up.
+  const [calendarExpanded, setCalendarExpanded] = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 640px)").matches);
   const [search, setSearch] = useState("");
   const [type, setType] = useState<"todos" | TxType>("todos");
   const [status, setStatus] = useState<"todos" | TxStatus>("todos");
@@ -333,14 +334,15 @@ export default function Transactions() {
 
   return (
     <div className="relative flex flex-col gap-4 animate-fade-up">
-      <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-start gap-x-3 gap-y-3" data-testid="flow-header-grid">
+      <div className="grid grid-cols-1 items-start gap-x-3 gap-y-3 sm:grid-cols-[minmax(0,1fr)_4.5rem]" data-testid="flow-header-grid">
         <div className="min-w-0 pt-1">
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Acompanhe o que entrou, saiu e o que vem pela frente.</p>
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Lançamentos</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Tudo o que entrou e saiu, dia a dia.</p>
         </div>
 
-        <div className="flex justify-end self-start sm:row-span-2" data-testid="flow-view-rail">
-          <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
+        {/* Phones: labelled segmented tabs under the title (no tall icon rail leaving a blank gap). */}
+        <div className="flex self-start sm:row-span-2 sm:justify-end" data-testid="flow-view-rail">
+          <div className="grid w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-card/80 p-1 shadow-sm backdrop-blur sm:flex sm:w-auto sm:flex-col sm:rounded-full">
             {([
               { key: "calendario" as const, label: "Calendário", icon: CalendarDays },
               { key: "categorias" as const, label: "Análise", icon: ChartPie },
@@ -349,9 +351,9 @@ export default function Transactions() {
               <Button
                 key={item.key}
                 type="button"
-                size="icon"
+                size="sm"
                 variant={flowView === item.key ? "default" : "ghost"}
-                className="rounded-full"
+                className="h-10 gap-1.5 rounded-xl px-2 sm:h-9 sm:w-9 sm:rounded-full sm:px-0"
                 onClick={() => setFlowView(item.key)}
                 aria-label={`Visualizar ${item.label}`}
                 aria-pressed={flowView === item.key}
@@ -359,24 +361,25 @@ export default function Transactions() {
                 data-testid={`flow-view-${item.key}`}
               >
                 <item.icon className="h-4 w-4" aria-hidden="true" />
+                <span className="text-xs font-semibold sm:sr-only">{item.label}</span>
               </Button>
             ))}
           </div>
         </div>
 
-        <div className="col-span-2 min-w-0 rounded-3xl border border-border bg-background/95 px-5 py-5 shadow-sm backdrop-blur sm:col-span-1 supports-[backdrop-filter]:bg-background/85">
+        <div className="min-w-0 rounded-3xl border border-border bg-background/95 px-5 py-5 shadow-sm backdrop-blur sm:col-span-1 supports-[backdrop-filter]:bg-background/85">
           <div className="grid grid-cols-3 items-center gap-3">
             <div className="contents" data-testid="flow-strip-real">
               <div className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Entrada</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-xs">Entrada</p>
                 <p className="mt-1 break-words font-heading text-[12px] font-bold tabular-nums text-income sm:text-base">{money(strip.income)}</p>
               </div>
               <div className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saída</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-xs">Saída</p>
                 <p className="mt-1 break-words font-heading text-[12px] font-bold tabular-nums text-expense sm:text-base">{money(strip.expense)}</p>
               </div>
               <div className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saldo</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-xs">Saldo</p>
                 <p className="mt-1 break-words font-heading text-[12px] font-bold tabular-nums text-foreground sm:text-base">{money(strip.income - strip.expense)}</p>
               </div>
             </div>
@@ -572,15 +575,15 @@ export default function Transactions() {
                       <p className="font-medium text-foreground">{t.name}</p>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {t.fixed ? (
-                          <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Fixa · {t.recurrence}</Badge>
+                          <Badge variant="secondary" className="px-1.5 py-0 text-xs">Fixa · {t.recurrence}</Badge>
                         ) : null}
                         {t.status !== "pago" && t.notify_enabled === false ? (
-                          <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px]">
+                          <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-xs">
                             <BellOff className="h-3 w-3" aria-hidden="true" /> Sem aviso
                           </Badge>
                         ) : null}
                         {t.installment && t.total_installments ? (
-                          <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                          <Badge variant="secondary" className="px-1.5 py-0 text-xs">
                             {t.current_installment}/{t.total_installments} · {t.total_installments}x de {formatBRLShort(t)}
                           </Badge>
                         ) : null}
@@ -696,14 +699,14 @@ export default function Transactions() {
                           <div className="mt-2.5 flex items-center justify-between gap-2">
                             <div className="flex min-w-0 flex-wrap gap-1">
                               <StatusBadge status={t.status} />
-                              {t.fixed ? <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Fixa</Badge> : null}
+                              {t.fixed ? <Badge variant="secondary" className="px-1.5 py-0 text-xs">Fixa</Badge> : null}
                               {t.status !== "pago" && t.notify_enabled === false ? (
-                                <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px]">
+                                <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-xs">
                                   <BellOff className="h-3 w-3" aria-hidden="true" /> Sem aviso
                                 </Badge>
                               ) : null}
                               {t.installment && t.total_installments ? (
-                                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                                <Badge variant="secondary" className="px-1.5 py-0 text-xs">
                                   {t.current_installment}/{t.total_installments}
                                 </Badge>
                               ) : null}

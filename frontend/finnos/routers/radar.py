@@ -81,7 +81,7 @@ async def _signals(user_id: str) -> list[dict]:
         if budget > 0 and current / budget >= D('0.85'):
             pct = current / budget * 100
             critical = pct >= 100
-            signals.append(dict(id=f'budget-{cid}-{month}', type='risk', severity='critical' if critical else 'high', title=f"{cat.get('name', 'Categoria')} {('passou' if critical else 'está perto')} do orçamento", description=f'{brl(current)} de {brl(budget)} planejados', explanation=f'Você já utilizou {pct:.0f}% do orçamento definido para esta categoria.', metric=f'{pct:.0f}%', score=98 if critical else 88, related_entity_type='category', related_entity_id=cid, expires_at=month_end(month), evidence=[{'label': 'Orçamento', 'value': brl(budget)}, {'label': 'Utilizado', 'value': brl(current)}]))
+            signals.append(dict(id=f'budget-{cid}-{month}', type='risk', severity='critical' if critical else 'high', title=f"{cat.get('name', 'Categoria')} {('passou' if critical else 'está perto')} do limite", description=f'{brl(current)} de {brl(budget)} planejados', explanation=f'Você já utilizou {pct:.0f}% do orçamento definido para esta categoria.', metric=f'{pct:.0f}%', score=98 if critical else 88, related_entity_type='category', related_entity_id=cid, expires_at=month_end(month), evidence=[{'label': 'Orçamento', 'value': brl(budget)}, {'label': 'Utilizado', 'value': brl(current)}]))
     for t in txs:
         if t.get('type') != 'despesa' or t.get('status') != 'pago' or t['date'] < (today - timedelta(days=7)).isoformat():
             continue
@@ -102,6 +102,10 @@ async def _signals(user_id: str) -> list[dict]:
     for doc in active_cards:
         card = await build_card(doc, card_txs, accounts)
         close = days_until(card.next_closing)
+        # A closed, unpaid invoice past its due date is the most urgent card signal.
+        if card.payable_due and card.payable_invoice > 0 and card.payable_due < today_s:
+            late = (today - date.fromisoformat(card.payable_due)).days
+            signals.append(dict(id=f'card-overdue-{card.id}-{card.payable_cycle}', type='risk', severity='critical', title=f'Fatura {card.name} vencida', description=f'{brl(card.payable_invoice)} venceu há {late} dia{("s" if late != 1 else "")}', explanation='A fatura fechou e passou do vencimento sem pagamento registrado. Se você já pagou, registre o pagamento na fatura para o saldo e o limite ficarem corretos.', metric=brl(card.payable_invoice), score=100, related_entity_type='card', related_entity_id=card.id, expires_at=None, evidence=[{'label': 'Vencimento', 'value': card.payable_due}, {'label': 'Dias em atraso', 'value': str(late)}, {'label': 'Valor em aberto', 'value': brl(card.payable_invoice)}]))
         monthly = []
         for offset in (1, 2, 3):
             m = add_months(month, -offset)

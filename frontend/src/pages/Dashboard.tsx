@@ -180,7 +180,7 @@ export default function Dashboard() {
         <div className="min-w-0 space-y-5 sm:space-y-6">
           {homePreferences.order.filter((id) => !homePreferences.hidden.includes(id)).map((moduleId: HomeModuleId) => {
             if (moduleId === "metrics") return null;
-            if (moduleId === "radar") return <RadarSection key={moduleId} signals={radarQuery.data?.items ?? []} totalCount={radarQuery.data?.count ?? 0} />;
+            if (moduleId === "radar") return <RadarSection key={moduleId} signals={radarQuery.data?.items ?? []} totalCount={radarQuery.data?.count ?? 0} loading={radarQuery.isPending} error={radarQuery.isError} onRetry={() => void radarQuery.refetch()} />;
             if (moduleId === "categories") return (
               <div key={moduleId}>
                 <ExpensesDonutChart

@@ -20,33 +20,21 @@ function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: strin
       }}
       className={({ isActive }) =>
         cn(
-          "relative flex h-[3.75rem] min-w-0 items-center justify-center overflow-hidden rounded-full px-1 transition-colors duration-200",
+          // Every tab shows icon and name (iOS/Android pattern); theme tokens only,
+          // so the dock follows light/dark and any primary colour change.
+          "relative flex h-[3.6rem] min-w-0 flex-col items-center justify-center gap-0.5 rounded-[1.35rem] px-0 transition-colors duration-200",
           isActive
-            ? "bg-white text-[#080808] shadow-[0_1px_4px_rgba(0,0,0,.035)] dark:bg-white dark:text-black"
-            : "text-[#626262] dark:text-white/70"
+            ? "bg-primary/12 text-primary dark:bg-primary/25 dark:text-white"
+            : "text-muted-foreground hover:text-foreground"
         )
       }
       data-testid={`mobile-nav-${item.slug}`}
     >
       {({ isActive }) => (
-        <motion.span
-          layout
-          className="flex min-w-0 items-center justify-center gap-2"
-          transition={{ type: "spring", stiffness: 380, damping: 34 }}
-        >
-          <item.icon className="h-[1.55rem] w-[1.55rem] shrink-0" aria-hidden="true" />
-          {isActive ? (
-            <motion.span
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: "auto" }}
-              className="overflow-hidden whitespace-nowrap text-[clamp(.65rem,2.7vw,.94rem)] font-semibold"
-            >
-              {item.label}
-            </motion.span>
-          ) : (
-            <span className="sr-only">{item.label}</span>
-          )}
-        </motion.span>
+        <>
+          <item.icon className="h-[1.35rem] w-[1.35rem] shrink-0" strokeWidth={isActive ? 2.4 : 2} aria-hidden="true" />
+          <span className={cn("max-w-full truncate text-[clamp(10px,2.8vw,11px)] leading-none tracking-tight", isActive ? "font-semibold" : "font-medium")}>{item.shortLabel ?? item.label}</span>
+        </>
       )}
     </NavLink>
   );
@@ -58,7 +46,6 @@ export function MobileNav() {
   const mobileItems = navItemsFor(navigationPreferences.mobile);
   const navigate = useNavigate();
   const location = useLocation();
-  const activeIndex = mobileItems.findIndex((item) => item.to === location.pathname || (item.to === "/" && location.pathname === "/"));
 
   const [registerOpen, setRegisterOpen] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
@@ -178,9 +165,9 @@ export function MobileNav() {
         )}
         data-testid="mobile-nav"
       >
-        <div className="flex w-full max-w-[28rem] items-center gap-2.5">
-          <div style={{ gridTemplateColumns: mobileItems.map((_, index) => `${index === activeIndex ? 2.35 : 1}fr`).join(" ") || "1fr" }}
-          className={cn("grid min-w-0 flex-1 items-center rounded-full border border-white/50 bg-[#eeeeee]/75 p-[3px] shadow-[0_4px_22px_rgba(0,0,0,.08)] backdrop-blur-[28px] transition-[background-color,box-shadow] duration-300 dark:border-white/15 dark:bg-[#161625]/75", compact && "bg-[#eeeeee]/45 shadow-[0_2px_12px_rgba(0,0,0,.05)]", registerOpen && "invisible pointer-events-none opacity-0")}>
+        <div className="flex w-full max-w-[28rem] items-center gap-2">
+          <div style={{ gridTemplateColumns: `repeat(${mobileItems.length || 1}, minmax(0, 1fr))` }}
+          className={cn("grid min-w-0 flex-1 items-center gap-0.5 rounded-[1.6rem] border border-border bg-card/92 p-1 shadow-[0_6px_24px_rgba(15,23,42,.10)] backdrop-blur-xl transition-[background-color,box-shadow] duration-300 dark:shadow-[0_6px_24px_rgba(0,0,0,.45)]", compact && "shadow-[0_2px_12px_rgba(15,23,42,.08)]", registerOpen && "invisible pointer-events-none opacity-0")}>
             {mobileItems.map((item) => (
               <MobileTab key={item.to} item={item} onNavigate={navigateFromDock} />
             ))}
@@ -189,7 +176,7 @@ export function MobileNav() {
           <button
             type="button"
             onClick={() => setRegisterOpen(open => !open)}
-            className="flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-[#4B2CFF] text-white shadow-[0_4px_18px_rgba(75,44,255,.18)] transition-all duration-300 active:scale-95"
+            className="flex h-[3.6rem] w-[3.6rem] shrink-0 items-center justify-center rounded-[1.4rem] bg-primary text-primary-foreground shadow-[0_6px_20px_color-mix(in_srgb,var(--primary)_35%,transparent)] transition-all duration-300 active:scale-95"
             aria-label={registerOpen ? "Fechar Registro Inteligente" : "Abrir Registro Inteligente"}
             aria-expanded={registerOpen}
             data-testid="mobile-quick-action-button"

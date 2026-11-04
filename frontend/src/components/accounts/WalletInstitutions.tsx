@@ -45,10 +45,10 @@ export function WalletInstitutions({
           <div className="flex items-center justify-between gap-3 border-b border-border p-4 sm:p-5">
             <div className="flex min-w-0 items-center gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: group.color + "1A", color: group.color }}><Landmark className="h-5 w-5"/></span>
-              <div className="min-w-0"><h3 className="truncate font-heading font-bold">{group.name}</h3><p className="text-xs text-muted-foreground">{group.accounts.length} conta(s) · {group.cards.length} cartão(ões){!group.institutionId ? " · vínculo legado" : ""}</p></div>
+              <div className="min-w-0"><h3 className="truncate font-heading font-bold">{group.name}</h3><p className="text-xs text-muted-foreground">{group.accounts.length} {group.accounts.length === 1 ? "conta" : "contas"} · {group.cards.length} {group.cards.length === 1 ? "cartão" : "cartões"}{!group.institutionId ? " · sem banco vinculado" : ""}</p></div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <div className="text-right"><p className="text-[10px] font-semibold uppercase text-muted-foreground">Saldo</p><p className="font-heading text-sm font-bold tabular-nums">{money(group.balanceCents / 100)}</p></div>
+              <div className="text-right"><p className="text-xs font-semibold uppercase text-muted-foreground">Saldo</p><p className="font-heading text-sm font-bold tabular-nums">{money(group.balanceCents / 100)}</p></div>
               <Button variant="ghost" size="icon-sm" aria-label={collapsed ? "Expandir instituição" : "Recolher instituição"} onClick={() => setClosed(current => collapsed ? current.filter(key => key !== group.key) : [...current,group.key])}>{collapsed ? <ChevronDown className="h-4 w-4"/> : <ChevronUp className="h-4 w-4"/>}</Button>
             </div>
           </div>

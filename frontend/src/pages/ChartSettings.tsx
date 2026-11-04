@@ -104,7 +104,7 @@ function HeatmapPreview() {
           />
         ))}
       </div>
-      <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
         <span>Menos</span>
         {[1,2,3,4].map((level) => (
           <span
@@ -157,7 +157,7 @@ function GaugePreview() {
         />
         <div className="absolute inset-x-0 bottom-0 text-center">
           <span className="font-heading text-2xl font-bold text-foreground">70%</span>
-          <span className="block text-[11px] text-muted-foreground">do orçamento usado</span>
+          <span className="block text-xs text-muted-foreground">do orçamento usado</span>
         </div>
       </div>
       <div className="flex h-3 overflow-hidden rounded-full bg-muted">

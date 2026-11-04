@@ -137,9 +137,14 @@
     --sidebar-accent-foreground: var(--finnos-app);
     --sidebar-border: #E7E4FF;
     --sidebar-ring: var(--finnos-purple);
-    --income: #10B981;
-    --expense: #E11D48;
+    --income: #047857; /* emerald-700: 5.5:1 on white (was 2.5:1) */
+    --expense: #BE123C; /* rose-700: 6.1:1 on white (was 3.3:1 on tinted cards) */
     --transfer: var(--finnos-purple);
+    /* Radar signal colours (AA on light cards). */
+    --signal-risk: var(--expense);
+    --signal-opportunity: var(--income);
+    --signal-deviation: #B45309;
+    --signal-information: #6D28D9;
 }
 
 /* FINNOS dark mode uses pure black as the app surface. */
@@ -183,6 +188,10 @@
     --income: #34D399;
     --expense: #FB4A6B;
     --transfer: var(--finnos-lilac);
+    --signal-risk: var(--expense);
+    --signal-opportunity: var(--income);
+    --signal-deviation: #FF9F2F;
+    --signal-information: #8C5BFF;
 }
 
 @layer base {

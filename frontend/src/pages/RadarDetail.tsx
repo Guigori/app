@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import type { RadarSignal } from "@/types/finnos";
 
 const LABEL = { risk: "Risco", deviation: "Desvio", information: "Informação", opportunity: "Oportunidade" } as const;
-const COLOR = { risk: "#FB4A6B", deviation: "#FF9F2F", information: "#8C5BFF", opportunity: "#34D399" } as const;
+const COLOR = { risk: "var(--signal-risk)", deviation: "var(--signal-deviation)", information: "var(--signal-information)", opportunity: "var(--signal-opportunity)" } as const;
 
 function target(signal: RadarSignal) {
   if (signal.related_entity_type === "card" && signal.related_entity_id) return `/cartoes/${signal.related_entity_id}`;

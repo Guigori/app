@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
+import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { AiPanel } from "@/components/ai/AiPanel";
@@ -23,20 +24,23 @@ export function AppShell() {
     <DialogsProvider>
       <div className="min-h-svh bg-background">
         <Sidebar />
-        <div className="lg:pl-72">
+        <div className="transition-[padding] duration-200 ease-out lg:pl-[var(--sidebar-w,16rem)]">
           <div className="lg:hidden"><Header onOpenMenu={() => setMenuOpen(true)} /></div>
           <main className="mx-auto w-full max-w-[1600px] px-4 py-5 pb-32 sm:px-6 lg:px-8 dashboard:pb-28">
             {/^\/radar\/[^/]+$/.test(location.pathname) || location.pathname === "/configuracoes" ? null : <BackButton />}
             {/* Each route fades/slides in, so navigation feels continuous instead of a jump. */}
-            <AnimatePresence mode="wait" initial={false}>
+            <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
                 key={location.pathname}
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
               >
-                <Outlet />
+                {/* Suspense inside the shell keeps sidebar and header in place while a page chunk loads. */}
+                <Suspense fallback={<FinnosPageLoading title="Abrindo" />}>
+                  <Outlet />
+                </Suspense>
               </motion.div>
             </AnimatePresence>
           </main>

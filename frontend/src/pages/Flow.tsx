@@ -98,9 +98,9 @@ export default function Flow() {
     <div className="flex flex-col gap-6 animate-fade-up" data-testid="flow-page">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Fluxo</h1>
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Fluxo de caixa</h1>
           <p className="mt-1 text-sm text-muted-foreground" data-testid="flow-subtitle">
-            Entradas, saídas e projeção · {monthLabel(month)}
+            Quanto sobrou ou faltou em cada mês, e o que vem pela frente · {monthLabel(month)}
           </p>
         </div>
         <MonthSelector month={month} onChange={(next) => setMonth(next)} />
@@ -185,7 +185,7 @@ export default function Flow() {
         <>
           <Card className="py-0">
             <CardContent className="p-5 sm:p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Sobrou</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{flow.net >= 0 ? "Sobrou" : "Faltou"}</p>
               <p
                 className={cn(
                   "mt-1 font-heading text-4xl font-bold tabular-nums",
@@ -209,13 +209,13 @@ export default function Flow() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Ainda previsto</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Ainda vai entrar/sair</p>
                   <p className="mt-1 font-heading text-xl font-bold tabular-nums text-foreground" data-testid="flow-projected-value">
                     {money(flow.projected_net)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Caixa do período</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Saldo em conta</p>
                   <p className="mt-1 font-heading text-xl font-bold tabular-nums text-foreground" data-testid="flow-total-net-value">
                     {money(flow.total_net)}
                   </p>

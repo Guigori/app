@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
+import { FinnosLoading } from "@/components/brand/FinnosLoading";
 import { AppShell } from "@/components/layout/AppShell";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
@@ -52,10 +53,15 @@ const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
 const SettingsHub = lazy(() => import("@/pages/SettingsHub").then(module => ({ default: module.SettingsHub })));
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
+/** Only for the very first chunk; inside the app shell pages use their own skeleton. */
+function RouteFallback() {
+  return <FinnosLoading fullscreen title="Abrindo o FINNOS" description="Carregando o módulo." />;
+}
+
 export default function App() {
   return (
     <>
-      <Suspense fallback={<div className="mx-auto flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground" role="status" aria-live="polite">Abrindo módulo FINNOS...</div>}>
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />

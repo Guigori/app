@@ -115,7 +115,7 @@ export function SummaryCards({
                 <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   {card.label}
                   {card.badge ? (
-                    <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Em breve</Badge>
+                    <Badge variant="secondary" className="px-1.5 py-0 text-xs">Em breve</Badge>
                   ) : null}
                 </p>
                 <ChevronRight

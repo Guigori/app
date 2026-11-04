@@ -249,7 +249,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
             ))}
             <span className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-muted-foreground"><span className="h-0 w-5 border-t-2 border-dashed" style={{ borderColor: projectionColor }} />Estimativa</span>
           </div>
-          <p className="mt-2 text-center text-[11px] text-muted-foreground">Arraste para os lados para mudar de mês.</p>
+          <p className="mt-2 text-center text-xs text-muted-foreground">Arraste para os lados para mudar de mês.</p>
         </div>
       ) : view === "pie" ? (
         <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 py-1 sm:min-h-[270px] sm:flex-row sm:gap-10 sm:py-2">

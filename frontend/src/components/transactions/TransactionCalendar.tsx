@@ -37,6 +37,13 @@ interface TransactionCalendarProps {
 
 /** Fluid month calendar. The bottom handle is the only expansion control: drag upward
  *  to reduce the visible weeks and downward to progressively reveal the month. */
+/** Compact pt-BR amount for a day tile: 212,4 · 1,2 mil. Full value stays in the day list. */
+function shortMoney(value: number): string {
+  const v = Math.abs(value);
+  if (v >= 1000) return `${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`;
+  return v.toLocaleString("pt-BR", { maximumFractionDigits: v >= 100 ? 0 : 2 });
+}
+
 export function TransactionCalendar({
   month,
   days,
@@ -107,7 +114,7 @@ export function TransactionCalendar({
         </Button>
       </div>
 
-      <div className="mt-3 grid grid-cols-7 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="mt-3 grid grid-cols-7 text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {WEEKDAYS.map((label) => (
           <span key={label}>{label}</span>
         ))}
@@ -136,20 +143,28 @@ export function TransactionCalendar({
                 aria-label={`Ver lançamentos de ${cell.date}`}
                 aria-current={selected ? "date" : undefined}
                 className={cn(
-                  "relative flex aspect-square min-h-11 items-center justify-center rounded-xl border text-sm font-semibold tabular-nums transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  // Fixed heights per breakpoint: a square of width/7 filled the whole
+                  // phone screen and became huge, almost empty tiles on desktop.
+                  "relative flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border text-sm font-semibold tabular-nums transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-14 lg:h-[4.5rem] lg:items-start lg:justify-between lg:px-2.5 lg:py-2",
                   selected
-                    ? "border-white/80 ring-2 ring-white/90 ring-offset-2 ring-offset-card text-white shadow-sm"
+                    ? "border-foreground bg-foreground text-background shadow-md"
                     : cell.outside
-                      ? "border-transparent bg-transparent text-muted-foreground/35"
+                      ? "border-transparent bg-transparent text-muted-foreground/40"
                       : level >= 3
                         ? "border-border/20 text-white hover:brightness-110"
                         : "border-border/20 text-foreground hover:brightness-110",
-                  !selected && cell.date === today ? "ring-1 ring-primary/70" : undefined,
+                  !selected && cell.date === today ? "font-extrabold ring-2 ring-primary ring-offset-1 ring-offset-card" : undefined,
                 )}
-                style={!cell.outside ? { backgroundColor: level > 0 ? heatBackground(level) : "color-mix(in srgb, var(--finnos-app) 14%, var(--card))" } : undefined}
+                style={!cell.outside && !selected ? { backgroundColor: level > 0 ? heatBackground(level) : "color-mix(in srgb, var(--finnos-app) 14%, var(--card))" } : undefined}
                 data-testid={`calendar-day-${cell.date}`}
               >
-                {Number(cell.date.slice(8, 10))}
+                <span>{Number(cell.date.slice(8, 10))}</span>
+                {!cell.outside && flow && (flow.income || flow.expense) ? (
+                  <span className="hidden w-full text-left text-xs font-medium leading-tight lg:block">
+                    {flow.income ? <span className="block">+{shortMoney(flow.income)}</span> : null}
+                    {flow.expense ? <span className="block">−{shortMoney(flow.expense)}</span> : null}
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -157,7 +172,7 @@ export function TransactionCalendar({
         </motion.div>
       </AnimatePresence>
 
-      <div className="mt-3 flex items-center justify-end gap-1.5 px-2 text-[10px] text-muted-foreground" data-testid="calendar-heatmap-legend">
+      <div className="mt-3 flex items-center justify-end gap-1.5 px-2 text-xs text-muted-foreground" data-testid="calendar-heatmap-legend">
         <span>Menos</span>
         {[1, 2, 3, 4, 5].map((level) => (
           <span
@@ -170,7 +185,7 @@ export function TransactionCalendar({
         <span>Mais</span>
       </div>
 
-      <p className="mt-2 px-2 text-[11px] leading-relaxed text-muted-foreground">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>
+      <p className="mt-2 px-2 text-xs leading-relaxed text-muted-foreground">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>
 
       {/* Drag the handle up to collapse to the week, down to show the whole month. */}
       <motion.button

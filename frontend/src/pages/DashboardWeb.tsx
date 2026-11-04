@@ -13,6 +13,12 @@ import { fetchRadar } from "@/lib/data";
 import type { MetricKind } from "@/types/finnos";
 
 const money = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
+/** Day tile amount without currency and cents noise ("−212", "+1,2 mil"); full value in the title. */
+const shortNet = (n: number) => {
+  const v = Math.abs(n);
+  const body = v >= 1000 ? `${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : v.toLocaleString("pt-BR", { maximumFractionDigits: v >= 100 ? 0 : 2 });
+  return `${n < 0 ? "−" : "+"}${body}`;
+};
 const changeMonth = (month: string, delta: number) => {
   const [year, m] = month.split("-").map(Number);
   const d = new Date(year, m - 1 + delta, 1);
@@ -99,7 +105,7 @@ export default function DashboardWeb() {
           {calendar.isError && <div className="py-8 text-center text-sm text-muted-foreground">Calendário indisponível. <button onClick={() => calendar.refetch()} className="underline">Tentar novamente</button></div>}
           {calendar.isPending && <div className="h-72 animate-pulse rounded-xl bg-muted" />}
           {calendar.data && <>
-            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-muted-foreground">{["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d) => <span key={d} className="py-2">{d}</span>)}</div>
+            <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">{["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d) => <span key={d} className="py-2">{d}</span>)}</div>
             <div className="grid grid-cols-7 gap-0.5">
               {Array.from({ length: offset }, (_, i) => <div key={`empty-${i}`} />)}
               {Array.from({ length: count }, (_, i) => {
@@ -108,7 +114,7 @@ export default function DashboardWeb() {
                 const net = day ? day.income - day.expense : 0;
                 return <button type="button" key={date} onClick={() => setSelectedDate(date)} aria-label={`Dia ${i + 1}`} aria-pressed={selectedDate === date} className={`min-h-11 rounded-lg border p-1.5 text-left transition hover:border-primary/40 sm:min-h-12 ${selectedDate === date ? "border-primary bg-primary/10" : date === today ? "border-primary/40 bg-primary/5" : "border-transparent bg-muted/40"}`}>
                   <span className="text-xs font-semibold">{i + 1}</span>
-                  {day && (day.income !== 0 || day.expense !== 0) && <span className={`mt-0.5 block truncate text-[10px] font-semibold ${net < 0 ? "text-rose-500" : "text-emerald-600"}`}>{hidden ? "•••" : money(net)}</span>}
+                  {day && (day.income !== 0 || day.expense !== 0) && <span title={money(net)} className={`mt-0.5 block whitespace-nowrap text-xs font-semibold tabular-nums ${net < 0 ? "text-expense" : "text-income"}`}>{hidden ? "•••" : shortNet(net)}</span>}
                 </button>;
               })}
             </div>
@@ -127,7 +133,7 @@ export default function DashboardWeb() {
           </section>
           <section className="rounded-2xl border border-border bg-card p-5">
             <div className="mb-3 flex items-center justify-between"><h2 className="font-heading text-lg font-semibold">Movimentações recentes</h2><Link to="/transacoes" className="text-xs font-medium text-primary">Ver todas</Link></div>
-            {data?.recent.length ? data.recent.slice(0, 5).map((tx) => <div key={tx.id} className="flex items-center justify-between gap-3 border-b border-border/70 py-3 last:border-0"><div className="min-w-0"><p className="truncate text-sm font-medium">{tx.name}</p><p className="text-xs text-muted-foreground">{tx.date} · {tx.category_name ?? tx.type}</p></div><span className={`shrink-0 text-sm font-semibold ${tx.type === "despesa" ? "text-rose-500" : "text-emerald-600"}`}>{tx.type === "despesa" ? "−" : "+"}{display(tx.value)}</span></div>) : <p className="py-4 text-sm text-muted-foreground">Ainda não há movimentações neste mês.</p>}
+            {data?.recent.length ? data.recent.slice(0, 5).map((tx) => <div key={tx.id} className="flex items-center justify-between gap-3 border-b border-border/70 py-3 last:border-0"><div className="min-w-0"><p className="truncate text-sm font-medium">{tx.name}</p><p className="text-xs text-muted-foreground">{tx.date} · {tx.category_name ?? tx.type}</p></div><span className={`shrink-0 text-sm font-semibold ${tx.type === "despesa" ? "text-expense" : "text-emerald-600"}`}>{tx.type === "despesa" ? "−" : "+"}{display(tx.value)}</span></div>) : <p className="py-4 text-sm text-muted-foreground">Ainda não há movimentações neste mês.</p>}
           </section>
         </div>
       </div>
@@ -162,7 +168,7 @@ export default function DashboardWeb() {
           </div>
         </div>
       </section>}
-      <RadarSection signals={radar.data?.items ?? []} totalCount={radar.data?.count ?? 0} />
+      <RadarSection signals={radar.data?.items ?? []} totalCount={radar.data?.count ?? 0} loading={radar.isPending} error={radar.isError} onRetry={() => void radar.refetch()} />
     </div>
   );
 }

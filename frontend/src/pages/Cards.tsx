@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { CalendarClock, CreditCard as CreditCardIcon, Pencil, Plus, Sparkles } from "lucide-react";
 import { fetchCards } from "@/lib/data";
 import { useBalanceHidden } from "@/lib/balance";
-import { formatBRL, formatDate, formatHiddenBRL } from "@/lib/format";
+import { formatBRL, formatDate, formatHiddenBRL, todayISO } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { CreditCard } from "@/types/finnos";
 import { CardDialog } from "@/components/cards/CardDialog";
@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 function usageTone(percent: number) {
   if (percent >= 90) return { bar: "bg-destructive", label: "Limite quase todo usado", badge: "destructive" as const };
   if (percent >= 70) return { bar: "bg-amber-500", label: "Perto do limite", badge: "secondary" as const };
+  if (percent >= 50) return { bar: "bg-amber-400", label: "Atenção ao limite", badge: "secondary" as const };
   return { bar: "bg-income", label: "Uso tranquilo", badge: "secondary" as const };
 }
 
@@ -97,7 +98,19 @@ export default function Cards() {
                       </Button>
                     </div>
                   </div>
-                  <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/70">{closedPayable ? "Fatura fechada a pagar" : "Fatura atual"}</p>
+                  {(() => {
+                    // A closed invoice past its due date is overdue: say so plainly.
+                    const daysLate = closedPayable && card.payable_due && card.payable_due < todayISO()
+                      ? Math.round((Date.parse(todayISO() + "T12:00:00") - Date.parse(card.payable_due + "T12:00:00")) / 86400000)
+                      : 0;
+                    return daysLate > 0 ? (
+                      <p className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs font-bold uppercase tracking-[0.1em] text-expense" data-testid={`card-overdue-${card.id}`}>
+                        Fatura vencida há {daysLate} {daysLate === 1 ? "dia" : "dias"}
+                      </p>
+                    ) : (
+                      <p className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-white/70">{closedPayable ? "Fatura fechada a pagar" : "Fatura atual"}</p>
+                    );
+                  })()}
                   <p className="font-heading text-3xl font-bold tabular-nums" data-testid={`card-invoice-${card.id}`}>
                     {money(closedPayable ? (card.payable_invoice ?? card.current_invoice) : card.current_invoice)}
                   </p>
@@ -146,7 +159,7 @@ export default function Cards() {
 
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                     <div className="rounded-2xl bg-muted/60 p-3">
-                      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                         <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
                         Fechamento
                       </p>
@@ -156,14 +169,14 @@ export default function Cards() {
                       <p className="text-xs text-muted-foreground">Todo dia {card.closing_day}</p>
                     </div>
                     <div className="rounded-2xl bg-muted/60 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Vencimento</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">Vencimento</p>
                       <p className="mt-1 text-sm font-semibold text-foreground" data-testid={`card-due-${card.id}`}>
                         {formatDate(card.next_due)}
                       </p>
                       <p className="text-xs text-muted-foreground">Todo dia {card.due_day}</p>
                     </div>
                     <div className="rounded-2xl bg-primary/8 p-3">
-                      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-primary">
+                      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-primary">
                         <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                         Melhor compra
                       </p>

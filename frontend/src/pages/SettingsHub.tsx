@@ -49,7 +49,7 @@ export function SettingsHub() {
               <Link key={item.label} to={item.href} className={`flex min-h-16 items-center gap-3 px-4 py-3 text-card-foreground transition-colors hover:bg-accent focus-visible:bg-accent ${index ? "border-t border-border/70" : ""}`}>
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><item.icon className="h-4 w-4" /></span>
                 <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{item.label}</span><span className="block text-xs text-muted-foreground">{item.description}</span></span>
-                {item.soon && <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground">Em breve</span>}
+                {item.soon && <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">Em breve</span>}
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               </Link>
             ))}

@@ -102,7 +102,7 @@ export function RecentTransactions({
                       <p className="text-xs font-medium text-muted-foreground">
                         {installmentNumberForMonth(t, month)}/{t.total_installments}
                       </p>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         Total {hidden ? "••••" : formatSignedBRL(t.type === "receita" ? t.value : -t.value)}
                       </p>
                     </>

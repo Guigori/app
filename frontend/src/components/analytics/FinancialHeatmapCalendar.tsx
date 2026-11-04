@@ -50,7 +50,7 @@ export function FinancialHeatmapCalendar({ month, days, hidden = false }: Financ
 
   return (
     <div data-testid="flow-heatmap-calendar">
-      <div className="grid grid-cols-7 gap-1.5 text-center text-[11px] font-semibold text-muted-foreground">
+      <div className="grid grid-cols-7 gap-1.5 text-center text-xs font-semibold text-muted-foreground">
         {WEEKDAYS.map((weekday, index) => <span key={`${weekday}-${index}`}>{weekday}</span>)}
       </div>
       <div className="mt-2 grid grid-cols-7 gap-1.5">
@@ -76,7 +76,7 @@ export function FinancialHeatmapCalendar({ month, days, hidden = false }: Financ
           );
         })}
       </div>
-      <div className="mt-3 flex items-center justify-end gap-1.5 text-[11px] text-muted-foreground">
+      <div className="mt-3 flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
         <span>Menos</span>
         {[1, 2, 3, 4, 5].map((level) => (
           <span

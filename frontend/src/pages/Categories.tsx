@@ -124,11 +124,11 @@ export default function Categories() {
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-medium text-foreground">{category.name}</p>
-                            <p className="truncate text-xs text-muted-foreground" data-testid={`category-budget-${category.id}`}>
+                            <p className="text-xs text-muted-foreground" data-testid={`category-budget-${category.id}`}>
                               {cycleAllocation
                                 ? `Limite do ciclo atual: ${formatBRL(limit)}`
                                 : category.monthly_budget > 0
-                                  ? `Orçamento mensal: ${formatBRL(category.monthly_budget)}`
+                                  ? `Limite: ${formatBRL(category.monthly_budget)}/mês`
                                   : "Sem limite definido"}
                             </p>
                           </div>
