@@ -56,7 +56,7 @@ export default function RadarDetail() {
       <section className="rounded-3xl border border-border bg-card p-6 sm:p-8">
         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: COLOR[signal.type] }}>{LABEL[signal.type]}{signal.severity === "critical" ? " crítico" : ""}</p>
         <h1 className="mt-2 font-heading text-2xl font-bold tracking-tight">{signal.title}</h1>
-        <p className="mt-3 text-muted-foreground">{signal.description}</p>
+        <p data-keep className="mt-3 text-muted-foreground">{signal.description}</p>
         {signal.metric ? <p className="mt-6 font-heading text-4xl font-bold" style={{ color: COLOR[signal.type] }}>{signal.metric}</p> : null}
         <div className="mt-7 border-t border-border pt-5">
           <p className="text-sm font-semibold">Por que apareceu no Radar?</p>

@@ -88,7 +88,7 @@ export function FinancialHeatmapCalendar({ month, days, hidden = false }: Financ
         ))}
         <span>Mais</span>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>
+      <p className="mt-2 hidden text-xs text-muted-foreground sm:block">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>
     </div>
   );
 }

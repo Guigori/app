@@ -29,7 +29,7 @@ function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: strin
         return cn(
           "relative flex h-[3.75rem] min-w-0 items-center justify-center overflow-hidden rounded-full px-1 transition-colors duration-200",
           isActive
-            ? "bg-white text-[#080808] shadow-[0_1px_4px_rgba(0,0,0,.035)] dark:bg-white/15 dark:text-white dark:shadow-none"
+            ? "bg-white text-primary shadow-[0_1px_4px_rgba(0,0,0,.035)] dark:bg-white/10 dark:text-[#A996FF] dark:shadow-none"
             : "text-[#626262] dark:text-white/70"
         );
       }}
@@ -161,13 +161,13 @@ export function MobileNav() {
               className="fixed inset-0 z-[39] bg-black/40 backdrop-blur-[12px] dashboard:hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} />
             <motion.section role="dialog" aria-modal="true" aria-label="Novo registro"
-              className="fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[40] mx-auto flex max-w-[28rem] flex-col overflow-hidden rounded-[30px] border border-violet-500/25 bg-[#090911] shadow-2xl dashboard:hidden"
+              className="fixed inset-x-0 bottom-0 top-[max(0.5rem,env(safe-area-inset-top))] z-[41] mx-auto flex max-w-[30rem] flex-col overflow-hidden rounded-t-[30px] bg-background shadow-2xl dashboard:hidden"
               initial={{ y: "110%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "110%", opacity: 0 }}
               transition={{ type: "spring", stiffness: 330, damping: 34 }}>
-              <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/25" aria-hidden="true" />
+              <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden="true" />
               <div className="min-h-0 flex-1 overflow-hidden">
-                <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-white/70">Preparando o registro...</div>}>
-                  <SmartRegister embedded />
+                <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">Preparando o registro...</div>}>
+                  <SmartRegister embedded onClose={() => setRegisterOpen(false)} />
                 </Suspense>
               </div>
             </motion.section>
@@ -177,11 +177,11 @@ export function MobileNav() {
 
       <motion.nav
         initial={false}
-        animate={{ opacity: registerOpen || visible ? 1 : 0, y: registerOpen || visible ? 0 : 90, scale: registerOpen ? 1 : visible ? (compact ? 0.94 : 1) : 0.94 }}
+        animate={{ opacity: !registerOpen && visible ? 1 : 0, y: !registerOpen && visible ? 0 : 90, scale: visible ? (compact ? 0.94 : 1) : 0.94 }}
         transition={{ type: "spring", stiffness: 280, damping: 34, mass: 0.85 }}
         className={cn(
           "fixed inset-x-0 bottom-[max(0.7rem,env(safe-area-inset-bottom))] z-40 flex justify-center px-3 dashboard:hidden",
-          !visible && !registerOpen && "pointer-events-none"
+          (!visible || registerOpen) && "pointer-events-none"
         )}
         data-testid="mobile-nav"
       >

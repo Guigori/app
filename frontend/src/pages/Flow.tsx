@@ -120,7 +120,7 @@ export default function Flow() {
           </Link>
           <div className="min-w-0">
             <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo de caixa</h1>
-            <p className="mt-1 text-sm text-muted-foreground" data-testid="flow-subtitle">
+            <p data-keep className="mt-1 text-sm text-muted-foreground" data-testid="flow-subtitle">
               {monthLabel(month)}
             </p>
           </div>
@@ -159,7 +159,7 @@ export default function Flow() {
             </button>
           ))}
         </div>
-        <p className="mt-2 text-xs text-muted-foreground" data-testid="flow-tab-hint">{TAB_HINT[tab]}</p>
+        <p className="mt-2 hidden text-xs text-muted-foreground sm:block" data-testid="flow-tab-hint">{TAB_HINT[tab]}</p>
       </div>
 
       {flowQuery.isPending ? (
@@ -318,7 +318,7 @@ export default function Flow() {
                 )}
               </ResponsiveContainer>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">Toque em um mês para ver o resumo dele.</p>
+            <p className="mt-2 hidden text-xs text-muted-foreground sm:block">Toque em um mês para ver o resumo dele.</p>
           </section>
 
           <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">

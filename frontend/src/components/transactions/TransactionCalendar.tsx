@@ -180,7 +180,7 @@ export function TransactionCalendar({
         <span>Mais</span>
       </div>
 
-      {compact ? null : <p className="mt-2 px-2 text-xs leading-relaxed text-muted-foreground">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>}
+      {compact ? null : <p className="mt-2 hidden px-2 text-xs leading-relaxed text-muted-foreground sm:block">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>}
 
       {/* Drag the handle up to collapse to the week, down to show the whole month. */}
       {compact ? null : <motion.button

@@ -238,7 +238,7 @@ export default function Onboarding() {
         {STEPS.map((item, index) => <span key={item[0]} className={"h-1.5 flex-1 rounded-full " + (index <= step ? "bg-primary" : "bg-primary/15")} />)}
       </div>
       <h1 className="mt-6 font-heading text-2xl font-bold sm:text-3xl">{STEPS[step][0]}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{STEPS[step][1]}</p>
+      <p data-keep className="mt-2 text-sm text-muted-foreground">{STEPS[step][1]}</p>
       {step === 0 && <p className="mt-4 text-xs leading-5 text-muted-foreground"><ShieldCheck className="mr-1 inline h-4 w-4 text-primary"/> Seus dados financeiros ficam vinculados à sua conta e não serão compartilhados com outros usuários. Você decide o que registrar.</p>}
     </div>
 

@@ -74,7 +74,7 @@ export default function ComingSoon({ module }: { module: string }) {
       </div>
       <Badge variant="secondary" className="mt-5">Em breve</Badge>
       <h1 className="mt-3 font-heading text-2xl font-bold tracking-tight text-foreground">{meta.title}</h1>
-      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{meta.description}</p>
+      <p data-keep className="mt-3 text-sm leading-relaxed text-muted-foreground">{meta.description}</p>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         {meta.links.map((link) => (
           <Link key={link.to} to={link.to} className={buttonVariants({ variant: "outline" })} data-testid="coming-soon-link">

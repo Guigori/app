@@ -264,3 +264,9 @@
     color: transparent;
   }
 }
+
+/* Phones: a page title stands alone, like a native app. The explanatory line
+   under each h1 shows from the sm breakpoint up; lines that carry data opt out with data-keep. */
+@media (max-width: 639px) {
+  main h1 + p.text-muted-foreground:not([data-keep]) { display: none; }
+}

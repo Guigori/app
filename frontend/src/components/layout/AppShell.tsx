@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useLayoutEffect, useState } from "react";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
@@ -19,6 +19,13 @@ export function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   // Dragging in from the left edge opens the menu, like Calen.
   useEdgeSwipe(useCallback(() => setMenuOpen(true), []), !menuOpen);
+  // Like a native app: every screen (and a reload) opens at the top, never mid-page.
+  useLayoutEffect(() => {
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+  }, []);
+  useLayoutEffect(() => {
+    if (!location.hash) window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+  }, [location.pathname, location.hash]);
 
   return (
     <DialogsProvider>

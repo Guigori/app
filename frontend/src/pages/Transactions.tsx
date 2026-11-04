@@ -414,7 +414,7 @@ export default function Transactions() {
           aria-label="Filtros" aria-expanded={showFilters} data-testid="toolbar-filter-toggle"><Filter className="h-4 w-4" /></Button>
       </div>
 
-      <p className="-mt-4 text-xs text-muted-foreground" data-testid="scope-label">
+      <p className="-mt-4 hidden text-xs text-muted-foreground sm:block" data-testid="scope-label">
         {scope === "dia" ? formatDate(selectedDate) : periodMode === "rolling30" ? "Últimos 30 dias" : monthLabel(month)} · {sortDir === "desc" ? "mais recentes primeiro" : "mais antigas primeiro"}
       </p>
 
