@@ -725,7 +725,8 @@ export function localLoadDemo(): void {
       name: r.name,
       value: r.value,
       type: r.type ?? "despesa",
-      status: r.status ?? "pago",
+      // Demo rows use fixed days of the current month; ones still ahead of today are scheduled, never paid.
+      status: r.status ?? (r.date > todayISO() ? "agendado" : "pago"),
       date: r.date,
       account_id: r.account_id!,
       card_id: null,

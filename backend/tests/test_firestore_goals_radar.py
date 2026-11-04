@@ -1,4 +1,4 @@
-from tests.test_firestore_finance import finance, account, tx
+from tests.test_firestore_finance import finance, account, freeze_today, tx
 
 
 def test_goals_real_capacity_and_uid_isolation(finance):
@@ -71,7 +71,8 @@ def test_radar_state_is_user_scoped_and_persisted(finance):
     assert client.get('/api/radar').status_code==200
 
 
-def test_simulation_uses_actual_balances_and_never_writes(finance):
+def test_simulation_uses_actual_balances_and_never_writes(finance, monkeypatch):
+    freeze_today(monkeypatch, '2026-10-15')
     client,user,db=finance
     a=account(client,value=1000)
     tx(client,a['id'],type='despesa',value=100,installment=True,total_installments=3)

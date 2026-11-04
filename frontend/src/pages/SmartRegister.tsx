@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { TransactionInput } from "@/types/finnos";
 import { createTransaction, fetchAccounts, fetchCards, fetchCategories } from "@/lib/data";
 import { getAccountPaymentMethods } from "@/lib/accountPaymentPreferences";
+import { isISODate, todayISO } from "@/lib/format";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { ArrowLeft, ArrowUp, Camera, Check, ChevronRight, Mic, Paperclip, Plus, X, Wallet, CreditCard, Landmark, CalendarDays, Repeat2, StickyNote, Bell, Tag, FolderOpen } from "lucide-react";
 
@@ -47,7 +48,7 @@ export default function SmartRegister({ embedded = false }: { embedded?: boolean
   const selectedAccount = accounts.find(a => a.id === account);
   const [destination, setDestination] = useState("");
   const [installments, setInstallments] = useState(1);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
   const [recurring, setRecurring] = useState(false);
   const [attachment, setAttachment] = useState("");
@@ -60,7 +61,7 @@ export default function SmartRegister({ embedded = false }: { embedded?: boolean
   const save = () => {
     if (!canSave) return;
     const amount = Number(value);
-    if (!Number.isFinite(amount) || amount <= 0 || !account || !/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || (kind !== "Transferência" && !category) || (kind === "Transferência" && (!destination || destination === account))) return;
+    if (!Number.isFinite(amount) || amount <= 0 || !account || !isISODate(date) || (kind !== "Transferência" && !category) || (kind === "Transferência" && (!destination || destination === account))) return;
     const input: TransactionInput = { name: displayName, value: amount, type: kind === "Despesa" ? "despesa" : kind === "Receita" ? "receita" : "transferencia", status: "pago", date, account_id: account, card_id: kind === "Despesa" ? selectedCardId : null, to_account_id: kind === "Transferência" ? destination : null, category_id: kind === "Transferência" ? null : category, fixed: recurring, recurrence: recurring ? "mensal" : null, installment: kind === "Despesa" && !!selectedCardId && installments > 1, total_installments: kind === "Despesa" && !!selectedCardId && installments > 1 ? installments : null, current_installment: kind === "Despesa" && !!selectedCardId && installments > 1 ? 1 : null, adjusted_value: null, attachment: null, notes: [note.trim(), payment && kind !== "Transferência" ? `Forma de pagamento: ${payment}` : "", project.trim() ? `Projeto: ${project.trim()}` : "", tags.trim() ? `Tags: ${tags.trim()}` : ""].filter(Boolean).join("\n") || null, notify_enabled: reminder };
     saveMutation.mutate(input);
   };

@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, Eye, EyeOff, Loader2, MonitorSmartphone } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
-import { beginSession, endSession } from "@/lib/session";
+import { beginSession, endSessionForDeviceMode } from "@/lib/session";
 import { destinationAfterAuthentication, startOnboarding } from "@/lib/onboarding";
 import { disableLocalMode, enableLocalMode, enableDemoMode } from "@/lib/mode";
 import type { User } from "@/types/finnos";
@@ -52,7 +52,7 @@ export default function Login() {
 
   const demoMutation = useMutation({
     mutationFn: async () => {
-      await endSession();
+      await endSessionForDeviceMode();
       enableDemoMode();
       localSetName("Demonstração");
       localLoadDemo();
@@ -63,7 +63,7 @@ export default function Login() {
   });
 
   const startLocalMode = async () => {
-    await endSession();
+    await endSessionForDeviceMode();
     enableLocalMode();
     await beginSession();
     navigate("/", { replace: true });
