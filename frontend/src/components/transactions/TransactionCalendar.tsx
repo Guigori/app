@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { addMonth, monthLabel, todayISO } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useBalanceHidden } from "@/lib/balance";
 import { Button } from "@/components/ui/button";
 import type { DayFlow } from "@/types/finnos";
 
@@ -33,17 +34,13 @@ interface TransactionCalendarProps {
   onToggleExpanded: () => void;
   onMonthChange: (month: string) => void;
   onSelectDate: (date: string) => void;
+  /** Home widget: whole month in small tiles, without legend text or drag handle. */
+  compact?: boolean;
+  className?: string;
 }
 
 /** Fluid month calendar. The bottom handle is the only expansion control: drag upward
  *  to reduce the visible weeks and downward to progressively reveal the month. */
-/** Compact pt-BR amount for a day tile: 212,4 · 1,2 mil. Full value stays in the day list. */
-function shortMoney(value: number): string {
-  const v = Math.abs(value);
-  if (v >= 1000) return `${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`;
-  return v.toLocaleString("pt-BR", { maximumFractionDigits: v >= 100 ? 0 : 2 });
-}
-
 export function TransactionCalendar({
   month,
   days,
@@ -52,7 +49,10 @@ export function TransactionCalendar({
   onToggleExpanded,
   onMonthChange,
   onSelectDate,
+  compact = false,
+  className,
 }: TransactionCalendarProps) {
+  const { hidden } = useBalanceHidden();
   const byDate = new Map(days.map((d) => [d.date, d]));
   const today = todayISO();
   const maxMovement = Math.max(
@@ -84,10 +84,10 @@ export function TransactionCalendar({
   const [weekCount, setWeekCount] = useState<1 | 2 | 3>(1);
   const selectedWeekIndex = Math.max(0, trimmed.findIndex((week) => week.some((cell) => cell.date === selectedDate)));
   const compactStart = Math.min(Math.max(0, selectedWeekIndex - Math.floor((weekCount - 1) / 2)), Math.max(0, trimmed.length - weekCount));
-  const visibleWeeks = expanded ? trimmed : trimmed.slice(compactStart, compactStart + weekCount);
+  const visibleWeeks = expanded || compact ? trimmed : trimmed.slice(compactStart, compactStart + weekCount);
 
   return (
-    <section className="rounded-3xl border border-border bg-card px-3 pb-2 pt-4" data-testid="transaction-calendar">
+    <section className={cn("rounded-3xl border border-border bg-card px-3 pb-2 pt-4", compact && "flex flex-col rounded-2xl pb-4", className)} data-testid="transaction-calendar">
       <div className="flex items-center justify-center gap-2">
         <Button
           size="icon-sm"
@@ -98,7 +98,7 @@ export function TransactionCalendar({
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </Button>
-        <h2 className="min-w-44 text-center font-heading text-lg font-bold capitalize text-foreground" data-testid="calendar-month-label">
+        <h2 className="min-w-44 text-center font-heading text-lg font-bold text-foreground" data-testid="calendar-month-label">
           {monthLabel(month)}
         </h2>
         <Button
@@ -125,9 +125,9 @@ export function TransactionCalendar({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-1"
+          className={cn("mt-1", compact && "flex flex-1 flex-col")}
         >
-          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+          <div className={cn("grid grid-cols-7", compact ? "flex-1 auto-rows-fr gap-1" : "gap-1.5 sm:gap-2")}>
           {visibleWeeks.flat().map((cell) => {
             const flow = byDate.get(cell.date);
             const selected = cell.date === selectedDate;
@@ -139,11 +139,14 @@ export function TransactionCalendar({
                 type="button"
                 onClick={() => onSelectDate(cell.date)}
                 aria-label={`Ver lançamentos de ${cell.date}`}
+                title={!hidden && flow && (flow.income || flow.expense) ? `Entrou ${flow.income.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · Saiu ${flow.expense.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}` : undefined}
                 aria-current={selected ? "date" : undefined}
                 className={cn(
                   // Fixed heights per breakpoint: a square of width/7 filled the whole
-                  // phone screen and became huge, almost empty tiles on desktop.
-                  "relative flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border text-sm font-semibold tabular-nums transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-14 lg:h-[3.75rem] lg:items-start lg:justify-between lg:px-1.5 lg:py-1.5",
+                  // phone screen and became huge, almost empty tiles on desktop. The colour
+                  // carries the intensity; exact amounts live in the day list (and the tooltip).
+                  "relative flex flex-col items-center justify-center rounded-xl border text-sm font-semibold tabular-nums transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  compact ? "h-full min-h-9 rounded-lg text-xs" : "h-11 sm:h-12",
                   selected
                     ? "border-foreground bg-foreground text-background shadow-md"
                     : cell.outside
@@ -157,12 +160,6 @@ export function TransactionCalendar({
                 data-testid={`calendar-day-${cell.date}`}
               >
                 <span>{Number(cell.date.slice(8, 10))}</span>
-                {!cell.outside && flow && (flow.income || flow.expense) ? (
-                  <span className="hidden w-full text-left text-xs font-medium leading-tight lg:block">
-                    {flow.income ? <span className="block">+{shortMoney(flow.income)}</span> : null}
-                    {flow.expense ? <span className="block">−{shortMoney(flow.expense)}</span> : null}
-                  </span>
-                ) : null}
               </button>
             );
           })}
@@ -170,7 +167,7 @@ export function TransactionCalendar({
         </motion.div>
       </AnimatePresence>
 
-      <div className="mt-3 flex items-center justify-end gap-1.5 px-2 text-xs text-muted-foreground" data-testid="calendar-heatmap-legend">
+      <div className={cn("mt-3 flex items-center justify-end gap-1.5 px-2 text-xs text-muted-foreground", compact && "mt-3")} data-testid="calendar-heatmap-legend">
         <span>Menos</span>
         {[1, 2, 3, 4, 5].map((level) => (
           <span
@@ -183,10 +180,10 @@ export function TransactionCalendar({
         <span>Mais</span>
       </div>
 
-      <p className="mt-2 px-2 text-xs leading-relaxed text-muted-foreground">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>
+      {compact ? null : <p className="mt-2 px-2 text-xs leading-relaxed text-muted-foreground">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>}
 
       {/* Drag the handle up to collapse to the week, down to show the whole month. */}
-      <motion.button
+      {compact ? null : <motion.button
         type="button"
         drag="y"
         dragConstraints={{ top: 0, bottom: 0 }}
@@ -213,7 +210,7 @@ export function TransactionCalendar({
         data-testid="calendar-toggle-expanded"
       >
         <span className="h-1.5 w-12 rounded-full bg-border" aria-hidden="true" />
-      </motion.button>
+      </motion.button>}
     </section>
   );
 }

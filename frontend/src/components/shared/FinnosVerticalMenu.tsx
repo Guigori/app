@@ -67,9 +67,10 @@ export function FinnosVerticalMenu({month,onMonthChange,hidden,onToggleHidden,vi
   const iconCircle=(active:boolean)=>cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full border",active?"border-[#6744ff] bg-[#4B2CFF] text-white":"border-[#d9d1f5] bg-[#f4f0ff] text-[#070F52] dark:border-[#242035] dark:bg-[#0c0a17] dark:text-white");
   const openSection=(id:string)=>setSection(p=>p===id?"":id);
   return <div ref={anchorRef} className={cn("relative z-30 flex justify-end",className)} data-testid="finnos-vertical-menu">
-    {!expanded?<div className="flex flex-col gap-2 rounded-full border border-[#8c5bff] bg-[#fbfaff] p-2 shadow-lg dark:bg-[#080710]">
-      <button type="button" aria-label={hidden?"Mostrar valores":"Ocultar valores"} onClick={onToggleHidden} className={cn("rounded-full p-2 text-[#070F52] dark:text-white",hidden&&"bg-[#4B2CFF] !text-white")}>{hidden?<EyeOff size={20}/>:<Eye size={20}/>}</button>
-      <button type="button" aria-label="Abrir filtros e menu vertical" onClick={()=>setExpanded(true)} className={cn("rounded-full p-2 text-[#070F52] dark:text-white",filterActive&&"bg-[#4B2CFF] !text-white")}><SlidersHorizontal size={20}/></button>
+    {/* Collapsed: two quiet icon buttons, like the header (eye open/closed + filters). */}
+    {!expanded?<div className="flex items-center gap-0.5">
+      <button type="button" aria-label={hidden?"Mostrar valores":"Ocultar valores"} onClick={onToggleHidden} aria-pressed={hidden} title={hidden?"Mostrar valores":"Ocultar valores"} className="inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground/75 transition-colors hover:bg-muted hover:text-foreground">{hidden?<EyeOff size={20}/>:<Eye size={20}/>}</button>
+      <button type="button" aria-label="Abrir filtros e menu vertical" onClick={()=>setExpanded(true)} title="Filtros e visualização" className={cn("relative inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground/75 transition-colors hover:bg-muted hover:text-foreground",filterActive&&"text-primary")}><SlidersHorizontal size={20}/>{filterActive?<span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-primary" aria-hidden="true"/>:null}</button>
     </div>:null}
     {expanded&&createPortal(<>
       <button type="button" aria-label="Fechar menu" onClick={close} className="fixed inset-0 z-[9998] bg-[#070F52]/20 backdrop-blur-[3px]" />

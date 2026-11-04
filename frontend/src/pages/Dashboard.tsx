@@ -14,7 +14,6 @@ import type { CategorySlice, MetricKind } from "@/types/finnos";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { BalanceHeroCard } from "@/components/dashboard/BalanceHeroCard";
 import { HomeFinancialChart } from "@/components/dashboard/HomeFinancialChart";
-import { Budget503020Card } from "@/components/dashboard/Budget503020Card";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 
@@ -96,9 +95,10 @@ export default function Dashboard() {
   return (
     <div className="min-w-0 space-y-5 overflow-x-hidden animate-fade-up sm:space-y-6">
       {(needsSetup || (onboardingQuery.data?.status === "legacy" && noAccounts)) && <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4" data-testid="onboarding-resume-banner"><div><p className="text-sm font-semibold">Sua configuração ainda não terminou</p><p className="mt-1 text-xs text-muted-foreground">Continue de onde parou, sem perder as informações que já cadastrou.</p></div><Link to="/onboarding" className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Continuar configuração</Link></div>}
-      <section className="dashboard-hero-surface relative min-w-0 rounded-[24px] border border-border/70 px-4 pb-6 pt-6 shadow-sm sm:rounded-[28px] sm:px-6 sm:pb-7 sm:pt-7" data-testid="dashboard-financial-header">
+      {/* Minimal header: no tinted box around the greeting, balance and chart. */}
+      <section className="relative min-w-0 pt-1" data-testid="dashboard-financial-header">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 pr-12 sm:pr-14">
+        <div className="min-w-0 pr-24">
           <h1
             className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
             data-testid="dashboard-greeting"
@@ -109,7 +109,7 @@ export default function Dashboard() {
             Visão geral de {monthLabel(activeMonth)}
           </p>
         </div>
-        <div className="absolute right-0 top-6 z-30 sm:top-7" data-testid="dashboard-action-rail">
+        <div className="absolute -right-1 top-0 z-30" data-testid="dashboard-action-rail">
           <FinnosVerticalMenu month={activeMonth} onMonthChange={setMonth} hidden={balanceHidden} onToggleHidden={toggleBalance} view={menuView} onViewChange={setMenuView} interval={menuInterval} onIntervalChange={setMenuInterval} series={menuSeries} onSeriesChange={setMenuSeries} />
         </div>
       </div>
@@ -192,23 +192,22 @@ export default function Dashboard() {
                   onOpenAllTransactions={() =>
                     navigate(
                       selectedCategory?.category_id
-                        ? `/fluxo?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(selectedCategory.category_id)}`
-                        : `/fluxo?month=${activeMonth}`,
+                        ? `/transacoes?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(selectedCategory.category_id)}`
+                        : `/transacoes?month=${activeMonth}`,
                     )
                   }
                   selectedCategoryId={selectedCategory?.category_id ?? null}
                   onSelectCategory={setSelectedCategory}
-                  onOpenCategory={(slice) => navigate(`/fluxo?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)}
+                  onOpenCategory={(slice) => navigate(`/transacoes?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)}
                 />
               </div>
             );
-            if (moduleId === "budget") return <Budget503020Card key={moduleId} month={monthLabel(data.month)} income={data.income} rule={data.rule} />;
             return null;
           })}
 
           <div className="flex justify-center pb-2 pt-2">
             <Link
-              to="/configuracoes#home-panel"
+              to="/configuracoes/painel"
               className={cn(buttonVariants({ variant: "outline" }), "rounded-full border-border/70 bg-card/70 px-5 shadow-sm backdrop-blur-xl")}
               data-testid="modify-dashboard-button"
             >

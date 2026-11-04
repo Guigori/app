@@ -55,7 +55,7 @@ export default function Transactions() {
   const { hidden } = useBalanceHidden();
 
   const [month, setMonth] = useState(currentMonth());
-  const [periodMode, setPeriodMode] = useState<"rolling30" | "month">("rolling30");
+  const [periodMode, setPeriodMode] = useState<"rolling30" | "month">("month");
   const [flowView, setFlowView] = useState<"calendario" | "categorias" | "lista">("calendario");
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [scope, setScope] = useState<"dia" | "mes">("mes");
@@ -368,6 +368,10 @@ export default function Transactions() {
         </div>
 
         <div className="min-w-0 rounded-2xl border border-border bg-card px-5 py-4 sm:col-span-1">
+          {/* Same period as Início and Fluxo de caixa, so the numbers always match. */}
+          <p className="mb-2 text-xs text-muted-foreground" data-testid="flow-strip-period">
+            {scope === "dia" ? formatDate(selectedDate) : periodMode === "rolling30" ? "Últimos 30 dias" : monthLabel(month)}
+          </p>
           <div className="grid grid-cols-3 items-center gap-3">
             <div className="contents" data-testid="flow-strip-real">
               <Link to={`/fluxo?metric=receitas&month=${month}`} className="group -m-2 min-w-0 rounded-xl p-2 transition-colors hover:bg-muted/60" aria-label={`Ver fluxo de caixa: entrada`} data-testid="flow-strip-receitas">

@@ -21,9 +21,10 @@ interface ExpensesDonutChartProps {
   periodLabel?: string;
   transactions?: Transaction[];
   onOpenAllTransactions?: () => void;
+  className?: string;
 }
 
-export function ExpensesDonutChart({ month, slices, total, onOpenDetails, selectedCategoryId = null, onSelectCategory, onOpenCategory, periodLabel, transactions, onOpenAllTransactions }: ExpensesDonutChartProps) {
+export function ExpensesDonutChart({ month, slices, total, onOpenDetails, selectedCategoryId = null, onSelectCategory, onOpenCategory, periodLabel, transactions, onOpenAllTransactions, className }: ExpensesDonutChartProps) {
   const dialogs = useDialogs();
   const { hidden } = useBalanceHidden();
   const selected = selectedCategoryId ? slices.find((slice) => slice.category_id === selectedCategoryId) ?? null : null;
@@ -32,7 +33,7 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
   const displayPeriod = periodLabel ?? monthLabel(month);
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader className="flex flex-row items-start justify-between gap-2">
         <div>
           <CardTitle className="font-heading">Pra onde foi o dinheiro?</CardTitle>

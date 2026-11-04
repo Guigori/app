@@ -7,7 +7,6 @@ export const HOME_MODULES = [
   { id: "metrics", label: "Receitas, despesas e saldo" },
   { id: "radar", label: "Radar" },
   { id: "categories", label: "Gastos e transações" },
-  { id: "budget", label: "Planejamento 50/30/20" },
 ] as const;
 
 export type HomeModuleId = (typeof HOME_MODULES)[number]["id"];
