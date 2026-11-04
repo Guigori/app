@@ -111,7 +111,7 @@ export default function Flow() {
           {/* Cash flow is a detail of Fluxo, reached from its Entrada / Saída / Saldo. */}
           <Link
             to={`/transacoes?month=${month}`}
-            className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "-ml-2 mt-0.5 shrink-0 rounded-full")}
+            className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "mt-0.5 size-10 shrink-0 rounded-full border border-border bg-card")}
             aria-label="Voltar para o Fluxo"
             title="Voltar para o Fluxo"
             data-testid="flow-breadcrumb-back"

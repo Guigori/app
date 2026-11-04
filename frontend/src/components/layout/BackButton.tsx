@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { ChevronLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /** Section roots and their tabs have no back control. Nested screens return
@@ -15,16 +15,17 @@ export function BackButton() {
   const fromNotifications = Boolean((location.state as { fromNotifications?: boolean } | null)?.fromNotifications);
 
   return (
+    // A small arrow in a circle: takes little room and scrolls away with the page.
     <Button
       variant="ghost"
-      size="sm"
+      size="icon"
       onClick={() => fromNotifications ? navigate(-1) : navigate(parentPath)}
-      className="-ml-2 mb-2 h-10 gap-1 rounded-full px-2 font-medium text-primary transition-colors hover:bg-primary/5 hover:text-primary focus-visible:ring-primary/30"
+      className="mb-3 size-10 rounded-full border border-border bg-card text-foreground hover:bg-muted"
       aria-label={fromNotifications ? "Voltar para a central de notificações" : "Voltar para a seção anterior"}
+      title="Voltar"
       data-testid="back-button"
     >
-      <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-      Voltar
+      <ArrowLeft className="h-5 w-5" aria-hidden="true" />
     </Button>
   );
 }

@@ -161,7 +161,7 @@ export function MobileNav() {
               className="fixed inset-0 z-[39] bg-black/40 backdrop-blur-[12px] dashboard:hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} />
             <motion.section role="dialog" aria-modal="true" aria-label="Novo registro"
-              className="fixed inset-x-0 bottom-0 top-[max(0.5rem,env(safe-area-inset-top))] z-[41] mx-auto flex max-w-[30rem] flex-col overflow-hidden rounded-t-[30px] bg-background shadow-2xl dashboard:hidden"
+              className="fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] bottom-[calc(5.6rem+env(safe-area-inset-bottom))] z-[40] mx-auto flex max-w-[28rem] flex-col overflow-hidden rounded-[30px] border border-border bg-background shadow-2xl dashboard:hidden"
               initial={{ y: "110%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "110%", opacity: 0 }}
               transition={{ type: "spring", stiffness: 330, damping: 34 }}>
               <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden="true" />
@@ -177,11 +177,11 @@ export function MobileNav() {
 
       <motion.nav
         initial={false}
-        animate={{ opacity: !registerOpen && visible ? 1 : 0, y: !registerOpen && visible ? 0 : 90, scale: visible ? (compact ? 0.94 : 1) : 0.94 }}
+        animate={{ opacity: registerOpen || visible ? 1 : 0, y: registerOpen || visible ? 0 : 90, scale: registerOpen ? 1 : visible ? (compact ? 0.94 : 1) : 0.94 }}
         transition={{ type: "spring", stiffness: 280, damping: 34, mass: 0.85 }}
         className={cn(
           "fixed inset-x-0 bottom-[max(0.7rem,env(safe-area-inset-bottom))] z-40 flex justify-center px-3 dashboard:hidden",
-          (!visible || registerOpen) && "pointer-events-none"
+          !visible && !registerOpen && "pointer-events-none"
         )}
         data-testid="mobile-nav"
       >
