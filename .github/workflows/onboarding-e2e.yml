@@ -10,18 +10,17 @@ on:
       - "docs/finance/LOTE-P0-P1-20261028.md"
       - ".github/workflows/onboarding-e2e.yml"
   pull_request:
-    branches: [main, fix/fase-0-estabilizacao-20261025]
+    branches: [main]
+    # AUD-16: same coverage as push; screens depend on data.ts, sync and the API.
     paths:
-      - "frontend/src/pages/Onboarding.tsx"
-      - "frontend/src/lib/onboarding.ts"
-      - "frontend/src/components/RequireAuth.tsx"
-      - "tests/e2e/onboarding.spec.ts"
-      - "tests/e2e/wallet.spec.ts"
-      - "frontend/src/pages/Accounts.tsx"
-      - "frontend/src/components/accounts/**"
-      - "frontend/src/lib/institutionGroups.ts"
-      - "frontend/src/lib/local/engine.ts"
-      - "tests/playwright.config.ts"
+      - "frontend/src/**"
+      - "frontend/finnos/**"
+      - "frontend/api/**"
+      - "frontend/fixtures/**"
+      - "frontend/vercel.json"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+      - "tests/**"
       - ".github/workflows/onboarding-e2e.yml"
   workflow_dispatch:
 
@@ -40,7 +39,7 @@ jobs:
           node-version: 20
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm install --legacy-peer-deps --no-audit --no-fund
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
       - name: Install Playwright dependencies
         working-directory: tests
         run: |
