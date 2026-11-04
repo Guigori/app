@@ -7,6 +7,7 @@ verified bank connection or migration authority.
 from collections import defaultdict
 from finnos.lib.money import cents
 from finnos.lib.stats import balance_effects
+from finnos.lib.invoices import invoice_state
 
 
 def compare_invoice_evidence(cards: list[dict], txs: list[dict], evidence: list[dict]) -> dict:
@@ -37,6 +38,15 @@ def compare_invoice_evidence(cards: list[dict], txs: list[dict], evidence: list[
             mismatch.append("invalid_saved_cycle")
         elif saved_paid != declared_paid:
             mismatch.append("snapshot_paid_differs")
+        # AUD-11: the declared total must match the cycle FINNOS computes from
+        # its own purchases, installments and credits, independently of payments.
+        internal_total = None
+        try:
+            internal_total = invoice_state(card, txs, cycle)["total_cents"]
+        except (ValueError, KeyError, TypeError):
+            mismatch.append("invalid_cycle")
+        if internal_total is not None and internal_total != declared_total:
+            mismatch.append("invoice_total_differs")
         if receipt_total != declared_paid:
             mismatch.append("bank_receipts_differ")
         if saved_paid is not None and type(saved_paid) is int and receipt_total != saved_paid:
@@ -46,6 +56,7 @@ def compare_invoice_evidence(cards: list[dict], txs: list[dict], evidence: list[
             "status": "manual_review" if mismatch else "values_match_unverified",
             "evidence_verified": False,
             "reported_total_cents": declared_total,
+            "internal_total_cents": internal_total,
             "reported_paid_cents": declared_paid,
             "saved_paid_cents": saved_paid,
             "bank_receipt_cents": receipt_total,

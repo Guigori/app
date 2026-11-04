@@ -1,0 +1,54 @@
+{
+  "purpose": "AUD-04 shared API/local installment contract: dated schedule, realized bank balance per day and monthly amounts. Synthetic data only.",
+  "account": { "id": "bank", "initial_balance": 1000 },
+  "cases": [
+    {
+      "id": "bank-paid-3x-day-20",
+      "tx": { "id": "p1", "name": "Notebook", "type": "despesa", "status": "pago", "value": 300, "date": "2026-10-20", "account_id": "bank", "card_id": null, "installment": true, "total_installments": 3, "current_installment": 1 },
+      "schedule": [["2026-10-20", 0], ["2026-11-20", 1], ["2026-12-20", 2]],
+      "realized_cents": { "2026-10-20": -10000, "2026-11-04": -10000, "2026-11-19": -10000, "2026-11-20": -20000, "2026-12-19": -20000, "2026-12-20": -30000, "2027-03-01": -30000 },
+      "paid_month_cents": { "2026-10": 10000, "2026-11": 10000, "2026-12": 10000, "2027-01": null }
+    },
+    {
+      "id": "day-31-clamps-to-month-end",
+      "tx": { "id": "p2", "name": "Curso", "type": "despesa", "status": "pago", "value": 100, "date": "2026-01-31", "account_id": "bank", "card_id": null, "installment": true, "total_installments": 4, "current_installment": 1 },
+      "schedule": [["2026-01-31", 0], ["2026-02-28", 1], ["2026-03-31", 2], ["2026-04-30", 3]],
+      "realized_cents": { "2026-02-27": -2500, "2026-02-28": -5000, "2026-03-30": -5000, "2026-03-31": -7500, "2026-04-30": -10000 },
+      "paid_month_cents": { "2026-02": 2500, "2026-04": 2500 }
+    },
+    {
+      "id": "leap-year-february",
+      "tx": { "id": "p3", "name": "Seguro", "type": "despesa", "status": "pago", "value": 50, "date": "2028-01-31", "account_id": "bank", "card_id": null, "installment": true, "total_installments": 2, "current_installment": 1 },
+      "schedule": [["2028-01-31", 0], ["2028-02-29", 1]],
+      "realized_cents": { "2028-02-28": -2500, "2028-02-29": -5000 },
+      "paid_month_cents": { "2028-02": 2500 }
+    },
+    {
+      "id": "residual-cents-on-last-installment",
+      "tx": { "id": "p4", "name": "Residual", "type": "despesa", "status": "pago", "value": 100, "date": "2026-09-10", "account_id": "bank", "card_id": null, "installment": true, "total_installments": 3, "current_installment": 1 },
+      "schedule": [["2026-09-10", 0], ["2026-10-10", 1], ["2026-11-10", 2]],
+      "realized_cents": { "2026-10-09": -3333, "2026-10-10": -6666, "2026-11-10": -10000 },
+      "paid_month_cents": { "2026-09": 3333, "2026-11": 3334 }
+    },
+    {
+      "id": "imported-k-of-n",
+      "tx": { "id": "p5", "name": "Importada 4/6", "type": "despesa", "status": "pago", "value": 600, "date": "2026-10-20", "account_id": "bank", "card_id": null, "installment": true, "total_installments": 6, "current_installment": 4 },
+      "schedule": [["2026-10-20", 3], ["2026-11-20", 4], ["2026-12-20", 5]],
+      "realized_cents": { "2026-11-04": -10000, "2026-11-20": -20000, "2026-12-20": -30000 },
+      "paid_month_cents": { "2026-12": 10000, "2027-01": null }
+    },
+    {
+      "id": "card-installments-never-touch-bank",
+      "tx": { "id": "p6", "name": "Cartao 3x", "type": "despesa", "status": "pago", "value": 300, "date": "2026-10-20", "account_id": "bank", "card_id": "card", "installment": true, "total_installments": 3, "current_installment": 1 },
+      "schedule": [["2026-10-20", 0], ["2026-11-20", 1], ["2026-12-20", 2]],
+      "realized_cents": { "2026-11-04": 0, "2026-12-20": 0 }
+    },
+    {
+      "id": "scheduled-series-projects-each-month",
+      "tx": { "id": "p7", "name": "Agendada 3x", "type": "despesa", "status": "agendado", "value": 300, "date": "2026-10-20", "account_id": "bank", "card_id": null, "installment": true, "total_installments": 3, "current_installment": 1 },
+      "schedule": [["2026-10-20", 0], ["2026-11-20", 1], ["2026-12-20", 2]],
+      "realized_cents": { "2026-11-04": 0, "2026-12-20": 0 },
+      "unpaid_month_cents": { "2026-10": 10000, "2026-11": 10000, "2026-12": 10000, "2027-01": null }
+    }
+  ]
+}

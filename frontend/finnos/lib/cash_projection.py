@@ -1,25 +1,26 @@
 """FIN-07/08/13/14: one read-only, cent-exact 30-day bank cash forecast.
 
 This is not the realized bank ledger: it adds *unsettled* future bank
-movements, future fixed sources and non-card subscriptions. Credit card
-purchases are excluded, as they are paid through invoice due dates.
+movements, the not-yet-due installments of paid bank purchases, future fixed
+sources and non-card subscriptions. Credit card purchases enter only through
+their invoices: when `cards` is given, each open invoice balance falls on its
+due date (an overdue one on `start`). Radar and Simulação share this ledger so
+the same debt can never appear in one screen and vanish in the other (AUD-03).
+
+`opening_cents` must be the realized balance as of `start` (see
+stats.balance_effects), so installments dated on `start` are already in it.
 """
-import calendar
 from collections import defaultdict
 from datetime import date
-from finnos.lib.money import cents, installment_portion, remaining_installment_indices
+from finnos.lib.money import cents, installment_portion, installment_schedule
 from finnos.lib.recurrence import monthly_projection_sources
 from finnos.lib.subscription_projection import planned_subscriptions
-
-
-def _month(year: int, month: int, offset: int):
-    index = year * 12 + month - 1 + offset
-    return divmod(index, 12)
 
 
 def project_scheduled_cash(
     transactions: list[dict], opening_cents: int,
     start: date, end: date, subscriptions: list[dict] | None = None,
+    cards: list[dict] | None = None,
 ) -> dict:
     if (type(opening_cents) is not int or end < start
             or (end - start).days > 366):
@@ -35,24 +36,40 @@ def project_scheduled_cash(
 
     for tx in transactions:
         if (tx.get("card_id") or tx.get("invoice_payment")
-                or tx.get("type") not in ("receita", "despesa")
-                or tx.get("status") not in ("pendente", "agendado")):
+                or tx.get("type") not in ("receita", "despesa")):
             continue
         multiplier = 1 if tx["type"] == "receita" else -1
-        anchor = date.fromisoformat(tx["date"])
-        if not tx.get("installment"):
-            include(anchor, multiplier * cents(tx["value"]))
+        if tx.get("status") == "pago":
+            # Realized up to `start`; only later installments are still to come.
+            if tx.get("installment") and tx.get("date", "") <= start.isoformat():
+                for when, index in installment_schedule(tx):
+                    if when > start.isoformat():
+                        include(date.fromisoformat(when), multiplier * cents(installment_portion(tx, index)))
             continue
-        indices = remaining_installment_indices(tx)
-        for offset, index in enumerate(indices):
-            year, month_index = _month(anchor.year, anchor.month, offset)
-            target_month = month_index + 1
-            when = date(year, target_month, min(
-                anchor.day, calendar.monthrange(year, target_month)[1],
-            ))
-            if when > end:
-                break
-            include(when, multiplier * cents(installment_portion(tx, index)))
+        if tx.get("status") not in ("pendente", "agendado"):
+            continue
+        if not tx.get("installment"):
+            include(date.fromisoformat(tx["date"]), multiplier * cents(tx["value"]))
+            continue
+        for when, index in installment_schedule(tx):
+            include(date.fromisoformat(when), multiplier * cents(installment_portion(tx, index)))
+
+    for card in cards or []:
+        from finnos.lib.invoices import invoice_state, occurrences
+
+        # Legacy cards without a valid cycle cannot date an invoice; the
+        # historical review reports them as uninspectable instead.
+        if not all(type(card.get(key)) is int and 1 <= card[key] <= 31
+                   for key in ("closing_day", "due_day")):
+            continue
+        cycles = {key for tx in transactions for key, _, _ in occurrences(card, tx)}
+        cycles |= set(card.get("invoice_cycles") or {})
+        for cycle in sorted(cycles):
+            state = invoice_state(card, transactions, cycle)
+            outstanding = state["total_cents"] - state["paid_cents"]
+            due = date.fromisoformat(state["due_date"])
+            if outstanding > 0 and due <= end:
+                include(max(due, start), -outstanding)
 
     first_index = start.year * 12 + start.month - 1
     last_index = end.year * 12 + end.month - 1

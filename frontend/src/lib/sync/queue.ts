@@ -130,12 +130,26 @@ export async function queueEntityMutation(
 export async function queueTransaction(input: TransactionInput, source: OperationSource = "manual", entityId?: string): Promise<SyncOperation> {
   const uid = firebaseAuth?.currentUser?.uid;
   if (!uid) throw new Error("FINNOS_AUTH_REQUIRED");
+  // AUD-09: a second offline edit of the same record must not race the first.
+  // A queued edit never sent is consolidated (its payload was never attempted);
+  // one already attempted becomes the base the new edit depends on.
+  const prior = entityId
+    ? (await listSyncOperations()).filter((item) => item.kind === "transaction.update" && item.entityId === entityId).at(-1)
+    : undefined;
+  if (prior && prior.attempts === 0 && prior.status === "pending") {
+    const merged = { ...prior, payload: input, source };
+    if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+    await saveSyncOperation(merged);
+    return merged;
+  }
   const op: SyncOperation = {
     uid,
     id: crypto.randomUUID(),
     kind: entityId ? "transaction.update" : "transaction.create",
     entityId,
-    baseVersion: entityId ? (await cachedFetch(`transaction:${entityId}`, () => apiGet<Transaction>(`/transactions/${entityId}`))).version ?? 1 : undefined,
+    baseVersion: !entityId ? undefined
+      : prior ? (prior.baseVersion ?? 1) + 1
+      : (await cachedFetch(`transaction:${entityId}`, () => apiGet<Transaction>(`/transactions/${entityId}`))).version ?? 1,
     payload: input,
     source,
     createdAt: new Date().toISOString(),
@@ -200,6 +214,18 @@ async function remove(id: string): Promise<void> {
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
   });
+}
+
+const DEFINITIVE_REJECTIONS = new Set([400, 404, 409, 410, 422]);
+
+/** The server's own explanation ("Conta inválida.") instead of "request failed with 400". */
+function serverReason(error: unknown): string {
+  if (error instanceof ApiError) {
+    const detail = (error.body as { detail?: unknown } | null)?.detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    return error.status === 404 ? "O registro não existe mais no servidor." : error.message;
+  }
+  return error instanceof Error ? error.message : "Falha ao sincronizar";
 }
 
 let flushing = false;
@@ -271,13 +297,15 @@ export async function flushSyncQueue(): Promise<void> {
         await remove(op.id);
         window.dispatchEvent(new CustomEvent("finnos:sync-success", { detail: { operation: op } }));
       } catch (error) {
-        // 409 conflicts and 422 payload rejections cannot be repaired by
-        // replaying the same operation. Keep them for manual review.
-        const needsReview = error instanceof ApiError && (error.status === 409 || error.status === 422);
+        // Definitive rejections (removed reference, deleted entity, conflict,
+        // invalid payload) can never succeed by replaying the same operation:
+        // keep them for explicit review/discard instead of retrying forever
+        // (AUD-06). Network, 401 and 5xx failures stay retryable errors.
+        const needsReview = error instanceof ApiError && DEFINITIVE_REJECTIONS.has(error.status);
         const failed = {
           ...current,
           status: (needsReview ? "conflict" : "error") as "conflict" | "error",
-          lastError: error instanceof Error ? error.message : "Falha ao sincronizar",
+          lastError: serverReason(error),
         };
         // Do not modify a former user's queue after switching accounts.
         if (op.uid !== firebaseAuth?.currentUser?.uid) break;

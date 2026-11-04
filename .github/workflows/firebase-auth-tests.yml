@@ -4,32 +4,10 @@ on:
   push:
     branches: [feat/firebase-fastapi-migration-20261012]
   workflow_dispatch:
+  # AUD-16: contract tests guard UID isolation, cards and sync for every
+  # change reaching main, not only when backend files are touched.
   pull_request:
     branches: [main]
-    paths:
-      - "backend/lib/firebase.py"
-      - "backend/lib/firebase_auth.py"
-      - "backend/tests/test_firebase_auth.py"
-      - "backend/tests/test_firestore_transactions.py"
-      - "backend/tests/test_firestore_http.py"
-      - "backend/tests/test_firebase_diagnostics.py"
-      - "backend/routers/firebase_diagnostics.py"
-      - "backend/routers/firebase_transactions.py"
-      - "backend/server.py"
-      - "backend/tests/test_vercel_firebase_session.py"
-      - "backend/tests/test_*firestore*.py"
-      - "backend/tests/test_invoice_payments.py"
-      - "backend/tests/test_preview_project_isolation.py"
-      - "backend/tests/test_finance_migration_plan.py"
-      - "backend/tests/test_encrypted_backup.py"
-      - "backend/tests/test_firebase_backup_recovery.py"
-      - "backend/tests/test_configure_test_users.py"
-      - "backend/scripts/**"
-      - "frontend/finnos/**"
-      - "frontend/api/**"
-      - "frontend/requirements.txt"
-      - "frontend/vercel.json"
-      - ".github/workflows/firebase-auth-tests.yml"
 
 permissions:
   contents: read

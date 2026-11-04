@@ -6,7 +6,6 @@ from finnos.lib.money import FinanceModel,Money,cents,installment_portion
 from finnos.lib.db import db
 from finnos.lib.stats import balance_effects
 from finnos.lib.dates import today_iso
-from finnos.lib.invoices import occurrences,invoice_state
 from finnos.lib.cards import cycle_bounds,due_date
 from finnos.routers.auth import require_user
 from finnos.routers.cards import _build,_context
@@ -29,14 +28,9 @@ async def purchase(payload:PurchaseSimulationIn,user=Depends(require_user)):
     balance+=sum(cents(amount) for tx in txs for _,amount in balance_effects(tx,today.isoformat()))
     from finnos.lib.cash_projection import project_scheduled_cash
     subscriptions=await db.subscriptions.find({'user_id':uid}).to_list(500)
-    forecast=project_scheduled_cash(txs,balance,today,horizon,subscriptions)
+    # Open invoices are part of the shared ledger, identical to the Radar (AUD-03).
+    forecast=project_scheduled_cash(txs,balance,today,horizon,subscriptions,cards)
     projected=forecast['projected_cents']
-    for card in cards:
-        keys={key for tx in txs for key,_,_ in occurrences(card,tx)}|set((card.get('invoice_cycles') or {}))
-        for key in keys:
-            state=invoice_state(card,txs,key)
-            if date.fromisoformat(state['due_date'])<=horizon:
-                projected-=state['total_cents']-state['paid_cents']
     selected=next((c for c in cards if c['id']==payload.card_id and c.get('active',True)),None)
     if payload.card_id and not selected:raise HTTPException(404,'Cartão não encontrado.')
     if payload.category_id and not await db.categories.find_one({'user_id':uid,'id':payload.category_id}):raise HTTPException(400,'Categoria inválida.')

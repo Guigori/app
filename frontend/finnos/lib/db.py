@@ -450,7 +450,7 @@ class Collection:
                             raise HTTPException(409, "Identificador de operação reutilizado.")
                         return SimpleNamespace(matched_count=1)
                 if expected_version is not None and expected_version != previous_version:
-                    raise HTTPException(409, "Conflito: registro alterado desde a cópia offline. Revise antes de reenviar.")
+                    raise HTTPException(409, "Conflito: este registro foi alterado em outro lugar desde que você começou a editar. Recarregue e revise antes de salvar.")
                 if replace:
                     doc = dict(update, id=doc["id"], user_id=uid)
                     doc.pop("_expected_version", None)

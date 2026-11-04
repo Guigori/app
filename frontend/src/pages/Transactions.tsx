@@ -3,7 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { useSearchParams } from "react-router-dom";
 import { ArrowDown, ArrowUp, BellOff, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions, fetchTransactionsPage } from "@/lib/data";
+import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions, fetchTransactionsPage, isTransactionListComplete } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { isLocalMode } from "@/lib/mode";
 import { listSyncOperations } from "@/lib/sync/queue";
@@ -221,6 +221,13 @@ export default function Transactions() {
     ? pagesQuery.data?.pages.flatMap(page => page.items) ?? []
     : monthTransactions.slice().sort((a, b) => (sortDir === "desc"
       ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
+  // AUD-07: offline, say when only the pages loaded online are available.
+  const completenessQuery = useQuery({
+    queryKey: ["transactions", "complete", filters, online],
+    queryFn: () => isTransactionListComplete(filters),
+    enabled: !online && !pagedList,
+  });
+  const partialOffline = !online && !pagedList && completenessQuery.data === false;
   const listPending = pagedList ? pagesQuery.isPending : transactionsQuery.isPending;
   const listError = pagedList ? (!pagesQuery.data ? pagesQuery.error : null) : transactionsQuery.error;
   const retryList = () => { if (pagedList) void pagesQuery.refetch(); else void transactionsQuery.refetch(); };
@@ -502,6 +509,11 @@ export default function Transactions() {
         );
       })() : null}
 
+      {partialOffline && (
+        <p role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm" data-testid="transactions-offline-partial">
+          Sem conexão: mostrando só as páginas carregadas antes. Conecte-se para ver todos os lançamentos do período.
+        </p>
+      )}
       {flowView !== "categorias" || selectedDonutCategory ? (
       listPending ? (
         <FinnosPageLoading title="Carregando transações" description="Buscando seus lançamentos do período." />

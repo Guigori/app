@@ -1,6 +1,7 @@
 // Session boundary helpers. The session itself is an httpOnly cookie the backend sets —
 // this module only makes sure the react-query cache never leaks across sessions.
 import { apiPost } from "@/lib/api";
+import { revokePushForSession } from "@/lib/push";
 import { queryClient } from "@/lib/queryClient";
 import { clearAccountCache } from "@/lib/offline/accountCache";
 import { firebaseAuth } from "@/lib/firebase";
@@ -15,6 +16,8 @@ export async function beginSession(): Promise<void> {
 /** Every sign-out control must go through here — clearing only the server session
  *  would leak the previous account's cached data into the next login. */
 export async function endSession(): Promise<void> {
+  // Revoke this device's push enrolment while the session can still authorize it.
+  await revokePushForSession();
   try {
     await apiPost("/auth/logout");
   } finally {

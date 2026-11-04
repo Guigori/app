@@ -1,4 +1,4 @@
-from finnos.lib.money import D, installment_portion, remaining_installment_indices, quantize_brl
+from finnos.lib.money import D, installment_portion, installment_schedule, remaining_installment_indices, quantize_brl
 
 """Month & money math shared by FINNOS routers.
 
@@ -77,16 +77,15 @@ def balance_effects(tx: dict, today: str) -> list[tuple[str, float]]:
 
     Only paid transactions dated today or earlier affect the realized balance.
     Pending and scheduled transactions never affect the realized balance.
-    A parcelado purchase counts only the installments already come due.
+    A parcelado purchase counts only the installments whose own date is today
+    or earlier (AUD-04): R$ 300 in 3x from 20/10 debits R$ 100 until 19/11.
     """
     if tx.get("card_id") or tx.get("status") != "pago" or tx.get("date", "") > today:
         return []
     v = D(tx["value"])
     if tx.get("installment"):
-        indices = remaining_installment_indices(tx)
-        due = months_between(tx["date"][:7], today[:7]) + 1
         v = sum(
-            (installment_portion(tx, i) for i in indices[:max(0, due)]),
+            (installment_portion(tx, i) for when, i in installment_schedule(tx) if when <= today),
             D(0),
         )
     if tx["type"] == "receita":

@@ -1,7 +1,7 @@
 // Local-mode data engine: the same business rules as backend/lib/stats.py, run in
 // the browser. Keep the two in sync — a rule change belongs in both places.
 
-import { addMonth, currentMonth, todayISO } from "@/lib/format";
+import { addMonth, currentMonth, todayISO, toLocalISO } from "@/lib/format";
 import { newId, readDb, writeDb, freshDb, wipeDb, type LocalCard, type LocalDb } from "@/lib/local/store";
 import type {
   Account,
@@ -95,6 +95,33 @@ function firstRemainingInstallment(tx: { current_installment?: number | null; to
   return current - 1;
 }
 
+/** Mirror of finnos.lib.money.installment_schedule: [YYYY-MM-DD, index] per
+ * remaining installment, on the purchase day of each following month,
+ * clamped to that month's last day (AUD-04 shared contract). */
+export function installmentSchedule(tx: Pick<Transaction, "date"> &
+  Partial<Pick<Transaction, "current_installment" | "total_installments">>): [string, number][] {
+  const n = tx.total_installments ?? 1;
+  const first = firstRemainingInstallment(tx);
+  const year = Number(tx.date.slice(0, 4));
+  const month = Number(tx.date.slice(5, 7));
+  const day = Number(tx.date.slice(8, 10));
+  return Array.from({ length: n - first }, (_, offset) => {
+    const idx = year * 12 + month - 1 + offset;
+    return [clampDay(Math.floor(idx / 12), (idx % 12) + 1, day), first + offset] as [string, number];
+  });
+}
+
+/** Mirror of analytics._unpaid_portion: expected amount of a pending/scheduled
+ * entry in `month`; a parcelado series contributes the installment dated there. */
+function unpaidPortion(tx: Transaction, month: string): number | null {
+  if (tx.status === "pago") return null;
+  if (tx.installment) {
+    const hit = installmentSchedule(tx).find(([when]) => when.slice(0, 7) === month);
+    return hit ? installmentPortion(tx.value, tx.total_installments ?? 1, hit[1]) : null;
+  }
+  return tx.date.slice(0, 7) === month ? occurrenceAmount(tx) : null;
+}
+
 /** One occurrence, including imported k/n rows without installment_value.
  * Mirror: finnos.lib.transaction_amount.occurrence_amount. Never project a
  * missing installment as R$ 0,00; preserve an explicitly stored legacy value.
@@ -136,10 +163,10 @@ function balanceEffects(tx: Transaction, today: string): [string, number][] {
   if (tx.card_id || tx.status !== "pago" || tx.date > today) return [];
   let v = tx.value;
   if (tx.installment) {
+    // Only installments whose own date has arrived are realized (AUD-04).
     const n = tx.total_installments ?? 1;
-    const due = monthsBetween(tx.date.slice(0, 7), today.slice(0, 7)) + 1;
-    const first = firstRemainingInstallment(tx);
-    v = round2(Array.from({ length: Math.max(0, Math.min(due, n - first)) }, (_, i) => installmentPortion(tx.value, n, first + i)).reduce((total, amount) => total + amount, 0));
+    v = round2(installmentSchedule(tx).filter(([when]) => when <= today)
+      .reduce((total, [, index]) => total + installmentPortion(tx.value, n, index), 0));
   }
   if (tx.type === "receita") return [[tx.account_id, round2(v)]];
   if (tx.type === "despesa") return [[tx.account_id, round2(-v)]];
@@ -810,7 +837,7 @@ export function localFlow(params: FlowParams): Flow {
   };
   const projection = (t: Transaction, month: string): number | null => {
     if (t.type === "transferencia" || t.invoice_payment) return null;
-    return t.status !== "pago" && t.date.slice(0, 7) === month ? amount(t) : null;
+    return t.installment ? unpaidPortion(t, month) : t.status !== "pago" && t.date.slice(0, 7) === month ? amount(t) : null;
   };
 
   const series: FlowPoint[] = window.map((m) => {
@@ -926,6 +953,30 @@ export function localCalendar(month: string): CalendarMonth {
     }
     buckets.set(tx.date, day);
   }
+  // A parcelado row is stored once; its later installments belong on their own
+  // calendar days (mirror of analytics.calendar_month). No clickable count.
+  for (const source of db.transactions) {
+    if (!source.installment || source.date.slice(0, 7) === month
+        || (source.type !== "receita" && source.type !== "despesa")
+        || source.invoice_payment || source.invoice_refund) continue;
+    const paid = source.status === "pago";
+    const portion = paid ? monthPortion(source, month) : unpaidPortion(source, month);
+    if (portion === null) continue;
+    const key = clampDay(Number(month.slice(0, 4)), Number(month.slice(5, 7)), Number(source.date.slice(8, 10)));
+    const day = buckets.get(key) ?? {
+      date: key, income: 0, expense: 0, projected_income: 0,
+      projected_expense: 0, count: 0, active_count: 0,
+    };
+    if (paid) {
+      if (source.type === "receita") day.income = round2(day.income + portion);
+      else day.expense = round2(day.expense + portion);
+    } else if (source.type === "receita") {
+      day.projected_income = round2(day.projected_income + portion);
+    } else {
+      day.projected_expense = round2(day.projected_expense + portion);
+    }
+    buckets.set(key, day);
+  }
   // FIN-08/14: bank refund is a cash receipt but NOT ordinary income.
   // Both bank reimbursements and merchant credits reverse the purchase as
   // negative spend in the calendar on the event date.
@@ -987,7 +1038,7 @@ function shiftMonths(iso: string, months: number): string {
 function addDays(iso: string, days: number): string {
   const d = new Date(`${iso}T12:00:00`);
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return toLocalISO(d);
 }
 
 /** Advance from a configured closing/day, preserving 29–31 through February. */

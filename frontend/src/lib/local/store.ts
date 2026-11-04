@@ -32,6 +32,8 @@ export interface LocalDb {
   cards: LocalCard[];
   subscriptions: SubscriptionItem[];
   audit_events: FinanceHistoryEvent[];
+  /** Monotonic write counter; the higher copy wins on startup (AUD-08). */
+  revision?: number;
 }
 
 export const DEFAULT_CATEGORIES: Omit<Category, "id" | "created_at">[] = [
@@ -127,6 +129,7 @@ function normalizeDb(parsed: Partial<LocalDb>): LocalDb {
     cards: parsed.cards ?? [],
     subscriptions: parsed.subscriptions ?? [],
     audit_events: parsed.audit_events ?? [],
+    revision: typeof parsed.revision === "number" ? parsed.revision : 0,
   };
 }
 
@@ -138,19 +141,22 @@ function legacyRead(key: string): LocalDb | null {
 
 export async function initializeLocalPersistence(): Promise<void> {
   for (const key of ["finnos:local-db", "finnos:demo-db"]) {
+    // The localStorage copy is a journal of the last write: it is newer than
+    // IndexedDB whenever that write failed or the tab closed mid-commit.
+    const journal = legacyRead(key);
     try {
-      let value = await idbGet(key);
-      if (!value) {
-        value = legacyRead(key);
-        if (value) {
-          await idbPut(key, value);
-          window.localStorage.removeItem(key);
-        }
+      const stored = await idbGet(key);
+      const current = stored ? normalizeDb(stored) : null;
+      const winner = journal && (!current || (journal.revision ?? 0) > (current.revision ?? 0)) ? journal : current;
+      if (!winner) continue;
+      memory.set(key, winner);
+      if (winner === journal) {
+        await idbPut(key, winner);
+        // Remove the journal only after IndexedDB holds the same revision.
+        if ((legacyRead(key)?.revision ?? -1) <= (winner.revision ?? 0)) window.localStorage.removeItem(key);
       }
-      if (value) memory.set(key, normalizeDb(value));
     } catch {
-      const legacy = legacyRead(key);
-      if (legacy) memory.set(key, legacy);
+      if (journal) memory.set(key, journal);
     }
   }
 }
@@ -172,8 +178,14 @@ export function readDb(): LocalDb {
 
 export function writeDb(db: LocalDb): void {
   const key = storageKey();
-  memory.set(key, db);
-  void idbPut(key, db).catch(() => window.localStorage.setItem(key, JSON.stringify(db)));
+  const next: LocalDb = { ...db, revision: Math.max(memory.get(key)?.revision ?? 0, db.revision ?? 0) + 1 };
+  memory.set(key, next);
+  // Synchronous journal first: survives a failed IndexedDB write or a tab
+  // closed before the async commit (AUD-08). Quota errors keep IndexedDB only.
+  try { window.localStorage.setItem(key, JSON.stringify(next)); } catch { /* journal unavailable */ }
+  void idbPut(key, next).then(() => {
+    if ((legacyRead(key)?.revision ?? Infinity) <= (next.revision ?? 0)) window.localStorage.removeItem(key);
+  }).catch(() => { /* journal keeps the newest copy until the next successful write */ });
 }
 
 export function wipeDb(): void {

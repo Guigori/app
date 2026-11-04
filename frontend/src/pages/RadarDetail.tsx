@@ -27,7 +27,7 @@ export default function RadarDetail() {
     const rows=await fetchTransactions({});
     const tx=rows.find(row=>row.id===signal.related_entity_id);
     if(!tx)return;
-    await updateTransaction(tx.id,{name:tx.name,value:tx.value,type:tx.type,status:tx.status,date:tx.date,account_id:tx.account_id,card_id:tx.card_id,to_account_id:tx.to_account_id,category_id:tx.category_id,fixed:true,recurrence:"mensal",installment:tx.installment,total_installments:tx.total_installments,current_installment:tx.current_installment,adjusted_value:tx.adjusted_value,attachment:tx.attachment,notes:tx.notes});
+    await updateTransaction(tx.id,{name:tx.name,value:tx.value,type:tx.type,status:tx.status,date:tx.date,account_id:tx.account_id,card_id:tx.card_id,to_account_id:tx.to_account_id,category_id:tx.category_id,fixed:true,recurrence:"mensal",installment:tx.installment,total_installments:tx.total_installments,current_installment:tx.current_installment,adjusted_value:tx.adjusted_value,attachment:tx.attachment,notes:tx.notes},"manual",tx.version);
     await updateRadarSignal(signal.id,"resolve");
   }, onSuccess: async()=>{await queryClient.invalidateQueries({queryKey:["radar"]});await queryClient.invalidateQueries({queryKey:["subscriptions"]});navigate("/assinaturas")}});
   const feedbackMutation = useMutation({ mutationFn: (feedback: "useful" | "not_useful" | "dont_show_similar") => sendRadarFeedback(signalId!, feedback) });

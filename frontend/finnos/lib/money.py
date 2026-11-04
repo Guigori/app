@@ -67,3 +67,21 @@ def installment_portion(tx, offset):
         raise ValueError("Parcelamento inválido: cada parcela deve valer ao menos R$ 0,01.")
     base, remaining = divmod(total, n)
     return D(base + (1 if offset >= n - remaining else 0)) / 100
+
+
+def installment_schedule(tx):
+    """Dated occurrences [(YYYY-MM-DD, installment index)] of a parcelado purchase.
+
+    The single FIN-04/AUD-04 contract shared by realized balance, cash
+    projection and calendar: installment k+i falls on the purchase day of the
+    i-th following month, clamped to that month's last day (31 -> 30/28/29).
+    """
+    import calendar
+
+    year, month, day = (int(part) for part in tx["date"][:10].split("-"))
+    schedule = []
+    for offset, index in enumerate(remaining_installment_indices(tx)):
+        y, m = divmod(year * 12 + month - 1 + offset, 12)
+        last = calendar.monthrange(y, m + 1)[1]
+        schedule.append((f"{y:04d}-{m + 1:02d}-{min(day, last):02d}", index))
+    return schedule
