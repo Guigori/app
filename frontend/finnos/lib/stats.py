@@ -1,4 +1,4 @@
-from finnos.lib.money import D, installment_portion
+from finnos.lib.money import D, installment_portion, remaining_installment_indices, quantize_brl
 
 """Month & money math shared by FINNOS routers.
 
@@ -51,37 +51,49 @@ def month_portion(tx: dict, month: str) -> float | None:
     month to the last installment — so future parcels never double-count in the
     current month. Pending/scheduled money and transfers count as zero.
     """
-    if tx.get("invoice_payment") or tx.get("type") == "transferencia" or tx.get("status") != "pago":
+    if tx.get("invoice_payment") or tx.get("invoice_refund") or tx.get("type") == "transferencia" or tx.get("status") != "pago":
         return None
     d: str = tx["date"]
     if tx.get("installment"):
-        n = int(tx.get("total_installments") or 1)
+        indices = remaining_installment_indices(tx)
         offset = months_between(d[:7], month)
-        if 0 <= offset < n:
-            return installment_portion(tx, offset)
+        if 0 <= offset < len(indices):
+            return installment_portion(tx, indices.start + offset)
         return None
-    return round(D(tx["value"]), 2) if d[:7] == month else None
+    return quantize_brl(tx["value"]) if d[:7] == month else None
+
+
+def paid_future_is_inconsistent(status: str, tx_date: str, today: str) -> bool:
+    """A not-yet-occurred cash transaction cannot be marked as settled.
+
+    Callers reject new inconsistent writes; existing data remains untouched until
+    an explicit user-confirmed remediation/migration is designed.
+    """
+    return status == "pago" and tx_date > today
 
 
 def balance_effects(tx: dict, today: str) -> list[tuple[str, float]]:
     """Signed effect on each account's balance.
 
-    Status is the single source of truth: "pago" means the money moved, so it
-    counts regardless of the date; "pendente"/"agendado" never move a balance.
+    Only paid transactions dated today or earlier affect the realized balance.
+    Pending and scheduled transactions never affect the realized balance.
     A parcelado purchase counts only the installments already come due.
     """
-    if tx.get("card_id") or tx.get("status") != "pago":
+    if tx.get("card_id") or tx.get("status") != "pago" or tx.get("date", "") > today:
         return []
     v = D(tx["value"])
     if tx.get("installment"):
-        n = int(tx.get("total_installments") or 1)
+        indices = remaining_installment_indices(tx)
         due = months_between(tx["date"][:7], today[:7]) + 1
-        v = sum((installment_portion(tx, i) for i in range(max(0, min(due, n)))), D(0))
+        v = sum(
+            (installment_portion(tx, i) for i in indices[:max(0, due)]),
+            D(0),
+        )
     if tx["type"] == "receita":
-        return [(tx["account_id"], round(v, 2))]
+        return [(tx["account_id"], quantize_brl(v))]
     if tx["type"] == "despesa":
-        return [(tx["account_id"], round(-v, 2))]
-    effects = [(tx["account_id"], round(-v, 2))]
+        return [(tx["account_id"], quantize_brl(-v))]
+    effects = [(tx["account_id"], quantize_brl(-v))]
     if tx.get("to_account_id") and tx["to_account_id"] != tx["account_id"]:
-        effects.append((tx["to_account_id"], round(v, 2)))
+        effects.append((tx["to_account_id"], quantize_brl(v)))
     return effects

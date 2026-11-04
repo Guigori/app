@@ -84,7 +84,7 @@ jobs:
             echo "FINNOS_CRON_SECRET is not configured; dispatcher skipped."
             exit 0
           fi
-          curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "X-Cron-Secret: $FINNOS_CRON_SECRET" \
+          # Active Firebase API exposes GET /push/dispatch and validates a\n          # Bearer CRON_SECRET. Do not log the secret or bypass the preview gate.\n          curl --fail-with-body --silent --show-error \
+            --request GET \
+            --header "Authorization: Bearer $FINNOS_CRON_SECRET" \
             https://finnos.vercel.app/api/push/dispatch

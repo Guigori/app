@@ -14,17 +14,29 @@ export function pushAvailable(): boolean {
   return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
 }
 
+/** Do not show an opt-in prompt until the active API can actually deliver pushes. */
+export async function pushServerAvailable(): Promise<boolean> {
+  if (!pushAvailable()) return false;
+  try {
+    const { public_key, supported } = await apiGet<PushPublicKey>("/push/public-key");
+    return Boolean(supported && public_key);
+  } catch {
+    return false;
+  }
+}
+
 /** Must be called from a user gesture: browsers reject unsolicited permission prompts. */
 export async function enablePush(): Promise<void> {
   if (!pushAvailable()) throw new Error("Este navegador não suporta avisos push.");
+
+  // Check server readiness BEFORE asking for a persistent browser permission.
+  const { public_key, supported } = await apiGet<PushPublicKey>("/push/public-key");
+  if (!supported || !public_key) throw new Error("Avisos push não estão configurados no servidor.");
   const permission = await Notification.requestPermission();
   if (permission !== "granted") throw new Error("Permissão de notificação não concedida.");
 
   const registration = await navigator.serviceWorker.register("/sw.js");
   await navigator.serviceWorker.ready;
-
-  const { public_key, supported } = await apiGet<PushPublicKey>("/push/public-key");
-  if (!supported || !public_key) throw new Error("Avisos push não estão configurados no servidor.");
 
   let subscription = await registration.pushManager.getSubscription();
   if (!subscription) {

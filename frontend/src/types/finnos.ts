@@ -30,6 +30,7 @@ export interface InstitutionInput {
 }
 
 export interface Account {
+  version?: number;
   id: string;
   name: string;
   institution: string;
@@ -59,7 +60,76 @@ export interface AccountDetail {
   transactions: Transaction[];
 }
 
+export interface HistoricalInvoiceReview {
+  status: "review_required" | "no_issues_detected_not_migration_verified";
+  counts: Record<string, number>;
+  examples: Array<{
+    reason: string;
+    card_id: string;
+    cycle: string | null;
+    item_id?: string;
+    recorded_paid_cents?: number;
+    matched_bank_payment_cents?: number;
+  }>;
+  sample_limit: number;
+  auto_fixed: false;
+  legacy_source_compared: false;
+}
+
+export interface FiintMaturity {
+  version: "fiint-v1";
+  status: "read_only";
+  finance_revision: number;
+  score: number;
+  score_max: 100;
+  score_label: string;
+  maturity_month: number;
+  months_observed: number;
+  history_span_months: number;
+  stage: string;
+  history_start: string | null;
+  criteria: Array<{ id: string; label: string; completed: boolean; points: number }>;
+  monthly_history: Array<{
+    month: string; income: number; expense: number; net: number;
+    entries: number; has_confirmed_data: boolean;
+  }>;
+  data_quality: {
+    active_accounts: number; categories: number;
+    months_with_settled_records: number; active_subscriptions: number;
+    has_open_budget: boolean;
+  };
+  is_financial_health_score: false;
+  writes_data: false;
+  disclaimer: string;
+}
+
+export interface FinanceIntegrity {
+  storage: "firestore";
+  integrity_ok: boolean;
+  issues: Record<string, number>;
+  has_financial_records: boolean;
+  total_account_balance: number | null;
+  legacy_reconciliation: "not_verified";
+  historical_invoices: HistoricalInvoiceReview;
+}
+
+export interface FinanceHistoryEvent {
+  id: string;
+  entity: string;
+  entity_id: string;
+  action: "created" | "updated" | "deleted";
+  summary: string;
+  created_at: string;
+  before: Record<string, string | number> | null;
+  after: Record<string, string | number> | null;
+}
+export interface FinanceHistoryPage {
+  items: FinanceHistoryEvent[];
+  next_cursor: string | null;
+}
+
 export interface Category {
+  version?: number;
   id: string;
   name: string;
   icon: string;
@@ -80,7 +150,9 @@ export interface CategoryInput {
 }
 
 export interface Transaction {
+  recurrence_id?: string | null;
   invoice_payment?: boolean;
+  invoice_refund?: boolean;
   version?: number;
   id: string;
   name: string;
@@ -109,6 +181,12 @@ export interface Transaction {
   notes: string | null;
   notify_enabled?: boolean;
   created_at: string;
+}
+
+export interface TransactionPage {
+  month: string;
+  items: Transaction[];
+  next_cursor: string | null;
 }
 
 export interface TransactionInput {
@@ -202,6 +280,13 @@ export interface BudgetRow {
   remaining: number;
   percent: number;
   status: BudgetStatus;
+  pace_day?: number;
+  pace_days_in_month?: number;
+  pace_ideal?: number;
+  pace_daily_allowance?: number;
+  pace_projected_close?: number;
+  pace_difference?: number;
+  pace_cumulative?: number[];
 }
 
 export interface BudgetSummary {
@@ -364,6 +449,7 @@ export interface CardInput {
 }
 
 export interface CreditCard {
+  version?: number;
   id: string;
   name: string;
   institution: string;
@@ -377,6 +463,9 @@ export interface CreditCard {
   active: boolean;
   invoice_paid: boolean;
   current_invoice: number;
+  payable_invoice?: number;
+  payable_cycle?: string | null;
+  payable_due?: string | null;
   future_installments: number;
   used: number;
   available: number;
@@ -449,6 +538,7 @@ export interface SubscriptionInput {
 // --- Assinaturas (mirror: backend/models/notify.py SubscriptionItem) ---
 
 export interface SubscriptionItem {
+  version?: number;
   id: string;
   name: string;
   value: number;
@@ -484,6 +574,38 @@ export interface InvoiceItem {
   installment_label: string | null;
 }
 
+export interface InvoiceAdjustment {
+  id: string;
+  purchase_id: string;
+  date: string;
+  reason: string;
+  value: number;
+}
+
+export interface BankRefundInput {
+  cycle: string;
+  purchase_id: string;
+  account_id: string;
+  date: string;
+  value: number;
+  reason: string;
+}
+export interface BankRefund {
+  id: string;
+  purchase_id: string;
+  account_id: string;
+  date: string;
+  value: number;
+  reason: string;
+}
+
+export interface CreditInvoiceInput {
+  cycle: string;
+  purchase_id: string;
+  value: number;
+  reason: string;
+}
+
 export interface Invoice {
   card_id: string;
   card_name: string;
@@ -496,6 +618,10 @@ export interface Invoice {
   outstanding?: number;
   paid_at: string | null;
   items: InvoiceItem[];
+  adjustments?: InvoiceAdjustment[];
+  adjustment_total?: number;
+  refunds?: BankRefund[];
+  refund_total?: number;
 }
 
 export interface PayInvoiceInput {

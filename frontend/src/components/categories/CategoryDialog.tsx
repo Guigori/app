@@ -81,7 +81,16 @@ export function CategoryDialog({ open, onOpenChange, category: categoryProp, cat
       ]);
       onOpenChange(false);
     },
-    onError: (error) => setFormError(getApiErrorMessage(error)),
+    onError: (error) => {
+      if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+        toast.info("Cadastro de categoria salvo neste aparelho", {
+          description: "Aguardando sincronização. Ainda não está confirmado no servidor.",
+        });
+        onOpenChange(false);
+        return;
+      }
+      setFormError(getApiErrorMessage(error));
+    },
   });
 
   const submit = () => {

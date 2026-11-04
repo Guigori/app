@@ -1,8 +1,16 @@
 name: FINNOS UI E2E
 
 on:
+  push:
+    branches: [refactor/finn-migration-phase1-20261026]
+    paths:
+      - "frontend/src/**"
+      - "tests/e2e/**"
+      - "tests/playwright.config.ts"
+      - "docs/finance/LOTE-P0-P1-20261028.md"
+      - ".github/workflows/onboarding-e2e.yml"
   pull_request:
-    branches: [main]
+    branches: [main, fix/fase-0-estabilizacao-20261025]
     paths:
       - "frontend/src/pages/Onboarding.tsx"
       - "frontend/src/lib/onboarding.ts"
@@ -50,4 +58,12 @@ jobs:
           exit 1
       - name: Run onboarding and wallet end-to-end tests
         working-directory: tests
-        run: npx playwright test e2e/onboarding.spec.ts e2e/wallet.spec.ts --project=desktop --project=mobile
+        run: npx playwright test e2e/onboarding.spec.ts e2e/wallet.spec.ts e2e/finance-integration.spec.ts e2e/visual-smoke.spec.ts --project=desktop --project=mobile
+      - name: Upload browser screenshots and traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finnos-ui-desktop-mobile
+          path: tests/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

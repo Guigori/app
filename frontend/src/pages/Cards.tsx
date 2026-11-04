@@ -32,7 +32,7 @@ export default function Cards() {
         <div>
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Cartões</h1>
           <p className="mt-1 text-sm text-muted-foreground" data-testid="cards-subtitle">
-            Fatura atual, limite usado, fechamento e melhor dia de compra.
+            Fatura a pagar, limite usado, fechamento e melhor dia de compra.
           </p>
         </div>
         <Button onClick={() => setDialog({ open: true })} data-testid="new-card-button">
@@ -61,6 +61,7 @@ export default function Cards() {
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2" data-testid="cards-list">
           {cards.map((card, index) => {
             const tone = usageTone(card.used_percent);
+            const closedPayable = Boolean(card.payable_cycle && card.payable_cycle !== card.next_closing && (card.payable_invoice ?? 0) > 0);
             return (
               <motion.article
                 key={card.id}
@@ -96,13 +97,14 @@ export default function Cards() {
                       </Button>
                     </div>
                   </div>
-                  <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/70">Fatura atual</p>
+                  <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/70">{closedPayable ? "Fatura fechada a pagar" : "Fatura atual"}</p>
                   <p className="font-heading text-3xl font-bold tabular-nums" data-testid={`card-invoice-${card.id}`}>
-                    {money(card.current_invoice)}
+                    {money(closedPayable ? (card.payable_invoice ?? card.current_invoice) : card.current_invoice)}
                   </p>
                   <p className="mt-1 text-xs text-white/70">
-                    Ciclo aberto desde {formatDate(card.cycle_start)}
-                    {card.invoice_paid ? " · fatura paga" : ""}
+                    {closedPayable
+                      ? `Fechada em ${formatDate(card.payable_cycle!)} · vence ${card.payable_due ? formatDate(card.payable_due) : "—"}`
+                      : <>Ciclo aberto desde {formatDate(card.cycle_start)}{card.invoice_paid ? " · fatura paga" : ""}</>}
                   </p>
                   <Link
                     to={`/cartoes/${card.id}`}

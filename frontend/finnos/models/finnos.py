@@ -23,6 +23,7 @@ DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 
 
 class AccountOut(BaseModel):
+    version: int = 1
     id: str
     name: str
     institution: str = ""
@@ -43,7 +44,8 @@ class AccountIn(BaseModel):
     institution_id: Optional[str] = Field(default=None, max_length=1500)
     type: AccountType = "corrente"
     color: str = Field(default="#070F52", pattern=HEX_PATTERN)
-    initial_balance: Money = Field(default=0.0, ge=0)
+    # Overdrafts and pre-existing liabilities are legitimate opening balances.
+    initial_balance: Money = Field(default=0.0)
     active: bool = True
 
 
@@ -56,6 +58,7 @@ class AccountDetailOut(BaseModel):
 
 
 class CategoryOut(BaseModel):
+    version: int = 1
     id: str
     name: str
     icon: str = "more-horizontal"
@@ -80,6 +83,7 @@ class CategoryIn(BaseModel):
 
 class TransactionOut(BaseModel):
     invoice_payment: bool = False
+    invoice_refund: bool = False
     version: int = 1
     id: str
     name: str
@@ -99,6 +103,7 @@ class TransactionOut(BaseModel):
     category_icon: Optional[str] = None
     fixed: bool = False
     recurrence: Optional[str] = None
+    recurrence_id: Optional[str] = None
     installment: bool = False
     total_installments: Optional[int] = None
     current_installment: Optional[int] = None

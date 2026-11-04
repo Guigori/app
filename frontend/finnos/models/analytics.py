@@ -34,6 +34,13 @@ class BudgetRow(BaseModel):
     remaining: Money
     percent: Money
     status: BudgetStatus
+    pace_day: int = 0
+    pace_days_in_month: int = 0
+    pace_ideal: Money = 0
+    pace_daily_allowance: Money = 0
+    pace_projected_close: Money = 0
+    pace_difference: Money = 0
+    pace_cumulative: List[Money] = []
 
 
 class BudgetSummary(BaseModel):

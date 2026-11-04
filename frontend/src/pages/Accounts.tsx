@@ -65,7 +65,16 @@ export default function Accounts() {
         queryClient.invalidateQueries({ queryKey: ["institutions"] }),
       ]);
     },
-    onError: (error) => toast.error(getApiErrorMessage(error)),
+    onError: (error) => {
+      if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+        setPendingDelete(null);
+        toast.info("Exclusão da conta aguardando sincronização", {
+          description: "A conta continua no servidor até a confirmação. Não tente excluí-la novamente.",
+        });
+        return;
+      }
+      toast.error(getApiErrorMessage(error));
+    },
   });
 
   return (

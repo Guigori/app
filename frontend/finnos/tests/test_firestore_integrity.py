@@ -45,6 +45,19 @@ def test_recent_previews_are_explicitly_bounded(monkeypatch):
 
 
 def _mock_delete(monkeypatch, records):
+    # The optimized adapter performs a UID-scoped point read before checking
+    # dependent references. Model the real Firestore DocumentSnapshot shape.
+    class Root:
+        def collection(self, kind):
+            return SimpleNamespace(document=lambda identifier: SimpleNamespace(
+                get=lambda transaction=None: SimpleNamespace(
+                    id=identifier,
+                    exists=any(r["id"] == identifier for r in records.get(kind, [])),
+                    to_dict=lambda: next((dict(r) for r in records.get(kind, [])
+                                          if r["id"] == identifier), None),
+                ),
+            ))
+    monkeypatch.setattr(adapter, "root", lambda db, uid: Root())
     monkeypatch.setattr(adapter, "client", lambda: object())
     monkeypatch.setattr(adapter, "atomic", lambda db, uid, action: action(SimpleNamespace()))
     monkeypatch.setattr(

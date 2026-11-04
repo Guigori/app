@@ -77,7 +77,11 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
 
   const mutation = useMutation({
     mutationFn: async (input: CardInput) => {
-      const resolved = await resolveInstitutionChoice(institutionChoice, input.institution, institutions);
+      // Offline registration is a draft. Do not attempt to create a related
+      // financial institution before the primary entity has been synced.
+      const resolved = !navigator.onLine && !card
+        ? { institution: input.institution, institution_id: institutionChoice === "new" ? null : input.institution_id }
+        : await resolveInstitutionChoice(institutionChoice, input.institution, institutions);
       const payload = { ...input, ...resolved };
       return card ? updateCard(card.id, payload) : createCard(payload);
     },
@@ -90,7 +94,16 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
       ]);
       onOpenChange(false);
     },
-    onError: (error) => setFormError(getApiErrorMessage(error)),
+    onError: (error) => {
+      if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+        toast.info("Cadastro de cartão salvo neste aparelho", {
+          description: "Aguardando sincronização. Ainda não está confirmado no servidor.",
+        });
+        onOpenChange(false);
+        return;
+      }
+      setFormError(getApiErrorMessage(error));
+    },
   });
 
   const submit = () => {
@@ -248,6 +261,13 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
                     await queryClient.invalidateQueries({ queryKey: ["cards"] });
                     onOpenChange(false);
                   } catch (error) {
+                    if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+                      toast.info("Exclusão do cartão aguardando sincronização", {
+                        description: "O cartão permanecerá visível até a confirmação do servidor.",
+                      });
+                      onOpenChange(false);
+                      return;
+                    }
                     setFormError(getApiErrorMessage(error));
                   }
                 }}

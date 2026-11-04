@@ -1,0 +1,65 @@
+{
+  "purpose": "FIN-07/08 legacy occurrence values used by Flow and Calendar, synthetic only",
+  "cases": [
+    {
+      "id": "plain",
+      "tx": {
+        "value": 19.9,
+        "installment": false
+      },
+      "expected_cents": 1990
+    },
+    {
+      "id": "first-third-missing",
+      "tx": {
+        "value": 100,
+        "installment": true,
+        "total_installments": 3,
+        "current_installment": 1,
+        "installment_value": null
+      },
+      "expected_cents": 3333
+    },
+    {
+      "id": "last-third-missing",
+      "tx": {
+        "value": 100,
+        "installment": true,
+        "total_installments": 3,
+        "current_installment": 3
+      },
+      "expected_cents": 3334
+    },
+    {
+      "id": "imported-seven-of-ten",
+      "tx": {
+        "value": 1000,
+        "installment": true,
+        "total_installments": 10,
+        "current_installment": 7
+      },
+      "expected_cents": 10000
+    },
+    {
+      "id": "legacy-explicit",
+      "tx": {
+        "value": 100,
+        "installment": true,
+        "total_installments": 3,
+        "current_installment": 1,
+        "installment_value": 33.35
+      },
+      "expected_cents": 3335
+    },
+    {
+      "id": "tiny-final-cent",
+      "tx": {
+        "value": 0.05,
+        "installment": true,
+        "total_installments": 3,
+        "current_installment": 3
+      },
+      "expected_cents": 2
+    }
+  ]
+}

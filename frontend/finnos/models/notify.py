@@ -41,6 +41,7 @@ class NotifyPrefsOut(NotifyPrefsIn):
 
 
 class SubscriptionItem(BaseModel):
+    version: int = 1
     id: str
     name: str
     value: Money
@@ -74,6 +75,41 @@ class InvoiceItem(BaseModel):
     installment_label: Optional[str] = None
 
 
+class InvoiceAdjustment(BaseModel):
+    id: str
+    purchase_id: str
+    date: str
+    reason: str
+    value: Money
+
+
+class CreditInvoiceIn(BaseModel):
+    cycle: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    purchase_id: str = Field(min_length=1, max_length=1500)
+    value: Money = Field(gt=0)
+    reason: str = Field(min_length=5, max_length=300)
+
+
+
+class BankRefundIn(BaseModel):
+    cycle: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    purchase_id: str = Field(min_length=1, max_length=1500)
+    account_id: str = Field(min_length=1, max_length=1500)
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    value: Money = Field(gt=0)
+    reason: str = Field(min_length=5, max_length=300)
+
+
+class BankRefundOut(BaseModel):
+    id: str
+    purchase_id: str
+    account_id: str
+    date: str
+    reason: str
+    value: Money
+
+
+
 class Invoice(BaseModel):
     card_id: str
     card_name: str
@@ -86,6 +122,10 @@ class Invoice(BaseModel):
     paid_amount: Money
     paid_at: Optional[str] = None
     items: List[InvoiceItem]
+    adjustments: List[InvoiceAdjustment] = Field(default_factory=list)
+    adjustment_total: Money = 0
+    refunds: List[BankRefundOut] = Field(default_factory=list)
+    refund_total: Money = 0
 
 
 class PayInvoiceIn(BaseModel):

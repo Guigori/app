@@ -97,3 +97,77 @@ def test_standalone_subscription_orphan_blocks_audited_balance():
     assert audited["integrity_ok"] is False
     assert audited["issues"]["subscription_account_missing"] == 1
     assert audited["total_account_balance"] is None
+
+
+
+def with_refund_records():
+    data = records()
+    data["cards"][0]["invoice_refunds"] = {
+        "2026-01-29": [{
+            "id": "return-1", "purchase_id": "card-purchase",
+            "account_id": "b", "date": "2026-01-09",
+            "refund_cents": 1250, "reason": "Item devolvido",
+        }],
+    }
+    data["transactions"].append({
+        "id": "return-1", "type": "receita", "status": "pago",
+        "date": "2026-01-09", "value": 12.50, "account_id": "b",
+        "card_id": None, "invoice_refund": True, "invoice_card_id": "card",
+        "invoice_cycle": "2026-01-29",
+        "original_purchase_id": "card-purchase",
+    })
+    return data
+
+
+def test_financial_integrity_links_card_refund_and_its_cash_receipt():
+    data = with_refund_records()
+    result = audit_finance(data)
+    assert result["integrity_ok"] is True
+    assert result["issues"] == {}
+    assert result["total_account_balance"] == 182.50
+
+
+def test_refund_without_its_bank_receipt_blocks_balance_confirmation():
+    data = with_refund_records()
+    data["transactions"] = [tx for tx in data["transactions"] if tx["id"] != "return-1"]
+    result = audit_finance(data)
+    assert result["issues"]["invoice_refund_receipt_missing_or_mismatch"] == 1
+    assert result["total_account_balance"] is None
+
+
+def test_wrong_refund_value_or_account_is_flagged():
+    data = with_refund_records()
+    receipt = data["transactions"][-1]
+    receipt["value"] = "not-a-number"
+    assert audit_finance(data)["issues"]["invoice_refund_receipt_missing_or_mismatch"] == 1
+    receipt["value"] = 12.5
+    receipt["account_id"] = "a"
+    assert audit_finance(data)["issues"]["invoice_refund_receipt_missing_or_mismatch"] == 1
+
+
+def test_refund_receipt_without_card_ledger_is_orphaned():
+    data = with_refund_records()
+    data["cards"][0].pop("invoice_refunds")
+    assert audit_finance(data)["issues"]["invoice_refund_orphan_receipt"] == 1
+
+
+def test_credit_references_must_match_purchase_on_same_card():
+    data = records()
+    data["cards"][0]["invoice_adjustments"] = {
+        "2026-01-29": [
+            {"id": "cr-1", "purchase_id": "missing", "credit_cents": 200},
+            {"id": "cr-2", "purchase_id": "card-purchase", "credit_cents": -100},
+        ],
+    }
+    issues = audit_finance(data)["issues"]
+    assert issues["invoice_adjustment_original_missing"] == 1
+    assert issues["invoice_adjustment_amount_invalid"] == 1
+
+
+def test_duplicate_credit_identifier_is_detected():
+    data = records()
+    event = {"id": "cr-1", "purchase_id": "card-purchase", "credit_cents": 500}
+    data["cards"][0]["invoice_adjustments"] = {
+        "2026-01-29": [dict(event), dict(event)],
+    }
+    assert audit_finance(data)["issues"]["invoice_adjustment_duplicate_id"] == 1

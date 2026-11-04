@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import Dashboard from "@/pages/Dashboard";
-import DashboardWeb from "@/pages/DashboardWeb";
+import { lazy, Suspense, useEffect, useState } from "react";
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const DashboardWeb = lazy(() => import("@/pages/DashboardWeb"));
 
 const DESKTOP_QUERY = "(min-width: 1024px)";
 
@@ -12,5 +12,9 @@ export default function DashboardEntry() {
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
   }, []);
-  return desktop ? <DashboardWeb /> : <Dashboard />;
+  return (
+    <Suspense fallback={<div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground" role="status">Preparando seu Dashboard...</div>}>
+      {desktop ? <DashboardWeb /> : <Dashboard />}
+    </Suspense>
+  );
 }

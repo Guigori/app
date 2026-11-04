@@ -4,7 +4,7 @@ from finnos.lib.money import D
 import uuid
 from datetime import datetime, timezone
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Header
 from finnos.lib.db import db
 from finnos.lib.stats import aware
 from finnos.models.finnos import CategoryIn, CategoryOut
@@ -15,6 +15,7 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 
 def _out(doc: dict) -> CategoryOut:
     return CategoryOut(
+        version=doc.get("version", 1),
         id=doc["id"],
         name=doc["name"],
         icon=doc.get("icon", "more-horizontal"),
@@ -38,12 +39,14 @@ async def list_categories(user: dict = Depends(require_user)) -> list[CategoryOu
 
 @router.post("", response_model=CategoryOut, status_code=201)
 async def create_category(
-    payload: CategoryIn, user: dict = Depends(require_user)
+    payload: CategoryIn, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80)
 ) -> CategoryOut:
     doc = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
         **payload.model_dump(),
+        **({"operation_id": x_finnos_operation_id} if x_finnos_operation_id else {}),
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
@@ -53,10 +56,14 @@ async def create_category(
 
 @router.put("/{category_id}", response_model=CategoryOut)
 async def update_category(
-    category_id: str, payload: CategoryIn, user: dict = Depends(require_user)
+    category_id: str, payload: CategoryIn, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
+    x_finnos_base_version: int | None = Header(default=None, ge=1)
 ) -> CategoryOut:
     result = await db.categories.update_one(
-        {"id": category_id, "user_id": user["id"]},
+        {"id": category_id, "user_id": user["id"],
+         "_operation_id": x_finnos_operation_id,
+         "_expected_version": x_finnos_base_version},
         {"$set": {**payload.model_dump(), "updated_at": datetime.now(timezone.utc)}},
     )
     if not result.matched_count:
@@ -66,7 +73,9 @@ async def update_category(
 
 
 @router.delete("/{category_id}", status_code=204)
-async def delete_category(category_id: str, user: dict = Depends(require_user)) -> None:
+async def delete_category(category_id: str, user: dict = Depends(require_user),
+    x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
+    x_finnos_base_version: int | None = Header(default=None, ge=1)) -> None:
     used = await db.transactions.count_documents(
         {"user_id": user["id"], "category_id": category_id}
     )
@@ -75,6 +84,8 @@ async def delete_category(category_id: str, user: dict = Depends(require_user)) 
             status_code=409,
             detail="Esta categoria tem transações vinculadas. Mova-as para outra categoria antes de excluir.",
         )
-    result = await db.categories.delete_one({"id": category_id, "user_id": user["id"]})
+    result = await db.categories.delete_one({"id": category_id, "user_id": user["id"],
+         "_operation_id": x_finnos_operation_id,
+         "_expected_version": x_finnos_base_version})
     if not result.deleted_count:
         raise HTTPException(status_code=404, detail="Categoria não encontrada.")
