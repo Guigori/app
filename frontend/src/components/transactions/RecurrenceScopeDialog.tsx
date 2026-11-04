@@ -97,12 +97,14 @@ export function RecurrenceScopeDialog({ open, onOpenChange, transaction, onSaved
     setError("");
     try {
       await editRecurrence(transaction.id, transaction.version ?? 1, scope, date, changes, operation.current);
-      await Promise.all(["transactions", "dashboard", "flow", "calendar", "budget", "radar", "trends", "notifications"].map(
-        (key) => queryClient.invalidateQueries({ queryKey: [key] }),
-      ));
       toast.success("Recorrência atualizada com segurança.");
       onOpenChange(false);
       onSaved?.();
+      // The server already confirmed the edit: refresh screens in the background so a
+      // slow or failing refetch never keeps the dialog locked on a saved change.
+      for (const key of ["transactions", "dashboard", "flow", "calendar", "budget", "radar", "trends", "notifications"]) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      }
     } catch (cause) {
       setError(getApiErrorMessage(cause));
     } finally {

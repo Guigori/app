@@ -31,22 +31,66 @@ class Ref:
         return Snapshot(self.path[-1], self.db.data.get(self.path))
 
 
-class Collection:
-    def __init__(self, db, path):
-        self.db, self.path = db, path
+_COMPARE = {
+    "==": lambda a, b: a == b, "<": lambda a, b: a < b, "<=": lambda a, b: a <= b,
+    ">": lambda a, b: a > b, ">=": lambda a, b: a >= b,
+}
 
-    def document(self, name):
-        return Ref(self.db, self.path + (name,))
+
+class Query:
+    """Immutable subset of the Firestore query API used by the paginated adapters."""
+
+    def __init__(self, db, path, filters=(), orders=(), cursor=None, size=None):
+        self.db, self.path = db, path
+        self.filters, self.orders, self.cursor, self.size = filters, orders, cursor, size
+
+    def _with(self, **changes):
+        state = dict(filters=self.filters, orders=self.orders, cursor=self.cursor, size=self.size)
+        state.update(changes)
+        return Query(self.db, self.path, **state)
+
+    def where(self, field, op, value):
+        return self._with(filters=self.filters + ((field, op, value),))
+
+    def order_by(self, field, direction=None):
+        descending = str(direction).upper().endswith("DESCENDING")
+        return self._with(orders=self.orders + ((field, descending),))
+
+    def start_after(self, snapshot):
+        return self._with(cursor=snapshot)
 
     def limit(self, value):
-        return self
+        return self._with(size=value)
+
+    @staticmethod
+    def _value(snapshot, field):
+        return snapshot.id if field == "__name__" else (snapshot.doc or {}).get(field)
 
     def stream(self, **kwargs):
-        return [
+        rows = [
             Snapshot(path[-1], doc)
             for path, doc in self.db.data.items()
             if path[:-1] == self.path
         ]
+        rows = [
+            row for row in rows
+            if all(_COMPARE[op](self._value(row, field), value) for field, op, value in self.filters)
+            if all(self._value(row, field) is not None for field, op, value in self.filters)
+        ]
+        for field, descending in reversed(self.orders):
+            rows.sort(key=lambda row: (self._value(row, field) is None, self._value(row, field)), reverse=descending)
+        if self.cursor is not None:
+            ids = [row.id for row in rows]
+            rows = rows[ids.index(self.cursor.id) + 1:] if self.cursor.id in ids else rows
+        return rows[: self.size] if self.size is not None else rows
+
+
+class Collection(Query):
+    def __init__(self, db, path):
+        super().__init__(db, path)
+
+    def document(self, name):
+        return Ref(self.db, self.path + (name,))
 
 
 class Transaction:
@@ -70,6 +114,21 @@ class DB:
 
     def collection(self, name):
         return Collection(self, (name,))
+
+
+def freeze_today(monkeypatch, iso_date):
+    """Pin the server's financial "today" so date-relative assertions never expire."""
+    from datetime import datetime
+    from finnos.lib import dates
+
+    frozen = datetime.fromisoformat(iso_date + "T12:00:00")
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return frozen.replace(tzinfo=tz)
+
+    monkeypatch.setattr(dates, "datetime", FrozenDatetime)
 
 
 @pytest.fixture
