@@ -23,9 +23,10 @@ interface AccountDetailDialogProps {
   account: Account | null;
   onEdit: (account: Account) => void;
   onDelete: (account: Account) => void;
+  onPaymentMethods?: (account: Account) => void;
 }
 
-export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDelete }: AccountDetailDialogProps) {
+export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDelete, onPaymentMethods }: AccountDetailDialogProps) {
   const { hidden } = useBalanceHidden();
   const detailQuery = useQuery({
     queryKey: ["account", account?.id],
@@ -114,6 +115,7 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
         )}
 
         <DialogFooter>
+          {onPaymentMethods ? <Button variant="ghost" onClick={() => onPaymentMethods(account)} data-testid="account-detail-payments-button">Formas de pagamento</Button> : null}
           <Button variant="outline" onClick={() => onEdit(account)} data-testid="account-detail-edit-button">
             <Pencil className="h-4 w-4" aria-hidden="true" />
             Editar

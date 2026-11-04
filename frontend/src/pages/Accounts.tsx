@@ -78,16 +78,17 @@ export default function Accounts() {
   });
 
   return (
-    <div className="space-y-6 animate-fade-up">
+    <div className="space-y-5 animate-fade-up">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Carteira</h1>
           <p className="mt-1 text-sm text-muted-foreground">Instituições, contas e cartões com saldos e faturas organizados.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => dialogs.openAccount()} data-testid="new-account-button"><PlusCircle className="h-4 w-4"/> Nova conta</Button>
-          <Button variant="outline" onClick={() => setCardDialog({ open: true })}><PlusCircle className="h-4 w-4"/> Novo cartão</Button>
-          <Button variant="outline" onClick={() => setInstitutionManagerOpen(true)}>Instituições</Button>
+        {/* Compact pills on phones, one row. */}
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
+          <Button size="sm" className="h-9 shrink-0 rounded-full px-3.5" onClick={() => dialogs.openAccount()} data-testid="new-account-button"><PlusCircle className="h-4 w-4"/> Nova conta</Button>
+          <Button size="sm" variant="outline" className="h-9 shrink-0 rounded-full px-3.5" onClick={() => setCardDialog({ open: true })}><PlusCircle className="h-4 w-4"/> Novo cartão</Button>
+          <Button size="sm" variant="outline" className="h-9 shrink-0 rounded-full px-3.5" onClick={() => setInstitutionManagerOpen(true)}>Instituições</Button>
         </div>
       </div>
 
@@ -104,8 +105,7 @@ export default function Accounts() {
           action={<Button onClick={() => dialogs.openAccount()} data-testid="accounts-empty-create-button">Criar conta</Button>} />
       ) : (
         <WalletInstitutions accounts={accounts} cards={cards} institutions={institutions}
-          onOpenAccount={setSelected} onEditAccount={account => dialogs.openAccount(account)}
-          onDeleteAccount={setPendingDelete} onPaymentMethods={account => { void openPaymentMethods(account); }}
+          onOpenAccount={setSelected}
           onEditCard={card => setCardDialog({ open: true, card })}/>
       )}
       <CardDialog open={cardDialog.open} card={cardDialog.card} onOpenChange={open => setCardDialog(prev => ({ ...prev, open }))} />
@@ -122,6 +122,7 @@ export default function Accounts() {
           dialogs.openAccount(account);
         }}
         onDelete={(account) => setPendingDelete(account)}
+        onPaymentMethods={(account) => { setSelected(null); void openPaymentMethods(account); }}
       />
 
       <ConfirmDialog

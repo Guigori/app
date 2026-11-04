@@ -15,14 +15,8 @@ export function FiintSection({ hidden }: { hidden: boolean }) {
     enabled: !local,
     staleTime: 60_000,
   });
-  if (local) return (
-    <section className="rounded-[24px] border bg-card p-5" aria-label="FIINT">
-      <h2 className="font-heading text-lg font-bold">Sua organização financeira</h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Entre com sua conta para ver como você acompanhou suas finanças nos últimos 12 meses.
-      </p>
-    </section>
-  );
+  // Demo/local mode has no audited history: show nothing rather than a login prompt.
+  if (local) return null;
   if (isPending) return (
     <section className="rounded-[24px] border bg-card p-5" role="status">
       <h2 className="font-heading text-lg font-bold">Sua organização financeira</h2>
