@@ -27,6 +27,14 @@ export function todayISO(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
+/** Strict calendar date in YYYY-MM-DD (rejects 2026-02-30 and partial values). */
+export function isISODate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+
 export function addMonth(month: string, delta: number): string {
   const y = parseInt(month.slice(0, 4), 10);
   const m = parseInt(month.slice(5, 7), 10);
