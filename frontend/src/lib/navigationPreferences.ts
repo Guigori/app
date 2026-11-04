@@ -13,8 +13,8 @@ export type NavigationPreferences = {
 };
 
 const HOME = "inicio";
-const MOBILE_DEFAULT = ["inicio", "transacoes", "fluxo", "contas"];
-const WEB_DEFAULT = ["inicio", "transacoes", "fluxo", "orcamento", "categorias", "contas"];
+const MOBILE_DEFAULT = ["inicio", "transacoes", "analise", "contas"];
+const WEB_DEFAULT = ["inicio", "transacoes", "analise", "orcamento", "categorias", "contas"];
 
 function validSlugs() {
   return new Set(MAIN_NAV.filter((item) => !item.soon).map((item) => item.slug));
@@ -30,7 +30,9 @@ export function getNavigationPreferences(): NavigationPreferences {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<NavigationPreferences>;
     const valid = validSlugs();
     const clean = (value: unknown, fallback: string[], max?: number, allowed = valid) => {
-      const source = Array.isArray(value) ? value.filter((x): x is string => typeof x === "string" && allowed.has(x)) : fallback;
+      // "fluxo" (cash flow) now lives inside Fluxo; saved shortcuts move to Análise.
+      const migrated = Array.isArray(value) ? value.map((x) => (x === "fluxo" ? "analise" : x)) : value;
+      const source = Array.isArray(migrated) ? migrated.filter((x): x is string => typeof x === "string" && allowed.has(x)) : fallback;
       const unique = [HOME, ...source.filter((x) => x !== HOME)].filter((x, i, a) => a.indexOf(x) === i);
       return max ? unique.slice(0, max) : unique;
     };

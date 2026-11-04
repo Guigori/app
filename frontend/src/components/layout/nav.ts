@@ -19,8 +19,6 @@ import {
 export interface NavItem {
   to: string;
   label: string;
-  /** Shorter name for the phone dock, where each tab is ~65px wide. */
-  shortLabel?: string;
   icon: LucideIcon;
   soon?: boolean;
   slug: string;
@@ -39,7 +37,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: null,
     items: [
       { to: "/", label: "Início", icon: Home, slug: "inicio" },
-      { to: "/transacoes", label: "Lançamentos", icon: GitCompareArrows, slug: "transacoes" },
+      { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
       { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
       { to: "/configuracoes#ia", label: "FINNOS IA", icon: Sparkles, slug: "ia" },
     ],
@@ -48,7 +46,6 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Planejar",
     dot: "#10B981",
     items: [
-      { to: "/fluxo", label: "Fluxo de caixa", shortLabel: "Fluxo", icon: ArrowUpDown, slug: "fluxo" },
       { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
       { to: "/radar", label: "Radar", icon: Radar, slug: "radar" },
       { to: "/patrimonio", label: "Patrimônio", icon: Landmark, slug: "patrimonio" },
@@ -76,8 +73,8 @@ export const MAIN_NAV: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 /** Horizontal tab strip under the header (Calen's Início · Fluxo · Categorias …). */
 export const TOP_TABS: NavItem[] = [
   { to: "/", label: "Início", icon: Home, slug: "inicio" },
-  { to: "/transacoes", label: "Lançamentos", icon: GitCompareArrows, slug: "transacoes" },
-  { to: "/fluxo", label: "Fluxo de caixa", shortLabel: "Fluxo", icon: ArrowUpDown, slug: "fluxo" },
+  { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
+  { to: "/analise", label: "Análise", icon: ChartNoAxesCombined, slug: "analise" },
   { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
   { to: "/categorias", label: "Categorias", icon: Tags, slug: "categorias" },
   { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
@@ -86,17 +83,17 @@ export const TOP_TABS: NavItem[] = [
 /** Bottom bar on mobile — the central "+" sits between these two pairs. */
 export const BOTTOM_LEFT: NavItem[] = [
   { to: "/", label: "Início", icon: Home, slug: "inicio" },
-  { to: "/transacoes", label: "Lançamentos", icon: GitCompareArrows, slug: "transacoes" },
+  { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
 ];
 
 export const BOTTOM_RIGHT: NavItem[] = [
-  { to: "/fluxo", label: "Fluxo de caixa", shortLabel: "Fluxo", icon: ArrowUpDown, slug: "fluxo" },
+  { to: "/analise", label: "Análise", icon: ChartNoAxesCombined, slug: "analise" },
   { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
 ];
 
 export const PAGE_TITLES: Record<string, string> = {
   "/": "Início",
-  "/transacoes": "Lançamentos",
+  "/transacoes": "Fluxo",
   "/contas": "Carteira",
   "/analise": "Análise",
   "/categorias": "Categorias",

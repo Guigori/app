@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ interface NavMenuProps {
  *  soft icon tiles, section captions and a left bar marking the active route. */
 export function NavMenu({ onNavigate, animate = true, testidPrefix = "nav", collapsed = false }: NavMenuProps) {
   let index = -1;
+  const location = useLocation();
   return (
     <nav className="flex flex-col gap-4" data-testid={`${testidPrefix}-menu`}>
       {NAV_GROUPS.map((group) => (
@@ -27,7 +28,6 @@ export function NavMenu({ onNavigate, animate = true, testidPrefix = "nav", coll
             <div className="mx-auto mb-2 h-px w-6 bg-border" aria-hidden="true" />
           ) : group.label ? (
             <p className="mb-1.5 flex items-center gap-2 px-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: group.dot }} aria-hidden="true" />
               {group.label}
             </p>
           ) : null}
@@ -57,7 +57,7 @@ export function NavMenu({ onNavigate, animate = true, testidPrefix = "nav", coll
                     title={collapsed ? item.label : undefined}
                     aria-label={collapsed ? item.label : undefined}
                     className={({ isActive: routeActive }) => {
-                      const isActive = routeActive && item.slug !== "ia";
+                      const isActive = (routeActive || (item.to === "/transacoes" && location.pathname.startsWith("/fluxo"))) && item.slug !== "ia";
                       return cn(
                         "group relative flex min-h-10 items-center gap-3 rounded-xl px-2.5 py-1 text-sm font-medium transition-colors duration-150",
                         collapsed && "justify-center px-0",
@@ -66,7 +66,7 @@ export function NavMenu({ onNavigate, animate = true, testidPrefix = "nav", coll
                     }}
                     data-testid={`${testidPrefix}-${item.slug}`}
                   >
-                    {({ isActive: routeActive }) => { const isActive = routeActive && item.slug !== "ia"; return (
+                    {({ isActive: routeActive }) => { const isActive = (routeActive || (item.to === "/transacoes" && location.pathname.startsWith("/fluxo"))) && item.slug !== "ia"; return (
                       <>
                         {isActive ? (
                           <motion.span

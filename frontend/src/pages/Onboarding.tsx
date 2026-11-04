@@ -314,7 +314,7 @@ export default function Onboarding() {
       </div>}
       {step === 5 && <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
-          {([["Home","Resumo do seu dinheiro","/"],["Fluxo de caixa","Quanto sobrou ou faltou por mês","/fluxo"],["Análises","Gráficos e descobertas","/analise"],["Metas e patrimônio","Seus objetivos","/patrimonio"],["Assinaturas","Serviços recorrentes","/assinaturas"],["Radar","Alertas importantes","/radar"]] as const).map(([title,desc,path]) =>
+          {([["Home","Resumo do seu dinheiro","/"],["Fluxo","Entradas, saídas e o que vem pela frente","/transacoes"],["Análises","Gráficos e descobertas","/analise"],["Metas e patrimônio","Seus objetivos","/patrimonio"],["Assinaturas","Serviços recorrentes","/assinaturas"],["Radar","Alertas importantes","/radar"]] as const).map(([title,desc,path]) =>
             <div key={title} className="rounded-2xl border border-border p-4"><p className="font-semibold">{title}</p><p className="mt-1 text-xs text-muted-foreground">{desc}</p><p className="mt-2 text-xs text-primary">{path}</p></div>)}
         </div>
         <p className="text-xs text-muted-foreground"><ShieldCheck className="mr-1 inline h-4 w-4 text-primary" />As operações financeiras permanecem privadas na sua conta. Você pode ajustar as configurações a qualquer momento.</p>

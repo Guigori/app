@@ -72,11 +72,9 @@ export function TransactionCalendar({
   };
   const heatBackground = (level: number) => {
     if (level === 0) return undefined;
-    if (level === 1) return "color-mix(in srgb, var(--finnos-purple) 18%, var(--card))";
-    if (level === 2) return "color-mix(in srgb, var(--finnos-purple) 34%, var(--card))";
-    if (level === 3) return "color-mix(in srgb, var(--finnos-purple-live) 54%, var(--card))";
-    if (level === 4) return "color-mix(in srgb, var(--finnos-violet) 76%, var(--finnos-purple))";
-    return "var(--finnos-purple-live)";
+    // Softer, single-hue scale: the calendar reads as a quiet heatmap, not a mosaic.
+    const mix = [0, 10, 20, 32, 46, 62][level] ?? 62;
+    return `color-mix(in srgb, var(--finnos-purple-live) ${mix}%, var(--card))`;
   };
   const cells = buildCells(month);
   const weeks: Cell[][] = [];
@@ -145,17 +143,17 @@ export function TransactionCalendar({
                 className={cn(
                   // Fixed heights per breakpoint: a square of width/7 filled the whole
                   // phone screen and became huge, almost empty tiles on desktop.
-                  "relative flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border text-sm font-semibold tabular-nums transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-14 lg:h-[4.5rem] lg:items-start lg:justify-between lg:px-2.5 lg:py-2",
+                  "relative flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border text-sm font-semibold tabular-nums transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:h-14 lg:h-[3.75rem] lg:items-start lg:justify-between lg:px-1.5 lg:py-1.5",
                   selected
                     ? "border-foreground bg-foreground text-background shadow-md"
                     : cell.outside
                       ? "border-transparent bg-transparent text-muted-foreground/40"
-                      : level >= 3
-                        ? "border-border/20 text-white hover:brightness-110"
-                        : "border-border/20 text-foreground hover:brightness-110",
+                      : level >= 5
+                        ? "border-transparent text-white hover:brightness-110"
+                        : "border-transparent text-foreground hover:brightness-95",
                   !selected && cell.date === today ? "font-extrabold ring-2 ring-primary ring-offset-1 ring-offset-card" : undefined,
                 )}
-                style={!cell.outside && !selected ? { backgroundColor: level > 0 ? heatBackground(level) : "color-mix(in srgb, var(--finnos-app) 14%, var(--card))" } : undefined}
+                style={!cell.outside && !selected ? { backgroundColor: level > 0 ? heatBackground(level) : "color-mix(in srgb, var(--finnos-app) 6%, var(--card))" } : undefined}
                 data-testid={`calendar-day-${cell.date}`}
               >
                 <span>{Number(cell.date.slice(8, 10))}</span>

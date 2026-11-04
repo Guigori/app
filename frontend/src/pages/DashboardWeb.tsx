@@ -5,6 +5,7 @@ import { ArrowDownLeft, ArrowRight, ArrowUpRight, CalendarDays, ChevronLeft, Che
 import { fetchAccounts, fetchCalendar, fetchDashboard, fetchMe } from "@/lib/data";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
+import { Sparkline } from "@/components/dashboard/Sparkline";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { HomeFinancialChart } from "@/components/dashboard/HomeFinancialChart";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
@@ -49,14 +50,25 @@ export default function DashboardWeb() {
   const byDate = new Map(days.map((d) => [d.date, d]));
   const selected = selectedDate ? byDate.get(selectedDate) : undefined;
   const today = new Date().toLocaleDateString("en-CA");
+  // Daily trend series for the summary cards: cumulative income/expense/net up
+  // to today (current month) or the whole month, and the balance walked back
+  // from today's total so the last point equals "Saldo disponível".
+  const lastDay = month === today.slice(0, 7) ? Number(today.slice(8, 10)) : count;
+  const daily = Array.from({ length: lastDay }, (_, i) => byDate.get(`${month}-${String(i + 1).padStart(2, "0")}`));
+  const cumulative = (pick: (d: (typeof days)[number]) => number) => {
+    let total = 0;
+    return daily.map((d) => (total += d ? pick(d) : 0));
+  };
+  const incomeSeries = cumulative((d) => d.income);
+  const expenseSeries = cumulative((d) => d.expense);
+  const netSeries = incomeSeries.map((v, i) => v - expenseSeries[i]);
+  const balanceSeries = data ? netSeries.map((v) => data.total_balance - (netSeries[netSeries.length - 1] ?? 0) + v) : [];
 
   return (
     <div className="mx-auto max-w-[1440px] space-y-6 pb-10" data-testid="dashboard-web-v2">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-primary">Visão financeira</p>
-          <h1 className="mt-1 font-heading text-2xl font-semibold tracking-tight sm:text-3xl">Olá, {me.data ? firstName(me.data.name) : "bem-vindo"}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Seu dinheiro, com clareza.</p>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">Olá, {me.data ? firstName(me.data.name) : "bem-vindo"}</h1>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={toggle} className="rounded-xl border border-border px-3 py-2 text-sm hover:bg-muted" aria-label={hidden ? "Mostrar valores" : "Ocultar valores"}>{hidden ? "Mostrar valores" : "Ocultar valores"}</button>
@@ -64,7 +76,7 @@ export default function DashboardWeb() {
         </div>
       </header>
 
-      <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+      <div className="flex items-center justify-between gap-3 border-b border-border pb-3">
         <div className="flex items-center gap-2 text-sm font-medium"><CalendarDays size={17} className="text-primary" /> {monthLabel(month)}</div>
         <div className="flex items-center gap-2">
           <button aria-label="Mês anterior" onClick={() => { setMonth(changeMonth(month, -1)); setSelectedDate(null); }} className="rounded-lg p-2 hover:bg-muted"><ChevronLeft size={18} /></button>
@@ -78,15 +90,15 @@ export default function DashboardWeb() {
       {data && (
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumo financeiro">
           {[
-            { title: "Saldo disponível", amount: data.total_balance, icon: Wallet, kind: "balance" as MetricKind, highlight: true },
-            { title: "Receitas do mês", amount: data.income, icon: ArrowDownLeft, kind: "income" as MetricKind },
-            { title: "Despesas do mês", amount: data.expense, icon: ArrowUpRight, kind: "expense" as MetricKind },
-            { title: "Resultado do mês", amount: data.month_balance, icon: CreditCard, kind: "balance" as MetricKind },
-          ].map(({ title, amount, icon: Icon, kind, highlight }) => (
-            <button key={title} onClick={() => go(kind)} className={`group rounded-2xl border p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md ${highlight ? "border-primary/30 bg-gradient-to-br from-[#070F52] to-[#4B2CFF] text-white" : "border-border bg-card"}`}>
+            { title: "Saldo disponível", amount: data.total_balance, icon: Wallet, kind: "balance" as MetricKind, highlight: true, series: balanceSeries, tone: "text-white" },
+            { title: "Receitas do mês", amount: data.income, icon: ArrowDownLeft, kind: "income" as MetricKind, series: incomeSeries, tone: "text-income" },
+            { title: "Despesas do mês", amount: data.expense, icon: ArrowUpRight, kind: "expense" as MetricKind, series: expenseSeries, tone: "text-expense" },
+            { title: "Resultado do mês", amount: data.month_balance, icon: CreditCard, kind: "balance" as MetricKind, series: netSeries, tone: data.month_balance >= 0 ? "text-income" : "text-expense" },
+          ].map(({ title, amount, icon: Icon, kind, highlight, series, tone }) => (
+            <button key={title} onClick={() => go(kind)} className={`group rounded-2xl border p-5 text-left transition-colors hover:border-primary/30 ${highlight ? "border-primary/30 bg-gradient-to-br from-[#070F52] to-[#4B2CFF] text-white" : "border-border bg-card"}`}>
               <div className="flex items-center justify-between gap-3"><span className={`text-sm ${highlight ? "text-white/75" : "text-muted-foreground"}`}>{title}</span><Icon size={18} className={highlight ? "text-white/75" : "text-primary"} /></div>
-              <p className="mt-5 font-heading text-2xl font-semibold tracking-tight">{display(amount)}</p>
-              <span className={`mt-3 inline-flex items-center gap-1 text-xs ${highlight ? "text-white/75" : "text-muted-foreground"}`}>Ver detalhes <ArrowRight size={12} /></span>
+              <p className="mt-3 font-heading text-2xl font-semibold tracking-tight tabular-nums">{display(amount)}</p>
+              <Sparkline values={hidden ? [] : series} className={`mt-3 ${tone} ${highlight ? "opacity-90" : ""}`} label={`Evolução de ${title.toLowerCase()} no mês`} />
             </button>
           ))}
         </section>
@@ -112,7 +124,7 @@ export default function DashboardWeb() {
                 const date = `${month}-${String(i + 1).padStart(2, "0")}`;
                 const day = byDate.get(date);
                 const net = day ? day.income - day.expense : 0;
-                return <button type="button" key={date} onClick={() => setSelectedDate(date)} aria-label={`Dia ${i + 1}`} aria-pressed={selectedDate === date} className={`min-h-11 rounded-lg border p-1.5 text-left transition hover:border-primary/40 sm:min-h-12 ${selectedDate === date ? "border-primary bg-primary/10" : date === today ? "border-primary/40 bg-primary/5" : "border-transparent bg-muted/40"}`}>
+                return <button type="button" key={date} onClick={() => setSelectedDate(date)} aria-label={`Dia ${i + 1}`} aria-pressed={selectedDate === date} className={`min-h-11 rounded-lg border p-1.5 text-left transition hover:border-primary/40 sm:min-h-12 ${selectedDate === date ? "border-primary bg-primary/10" : date === today ? "border-primary/40 bg-primary/5" : "border-transparent bg-muted/20 hover:bg-muted/50"}`}>
                   <span className="text-xs font-semibold">{i + 1}</span>
                   {day && (day.income !== 0 || day.expense !== 0) && <span title={money(net)} className={`mt-0.5 block whitespace-nowrap text-xs font-semibold tabular-nums ${net < 0 ? "text-expense" : "text-income"}`}>{hidden ? "•••" : shortNet(net)}</span>}
                 </button>;

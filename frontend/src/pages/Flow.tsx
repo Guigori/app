@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { fetchCategories, fetchFlow } from "@/lib/data";
@@ -98,6 +98,12 @@ export default function Flow() {
     <div className="flex flex-col gap-6 animate-fade-up" data-testid="flow-page">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
+          {/* Cash flow is a detail of Fluxo, reached from its Entrada / Saída / Saldo. */}
+          <nav aria-label="Caminho" className="mb-1 flex items-center gap-1 text-sm text-muted-foreground">
+            <Link to="/transacoes" className="rounded-md font-medium text-primary hover:underline" data-testid="flow-breadcrumb-back">Fluxo</Link>
+            <span aria-hidden="true">›</span>
+            <span>Fluxo de caixa</span>
+          </nav>
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Fluxo de caixa</h1>
           <p className="mt-1 text-sm text-muted-foreground" data-testid="flow-subtitle">
             Quanto sobrou ou faltou em cada mês, e o que vem pela frente · {monthLabel(month)}
@@ -193,7 +199,8 @@ export default function Flow() {
                 )}
                 data-testid="flow-net-value"
               >
-                {money(flow.net)}
+                {/* The label already says Sobrou/Faltou; never show "Faltou −R$". */}
+                {money(Math.abs(flow.net))}
               </p>
               <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <div>
