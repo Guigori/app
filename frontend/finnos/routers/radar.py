@@ -128,13 +128,13 @@ async def _signals(user_id: str) -> list[dict]:
     from finnos.lib.cash_projection import project_scheduled_cash
     subscriptions = await db.subscriptions.find({'user_id': user_id}).to_list(500)
     forecast = project_scheduled_cash(
-        txs, cents(balance), today, today + timedelta(days=30), subscriptions,
+        txs, cents(balance), today, today + timedelta(days=30), subscriptions, card_docs,
     )
     projected = D(forecast["projected_cents"]) / 100
     negative_date = forecast["first_negative_date"]
     future = forecast["event_count"]
     if negative_date:
-        signals.append(dict(id=f'cash-negative-{negative_date}', type='risk', severity='critical', title='Seu saldo projetado pode ficar negativo', description=f'Projeção indica saldo abaixo de zero em {negative_date[8:10]}/{negative_date[5:7]}', explanation='O FINNOS somou seu saldo atual aos lançamentos pendentes e agendados dos próximos 30 dias.', metric=brl(projected), score=100, related_entity_type='cashflow', expires_at=negative_date, evidence=[{'label': 'Saldo atual', 'value': brl(balance)}, {'label': 'Projeção 30 dias', 'value': brl(projected)}]))
+        signals.append(dict(id=f'cash-negative-{negative_date}', type='risk', severity='critical', title='Seu saldo projetado pode ficar negativo', description=f'Projeção indica saldo abaixo de zero em {negative_date[8:10]}/{negative_date[5:7]}', explanation='O FINNOS somou seu saldo atual aos lançamentos pendentes e agendados, parcelas e faturas que vencem nos próximos 30 dias.', metric=brl(projected), score=100, related_entity_type='cashflow', expires_at=negative_date, evidence=[{'label': 'Saldo atual', 'value': brl(balance)}, {'label': 'Projeção 30 dias', 'value': brl(projected)}]))
     elif future and projected > balance and (projected >= 200):
         signals.append(dict(id=f'cash-opportunity-{month}', type='opportunity', severity='normal', title='Sua projeção abre espaço para uma meta', description=f'Saldo projetado de {brl(projected)} nos próximos 30 dias', explanation='Considerando os lançamentos já programados, sua projeção permanece positiva. Você pode avaliar direcionar parte para uma meta.', metric=brl(projected), score=40, related_entity_type='cashflow', expires_at=(today + timedelta(days=7)).isoformat(), evidence=[{'label': 'Projeção 30 dias', 'value': brl(projected)}]))
     signals.extend(await recurring_signals(user_id, month_end(month)))

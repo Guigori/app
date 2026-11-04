@@ -1,4 +1,4 @@
-from finnos.lib.money import D, quantize_brl
+from finnos.lib.money import D, installment_portion, installment_schedule, quantize_brl
 
 """Analytics: month-over-month trends and the monthly budget view."""
 from typing import List, Optional
@@ -150,16 +150,29 @@ async def budget(
     )
 
 
+def _unpaid_portion(tx: dict, month: str):
+    """Expected (unpaid) amount of `tx` in `month`: its own month, or for a
+    scheduled/pending parcelado series the installment dated in `month`
+    (same installment_schedule as the cash ledger, AUD-04)."""
+    if tx.get("status") == "pago":
+        return None
+    if tx.get("installment"):
+        for when, index in installment_schedule(tx):
+            if when[:7] == month:
+                return installment_portion(tx, index)
+        return None
+    return _amount(tx) if tx["date"][:7] == month else None
+
+
 def _projection(tx: dict, month: str) -> float | None:
-    """An explicitly scheduled/pending entry projects only on its own month.
+    """An explicitly scheduled/pending entry projects on its own month; a
+    scheduled parcelado series projects each installment on its month.
 
     Monthly recurrence projections are emitted separately by the shared helper.
     """
     if tx.get("invoice_payment") or tx.get("type") == "transferencia":
         return None
-    if tx.get("status") != "pago" and tx["date"][:7] == month:
-        return _amount(tx)
-    return None
+    return _unpaid_portion(tx, month)
 
 
 @router.get("/flow", response_model=FlowOut)
@@ -333,9 +346,12 @@ async def calendar_month(
     year, month_number = map(int, m.split("-"))
     last_day = monthrange(year, month_number)[1]
     for source in history:
-        if not source.get("installment") or source["date"][:7] == m:
+        if (not source.get("installment") or source["date"][:7] == m
+                or source.get("type") not in ("receita", "despesa")
+                or source.get("invoice_payment") or source.get("invoice_refund")):
             continue
-        portion = month_portion(source, m)
+        paid = source.get("status") == "pago"
+        portion = month_portion(source, m) if paid else _unpaid_portion(source, m)
         if portion is None:
             continue
         occurrence_day = min(int(source["date"][8:10]), last_day)
@@ -345,10 +361,10 @@ async def calendar_month(
                          projected_income=D("0.0"), projected_expense=D("0.0"),
                          count=0),
         )
-        if source["type"] == "receita":
-            day.income = quantize_brl(D(day.income) + portion)
-        elif source["type"] == "despesa":
-            day.expense = quantize_brl(D(day.expense) + portion)
+        field = ("income" if source["type"] == "receita" else "expense")
+        if not paid:
+            field = "projected_" + field
+        setattr(day, field, quantize_brl(D(getattr(day, field)) + portion))
 
     # Forecast fixed series only for future occurrences not represented by a
     # real paid, scheduled or pending row in this month. Same-series bills
