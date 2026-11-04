@@ -1,4 +1,4 @@
-import { ChevronRight, UserRound, Landmark, Tags, ChartPie, Repeat2, Palette, LayoutDashboard, PanelBottom, BarChart3, ShieldCheck, Cloud, Bell, Zap, CircleHelp, Info } from "lucide-react";
+import { ChevronRight, UserRound, Landmark, Tags, ChartPie, Repeat2, Palette, LayoutDashboard, PanelBottom, BarChart3, ShieldCheck, Cloud, Bell, Zap, CircleHelp, Info, PenLine } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchMe } from "@/lib/data";
@@ -13,12 +13,13 @@ const groups = [
   { title: "Personalização", items: [
     { label: "Aparência", description: "Tema claro, escuro ou sistema", icon: Palette, href: "/configuracoes/aparencia" },
     { label: "Painel da Home", description: "Organize seus módulos", icon: LayoutDashboard, href: "/configuracoes/painel" },
+    { label: "Novo registro", description: "O que o + abre primeiro", icon: PenLine, href: "/configuracoes/registro" },
     { label: "Barra de navegação", description: "Atalhos mobile e web", icon: PanelBottom, href: "/configuracoes/navegacao" },
     { label: "Gráficos", description: "Biblioteca visual e preferências", icon: BarChart3, href: "/configuracoes/graficos" },
   ] },
   { title: "Aplicativo e privacidade", items: [
     { label: "Segurança e privacidade", description: "Conta e proteção de acesso", icon: ShieldCheck, href: "/configuracoes/perfil" },
-    { label: "Dados e sincronização", description: "Armazenamento, importação e offline", icon: Cloud, href: "/configuracoes/dados" },
+    { label: "Dados e backup", description: "Exportar, importar e restaurar", icon: Cloud, href: "/configuracoes/dados" },
     { label: "Notificações", description: "Vencimentos e lembretes", icon: Bell, href: "/configuracoes/notificacoes" },
     { label: "Integrações e automações", description: "Apple Pay, Atalhos e FINNOS IA", icon: Zap, href: "/configuracoes/integracoes", soon: true },
   ] },

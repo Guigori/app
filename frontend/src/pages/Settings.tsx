@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { DataBackupCard } from "@/components/settings/DataBackupCard";
+import { RegisterDefaultCard } from "@/components/settings/RegisterDefaultCard";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Check, ChevronDown, ChevronUp, GitCommitHorizontal, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
@@ -128,7 +130,7 @@ export default function Settings() {
   return (
     <div className="mx-auto max-w-2xl space-y-5 pb-44 sm:pb-32 animate-fade-up">
       <div>
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">{({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", painel: "Painel da Home", navegacao: "Barra de navegação", dados: "Dados e sincronização", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"}</h1>
+        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">{({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", registro: "Novo registro", painel: "Painel da Home", navegacao: "Barra de navegação", dados: "Dados e backup", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"}</h1>
         <p className="mt-1 text-sm text-muted-foreground">Gerencie suas preferências e informações com segurança.</p>
       </div>
 
@@ -407,7 +409,9 @@ export default function Settings() {
       </Card>
 
       </>)}
+      {visible("registro") && <RegisterDefaultCard />}
       {visible("dados") && (<>
+      <DataBackupCard />
       <Card data-testid="settings-mode-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">

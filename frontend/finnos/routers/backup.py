@@ -68,3 +68,60 @@ async def export_backup(user: dict = Depends(require_user)):
         "onboarding": onboarding,
         "excluded": ["ai_keys", "sync_receipts", "finance_history"],
     }
+
+
+# Restore only into an account that has no financial data yet, so a backup can
+# never be merged into (or duplicate) existing records. Default categories are
+# reused by name and their IDs remapped inside the restored documents.
+RESTORE_MUST_BE_EMPTY = ("institutions", "accounts", "cards", "subscriptions", "goals", "budget_cycles", "transactions")
+
+
+def _normalize(text: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", str(text)) if unicodedata.category(c) != "Mn").casefold().strip()
+
+
+def _remap(value, ids: dict):
+    if isinstance(value, str):
+        return ids.get(value, value)
+    if isinstance(value, list):
+        return [_remap(item, ids) for item in value]
+    if isinstance(value, dict):
+        return {key: _remap(item, ids) for key, item in value.items()}
+    return value
+
+
+@router.post("/restore")
+async def restore_backup(payload: dict, user: dict = Depends(require_user)):
+    uid = user["id"]
+    if payload.get("format") != BACKUP_FORMAT or payload.get("version") != BACKUP_VERSION:
+        raise HTTPException(400, "Arquivo não é um backup do FINNOS compatível.")
+    collections = payload.get("collections")
+    if not isinstance(collections, dict) or any(not isinstance(collections.get(name, []), list) for name in COLLECTIONS):
+        raise HTTPException(400, "Backup incompleto.")
+    if payload.get("checksum_sha256") != checksum(collections):
+        raise HTTPException(400, "O arquivo foi alterado ou está corrompido (checksum não confere).")
+    for name in RESTORE_MUST_BE_EMPTY:
+        if await getattr(db, name).find({"user_id": uid}).to_list(1):
+            raise HTTPException(409, "Sua conta já tem dados. Restaure o backup em uma conta vazia.")
+
+    existing_categories = await db.categories.find({"user_id": uid}).to_list(READ_LIMIT)
+    by_name = {_normalize(c.get("name", "")): c["id"] for c in existing_categories}
+    existing_ids = {c["id"] for c in existing_categories}
+    ids: dict[str, str] = {}
+    for category in collections.get("categories", []):
+        match = by_name.get(_normalize(category.get("name", "")))
+        if match and match != category.get("id"):
+            ids[category["id"]] = match
+
+    restored = {}
+    for name in COLLECTIONS:
+        count = 0
+        for doc in collections.get(name, []):
+            if name == "categories" and (doc.get("id") in ids or doc.get("id") in existing_ids):
+                continue
+            clean = _remap({k: v for k, v in doc.items() if k not in {"user_id", "operation_id"}}, ids)
+            await getattr(db, name).insert_one({**clean, "user_id": uid})
+            count += 1
+        restored[name] = count
+    return {"restored": restored, "reused_categories": len(ids)}

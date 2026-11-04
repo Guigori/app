@@ -7,6 +7,7 @@ import { fetchBudget, fetchCalendar, fetchDashboard, fetchTrends } from "@/lib/d
 import { currentMonth, monthLabel, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { FiintSection } from "@/components/analytics/FiintSection";
+import { InsightSheet, type InsightDetail } from "@/components/analytics/InsightSheet";
 import { Card, CardContent } from "@/components/ui/card";
 
 const money = (v:number) => new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(v);
@@ -32,6 +33,20 @@ export default function Analysis() {
   const pastDays=(calendar.data?.days ?? []).filter(day=>day.date.slice(0,7)===month && day.date<=today);
   const peakDay=pastDays.reduce<(typeof pastDays)[number]|null>((best,day)=>day.expense>(best?.expense ?? 0)?day:best,null);
   const daysWithoutSpending=pastDays.filter(day=>day.expense===0).length;
+  const [detail,setDetail]=useState<InsightDetail|null>(null);
+  const label=monthLabel(month);
+  const topDays=[...pastDays].filter(day=>day.expense>0).sort((a,b)=>b.expense-a.expense).slice(0,3);
+  const details:Record<string,()=>InsightDetail>={
+    periodo:()=>({title:"Visão do período",value:mask(money(d?.month_balance ?? 0)),explain:`Resultado de ${label}: tudo o que entrou menos tudo o que saiu no mês. Compras no cartão contam no mês da fatura, e parcelas, uma por mês.`,chart:"income-expense",items:[{label:"Receitas",value:mask(money(d?.income ?? 0)),tone:"income"},{label:"Despesas",value:mask(money(d?.expense ?? 0)),tone:"expense"}],cta:{label:"Abrir fluxo de caixa",to:`/fluxo?month=${month}`}}),
+    descobertas:()=>({title:"Descobertas FINNOS",value:top?`${pct(top.percent)} em ${top.name}`:"—",explain:"Onde o seu dinheiro mais foi neste mês, por categoria. A porcentagem é sobre o total de despesas do mês.",items:(d?.categories ?? []).slice(0,5).map(c=>({label:c.name,value:hidden?"••••":`${money(c.total)} · ${pct(c.percent)}`})),cta:{label:"Ver despesas por categoria",to:`/fluxo?month=${month}&metric=despesas`}}),
+    gasto:()=>({title:"Gasto do mês",value:mask(money(d?.expense ?? 0)),explain:d?.prev_expense?`${expenseDelta>0?"Você gastou mais":"Você gastou menos"} que no mês anterior (${mask(money(d.prev_expense))}): ${pct(expenseDelta)} de diferença.`:"Total de despesas do mês. Ainda não há mês anterior para comparar.",chart:"expense",cta:{label:"Ver as despesas do mês",to:`/transacoes?month=${month}&metric=despesas`}}),
+    orcamento:()=>({title:"Orçamento",value:budget.data?.planned?`${Math.round((budget.data.spent/budget.data.planned)*100)}% usado`:"Não configurado",explain:budget.data?.planned?`Dos ${mask(money(budget.data.planned))} planejados para o ciclo, ${mask(money(budget.data.spent))} já foram gastos.`:"Defina quanto quer gastar por categoria para acompanhar o ritmo do mês.",cta:{label:budget.data?.planned?"Abrir orçamento":"Configurar orçamento",to:budget.data?.planned?"/orcamento":"/orcamento/configuracoes"}}),
+    pico:()=>({title:"Dia de maior gasto",value:peakDay?`${peakDay.date.slice(8,10)}/${peakDay.date.slice(5,7)} · ${mask(money(peakDay.expense))}`:"—",explain:"Os dias do mês, até hoje, em que mais saiu dinheiro. Ajuda a ver se um gasto pontual puxou o mês.",items:topDays.map(day=>({label:`${day.date.slice(8,10)}/${day.date.slice(5,7)}`,value:mask(money(day.expense)),tone:"expense" as const})),cta:{label:"Ver o dia no Fluxo",to:peakDay?`/transacoes?date=${peakDay.date}`:`/transacoes?month=${month}`}}),
+    semgastos:()=>({title:"Dias sem gastos",value:`${daysWithoutSpending} de ${pastDays.length}`,explain:"Dias deste mês, até hoje, em que nenhuma despesa foi registrada. Mais dias sem gastos costumam significar um mês mais leve.",cta:{label:"Ver o calendário",to:`/transacoes?month=${month}`}}),
+    saldo:()=>({title:"Evolução do saldo",value:mask(money(d?.total_balance ?? 0)),explain:"Soma dos saldos das suas contas hoje. O gráfico mostra quanto sobrou ou faltou em cada mês.",chart:"net",cta:{label:"Abrir fluxo de caixa",to:`/fluxo?month=${month}&metric=caixa`}}),
+    pesou:()=>({title:"O que mais pesou",value:top?top.name:"—",explain:top?`${top.name} somou ${mask(money(top.total))}, ${pct(top.percent)} das despesas de ${label}.`:"Ainda não há despesas categorizadas neste mês.",cta:{label:"Ver lançamentos da categoria",to:top?.category_id?`/transacoes?month=${month}&metric=despesas&category_id=${encodeURIComponent(top.category_id)}`:`/transacoes?month=${month}`}}),
+  };
+  const open=(key:string)=>setDetail(details[key]());
   const expenseDelta=d?delta(d.expense,d.prev_expense):0;
   const incomeDelta=d?delta(d.income,d.prev_income):0;
   const top=d?.categories?.[0];
@@ -59,7 +74,7 @@ export default function Analysis() {
     </div>}
     {panel==="filters" && <div className="rounded-2xl border bg-card p-4 shadow-sm"><p className="mb-3 font-semibold">Filtrar análises</p><div className="flex flex-wrap gap-2">{(["all","income","expense"] as const).map(v=><Button key={v} variant={filter===v?"default":"outline"} onClick={()=>setFilter(v)}>{v==="all"?"Todos":v==="income"?"Receitas":"Despesas"}</Button>)}</div><Button className="mt-3" variant="outline" onClick={()=>setPanel(null)}>Concluir</Button></div>}
     <FiintSection hidden={hidden} />
-    <Link to={`/fluxo?month=${month}`} className="block"><Card className="rounded-[24px] transition-colors hover:bg-muted/40"><CardContent className="p-5">
+    <button type="button" onClick={()=>open("periodo")} className="block w-full text-left"><Card className="rounded-[24px] transition-colors hover:bg-muted/40"><CardContent className="p-5">
       <div className="mb-4 flex items-center justify-between"><h2 className="font-heading font-semibold">Visão do período</h2><ChevronRight className="h-4 w-4 text-muted-foreground"/></div>
       {mode==="cards" ? <div className="grid grid-cols-3 divide-x">
         {filter!=="expense" && <Metric label="Receitas" value={d?.income ?? 0} change={incomeDelta} hidden={hidden}/>}
@@ -68,37 +83,39 @@ export default function Analysis() {
       </div> : <div className="h-52">
         <ResponsiveContainer width="100%" height="100%"><BarChart data={chartData}><CartesianGrid vertical={false} strokeDasharray="3 3" opacity={.18}/><XAxis dataKey="label" axisLine={false} tickLine={false}/><YAxis hide/><Tooltip formatter={(v)=>money(Number(v))}/><Bar dataKey="income" name="Receitas" fill="#4B2CFF" radius={[5,5,0,0]}/><Bar dataKey="expense" name="Despesas" fill="#A46DFF" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer>
       </div>}
-    </CardContent></Card></Link>
+    </CardContent></Card></button>
 
-    <Link to={`/fluxo?month=${month}&metric=despesas`} className="block"><Card className="rounded-[24px] border-primary/15 bg-primary/[.035]"><CardContent className="flex items-center gap-3 p-5">
+    <button type="button" onClick={()=>open("descobertas")} className="block w-full text-left"><Card className="rounded-[24px] border-primary/15 bg-primary/[.035]"><CardContent className="flex items-center gap-3 p-5">
       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary"><Sparkles className="h-5 w-5"/></span>
       <div className="min-w-0 flex-1"><p className="font-heading font-semibold">Descobertas FINNOS</p><p className="text-sm text-muted-foreground">{hidden?"Valores ocultos":insight}</p></div><ChevronRight className="h-4 w-4"/>
-    </CardContent></Card></Link>
+    </CardContent></Card></button>
 
     <div className="grid grid-cols-2 gap-3">
-      <AnalysisCard to={`/transacoes?month=${month}&metric=despesas`} title="Gasto do mês" value={mask(money(d?.expense ?? 0))} note={expenseDelta ? `${expenseDelta>0?"▲":"▼"} ${pct(expenseDelta)} vs. mês anterior` : "Mês atual"}/>
-      <AnalysisCard to="/orcamento" title="Orçamento" value={hidden?"••••":budget.data?.planned ? `${Math.round((budget.data.spent/budget.data.planned)*100)}%` : "—"} note={budget.data?.planned ? "utilizado" : "não configurado"}/>
-      <AnalysisCard to={peakDay ? `/transacoes?date=${peakDay.date}` : `/transacoes?month=${month}`} title="Dia de maior gasto" value={peakDay ? `${peakDay.date.slice(8,10)}/${peakDay.date.slice(5,7)}` : "—"} note={peakDay ? mask(money(peakDay.expense)) : "sem gastos no período"}/>
-      <AnalysisCard to={`/transacoes?month=${month}`} title="Dias sem gastos" value={calendar.data ? String(daysWithoutSpending) : "—"} note={`de ${pastDays.length} ${pastDays.length===1?"dia":"dias"}`}/>
+      <AnalysisCard onOpen={()=>open("gasto")} title="Gasto do mês" value={mask(money(d?.expense ?? 0))} note={expenseDelta ? `${expenseDelta>0?"▲":"▼"} ${pct(expenseDelta)} vs. mês anterior` : "Mês atual"}/>
+      <AnalysisCard onOpen={()=>open("orcamento")} title="Orçamento" value={hidden?"••••":budget.data?.planned ? `${Math.round((budget.data.spent/budget.data.planned)*100)}%` : "—"} note={budget.data?.planned ? "utilizado" : "não configurado"}/>
+      <AnalysisCard onOpen={()=>open("pico")} title="Dia de maior gasto" value={peakDay ? `${peakDay.date.slice(8,10)}/${peakDay.date.slice(5,7)}` : "—"} note={peakDay ? mask(money(peakDay.expense)) : "sem gastos no período"}/>
+      <AnalysisCard onOpen={()=>open("semgastos")} title="Dias sem gastos" value={calendar.data ? String(daysWithoutSpending) : "—"} note={`de ${pastDays.length} ${pastDays.length===1?"dia":"dias"}`}/>
     </div>
 
-    <Link to={`/fluxo?month=${month}&metric=caixa`} className="block"><Card className="rounded-[24px] transition-colors hover:bg-muted/40"><CardContent className="p-5">
+    <button type="button" onClick={()=>open("saldo")} className="block w-full text-left"><Card className="rounded-[24px] transition-colors hover:bg-muted/40"><CardContent className="p-5">
       <div className="flex items-center justify-between"><div><p className="text-sm font-medium">Evolução do saldo</p><p className="mt-1 text-2xl font-bold">{mask(money(d?.total_balance ?? 0))}</p></div><TrendingUp className="h-5 w-5 text-primary"/></div>
       {mode==="charts" && <div className="mt-3 h-28"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><Area type="monotone" dataKey="net" stroke="#4B2CFF" fill="#8C5BFF" fillOpacity={.12} strokeWidth={2}/></AreaChart></ResponsiveContainer></div>}
-    </CardContent></Card></Link>
+    </CardContent></Card></button>
 
     <AnalysisRow to="/assinaturas" title="Assinaturas" value="Ver gastos recorrentes" icon={<WalletCards className="h-5 w-5"/>}/>
-    <AnalysisRow to={top?.category_id ? `/transacoes?month=${month}&metric=despesas&category_id=${encodeURIComponent(top.category_id)}` : `/transacoes?month=${month}`} title="O que mais pesou neste mês" value={hidden?"••••••":top ? `${top.name} · ${money(top.total)} · ${pct(top.percent)}` : "Sem dados suficientes"} icon={<TrendingUp className="h-5 w-5"/>}/>
+    <AnalysisRow onOpen={()=>open("pesou")} title="O que mais pesou neste mês" value={hidden?"••••••":top ? `${top.name} · ${money(top.total)} · ${pct(top.percent)}` : "Sem dados suficientes"} icon={<TrendingUp className="h-5 w-5"/>}/>
 
+    <InsightSheet detail={detail} trend={chartData} hidden={hidden} onClose={()=>setDetail(null)}/>
   </div>
 }
 
 function Metric({label,value,change,negative=false,hidden=false}:{label:string,value:number,change:number,negative?:boolean,hidden?:boolean}) {
   return <div className="min-w-0 px-3 first:pl-0 last:pr-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 whitespace-nowrap text-[clamp(0.9rem,4vw,1.25rem)] font-bold tabular-nums">{hidden?"••••••":money(value)}</p><p className={`mt-1 text-xs ${!value?"text-muted-foreground":negative&&change>0?"text-expense":"text-income"}`}>{!value ? "Sem movimento" : change ? `${change>0?"▲":"▼"} ${pct(change)}` : "• período"}</p></div>
 }
-function AnalysisCard({to,title,value,note}:{to:string,title:string,value:string,note:string}) {
-  return <Link to={to} className="block min-w-0"><Card className="h-full min-w-0 rounded-[22px] transition-colors hover:bg-muted/40"><CardContent className="p-4"><div className="flex items-start justify-between gap-1"><p className="text-xs font-medium">{title}</p><ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground"/></div><p className="mt-3 truncate text-xl font-bold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{note}</p></CardContent></Card></Link>
+function AnalysisCard({onOpen,title,value,note}:{onOpen:()=>void,title:string,value:string,note:string}) {
+  return <button type="button" onClick={onOpen} className="block min-w-0 text-left"><Card className="h-full min-w-0 rounded-[22px] transition-colors hover:bg-muted/40"><CardContent className="p-4"><div className="flex items-start justify-between gap-1"><p className="text-xs font-medium">{title}</p><ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground"/></div><p className="mt-3 truncate text-xl font-bold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{note}</p></CardContent></Card></button>
 }
-function AnalysisRow({to,title,value,icon}:{to:string,title:string,value:string,icon:React.ReactNode}) {
- return <Link to={to} className="block"><Card className="rounded-[22px] transition-colors hover:bg-muted/40"><CardContent className="flex items-center gap-3 p-4"><span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">{icon}</span><div className="min-w-0 flex-1"><p className="text-xs font-medium">{title}</p><p className="truncate font-semibold">{value}</p></div><ChevronRight className="h-4 w-4 text-muted-foreground"/></CardContent></Card></Link>
+function AnalysisRow({to,onOpen,title,value,icon}:{to?:string,onOpen?:()=>void,title:string,value:string,icon:React.ReactNode}) {
+ const Wrapper=({children}:{children:React.ReactNode})=>to?<Link to={to} className="block">{children}</Link>:<button type="button" onClick={onOpen} className="block w-full text-left">{children}</button>;
+ return <Wrapper><Card className="rounded-[22px] transition-colors hover:bg-muted/40"><CardContent className="flex items-center gap-3 p-4"><span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">{icon}</span><div className="min-w-0 flex-1"><p className="text-xs font-medium">{title}</p><p className="truncate font-semibold">{value}</p></div><ChevronRight className="h-4 w-4 text-muted-foreground"/></CardContent></Card></Wrapper>
 }
