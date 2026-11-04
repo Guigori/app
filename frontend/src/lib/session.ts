@@ -23,3 +23,9 @@ export async function endSession(): Promise<void> {
     await clearAccountCache();
   }
 }
+
+/** Entering local or demo mode must work without the server (offline PWA, API down):
+ *  the client cache is still cleared by endSession, only the remote logout may fail. */
+export async function endSessionForDeviceMode(): Promise<void> {
+  await endSession().catch(() => undefined);
+}
