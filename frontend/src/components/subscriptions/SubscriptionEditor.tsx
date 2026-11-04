@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { todayISO } from "@/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Check, CreditCard, Wallet } from "lucide-react";
 import { fetchAccounts, fetchCards, fetchCategories } from "@/lib/data";
@@ -29,7 +30,7 @@ function inputFor(original?: SubscriptionItem | null): SubscriptionInput {
     name: "",
     value: 0,
     recurrence: "mensal",
-    next_charge: new Date().toISOString().slice(0, 10),
+    next_charge: todayISO(),
     account_id: "",
     category_id: null,
     card_id: null,

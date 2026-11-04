@@ -72,6 +72,21 @@ class DB:
         return Collection(self, (name,))
 
 
+def freeze_today(monkeypatch, iso_date):
+    """Pin the server's financial "today" so date-relative assertions never expire."""
+    from datetime import datetime
+    from finnos.lib import dates
+
+    frozen = datetime.fromisoformat(iso_date + "T12:00:00")
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return frozen.replace(tzinfo=tz)
+
+    monkeypatch.setattr(dates, "datetime", FrozenDatetime)
+
+
 @pytest.fixture
 def finance(monkeypatch):
     db = DB()

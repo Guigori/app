@@ -1,11 +1,12 @@
-from tests.test_firestore_finance import finance, account, tx
+from tests.test_firestore_finance import finance, account, freeze_today, tx
 
 
 def plan(category_id, **changes):
     return dict(mode='personalizado',period='mensal',start_date='2026-10-01',end_date='2026-10-31',expected_income=1000.10,allocations=[dict(category_id=category_id,planned=100.11)],**changes)
 
 
-def test_budget_cents_overlap_progress_and_foreign_refs(finance):
+def test_budget_cents_overlap_progress_and_foreign_refs(finance, monkeypatch):
+    freeze_today(monkeypatch, '2026-10-15')
     client, identity, db = finance
     a = account(client)
     cat = client.post('/api/categories',json=dict(name='Mercado')).json()
@@ -36,7 +37,8 @@ def test_closed_budget_and_invalid_payload(finance):
     assert client.post('/api/budgets',json=payload).status_code == 422
 
 
-def test_budget_suggestion_without_categories_and_next_cycle(finance):
+def test_budget_suggestion_without_categories_and_next_cycle(finance, monkeypatch):
+    freeze_today(monkeypatch, '2026-10-15')
     client,_,_=finance
     a=account(client)
     tx(client,a['id'],value=1000,date='2026-09-12')
