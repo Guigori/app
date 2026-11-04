@@ -9,7 +9,8 @@ import { localRadar } from "@/lib/local/radar";
 import { isLocalMode, getMode } from "@/lib/mode";
 import { loadSessionProfile } from "@/lib/profileIdentity";
 import { queueTransaction, queueTransactionDelete, queueEntityCreate, queueEntityMutation, flushSyncQueue, listSyncOperations, isTransactionSyncOperation, type OperationSource } from "@/lib/sync/queue";
-import { cacheSet, cachedFetch } from "@/lib/offline/accountCache";
+import { cacheGet, cacheSet, cachedFetch } from "@/lib/offline/accountCache";
+import { withIntent } from "@/lib/sync/intent";
 import {
   localFinanceHistory,
   localClearData,
@@ -340,7 +341,8 @@ export async function createAccount(input: AccountInput): Promise<Account> {
     await queueEntityCreate("account.create", input);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
-  return apiPost<Account>("/accounts", input);
+  return withIntent(firebaseAuth?.currentUser?.uid ?? "session", "account:create", input, (operationId) =>
+    apiPost<Account>("/accounts", input, { "X-FINNOS-Operation-ID": operationId }));
 }
 
 export async function updateAccount(id: string, input: AccountInput): Promise<Account> {
@@ -383,7 +385,8 @@ export async function createCategory(input: CategoryInput): Promise<Category> {
     await queueEntityCreate("category.create", input);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
-  return apiPost<Category>("/categories", input);
+  return withIntent(firebaseAuth?.currentUser?.uid ?? "session", "category:create", input, (operationId) =>
+    apiPost<Category>("/categories", input, { "X-FINNOS-Operation-ID": operationId }));
 }
 
 export async function updateCategory(id: string, input: CategoryInput): Promise<Category> {
@@ -424,6 +427,8 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
   const key = `transactions:${params.toString()}`;
   const base = await cachedFetch(key, () => apiGet<Transaction[]>(`/transactions?${params.toString()}`));
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  // The legacy endpoint returns the whole filtered list.
+  if (navigator.onLine && uid) await cacheSet(`firebase:${uid}:complete:${key}`, true);
   if (navigator.onLine && uid) await Promise.all(base.map(t => cacheSet(`firebase:${uid}:transaction:${t.id}`, t)));
   const operations = (await listSyncOperations()).filter(isTransactionSyncOperation);
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
@@ -489,8 +494,34 @@ export async function fetchTransactionsPage(
     await Promise.all(result.items.map(row =>
       cacheSet(`firebase:${uid}:transaction:${row.id}`, row)));
     if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+    // AUD-07: accumulate the pages already seen into the snapshot the offline
+    // list reads, marking whether every page was loaded. A partial list is
+    // shown offline as partial, never as the complete month.
+    const listParams = new URLSearchParams();
+    for (const [name, value] of Object.entries(filters)) if (value) listParams.set(name, String(value));
+    const listKey = `firebase:${uid}:transactions:${listParams.toString()}`;
+    const pagesKey = `firebase:${uid}:pages:${sortDir}:${listParams.toString()}`;
+    const seen = cursor ? await cacheGet<Transaction[]>(pagesKey) : [];
+    if (seen) {
+      const items = [...seen, ...result.items.filter(row => !seen.some(old => old.id === row.id))];
+      await cacheSet(pagesKey, items);
+      await cacheSet(listKey, items);
+      await cacheSet(`firebase:${uid}:complete:transactions:${listParams.toString()}`, !result.next_cursor);
+    }
+    if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   }
   return result;
+}
+
+/** Whether the offline snapshot of this filtered list holds every record
+ * (true), only the pages loaded online (false) or is unknown (null). */
+export async function isTransactionListComplete(filters: LocalTxFilters): Promise<boolean | null> {
+  if (isLocalMode()) return true;
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (!uid) return null;
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries(filters)) if (value) params.set(name, String(value));
+  return cacheGet<boolean>(`firebase:${uid}:complete:transactions:${params.toString()}`);
 }
 
 export async function createTransaction(input: TransactionInput, source: OperationSource = "manual"): Promise<Transaction> {
@@ -499,16 +530,25 @@ export async function createTransaction(input: TransactionInput, source: Operati
     await queueTransaction(input, source);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
-  return apiPost<Transaction>("/transactions", input, { "X-FINNOS-Source": source });
+  const uid = firebaseAuth?.currentUser?.uid ?? "session";
+  return withIntent(uid, "transaction:create", input, (operationId) =>
+    apiPost<Transaction>("/transactions", input, { "X-FINNOS-Source": source, "X-FINNOS-Operation-ID": operationId }));
 }
 
-export async function updateTransaction(id: string, input: TransactionInput, source: OperationSource = "manual"): Promise<Transaction> {
+/** `baseVersion` is the version the user started editing from: the server answers
+ * 409 instead of silently overwriting a newer change made elsewhere (AUD-05). */
+export async function updateTransaction(id: string, input: TransactionInput, source: OperationSource = "manual", baseVersion?: number): Promise<Transaction> {
   if (isLocalMode()) return localUpdateTransaction(id, input);
   if (!navigator.onLine) {
     await queueTransaction(input, source, id);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
-  return apiPut<Transaction>(`/transactions/${id}`, input, { "X-FINNOS-Source": source });
+  const uid = firebaseAuth?.currentUser?.uid ?? "session";
+  return withIntent(uid, `transaction:update:${id}:${baseVersion ?? "?"}`, input, (operationId) =>
+    apiPut<Transaction>(`/transactions/${id}`, input, {
+      "X-FINNOS-Source": source, "X-FINNOS-Operation-ID": operationId,
+      ...(Number.isSafeInteger(baseVersion) && (baseVersion as number) >= 1 ? { "X-FINNOS-Base-Version": String(baseVersion) } : {}),
+    }));
 }
 
 export type RecurrenceEditScope = "esta" | "proximas" | "todas";
@@ -573,7 +613,8 @@ export async function createCard(input: CardInput): Promise<CreditCard> {
     await queueEntityCreate("card.create", input);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
-  return apiPost<CreditCard>("/cards", input);
+  return withIntent(firebaseAuth?.currentUser?.uid ?? "session", "card:create", input, (operationId) =>
+    apiPost<CreditCard>("/cards", input, { "X-FINNOS-Operation-ID": operationId }));
 }
 
 export async function updateCard(id: string, input: CardInput): Promise<CreditCard> {
@@ -672,7 +713,8 @@ export async function createSubscription(input: SubscriptionInput): Promise<Subs
     await queueEntityCreate("subscription.create", input);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
-  return apiPost<SubscriptionItem>("/subscriptions", input);
+  return withIntent(firebaseAuth?.currentUser?.uid ?? "session", "subscription:create", input, (operationId) =>
+    apiPost<SubscriptionItem>("/subscriptions", input, { "X-FINNOS-Operation-ID": operationId }));
 }
 
 export async function updateSubscription(id: string, input: SubscriptionInput): Promise<SubscriptionItem> {

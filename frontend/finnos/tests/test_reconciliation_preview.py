@@ -19,10 +19,14 @@ from finnos.routers.auth import require_user
 
 def scenario():
     return {
-        "cards": [{"id": "card", "invoice_cycles": {
+        "cards": [{"id": "card", "name": "Cartao", "closing_day": 29, "due_day": 7, "invoice_cycles": {
             "2026-09-29": {"paid_cents": 30000, "items": []},
         }}],
         "transactions": [{
+            # The R$ 300 purchase that makes up the cycle (AUD-11 compares totals).
+            "id": "purchase", "name": "Compra", "card_id": "card", "value": 300,
+            "status": "pago", "type": "despesa", "date": "2026-09-10",
+        }, {
             "id": "receipt", "invoice_payment": True,
             "invoice_card_id": "card", "invoice_cycle": "2026-09-29",
             "value": 300, "status": "pago", "type": "despesa",
@@ -181,3 +185,25 @@ def test_account_only_preview_is_scoped_and_rejects_future_evidence(monkeypatch)
         assert client.post("/api/finance/reconciliation/preview", json={}).status_code == 422
     assert data == before
     assert calls and all(query == {"user_id": "A"} for _, query in calls)
+
+
+def test_aud11_declared_invoice_total_is_compared_with_internal_cycle():
+    # Synthetic: internal cycle R$ 300, paid R$ 300, evidence claims a R$ 9.999 invoice.
+    card = dict(id="c1", name="Cartao", closing_day=29, due_day=7,
+                invoice_cycles={"2026-10-29": dict(paid_cents=30000, items=[])})
+    txs = [dict(id="buy", name="Compra", type="despesa", status="pago", card_id="c1", value=300, date="2026-10-10"),
+           dict(id="pay", name="Pagamento", type="despesa", status="pago", invoice_payment=True,
+                invoice_card_id="c1", invoice_cycle="2026-10-29", value=300, account_id="bank")]
+    wrong = compare_invoice_evidence([card], txs, [dict(card_id="c1", cycle="2026-10-29", declared_paid=300, declared_invoice_total=9999)])
+    item = wrong["items"][0]
+    assert item["status"] == "manual_review"
+    assert item["internal_total_cents"] == 30000
+    assert "invoice_total_differs" in item["differences"]
+    right = compare_invoice_evidence([card], txs, [dict(card_id="c1", cycle="2026-10-29", declared_paid=300, declared_invoice_total=300)])
+    assert right["items"][0]["differences"] == []
+
+
+def test_aud11_cycle_that_is_not_a_closing_date_is_flagged():
+    card = dict(id="c1", name="Cartao", closing_day=29, due_day=7, invoice_cycles={})
+    report = compare_invoice_evidence([card], [], [dict(card_id="c1", cycle="2026-10-15", declared_paid=0, declared_invoice_total=0)])
+    assert "invalid_cycle" in report["items"][0]["differences"]

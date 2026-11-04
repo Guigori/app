@@ -182,7 +182,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
         if (navigator.onLine) await flushSyncQueue();
         return undefined;
       }
-      return transaction ? updateTransaction(transaction.id, input) : createTransaction(input);
+      return transaction ? updateTransaction(transaction.id, input, "manual", transaction.version) : createTransaction(input);
     },
     onSuccess: async () => {
       if (syncOperationId) {
