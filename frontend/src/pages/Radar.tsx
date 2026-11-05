@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { motion } from "motion/react";
 import { fetchRadar, updateRadarSignal } from "@/lib/data";
 import { useRouteState } from "@/lib/routeState";
+import { formatBRL } from "@/lib/format";
 import { RADAR_COLOR, RADAR_ICON, RADAR_LABEL, RADAR_PLURAL, RADAR_TYPES, needsAttention, radarTarget, severityLabel, sortSignals } from "@/lib/radarUi";
 import { cn } from "@/lib/utils";
 import type { RadarSignal, RadarSignalType } from "@/types/finnos";
@@ -27,15 +28,15 @@ function SignalCard({ signal, onDismiss }: { signal: RadarSignal; onDismiss: () 
             <span className="font-semibold" style={{ color }}>{RADAR_LABEL[signal.type]}</span>
             {severity ? <span className="rounded-full px-1.5 py-px font-semibold" style={{ backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`, color }}>{severity}</span> : null}
             {signal.state === "new" ? <span className="flex items-center gap-1 text-muted-foreground"><span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />novo</span> : null}
-            {signal.metric ? <span className="ml-auto pl-2 font-heading text-sm font-bold tabular-nums text-foreground">{signal.metric}</span> : null}
           </span>
           <span className="mt-1 block font-semibold leading-snug text-foreground">{signal.title}</span>
+          {signal.metric ? <span className="mt-0.5 block font-heading text-lg font-bold tabular-nums" style={{ color }} data-testid="radar-signal-metric">{signal.metric}</span> : null}
           <span className="mt-0.5 line-clamp-2 block text-sm text-muted-foreground">{signal.description}</span>
         </span>
       </Link>
       <div className="flex items-center gap-1 px-4 pb-3 pl-[68px]">
         <Link to={target.to} className="inline-flex h-8 items-center gap-1 rounded-full bg-muted px-3 text-xs font-semibold text-foreground hover:bg-muted/70">
-          {target.label}<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          {target.short}<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
         </Link>
         <button type="button" onClick={onDismiss} className="ml-auto inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Dispensar ${signal.title}`}>
           <X className="h-3.5 w-3.5" aria-hidden="true" />Dispensar
@@ -50,6 +51,7 @@ export default function Radar() {
   const [chosen, setFilter] = useRouteState<RadarSignalType | "todos">("radar:filter", () => "todos");
   const { data, isPending, isError, refetch } = useQuery({ queryKey: ["radar"], queryFn: fetchRadar, staleTime: 60_000 });
   const items = sortSignals(data?.items ?? []);
+  const excess = items.filter((s) => (s.impact ?? 0) > 0 && (s.type === "risk" || s.type === "deviation")).reduce((sum, s) => sum + (s.impact ?? 0), 0);
   const counts = Object.fromEntries(RADAR_TYPES.map((type) => [type, items.filter((s) => s.type === type).length])) as Record<RadarSignalType, number>;
   // A filter whose last signal was dismissed falls back to everything.
   const filter = chosen !== "todos" && !counts[chosen] ? "todos" : chosen;
@@ -107,9 +109,12 @@ export default function Radar() {
             <p className="mt-1 font-heading text-2xl font-bold">
               {urgent.length === 0 ? "Nada urgente agora" : `${urgent.length} ${urgent.length === 1 ? "pede" : "pedem"} sua atenção`}
             </p>
-            <div className="mt-4 flex h-2 gap-0.5 overflow-hidden rounded-full" role="img" aria-label={RADAR_TYPES.filter((t) => counts[t]).map((t) => `${counts[t]} ${RADAR_PLURAL[t].toLowerCase()}`).join(", ")}>
-              {RADAR_TYPES.filter((t) => counts[t]).map((type) => <span key={type} className="h-full first:rounded-l-full last:rounded-r-full" style={{ flexGrow: counts[type], backgroundColor: RADAR_COLOR[type] }} />)}
-            </div>
+            {/* What is at stake in reais, not a bar of signal counts that reads like a financial gauge. */}
+            {excess > 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground" data-testid="radar-summary-excess">
+                Somando, <strong className="font-semibold text-expense">{formatBRL(excess)}</strong> acima dos seus limites e padrões.
+              </p>
+            ) : null}
           </section>
 
           <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="tablist" aria-label="Filtrar sinais">

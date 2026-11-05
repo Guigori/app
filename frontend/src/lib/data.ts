@@ -418,6 +418,16 @@ export async function deleteCategory(id: string): Promise<void> {
 
 // --- Transactions -----------------------------------------------------------
 
+/** One lançamento by id (a Radar signal points at it); null when it no longer exists. */
+export async function fetchTransaction(id: string): Promise<Transaction | null> {
+  if (isLocalMode()) return localListTransactions({}).find((tx) => tx.id === id) ?? null;
+  try {
+    return await apiGet<Transaction>(`/transactions/${encodeURIComponent(id)}`);
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchTransactions(filters: LocalTxFilters): Promise<Transaction[]> {
   if (isLocalMode()) return localListTransactions(filters);
   const params = new URLSearchParams();
