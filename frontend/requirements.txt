@@ -1,4 +1,4 @@
-fastapi==0.143.0
+fastapi==0.162.0
 firebase-admin==7.7.0
 
 # pywebpush 2.5 requires cryptography >=47; keep the major series bounded.
