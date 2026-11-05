@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
-import { Outlet, useLocation, useNavigationType } from "react-router-dom";
+import { Outlet, useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { DialogsProvider } from "@/components/dialogs/DialogsProvider";
@@ -23,6 +23,12 @@ export function AppShell() {
   // Like a native app: a new screen (and a reload) opens at the top; going back returns
   // to the exact scroll position the user left. Positions are kept per history entry.
   const navigationType = useNavigationType();
+  const navigate = useNavigate();
+  // The entry the app opened on has no history key ("default"). Give it one, so coming
+  // back to it (or reloading) restores the screen like any other entry.
+  useEffect(() => {
+    if (location.key === "default") navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: location.state });
+  }, [location.key, location.pathname, location.search, location.hash, location.state, navigate]);
   const positions = useRef(new Map<string, number>());
   useLayoutEffect(() => {
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
