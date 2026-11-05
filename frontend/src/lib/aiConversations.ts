@@ -1,3 +1,4 @@
+import type { FinnQuery } from "@/lib/finnQuestion";
 import { firebaseAuth } from "@/lib/firebase";
 import { getMode } from "@/lib/mode";
 
@@ -5,9 +6,13 @@ export type FinnVisual = {
   title?: string;
   metrics?: { label: string; value: string; tone?: "positive" | "negative" | "neutral" }[];
   items?: { label: string; value: string; detail?: string }[];
-  chart?: { type: "line" | "donut"; data: { name: string; value: number; secondary?: number }[]; valueLabel?: string; secondaryLabel?: string };
+  chart?: { type: "line" | "donut" | "bar"; data: { name: string; value: number; secondary?: number }[]; valueLabel?: string; secondaryLabel?: string };
 };
-export type FinnMessage = { id: string; role: "user" | "assistant"; content: string; createdAt: string; visual?: FinnVisual };
+export type FinnMessage = {
+  id: string; role: "user" | "assistant"; content: string; createdAt: string; visual?: FinnVisual;
+  /** Analyst answers: what it noticed, the next questions, where to look, and what it understood. */
+  insight?: string; followUps?: string[]; links?: { label: string; to: string }[]; query?: FinnQuery;
+};
 export type FinnConversation = { id: string; title: string; updatedAt: string; messages: FinnMessage[] };
 
 const key = () => `finnos:ai-conversations:${getMode()}:${getMode() === "account" ? firebaseAuth?.currentUser?.uid ?? "unauthenticated" : "device"}`;
