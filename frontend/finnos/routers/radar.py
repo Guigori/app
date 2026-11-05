@@ -1,4 +1,4 @@
-from finnos.lib.money import D, cents, installment_portion, FinanceModel, Money
+from finnos.lib.money import D, cents, installment_portion, FinanceModel, Money, quantize_brl
 """FINNOS Radar Intelligence Engine.
 
 Deterministic by design: builds a personal 90-day baseline, detects anomalies,
@@ -46,6 +46,36 @@ async def _state_map(user_id: str) -> dict:
     docs = await db.radar_states.find({'user_id': user_id}).to_list(5000)
     return {d['signal_id']: d for d in docs}
 
+async def _cycle_limits(user_id: str, today_s: str) -> tuple[dict, str | None]:
+    """Spent and planned per category in the active budget cycle (the Orçamento screen)."""
+    cycles = getattr(db, 'budget_cycles', None)
+    if cycles is None:
+        return {}, None
+    cycle = await cycles.find_one({'user_id': user_id, 'start_date': {'$lte': today_s}, 'end_date': {'$gte': today_s}, 'closed_at': None}, sort=[('start_date', -1)])
+    if not cycle:
+        return {}, None
+    from finnos.routers.budgets import _progress
+    progress = await _progress(cycle, user_id)
+    limits = {a.category_id: (D(a.spent), D(a.planned)) for a in progress.allocations if D(a.planned) > 0}
+    return limits, str(cycle['end_date'])
+
+
+def _budget_signal(cid: str, name: str, current, budget, month: str, expires: str, in_cycle: bool) -> dict | None:
+    if budget <= 0 or current / budget < D('0.85'):
+        return None
+    pct = current / budget * 100
+    critical = pct >= 100
+    where = ' no ciclo do orçamento' if in_cycle else ''
+    return dict(id=f'budget-{cid}-{month}', type='risk', severity='critical' if critical else 'high',
+                title=f"{name} {('passou' if critical else 'está perto')} do limite",
+                description=f'{brl(current)} gastos de {brl(budget)} planejados{where}',
+                explanation=f'Você já utilizou {pct:.0f}% do limite definido para esta categoria.',
+                metric=f'{brl(current - budget)} acima' if critical else f'Restam {brl(budget - current)}',
+                impact=quantize_brl(current - budget) if critical else None,
+                score=98 if critical else 88, related_entity_type='category', related_entity_id=cid, expires_at=expires,
+                evidence=[{'label': 'Limite', 'value': brl(budget)}, {'label': 'Gasto', 'value': brl(current)}, {'label': 'Uso', 'value': f'{pct:.0f}%'}])
+
+
 async def _signals(user_id: str) -> list[dict]:
     today = date.fromisoformat(today_iso())
     today_s = today.isoformat()
@@ -68,6 +98,13 @@ async def _signals(user_id: str) -> list[dict]:
             by_cat[t['category_id']].append(D(t.get('adjusted_value') or t['value']))
     # Current month category totals already include audited credits and refunds.
     elapsed = max(today.day, 1)
+    # The active budget cycle owns the limit of the categories it plans; the
+    # category's monthly limit is the fallback for the others.
+    (cycle_limits, cycle_end) = await _cycle_limits(user_id, today_s)
+    for (cid, (spent, planned)) in cycle_limits.items():
+        found = _budget_signal(cid, cat_by_id.get(cid, {}).get('name', 'Categoria'), spent, planned, month, cycle_end, True)
+        if found:
+            signals.append(found)
     for (cid, current) in current_cat.items():
         vals = by_cat.get(cid, [])
         cat = cat_by_id.get(cid, {})
@@ -76,12 +113,11 @@ async def _signals(user_id: str) -> list[dict]:
         expected = hist_total / hist_days * elapsed if hist_total else 0
         if expected >= 50 and current > expected * D('1.25'):
             pct = round((current / expected - 1) * 100)
-            signals.append(dict(id=f'pace-{cid}-{month}', type='deviation', severity='high' if pct >= 50 else 'medium', title=f"{cat.get('name', 'Categoria')} está acima do seu padrão", description=f'+{pct}% em relação ao seu ritmo dos últimos 90 dias', explanation=f'Até hoje, seu padrão de 90 dias indicaria cerca de {brl(expected)}. Neste mês já foram {brl(current)}.', metric=f'+{pct}%', score=70 + min(pct, 80) / 4, related_entity_type='category', related_entity_id=cid, expires_at=month_end(month), evidence=[{'label': 'Esperado até hoje', 'value': brl(expected)}, {'label': 'Gasto atual', 'value': brl(current)}, {'label': 'Base analisada', 'value': '90 dias'}]))
-        budget = D(cat.get('monthly_budget') or 0)
-        if budget > 0 and current / budget >= D('0.85'):
-            pct = current / budget * 100
-            critical = pct >= 100
-            signals.append(dict(id=f'budget-{cid}-{month}', type='risk', severity='critical' if critical else 'high', title=f"{cat.get('name', 'Categoria')} {('passou' if critical else 'está perto')} do limite", description=f'{brl(current)} de {brl(budget)} planejados', explanation=f'Você já utilizou {pct:.0f}% do orçamento definido para esta categoria.', metric=f'{pct:.0f}%', score=98 if critical else 88, related_entity_type='category', related_entity_id=cid, expires_at=month_end(month), evidence=[{'label': 'Orçamento', 'value': brl(budget)}, {'label': 'Utilizado', 'value': brl(current)}]))
+            signals.append(dict(id=f'pace-{cid}-{month}', type='deviation', severity='high' if pct >= 50 else 'medium', title=f"{cat.get('name', 'Categoria')} está acima do seu padrão", description=f'+{pct}% em relação ao seu ritmo dos últimos 90 dias', explanation=f'Até hoje, seu padrão de 90 dias indicaria cerca de {brl(expected)}. Neste mês já foram {brl(current)}.', metric=f'+{brl(current - expected)}', impact=quantize_brl(D(current) - D(expected)), score=70 + min(pct, 80) / 4, related_entity_type='category', related_entity_id=cid, expires_at=month_end(month), evidence=[{'label': 'Esperado até hoje', 'value': brl(expected)}, {'label': 'Gasto atual', 'value': brl(current)}, {'label': 'Base analisada', 'value': '90 dias'}]))
+        if cid not in cycle_limits:
+            found = _budget_signal(cid, cat.get('name', 'Categoria'), current, D(cat.get('monthly_budget') or 0), month, month_end(month), False)
+            if found:
+                signals.append(found)
     for t in txs:
         if t.get('type') != 'despesa' or t.get('status') != 'pago' or t['date'] < (today - timedelta(days=7)).isoformat():
             continue
@@ -91,7 +127,7 @@ async def _signals(user_id: str) -> list[dict]:
         avg = mean(vals)
         value = D(t.get('adjusted_value') or t['value'])
         if avg >= 20 and value >= max(avg * D('2.5'), avg + 100):
-            signals.append(dict(id=f"anomaly-{t['id']}", type='deviation', severity='high', title=f"Gasto fora do seu padrão: {t['name']}", description=f'{brl(value)} · sua média semelhante é {brl(avg)}', explanation='Este lançamento ficou muito acima do valor típico das suas compras nessa categoria nos últimos 90 dias.', metric=f'{value / avg:.1f}×', score=82, related_entity_type='transaction', related_entity_id=t['id'], expires_at=(today + timedelta(days=7)).isoformat(), evidence=[{'label': 'Compra', 'value': brl(value)}, {'label': 'Média pessoal', 'value': brl(avg)}]))
+            signals.append(dict(id=f"anomaly-{t['id']}", type='deviation', severity='high', title=f"Gasto fora do seu padrão: {t['name']}", description=f'{brl(value)} · sua média semelhante é {brl(avg)}', explanation='Este lançamento ficou muito acima do valor típico das suas compras nessa categoria nos últimos 90 dias.', metric=f'+{brl(value - avg)}', impact=quantize_brl(D(value) - D(avg)), score=82, related_entity_type='transaction', related_entity_id=t['id'], expires_at=(today + timedelta(days=7)).isoformat(), evidence=[{'label': 'Compra', 'value': brl(value)}, {'label': 'Média pessoal', 'value': brl(avg)}]))
     seen = {}
     for t in sorted(hist, key=lambda x: x['date'], reverse=True):
         key = (t.get('name', '').strip().lower(), round(D(t.get('adjusted_value') or t['value']), 2), t['date'])
@@ -106,7 +142,7 @@ async def _signals(user_id: str) -> list[dict]:
         projected_month = spent_now / today.day * days_total
         if projected_month >= spent_prev * D("1.15"):
             pct = int(round((projected_month / spent_prev - 1) * 100))
-            signals.append(dict(id=f'month-pace-{month}', type='deviation', severity='high' if pct >= 30 else 'medium', title='O mês está mais caro que o anterior', description=f'No ritmo atual, as despesas fecham em {brl(projected_month)} (+{pct}%)', explanation=f'Até hoje foram {brl(spent_now)} em {today.day} dias. Mantendo esse ritmo até o dia {days_total}, o mês passaria o anterior ({brl(spent_prev)}).', metric=f'+{pct}%', score=86 if pct >= 30 else 76, related_entity_type='cashflow', related_entity_id=None, expires_at=month_end(month), evidence=[{'label': 'Gasto até hoje', 'value': brl(spent_now)}, {'label': 'Projeção do mês', 'value': brl(projected_month)}, {'label': 'Mês anterior', 'value': brl(spent_prev)}]))
+            signals.append(dict(id=f'month-pace-{month}', type='deviation', severity='high' if pct >= 30 else 'medium', title='O mês está mais caro que o anterior', description=f'No ritmo atual, as despesas fecham em {brl(projected_month)} (+{pct}%)', explanation=f'Até hoje foram {brl(spent_now)} em {today.day} dias. Mantendo esse ritmo até o dia {days_total}, o mês passaria o anterior ({brl(spent_prev)}).', metric=f'+{brl(projected_month - spent_prev)}', impact=quantize_brl(D(projected_month) - D(spent_prev)), score=86 if pct >= 30 else 76, related_entity_type='cashflow', related_entity_id=None, expires_at=month_end(month), evidence=[{'label': 'Gasto até hoje', 'value': brl(spent_now)}, {'label': 'Projeção do mês', 'value': brl(projected_month)}, {'label': 'Mês anterior', 'value': brl(spent_prev)}]))
     (card_txs, accounts) = await card_context(user_id)
     for doc in active_cards:
         card = await build_card(doc, card_txs, accounts)
@@ -129,7 +165,7 @@ async def _signals(user_id: str) -> list[dict]:
         avg3 = mean(monthly) if monthly else 0
         if avg3 >= 100 and card.current_invoice > avg3 * D('1.15'):
             pct = round((card.current_invoice / avg3 - 1) * 100)
-            signals.append(dict(id=f'card-trend-{card.id}-{card.next_closing}', type='risk', severity='critical' if pct >= 35 else 'high', title=f'Fatura {card.name} acima das últimas faturas', description=f'+{pct}% sobre a média recente', explanation=f'A fatura atual está em {brl(card.current_invoice)}; a média dos últimos {len(monthly)} meses foi {brl(avg3)}.', metric=f'+{pct}%', score=97 if pct >= 35 else 89, related_entity_type='card', related_entity_id=card.id, expires_at=card.next_closing, evidence=[{'label': 'Fatura atual', 'value': brl(card.current_invoice)}, {'label': 'Média recente', 'value': brl(avg3)}]))
+            signals.append(dict(id=f'card-trend-{card.id}-{card.next_closing}', type='risk', severity='critical' if pct >= 35 else 'high', title=f'Fatura {card.name} acima das últimas faturas', description=f'+{pct}% sobre a média recente', explanation=f'A fatura atual está em {brl(card.current_invoice)}; a média dos últimos {len(monthly)} meses foi {brl(avg3)}.', metric=f'+{brl(card.current_invoice - avg3)}', impact=quantize_brl(D(card.current_invoice) - D(avg3)), score=97 if pct >= 35 else 89, related_entity_type='card', related_entity_id=card.id, expires_at=card.next_closing, evidence=[{'label': 'Fatura atual', 'value': brl(card.current_invoice)}, {'label': 'Média recente', 'value': brl(avg3)}]))
         elif 0 <= close <= 4 and (not card.invoice_paid):
             signals.append(dict(id=f'card-close-{card.id}-{card.next_closing}', type='information', severity='normal', title=f"Cartão {card.name} fecha em {close} dia{('s' if close != 1 else '')}", description='Compras novas em breve irão para a próxima fatura', explanation='O FINNOS acompanha o ciclo do cartão para você saber quando novas compras mudam de fatura.', score=50 + (4 - close) * 2, related_entity_type='card', related_entity_id=card.id, expires_at=card.next_closing, evidence=[{'label': 'Fatura atual', 'value': brl(card.current_invoice)}]))
         if card.future_installments >= 500:

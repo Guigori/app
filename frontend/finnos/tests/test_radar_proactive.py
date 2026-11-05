@@ -54,7 +54,9 @@ def test_month_running_hotter_than_last_month(monkeypatch):
     out = run(monkeypatch, txs, "2026-11-10")
     pace = next(s for s in out if s["id"] == "month-pace-2026-11")
     # R$ 900 in 10 days → R$ 2.700 in 30 days, +170% over October's R$ 1.000.
-    assert pace["metric"] == "+170%" and pace["severity"] == "high"
+    # The amount above last month leads; the percentage stays in the description.
+    assert pace["metric"] == "+R$ 1.700,00" and pace["severity"] == "high"
+    assert "+170%" in pace["description"] and pace["impact"] == 1700
 
 
 def test_no_pace_alert_early_in_the_month_or_when_cheaper(monkeypatch):
