@@ -13,6 +13,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.encoders import jsonable_encoder
 from starlette.concurrency import run_in_threadpool
 
 from finnos.lib import db as store
@@ -39,8 +40,10 @@ def checksum(collections: dict) -> str:
 
 
 def _clean(doc: dict) -> dict:
-    # The owner is implied by the account that restores the file.
-    return {key: value for key, value in doc.items() if key != "user_id"}
+    # The owner is implied by the account that restores the file. Values are made
+    # JSON-native here (datetimes → ISO strings, Decimal → number) so the checksum is
+    # computed over exactly what the downloaded file contains.
+    return jsonable_encoder({key: value for key, value in doc.items() if key != "user_id"})
 
 
 @router.get("/backup")

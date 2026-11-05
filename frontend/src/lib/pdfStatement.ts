@@ -6,7 +6,8 @@ const DATE_AT_START = /^(\d{2})[/.](\d{2})(?:[/.](\d{2,4}))?\s+/;
 
 function toNumber(token: string): number {
   // "-12,50", "R$ -12,50", "12,50-" and "12,50 D" (débito) are outflows.
-  const negative = /^(R\$\s*)?-|(-|D)\s*$/.test(token.trim());
+  const text = token.trim();
+  const negative = /^(R\$\s*)?-/.test(text) || /[-D]\s*$/.test(text);
   const digits = token.replace(/[^\d,]/g, "").replace(",", ".");
   const value = Number(digits);
   return negative ? -value : value;
