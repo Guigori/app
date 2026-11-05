@@ -77,3 +77,15 @@ test("cards live inside Carteira and Assinaturas stays its own screen", async ({
   await expect(page).toHaveURL(/\/assinaturas$/);
   await expect(page.getByTestId("subscriptions-panel")).toBeVisible();
 });
+
+test("an account opens its own cash flow, which can go back to every account", async ({ page }) => {
+  await createCheckingAccount(page);
+  await page.locator("[data-testid^=wallet-account-]").first().click();
+  await page.getByTestId("account-detail-cashflow").click();
+  await expect(page).toHaveURL(/\/transacoes\?aba=caixa&account_id=/);
+  await expect(page.getByTestId("flow-account-filter")).toContainText("Conta Inter");
+  await page.getByTestId("flow-tab-projecao").click();
+  await expect(page.getByTestId("flow-upcoming")).toContainText("Nada previsto");
+  await page.getByTestId("flow-account-clear").click();
+  await expect(page.getByTestId("flow-account-filter")).toHaveCount(0);
+});

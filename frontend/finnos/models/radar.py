@@ -27,6 +27,8 @@ class RadarSignalOut(FinanceModel):
     expires_at: Optional[str] = None
     evidence: List[RadarEvidence] = []
     detected_at: Optional[str] = None
+    # Reais above the limit or the usual pattern, for "sem esse excesso, o mês fecharia em…".
+    impact: Optional[Money] = None
 
 class RadarOut(FinanceModel):
     items: List[RadarSignalOut]

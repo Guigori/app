@@ -79,6 +79,21 @@ class FlowCategory(BaseModel):
     percent: Money
 
 
+class UpcomingItem(BaseModel):
+    """One amount still expected in the focus month; together they make up its projection."""
+    date: str
+    name: str
+    value: Money
+    type: Literal["receita", "despesa"]
+    kind: Literal["agendado", "pendente", "parcela", "fixa", "assinatura"]
+    transaction_id: Optional[str] = None
+    subscription_id: Optional[str] = None
+    account_id: Optional[str] = None
+    category_id: Optional[str] = None
+    category_name: Optional[str] = None
+    category_color: Optional[str] = None
+
+
 class FlowOut(BaseModel):
     month: str
     from_month: str
@@ -94,6 +109,7 @@ class FlowOut(BaseModel):
     total_net: Money
     series: List[FlowPoint]
     categories: List[FlowCategory]
+    upcoming: List[UpcomingItem] = []
 
 
 # --- Calendário de transações ----------------------------------------------

@@ -1,4 +1,5 @@
 /** Shared presentation rules for Radar signals: labels, colors, order and where each one leads. */
+import { currentMonth } from "@/lib/format";
 import { AlertTriangle, Info, Lightbulb, TrendingUp, type LucideIcon } from "lucide-react";
 import type { RadarSignal, RadarSignalType } from "@/types/finnos";
 
@@ -35,9 +36,11 @@ export function isRecurringCandidate(signal: RadarSignal): boolean {
   return signal.id.startsWith("recurring-") && signal.related_entity_type === "transaction" && Boolean(signal.related_entity_id);
 }
 
-export function radarTarget(signal: RadarSignal): { to: string; label: string } {
-  if (signal.related_entity_type === "card" && signal.related_entity_id) return { to: `/cartoes/${signal.related_entity_id}`, label: "Abrir fatura" };
-  if (signal.related_entity_type === "category" && signal.related_entity_id) return { to: `/fluxo?metric=despesas&category_id=${encodeURIComponent(signal.related_entity_id)}`, label: "Ver categoria" };
-  if (isRecurringCandidate(signal)) return { to: "/assinaturas", label: "Ver assinaturas" };
-  return { to: "/fluxo", label: "Ver fluxo" };
+/** Where a signal leads; `short` fits the chip on a list card, `label` the full button. */
+export function radarTarget(signal: RadarSignal): { to: string; label: string; short: string } {
+  if (signal.related_entity_type === "card" && signal.related_entity_id) return { to: `/cartoes/${signal.related_entity_id}`, label: "Abrir fatura", short: "Abrir fatura" };
+  if (signal.related_entity_type === "category" && signal.related_entity_id) return { to: `/transacoes?aba=caixa&month=${currentMonth()}&metric=despesas&category_id=${encodeURIComponent(signal.related_entity_id)}`, label: "Ver no Caixa", short: "Ver gastos" };
+  if (isRecurringCandidate(signal)) return { to: "/assinaturas", label: "Ver assinaturas", short: "Ver assinaturas" };
+  if (signal.related_entity_type === "cashflow") return { to: `/transacoes?aba=caixa&month=${currentMonth()}&metric=projecao`, label: "Ver no Caixa", short: "Ver projeção" };
+  return { to: `/transacoes?aba=caixa&month=${currentMonth()}`, label: "Ver no Caixa", short: "Ver no fluxo" };
 }

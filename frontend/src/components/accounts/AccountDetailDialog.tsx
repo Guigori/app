@@ -1,12 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { Pencil, Trash2, Wallet } from "lucide-react";
+import { ChartNoAxesCombined, ChevronRight, Pencil, Trash2, Wallet } from "lucide-react";
+import { Link } from "react-router-dom";
 import { fetchAccount } from "@/lib/data";
 import { signedAccountMovement } from "@/lib/accountMovement";
 import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatDate, formatHiddenBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Account } from "@/types/finnos";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +29,7 @@ interface AccountDetailDialogProps {
 }
 
 export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDelete, onPaymentMethods }: AccountDetailDialogProps) {
+  const dialogs = useDialogs();
   const { hidden } = useBalanceHidden();
   const detailQuery = useQuery({
     queryKey: ["account", account?.id],
@@ -82,6 +85,10 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
               </div>
             </div>
 
+            <Link to={`/transacoes?aba=caixa&account_id=${encodeURIComponent(account.id)}`} onClick={() => onOpenChange(false)} className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full justify-between rounded-2xl")} data-testid="account-detail-cashflow">
+              <span className="flex items-center gap-2"><ChartNoAxesCombined className="h-4 w-4" aria-hidden="true" />Caixa desta conta</span><ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+
             <div>
               <p className="mb-2 text-sm font-semibold text-foreground">Últimas transações</p>
               {detail.transactions.length === 0 ? (
@@ -91,7 +98,7 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
               ) : (
                 <ul className="divide-y divide-border">
                   {detail.transactions.map((t) => (
-                    <li key={t.id} className="flex items-center justify-between gap-3 py-2.5" data-testid="account-detail-transaction">
+                    <li key={t.id} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg py-2.5 hover:bg-muted/40" onClick={() => { onOpenChange(false); dialogs.openTransactionDetail(t); }} data-testid="account-detail-transaction">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{t.name}</p>
                         <p className="text-xs text-muted-foreground">{formatDate(t.date)}</p>

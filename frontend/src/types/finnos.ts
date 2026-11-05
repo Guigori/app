@@ -401,6 +401,24 @@ export interface Flow {
   total_net: number;
   series: FlowPoint[];
   categories: FlowCategory[];
+  /** What is still expected in the focus month; together it makes up the projection. Older servers omit it. */
+  upcoming?: UpcomingItem[];
+}
+
+export type UpcomingKind = "agendado" | "pendente" | "parcela" | "fixa" | "assinatura";
+
+export interface UpcomingItem {
+  date: string;
+  name: string;
+  value: number;
+  type: "receita" | "despesa";
+  kind: UpcomingKind;
+  transaction_id?: string | null;
+  subscription_id?: string | null;
+  account_id?: string | null;
+  category_id?: string | null;
+  category_name?: string | null;
+  category_color?: string | null;
 }
 
 export interface FlowParams {
@@ -409,6 +427,7 @@ export interface FlowParams {
   from_month?: string;
   to_month?: string;
   category_id?: string;
+  account_id?: string;
 }
 
 // --- Calendário (mirror: backend/models/analytics.py DayFlow/CalendarOut) ---
@@ -667,6 +686,8 @@ export interface RadarSignal {
   expires_at: string | null;
   evidence: { label: string; value: string }[];
   detected_at: string | null;
+  /** Reais above the limit or the usual pattern; older servers omit it. */
+  impact?: number | null;
 }
 
 export interface Radar {

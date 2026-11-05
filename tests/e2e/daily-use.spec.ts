@@ -40,6 +40,86 @@ test("quick entry: typed on the keyboard, saved and listed in Fluxo", async ({ p
   await expect(page.locator("text=Café teste >> visible=true").first()).toBeVisible();
 });
 
+test("tapping a lançamento explains it, and editing is one action inside", async ({ page }) => {
+  await createAccount(page);
+  await page.goto("/registro-inteligente");
+  await expect(page.getByTestId("quick-entry")).toBeVisible();
+  for (const key of ["4", "2"]) await page.keyboard.press(key);
+  await expect(page.getByTestId("quick-entry-amount")).toHaveText("R$ 42");
+  await page.getByRole("textbox", { name: "Nota" }).fill("Detalhe teste");
+  await page.getByRole("radiogroup", { name: "Categoria" }).getByRole("radio").nth(1).click();
+  await page.getByTestId("quick-entry-save").click();
+  await expect(page.getByRole("status").filter({ hasText: "Salvo" })).toBeVisible();
+  await page.goto("/transacoes");
+  await page.locator("text=Detalhe teste >> visible=true").first().click();
+  const detail = page.getByTestId("transaction-detail");
+  await expect(detail).toBeVisible();
+  await expect(detail.getByTestId("transaction-detail-value")).toHaveText("-R$ 42,00");
+  await expect(detail.getByTestId("transaction-detail-path")).toContainText("Conta Teste");
+  await expect(detail.getByTestId("transaction-detail-rhythm")).toContainText("avulso");
+  await expect(detail.getByTestId("transaction-detail-cashflow")).toHaveAttribute("href", /\/transacoes\?aba=caixa&month=\d{4}-\d{2}&metric=despesas&foco=/);
+  await detail.getByTestId("transaction-detail-edit").click();
+  await expect(detail).toBeHidden();
+  await expect(page.getByRole("dialog")).toBeVisible();
+});
+
+test("Ver no Caixa opens the month with the lançamento in focus", async ({ page }) => {
+  await createAccount(page);
+  await page.goto("/registro-inteligente");
+  await expect(page.getByTestId("quick-entry")).toBeVisible();
+  for (const key of ["4", "2"]) await page.keyboard.press(key);
+  await expect(page.getByTestId("quick-entry-amount")).toHaveText("R$ 42");
+  await page.getByRole("textbox", { name: "Nota" }).fill("Foco teste");
+  await page.getByRole("radiogroup", { name: "Categoria" }).getByRole("radio").nth(1).click();
+  await page.getByTestId("quick-entry-save").click();
+  await expect(page.getByRole("status").filter({ hasText: "Salvo" })).toBeVisible();
+  await page.goto("/transacoes");
+  await page.locator("text=Foco teste >> visible=true").first().click();
+  await page.getByTestId("transaction-detail").getByTestId("transaction-detail-cashflow").click();
+  const focus = page.getByTestId("focus-card");
+  await expect(focus).toContainText("Em foco: Foco teste");
+  await expect(focus.getByTestId("focus-weight")).toContainText("100%");
+  await expect(focus.getByTestId("focus-weight")).toContainText("1º maior");
+  await expect(page.getByTestId("flow-view-caixa")).toHaveAttribute("aria-pressed", "true");
+  await focus.getByTestId("focus-close").click();
+  await expect(page.getByTestId("focus-card")).toHaveCount(0);
+  await expect(page.getByText(/Deve (sobrar|faltar) no fim do mês|(Sobrou|Faltou) no mês/)).toBeVisible();
+});
+
+test("a sentence becomes several lançamentos to review, correct and register", async ({ page }) => {
+  await createAccount(page);
+  await page.goto("/registro-inteligente");
+  await expect(page.getByTestId("quick-entry")).toBeVisible();
+  await page.getByRole("button", { name: "Registro inteligente: escrever, falar ou fotografar" }).click();
+  const box = page.getByPlaceholder("Ex.: Paguei R$ 45 no Uber com o Nubank ontem");
+  await box.fill("uber hoje às 9h00 por 16,90 e pão 8");
+  await box.press("Enter");
+  const recognized = page.getByTestId("register-recognized");
+  await expect(recognized.getByTestId("ai-proposal-entry")).toHaveCount(2);
+  await expect(recognized.getByTestId("register-unknown")).toContainText("às 9h00");
+  await recognized.getByLabel("Valor de Pão").fill("9,50");
+  await recognized.getByLabel("Valor de Pão").blur();
+  await recognized.getByTestId("ai-proposal-apply").click();
+  await expect(recognized.getByTestId("ai-proposal-status")).toContainText("Feito · 2");
+  await page.goto("/transacoes");
+  await page.getByTestId("flow-view-lista").click();
+  await expect(page.locator("text=Pão >> visible=true").first()).toBeVisible();
+  await expect(page.locator("text=-R$ 9,50 >> visible=true").first()).toBeVisible();
+});
+
+test("a transfer shows what each account will have, and warns when the source goes negative", async ({ page }) => {
+  await createAccount(page);
+  await page.goto("/registro-inteligente");
+  await expect(page.getByTestId("quick-entry")).toBeVisible();
+  await page.getByRole("radio", { name: "Transferência" }).click();
+  for (const key of ["2", "0", "0"]) await page.keyboard.press(key);
+  const preview = page.getByTestId("transfer-preview");
+  await expect(preview.getByTestId("transfer-from-after")).toHaveText("R$ 800,00");
+  await expect(preview.getByTestId("transfer-to")).toContainText("Escolha uma conta");
+  for (const key of ["0"]) await page.keyboard.press(key);
+  await expect(page.getByTestId("transfer-negative")).toContainText("fica negativa em R$ 1.000,00");
+});
+
 test("statement import flags what is already registered", async ({ page }) => {
   await createAccount(page);
   const csv = Buffer.from(`Data;Descrição;Valor\n${isoDaysAgo(2)};Padaria Teste;-12,50\n${isoDaysAgo(4)};Pix recebido;200,00`);
@@ -59,12 +139,19 @@ test("statement import flags what is already registered", async ({ page }) => {
   await expect(page.getByTestId("statement-import-submit")).toBeDisabled();
 });
 
-test("cash flow leads with how the month closes, and Voltar keeps the chosen tab", async ({ page }) => {
-  await page.goto("/fluxo?metric=caixa");
+test("Caixa is a tab of Fluxo: Saldo opens it, the old address too, and coming back keeps the chosen tab", async ({ page }) => {
+  await page.goto("/transacoes");
+  await page.getByTestId("flow-strip-caixa").click();
+  await expect(page.getByTestId("flow-view-caixa")).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText(/Deve (sobrar|faltar) no fim do mês|(Sobrou|Faltou) no mês/)).toBeVisible();
   await page.getByTestId("flow-tab-despesas").click();
-  await page.getByTestId("flow-breadcrumb-back").click();
-  await expect(page).toHaveURL(/\/transacoes/);
+  await page.goto("/contas");
   await page.goBack();
   await expect(page.getByTestId("flow-tab-despesas")).toHaveAttribute("aria-selected", "true");
+  await page.getByTestId("flow-view-lista").click();
+  await expect(page.getByTestId("flow-strip-caixa")).toBeVisible();
+
+  await page.goto("/fluxo?metric=receitas");
+  await expect(page).toHaveURL(/\/transacoes\?.*aba=caixa/);
+  await expect(page.getByTestId("flow-tab-receitas")).toHaveAttribute("aria-selected", "true");
 });

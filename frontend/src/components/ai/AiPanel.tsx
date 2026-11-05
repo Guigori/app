@@ -1,13 +1,19 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Clock3, FileText, Loader2, Mic, Plus, Send, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Check, ChevronRight, Clock3, FileText, Loader2, Mic, Plus, Send, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { getMode, isLocalMode } from "@/lib/mode";
 import { askLocalFinnos } from "@/lib/local/ai";
-import { clearFinnConversations, newFinnConversation, readFinnConversations, upsertFinnConversation, type FinnConversation } from "@/lib/aiConversations";
-import type { AiAnswer, AiKey, AiProvider, Category, CreditCard } from "@/types/finnos";
+import { askFinnAnalyst, askFinnProposal } from "@/lib/askFinnAnalyst";
+import { applyProposal, undoProposal } from "@/lib/finnApply";
+import { ProposalCard } from "@/components/ai/ProposalCard";
+import { memoryCommand, notesFor, personalSuggestions, readMemory, rememberFeedback, rememberTopic, writeMemory, type FinnMemory } from "@/lib/finnMemory";
+import type { FinnAnswer } from "@/lib/finnAnalyst";
+import { fetchAccounts, fetchCategories, fetchRadar } from "@/lib/data";
+import { clearFinnConversations, newFinnConversation, readFinnConversations, upsertFinnConversation, type FinnConversation, type FinnMessage } from "@/lib/aiConversations";
+import type { AiAnswer, AiKey, AiProvider, CreditCard } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigationPreferences } from "@/lib/navigationPreferences";
@@ -32,25 +38,62 @@ export function AiPanel() {
   const keysQuery=useQuery({queryKey:["ai-keys"],queryFn:()=>apiGet<AiKey[]>("/ai/keys"),enabled:open&&!local,staleTime:30000});
   const activeProvider=(keysQuery.data?.[0]?.provider||"") as AiProvider|"";
   const cardsQuery=useQuery({queryKey:["cards"],queryFn:()=>apiGet<CreditCard[]>("/cards"),enabled:open&&!local,staleTime:30000});
-  const categoriesQuery=useQuery({queryKey:["categories"],queryFn:()=>apiGet<Category[]>("/categories"),enabled:open&&!local,staleTime:30000});
+  const categoriesQuery=useQuery({queryKey:["categories"],queryFn:fetchCategories,enabled:open,staleTime:30000});
+  const accountsQuery=useQuery({queryKey:["accounts"],queryFn:fetchAccounts,enabled:open,staleTime:30000});
+  const queryClient=useQueryClient();
   const askMutation=useMutation({mutationFn:({q,history}:{q:string;history:{role:"user"|"assistant";content:string}[]})=>apiPost<AiAnswer>("/ai/ask",{provider:activeProvider,question:q,history})});
 
   const suggestions=useMemo(()=>{
     const used=conversation.messages.filter(m=>m.role==="user").map(m=>m.content.toLowerCase());
-    return BASE_SUGGESTIONS.filter(s=>!used.some(u=>u.includes(s.toLowerCase().slice(0,12)))).slice(0,3);
+    // The user's own frequent questions come first.
+    const mine=personalSuggestions(readMemory());
+    return [...new Set([...mine,...BASE_SUGGESTIONS])].filter(s=>!used.some(u=>u.includes(s.toLowerCase().slice(0,12)))).slice(0,4);
   },[conversation.messages]);
 
   const speak=()=>{const w=window as any;const SR=w.SpeechRecognition||w.webkitSpeechRecognition;if(!SR){setError("Ditado por voz não está disponível neste navegador.");return}const rec=new SR();rec.lang="pt-BR";rec.interimResults=false;rec.onstart=()=>setListening(true);rec.onend=()=>setListening(false);rec.onerror=()=>setListening(false);rec.onresult=(e:any)=>setQuestion((v)=>[v,e.results[0][0].transcript].filter(Boolean).join(" "));rec.start()};
   const attachFile=async(file:File)=>{setAttachOpen(false);if(file.size>2_000_000){setError("Use um arquivo de até 2 MB nesta versão.");return}if(file.type.startsWith("text/")||/\\.(csv|txt)$/i.test(file.name)){const body=await file.text();setQuestion(`Analise este arquivo ${file.name} e identifique possíveis lançamentos. Não registre nada sem minha confirmação.\\n\\n${body.slice(0,12000)}`)}else{setQuestion(`Quero analisar o arquivo "${file.name}" para registrar gastos. Mostre uma prévia e peça minha confirmação antes de salvar.`);setError("A leitura automática de imagens/PDFs será concluída pelo processador de documentos do servidor; nenhum lançamento será salvo automaticamente.")}};
-  const feedback=(id:string,rating:"up"|"down")=>{if(local){localStorage.setItem(`finnos:ai-feedback:${id}`,rating);return}void apiPost("/ai/feedback",{rating,response_id:id})};
+  const feedback=(id:string,rating:"up"|"down")=>{
+    const message=conversation.messages.find(m=>m.id===id);
+    writeMemory(rememberFeedback(readMemory(),message?.query?.op??"geral",rating));
+    // A thumbs-down asks what to change, and the answer teaches the next replies.
+    if(rating==="down"&&conversation.messages.at(-1)?.id===id)persist({...conversation,messages:[...conversation.messages,{id:crypto.randomUUID(),role:"assistant",content:"Obrigado pelo retorno. O que eu posso melhorar?",followUps:["Responda mais curto","Quero respostas mais detalhadas","O que você sabe sobre mim?"],createdAt:new Date().toISOString()}]});
+    if(local){localStorage.setItem(`finnos:ai-feedback:${id}`,rating);return}void apiPost("/ai/feedback",{rating,response_id:id}).catch(()=>undefined)};
   const persist=(next:FinnConversation)=>{setConversation(next);upsertFinnConversation(next);setHistory(readFinnConversations())};
   const startNew=()=>{setConversation(newFinnConversation());setQuestion("");setError(null);setPendingContext(null);setHistoryOpen(false)};
+  const [thinking,setThinking]=useState(false);
+  // Proposal edits and their outcome live on the message, so the conversation keeps them.
+  const patchMessage=(id:string,patch:Partial<FinnMessage>)=>setConversation(prev=>{const updated={...prev,messages:prev.messages.map(m=>m.id===id?{...m,...patch}:m)};upsertFinnConversation(updated);setHistory(readFinnConversations());return updated});
+  const refresh=()=>queryClient.invalidateQueries();
+  // Opening with what matters now, instead of waiting for a question.
+  const radarQuery=useQuery({queryKey:["radar"],queryFn:fetchRadar,enabled:open,staleTime:60000});
+  const noticed=(radarQuery.data?.items??[]).filter(s=>s.severity==="critical"||s.severity==="high").sort((a,b)=>b.score-a.score)[0];
   const ask=async(q:string)=>{
-    const text=q.trim(); if(!text)return; setQuestion("");setError(null);
+    const text=q.trim(); if(!text)return; setQuestion("");setError(null);setThinking(true);
     const user={id:crypto.randomUUID(),role:"user" as const,content:text,createdAt:new Date().toISOString()};
     let next={...conversation,title:conversation.messages.length?conversation.title:text.slice(0,52),messages:[...conversation.messages,user]};persist(next);
     try{
       const contextualText=pendingContext?`${text}\n\n[Contexto estruturado do FINNOS: ${JSON.stringify(pendingContext)}]`:text;
+      // Lessons first ("lembre que lanche é Restaurantes"), then the analyst, in every mode and at no cost.
+      const memory=readMemory();
+      const lesson=pendingContext?null:memoryCommand(text,memory,await fetchCategories().catch(()=>[]));
+      if(lesson){
+        writeMemory(lesson.memory);
+        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:lesson.text,followUps:lesson.followUps,createdAt:new Date().toISOString()}]};persist(next);
+        return;
+      }
+      // A change to make ("café 3,80 e táxi 14", "mova a Padaria para Alimentação") becomes a proposal to review.
+      const proposed=pendingContext?null:await askFinnProposal(text,memory.aliases);
+      if(proposed){
+        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:proposed.text,steps:proposed.steps,proposal:proposed.proposal,proposalState:proposed.proposal?{status:"pending"}:undefined,followUps:proposed.followUps,createdAt:new Date().toISOString()}]};persist(next);
+        return;
+      }
+      const analyst=pendingContext?null:await askFinnAnalyst(text,conversation.messages,memory.aliases);
+      if(analyst){
+        writeMemory(rememberTopic(memory,analyst.query,text));
+        const shaped=styled(analyst,memory);
+        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:shaped.text,visual:shaped.visual,steps:analyst.steps,insight:analyst.insight,followUps:analyst.followUps,links:analyst.links,query:analyst.query,createdAt:new Date().toISOString()}]};persist(next);
+        return;
+      }
       const localReply=local?await askLocalFinnos(contextualText,undefined,conversation.messages):null;
       const amountMatch=text.match(/(?:R\\$\\s*)?([0-9]{1,3}(?:\\.[0-9]{3})*(?:,[0-9]{1,2})|[0-9]+(?:[.,][0-9]{1,2})?)/);
       const amount=amountMatch?Number(amountMatch[1].replace(/\\./g,"").replace(",",".")):0;
@@ -67,16 +110,22 @@ export function AiPanel() {
         const options=simulation.scenarios.map(s=>`${s.installments}x de ${money(s.installment_value)} → projeção de ${money(s.projected_30d_after)}`).join("\n");
         const budgetLine=simulation.budget?`\nOrçamento da categoria: ${money(simulation.budget.available_before)} disponível antes e ${money(simulation.budget.available_after)} depois.`:"";
         return `Simulei **${money(amount)}** sem criar nenhum lançamento. Seu saldo projetado para os próximos 30 dias parte de **${money(simulation.projected_30d_before)}**. Cenário: **${simulation.level}**.${budgetLine}\n\nComparação:\n${options}\n\nIsso é uma simulação; nenhuma compra ou despesa foi registrada.`;
-      })():(await askMutation.mutateAsync({q:contextualText,history:conversation.messages.slice(-12).map(({role,content})=>({role,content}))})).answer);
+      })():await askMutation.mutateAsync({q:contextualText,history:conversation.messages.slice(-12).map(({role,content})=>({role,content}))}).then(r=>r.answer).catch(()=>null));
+      if(reply===null){
+        // No language model here (none configured, or calls not enabled): say what can be asked instead of failing.
+        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:"Ainda não sei responder essa pergunta com os seus dados. Eu entendo perguntas sobre gastos e receitas de um período, de uma categoria, conta, cartão ou estabelecimento, comparações, evolução por mês, orçamento, saldo, projeção do mês, contas a vencer, assinaturas e o Radar.",followUps:["Para onde foi meu dinheiro este mês?","Quanto gastei no mês passado comparado com este?","Vou fechar o mês no positivo?"],createdAt:new Date().toISOString()}]};persist(next);
+        return;
+      }
       setPendingContext(null);
       next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:reply,visual:localReply?.visual,createdAt:new Date().toISOString()}]};persist(next);
     }catch(e){setError(getApiErrorMessage(e,"Não foi possível responder agora."))}
+    finally{setThinking(false)}
   };
 
   return <Sheet open={open} onOpenChange={setOpen}>
     {/* Phones open the assistant from the header (it no longer floats over content). */}
     {showTrigger&&!isMobile?<SheetTrigger className="fixed bottom-[5.75rem] right-4 z-40 flex lg:hidden h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg transition-all duration-200 dashboard:md:bottom-[6.25rem] dashboard:md:right-6" style={{opacity:triggerVisible?1:0,pointerEvents:triggerVisible?"auto":"none"}} aria-label="Abrir FINNOS IA"><Sparkles className="h-5 w-5"/></SheetTrigger>:null}
-    <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-xl [&>button]:hidden">
+    <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 data-[side=right]:w-full sm:max-w-xl data-[side=right]:sm:max-w-xl [&>button]:hidden">
       <header className="flex items-center gap-3 border-b border-border px-5 py-4">
         {historyOpen?<button onClick={()=>setHistoryOpen(false)} aria-label="Voltar"><ArrowLeft/></button>:<Sparkles className="h-6 w-6 text-primary"/>}
         <div className="min-w-0 flex-1"><h2 className="font-heading text-lg font-bold">{historyOpen?"Conversas anteriores":"FINNOS IA"}</h2><p className="text-xs text-muted-foreground">{historyOpen?"Últimas conversas neste dispositivo":appMode==="demo"?"Assistente financeiro · Demonstração":appMode==="local"?"Assistente financeiro · Local":"Assistente financeiro contextual"}</p></div>
@@ -85,16 +134,25 @@ export function AiPanel() {
       </header>
 
       {historyOpen?<div className="flex-1 overflow-y-auto p-5">
-        <div className="mb-5 flex items-center justify-between"><p className="text-sm text-muted-foreground">O FINNOS guarda até 3 conversas recentes neste dispositivo.</p>{history.length?<Button variant="ghost" size="sm" onClick={()=>{clearFinnConversations();setHistory([]);startNew()}}><Trash2 className="mr-2 h-4 w-4"/>Limpar</Button>:null}</div>
+        <div className="mb-5 flex items-center justify-between"><p className="text-sm text-muted-foreground">O FINNOS guarda até 10 conversas recentes neste dispositivo.</p>{history.length?<Button variant="ghost" size="sm" onClick={()=>{clearFinnConversations();setHistory([]);startNew()}}><Trash2 className="mr-2 h-4 w-4"/>Limpar</Button>:null}</div>
         <div className="space-y-3">{history.length?history.map(c=><button key={c.id} onClick={()=>{setConversation(c);setHistoryOpen(false)}} className="w-full rounded-2xl border border-border p-4 text-left hover:bg-muted"><strong className="block truncate">{c.title}</strong><span className="text-xs text-muted-foreground">{c.messages.filter(m=>m.role==="user").length} perguntas</span></button>):<p className="py-16 text-center text-sm text-muted-foreground">Nenhuma conversa anterior.</p>}</div>
       </div>:<>
         <main className="flex-1 space-y-4 overflow-y-auto p-5">
           {!conversation.messages.length?<div className="space-y-5">
             <div className="flex gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-5 w-5"/></div><div className="rounded-2xl border border-border bg-card p-4 text-sm leading-relaxed">Olá! Sou a FINNOS IA. Posso analisar seus gastos, orçamento, Radar e ajudar no seu planejamento financeiro. O que você quer entender hoje?</div></div>
             {appMode==="local"?<div className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground">Se quiser conectar ChatGPT, Claude ou Gemini e guardar sua chave com segurança, <Link to="/cadastro" onClick={()=>setOpen(false)} className="font-semibold text-primary">crie sua conta preservando seus dados</Link>.</div>:null}
+            {noticed?<div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm" data-testid="ai-opening-noticed"><p className="text-xs font-semibold text-primary">Hoje eu notei</p><p className="mt-1 font-medium">{noticed.title}{noticed.metric?` · ${noticed.metric}`:""}</p><button type="button" onClick={()=>void ask("O que o Radar está vendo?")} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary">Me explique<ChevronRight className="h-3.5 w-3.5"/></button></div>:null}
             <div className="grid gap-2">{suggestions.map(s=><button key={s} onClick={()=>void ask(s)} className="rounded-2xl bg-muted px-4 py-3 text-left text-sm font-medium hover:bg-accent">{s}</button>)}</div>
-          </div>:conversation.messages.map(m=><div key={m.id} className={m.role==="user"?"flex justify-end":"flex justify-start gap-3"}>{m.role==="assistant"?<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-4 w-4"/></div>:null}<div className={m.role==="user"?"max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground":"max-w-[88%] rounded-2xl border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-line"}><span>{m.content.replace(/\*\*/g,"")}</span>{m.role==="assistant"&&m.visual?<Suspense fallback={null}><AiVisual visual={m.visual}/></Suspense>:null}{m.role==="assistant"?<div className="mt-2 flex gap-1 text-muted-foreground"><button onClick={()=>feedback(m.id,"up")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta útil"><ThumbsUp className="h-3.5 w-3.5"/></button><button onClick={()=>feedback(m.id,"down")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta não útil"><ThumbsDown className="h-3.5 w-3.5"/></button></div>:null}</div></div>)}
-          {askMutation.isPending?<div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin"/>Analisando suas finanças…</div>:null}
+          </div>:conversation.messages.map(m=><div key={m.id} className={m.role==="user"?"flex justify-end":"flex justify-start gap-3"}>{m.role==="assistant"?<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-4 w-4"/></div>:null}<div className={m.role==="user"?"max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground":"max-w-[88%] rounded-2xl border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-line"}>{m.role==="assistant"&&m.steps?.length?<ul className="mb-2 space-y-0.5 text-xs text-muted-foreground" data-testid="ai-steps">{m.steps.map(step=><li key={step} className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5" aria-hidden="true"/>{step}</li>)}</ul>:null}<span>{m.content.split("**").map((part,i)=>i%2?<strong key={i} className="font-semibold">{part}</strong>:part)}</span>
+            {m.role==="assistant"&&m.proposal&&m.proposalState?<ProposalCard proposal={m.proposal} state={m.proposalState} categories={categoriesQuery.data??[]} accounts={accountsQuery.data??[]}
+              onChange={proposal=>patchMessage(m.id,{proposal})}
+              onCancel={()=>patchMessage(m.id,{proposalState:{status:"cancelled"}})}
+              onApply={async()=>{try{const state=await applyProposal(m.proposal!);patchMessage(m.id,{proposalState:state});await refresh()}catch(e){setError(getApiErrorMessage(e,"Não foi possível salvar tudo agora. Confira no Fluxo o que já entrou antes de tentar de novo."))}}}
+              onUndo={async()=>{if(m.proposalState?.status!=="applied")return;try{await undoProposal(m.proposalState);patchMessage(m.id,{proposalState:{status:"undone"}});await refresh()}catch(e){setError(getApiErrorMessage(e,"Não foi possível desfazer agora."))}}}/>:null}{m.role==="assistant"&&m.visual?<Suspense fallback={null}><AiVisual visual={m.visual}/></Suspense>:null}
+            {m.role==="assistant"&&m.insight?<div className="mt-3 rounded-xl bg-primary/5 p-3 text-xs leading-relaxed" data-testid="ai-insight"><p className="font-semibold text-primary">Eu notei também</p><p className="mt-0.5 text-foreground">{m.insight}</p></div>:null}
+            {m.role==="assistant"&&m.links?.length?<div className="mt-3 flex flex-wrap gap-2">{m.links.map(l=><Link key={l.to} to={l.to} onClick={()=>setOpen(false)} className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">{l.label}<ChevronRight className="h-3.5 w-3.5"/></Link>)}</div>:null}
+            {m.role==="assistant"&&m.followUps?.length&&m.id===conversation.messages.at(-1)?.id?<div className="mt-3 flex flex-wrap gap-1.5" data-testid="ai-follow-ups">{m.followUps.map(f=><button key={f} type="button" onClick={()=>void ask(f)} className="rounded-full border border-border px-3 py-1.5 text-left text-xs font-medium hover:bg-muted">{f}</button>)}</div>:null}{m.role==="assistant"?<div className="mt-2 flex gap-1 text-muted-foreground"><button onClick={()=>feedback(m.id,"up")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta útil"><ThumbsUp className="h-3.5 w-3.5"/></button><button onClick={()=>feedback(m.id,"down")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta não útil"><ThumbsDown className="h-3.5 w-3.5"/></button></div>:null}</div></div>)}
+          {askMutation.isPending||thinking?<div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin"/>Analisando suas finanças…</div>:null}
           {error?<p className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>:null}
         </main>
         <footer className="border-t border-border bg-background p-4">
@@ -104,4 +162,16 @@ export function AiPanel() {
       </>}
     </SheetContent>
   </Sheet>;
+}
+
+/** Applies what the user asked about answers: short ones keep the first sentence and the numbers; notes are repeated back. */
+function styled(answer: FinnAnswer, memory: FinnMemory): { text: string; visual: FinnAnswer["visual"] } {
+  const notes = notesFor(memory, answer.query);
+  const said = notes.length ? `\n\nVocê me disse: ${notes.join("; ")}.` : "";
+  if (memory.style === "curto") {
+    const first = answer.text.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? answer.text;
+    const visual = answer.visual?.metrics ? { metrics: answer.visual.metrics } : undefined;
+    return { text: first + said, visual };
+  }
+  return { text: answer.text + said, visual: answer.visual };
 }

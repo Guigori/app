@@ -1,11 +1,10 @@
 import { useMemo, useState } from "react";
 import { useRouteState } from "@/lib/routeState";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { canGoBack } from "@/lib/navigation";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ArrowDownLeft, ArrowLeft, ArrowUpRight, ChartColumn, ChartLine, ChevronRight, Eye, EyeOff } from "lucide-react";
-import { fetchCalendar, fetchCategories, fetchDashboard, fetchFlow, fetchTransactions } from "@/lib/data";
+import { ArrowDownLeft, ArrowUpRight, ChartColumn, ChartLine, ChevronRight, Eye, EyeOff, Wallet, X } from "lucide-react";
+import { fetchAccounts, fetchCalendar, fetchCategories, fetchDashboard, fetchFlow, fetchTransactions } from "@/lib/data";
 import { balanceTimeline, incomeSources, monthClose, upcoming, weeklyFlow } from "@/lib/cashFlow";
 import { axisMoney } from "@/lib/analysisFormat";
 import { useBalanceHidden } from "@/lib/balance";
@@ -14,16 +13,17 @@ import { cn } from "@/lib/utils";
 import { MonthSelector } from "@/components/dashboard/MonthSelector";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { FocusedTransaction } from "@/components/cashflow/FocusedTransaction";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { FlowPeriod, FlowTab } from "@/types/finnos";
+import type { FlowPeriod, FlowTab, UpcomingItem, UpcomingKind } from "@/types/finnos";
 
 const TABS: Array<{ key: FlowTab; label: string }> = [
   { key: "receitas", label: "Receitas" },
   { key: "despesas", label: "Despesas" },
-  { key: "caixa", label: "Caixa" },
+  { key: "caixa", label: "Saldo" },
   { key: "projecao", label: "Projeção" },
 ];
 
@@ -43,19 +43,30 @@ const TAB_HINT: Record<FlowTab, string> = {
 
 type ChartKind = "barras" | "linhas";
 
-export default function Flow() {
+/** The Caixa tab of Fluxo. Fluxo owns the month, so both views stay on the same one. */
+export default function Flow({ month: sharedMonth, onMonthChange }: { month?: string; onMonthChange?: (month: string) => void } = {}) {
   const [params] = useSearchParams();
-  const navigate = useNavigate();
   const initialTab = (params.get("metric") ?? "caixa") as FlowTab;
   const { hidden, toggle: toggleHidden } = useBalanceHidden();
 
-  const [month, setMonth] = useRouteState("caixa:month", () => params.get("month") ?? currentMonth());
+  const [ownMonth, setOwnMonth] = useRouteState("caixa:month", () => params.get("month") ?? currentMonth());
+  const month = sharedMonth ?? ownMonth;
+  const setMonth = (next: string) => (onMonthChange ? onMonthChange(next) : setOwnMonth(next));
   const [tab, setTab] = useRouteState<FlowTab>("caixa:tab", () => (TABS.some((t) => t.key === initialTab) ? initialTab : "caixa"));
   const [period, setPeriod] = useRouteState<FlowPeriod>("caixa:period", "12");
   const [chartKind, setChartKind] = useRouteState<ChartKind>("caixa:chart", "barras");
   const [fromMonth, setFromMonth] = useState(addMonth(currentMonth(), -5));
   const [toMonth, setToMonth] = useState(currentMonth());
   const [categoryId, setCategoryId] = useState(params.get("category_id") || "todas");
+  // ?foco=<id>: a lançamento read against its whole month (from its detail, "Ver no Caixa").
+  const [dismissedFocus, setDismissedFocus] = useState<string | null>(null);
+  const focusParam = params.get("foco");
+  const focusId = focusParam && focusParam !== dismissedFocus ? focusParam : null;
+  // Opened from a wallet account (or a lançamento's account): the whole screen follows it.
+  const [accountId, setAccountId] = useState(params.get("account_id") || "todas");
+  const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, staleTime: 60_000 });
+  const accounts = accountsQuery.data ?? [];
+  const account = accounts.find((a) => a.id === accountId);
 
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories, staleTime: 60_000 });
   const categories = categoriesQuery.data ?? [];
@@ -69,8 +80,9 @@ export default function Flow() {
       base.months = Number(period);
     }
     if (categoryId !== "todas") base.category_id = categoryId;
+    if (accountId !== "todas") base.account_id = accountId;
     return base;
-  }, [month, period, fromMonth, toMonth, categoryId]);
+  }, [month, period, fromMonth, toMonth, categoryId, accountId]);
 
   const flowQuery = useQuery({
     queryKey: ["flow", flowParams],
@@ -79,16 +91,25 @@ export default function Flow() {
   const flow = flowQuery.data;
   // Today's balance anchors the "saldo mês a mês"; the month's entries feed the lists below.
   const dashboardQuery = useQuery({ queryKey: ["dashboard", currentMonth()], queryFn: () => fetchDashboard(currentMonth()) });
-  const monthTxQuery = useQuery({ queryKey: ["transactions", "flow-month", month], queryFn: () => fetchTransactions({ month }) });
+  const monthTxQuery = useQuery({
+    queryKey: ["transactions", "flow-month", month, accountId],
+    queryFn: () => fetchTransactions(accountId === "todas" ? { month } : { month, account_id: accountId }),
+  });
   const calendarQuery = useQuery({ queryKey: ["calendar", month], queryFn: () => fetchCalendar(month) });
   const isPast = month < currentMonth();
   const close = flow ? monthClose(flow) : 0;
-  const timeline = flow && dashboardQuery.data ? balanceTimeline(flow.series, dashboardQuery.data.total_balance, currentMonth()) : [];
+  // With an account filter the line starts from that account's balance, not the whole wallet's.
+  const anchor = accountId !== "todas" ? account?.balance : dashboardQuery.data?.total_balance;
+  const timeline = flow && anchor !== undefined ? balanceTimeline(flow.series, anchor, currentMonth()) : [];
   const hasTimeline = timeline.some((p) => p.real !== null || p.forecast !== null);
   const endOfFocus = timeline.find((p) => p.month === month);
   const lowest = timeline.filter((p) => p.forecast !== null && p.month > currentMonth()).sort((a, b) => (a.forecast ?? 0) - (b.forecast ?? 0))[0];
   const sources = incomeSources(monthTxQuery.data ?? [], month);
-  const next = upcoming(monthTxQuery.data ?? [], month);
+  // The server lists every expected amount (fixed series, subscriptions, installments); older ones only send totals.
+  const expected: UpcomingItem[] = flow?.upcoming ?? upcoming(monthTxQuery.data ?? [], month).map((t) => ({
+    date: t.date, name: t.name, value: t.adjusted_value ?? t.value, type: t.type === "receita" ? "receita" : "despesa",
+    kind: t.status === "pendente" ? "pendente" : "agendado", transaction_id: t.id, category_name: t.category_name,
+  }));
   const weeks = calendarQuery.data ? weeklyFlow(month, calendarQuery.data.days) : [];
   const weekMax = Math.max(1, ...weeks.map((w) => Math.max(w.income, w.expense)));
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
@@ -125,27 +146,9 @@ export default function Flow() {
 
   return (
     <div className="flex flex-col gap-5 animate-fade-up" data-testid="flow-page">
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-2">
-          {/* Cash flow is a detail of Fluxo, reached from its Entrada / Saída / Saldo. */}
-          {/* Back to wherever the user came from (Início, Fluxo, Análise…); Fluxo when opened directly. */}
-          <Link
-            to={`/transacoes?month=${month}`}
-            onClick={(event) => { if (canGoBack()) { event.preventDefault(); navigate(-1); } }}
-            className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "mt-0.5 size-10 shrink-0 rounded-full border border-border bg-card")}
-            aria-label="Voltar"
-            title="Voltar"
-            data-testid="flow-breadcrumb-back"
-          >
-            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
-          </Link>
-          <div className="min-w-0">
-            <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo de caixa</h1>
-            <p data-keep className="mt-1 text-sm text-muted-foreground" data-testid="flow-subtitle">
-              {monthLabel(month)}
-            </p>
-          </div>
-        </div>
+      {/* Caixa is a tab of Fluxo: Fluxo's header carries the title and the way back. */}
+      <header className="flex items-center justify-between gap-3">
+        <p data-keep className="text-sm font-medium text-muted-foreground" data-testid="flow-subtitle">{monthLabel(month)}</p>
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
@@ -160,6 +163,16 @@ export default function Flow() {
           <MonthSelector month={month} onChange={(next) => setMonth(next)} />
         </div>
       </header>
+
+      {accountId !== "todas" ? (
+        <div className="-mt-2 flex flex-wrap items-center gap-2" data-testid="flow-account-filter">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 py-1 pl-3 pr-1 text-sm font-medium text-primary">
+            <Wallet className="h-4 w-4" aria-hidden="true" />Conta: {account?.name ?? "carregando…"}
+            <button type="button" onClick={() => setAccountId("todas")} className="grid size-6 place-items-center rounded-full hover:bg-primary/15" aria-label="Ver todas as contas" data-testid="flow-account-clear"><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
+          </span>
+          <span className="text-xs text-muted-foreground">Transferências entre suas contas não entram nos totais.</span>
+        </div>
+      ) : null}
 
       <div>
         <div className="flex gap-1 rounded-full border border-border bg-muted/60 p-1" role="tablist" aria-label="Tipo de fluxo">
@@ -198,6 +211,7 @@ export default function Flow() {
         </Card>
       ) : (
         <>
+          {focusId ? <FocusedTransaction id={focusId} monthRows={monthTxQuery.data ?? []} hidden={hidden} onClose={() => setDismissedFocus(focusId)} /> : null}
           {/* The answer of a cash flow first: how the month closes. Then what happened and what is still
               expected; each number selects its tab. */}
           <section className="rounded-2xl border border-border bg-card p-4 sm:p-5" aria-label={`Resumo de ${monthLabel(flow.month)}`}>
@@ -286,6 +300,15 @@ export default function Flow() {
                       {c.name}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+              <Select value={accountId} onValueChange={setAccountId}>
+                <SelectTrigger size="sm" className="w-full sm:w-44" aria-label="Filtrar fluxo por conta" data-testid="flow-account-select">
+                  <SelectValue>{accountId === "todas" ? "Todas as contas" : account?.name}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas as contas</SelectItem>
+                  {accounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -390,7 +413,7 @@ export default function Flow() {
             </section>
           ) : null}
 
-          {tab === "caixa" && weeks.length ? (
+          {tab === "caixa" && weeks.length && accountId === "todas" ? (
             <section className="rounded-2xl border border-border bg-card p-4 sm:p-5" data-testid="flow-weeks">
               <div className="flex items-baseline justify-between gap-3"><h2 className="font-heading text-base font-semibold">Semana a semana</h2><span className="text-xs text-muted-foreground">{monthLabel(month)}</span></div>
               <ul className="mt-3 space-y-3">
@@ -409,24 +432,13 @@ export default function Flow() {
             </section>
           ) : null}
 
-          {tab === "projecao" ? (
-            <section className="rounded-2xl border border-border bg-card p-4 sm:p-5" data-testid="flow-upcoming">
-              <div className="flex items-baseline justify-between gap-3"><h2 className="font-heading text-base font-semibold">O que ainda vem</h2><span className="text-xs text-muted-foreground">{monthLabel(month)}</span></div>
-              {next.length === 0 ? <p className="mt-3 rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Nada agendado ou pendente neste mês.</p> : (
-                <ul className="mt-2 divide-y divide-border/70">
-                  {next.slice(0, 12).map((t) => (
-                    <li key={t.id}>
-                      <Link to={`/transacoes?date=${t.date}&highlight=${t.id}`} className="flex items-center gap-3 py-2.5">
-                        <span className={cn("grid size-9 shrink-0 place-items-center rounded-xl", t.type === "receita" ? "bg-income/10 text-income" : "bg-expense/10 text-expense")}>{t.type === "receita" ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}</span>
-                        <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{t.name}</span><span className="block text-xs text-muted-foreground">{formatDate(t.date)} · {t.status === "pendente" ? (t.date < todayISO() ? "atrasado" : "pendente") : "agendado"}</span></span>
-                        <span className={cn("shrink-0 text-sm font-semibold tabular-nums", t.type === "receita" ? "text-income" : "text-expense")}>{t.type === "receita" ? "+" : "−"}{money(t.adjusted_value ?? t.value)}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="mt-3 text-xs text-muted-foreground">Os totais também contam as contas fixas e assinaturas que se repetem todo mês.</p>
-            </section>
+          {tab === "projecao" || tab === "receitas" || tab === "despesas" ? (
+            <ExpectedList
+              items={expected.filter((item) => tab === "projecao" || item.type === (tab === "receitas" ? "receita" : "despesa"))}
+              title={tab === "receitas" ? "Ainda vai entrar" : tab === "despesas" ? "Ainda vai sair" : "O que ainda vem"}
+              month={month}
+              money={money}
+            />
           ) : null}
 
           {tab === "despesas" || tab === "caixa" ? (
@@ -482,3 +494,51 @@ const tooltipStyle = {
   color: "var(--popover-foreground)",
   fontSize: 13,
 };
+
+const KIND_LABEL: Record<UpcomingKind, string> = {
+  agendado: "Agendado", pendente: "Pendente", parcela: "Parcela", fixa: "Fixa · todo mês", assinatura: "Assinatura",
+};
+
+/** Every amount still expected in the month, with where it comes from; they add up to the projection above. */
+function ExpectedList({ items, title, month, money }: { items: UpcomingItem[]; title: string; month: string; money: (v: number) => string }) {
+  const today = todayISO();
+  const totals = (type: UpcomingItem["type"]) => items.filter((i) => i.type === type).reduce((sum, i) => sum + i.value, 0);
+  const link = (item: UpcomingItem) =>
+    item.transaction_id ? `/transacoes?date=${item.date}&highlight=${item.transaction_id}` : item.subscription_id ? "/assinaturas" : `/transacoes?month=${month}`;
+  return (
+    <section className="rounded-2xl border border-border bg-card p-4 sm:p-5" data-testid="flow-upcoming">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="font-heading text-base font-semibold">{title}</h2>
+        <span className="text-xs text-muted-foreground">{monthLabel(month)}</span>
+      </div>
+      {items.length === 0 ? <p className="mt-3 rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Nada previsto para o resto do mês.</p> : (
+        <>
+          <ul className="mt-2 divide-y divide-border/70">
+            {items.slice(0, 20).map((item, index) => {
+              const late = item.date < today && (item.kind === "pendente" || item.kind === "agendado");
+              return (
+                <li key={`${item.transaction_id ?? item.subscription_id ?? item.name}-${item.date}-${index}`}>
+                  <Link to={link(item)} className="flex items-center gap-3 py-2.5" data-testid="flow-upcoming-row">
+                    <span className={cn("grid size-9 shrink-0 place-items-center rounded-xl", item.type === "receita" ? "bg-income/10 text-income" : "bg-expense/10 text-expense")}>{item.type === "receita" ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{item.name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {formatDate(item.date)} · <span className={late ? "font-semibold text-expense" : undefined}>{late ? "Atrasado" : KIND_LABEL[item.kind]}</span>{item.category_name ? ` · ${item.category_name}` : ""}
+                      </span>
+                    </span>
+                    <span className={cn("shrink-0 text-sm font-semibold tabular-nums", item.type === "receita" ? "text-income" : "text-expense")}>{item.type === "receita" ? "+" : "−"}{money(item.value)}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          {items.length > 20 ? <p className="mt-2 text-xs text-muted-foreground">E mais {items.length - 20}.</p> : null}
+          <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border/70 pt-3 text-xs text-muted-foreground" data-testid="flow-upcoming-total">
+            {totals("receita") ? <span>Entra: <strong className="text-income">{money(totals("receita"))}</strong></span> : null}
+            {totals("despesa") ? <span>Sai: <strong className="text-expense">{money(totals("despesa"))}</strong></span> : null}
+          </p>
+        </>
+      )}
+    </section>
+  );
+}

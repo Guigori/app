@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, ChevronRight, Repeat, Sparkles, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { fetchRadar, sendRadarFeedback, updateRadarSignal, fetchTransactions, updateTransaction } from "@/lib/data";
+import { fetchCalendar, fetchRadar, sendRadarFeedback, updateRadarSignal, fetchTransaction, fetchTransactions, updateTransaction } from "@/lib/data";
+import { currentMonth, formatBRL, formatDate } from "@/lib/format";
+import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { RADAR_COLOR, RADAR_ICON, RADAR_LABEL, isRecurringCandidate, radarTarget, severityLabel } from "@/lib/radarUi";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,6 +17,19 @@ export default function RadarDetail() {
   const { data, isPending } = useQuery({ queryKey: ["radar"], queryFn: fetchRadar, staleTime: 60_000 });
   const signal = data?.items.find((item) => item.id === signalId);
   const isNew = signal?.state === "new";
+  const dialogs = useDialogs();
+  const month = currentMonth();
+  // What caused it: the category's biggest expenses this month, or the lançamento it points at.
+  const categoryId = signal?.related_entity_type === "category" ? signal.related_entity_id : null;
+  const txId = signal?.related_entity_type === "transaction" ? signal.related_entity_id : null;
+  const causes = useQuery({
+    queryKey: ["transactions", "radar-causes", categoryId, month],
+    queryFn: () => fetchTransactions({ category_id: categoryId!, month, type: "despesa", status: "pago" }),
+    enabled: Boolean(categoryId),
+  });
+  const related = useQuery({ queryKey: ["transaction", txId], queryFn: () => fetchTransaction(txId!), enabled: Boolean(txId) });
+  const weighs = signal?.type === "risk" || signal?.type === "deviation";
+  const calendar = useQuery({ queryKey: ["calendar", month, "todas"], queryFn: () => fetchCalendar(month), enabled: Boolean(signal) && weighs });
   // Opening a signal marks it as seen; the list then stops calling it "novo".
   useEffect(() => {
     if (signalId && isNew) void updateRadarSignal(signalId, "view").catch(() => undefined);
@@ -100,6 +115,38 @@ export default function RadarDetail() {
             </dl>
           ) : null}
         </div>
+
+        {(() => {
+          const rows = categoryId ? [...(causes.data ?? [])].sort((a, b) => b.value - a.value) : related.data ? [related.data] : [];
+          if (!rows.length) return null;
+          return (
+            <div className="border-t border-border p-6 sm:p-8" data-testid="radar-detail-causes">
+              <h2 className="text-sm font-semibold">{categoryId ? "O que mais pesou neste mês" : "O lançamento"}</h2>
+              <ul className="mt-2 divide-y divide-border/70">
+                {rows.slice(0, 5).map((t) => (
+                  <li key={t.id}>
+                    <button type="button" onClick={() => dialogs.openTransactionDetail(t)} className="flex w-full items-center gap-3 rounded-lg py-2.5 text-left hover:bg-muted/50" data-testid="radar-detail-cause">
+                      <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{t.name}</span><span className="block text-xs text-muted-foreground">{formatDate(t.date)} · {t.card_name ?? t.account_name}</span></span>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums">{formatBRL(t.value)}</span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {rows.length > 5 ? <p className="mt-1 text-xs text-muted-foreground">E mais {rows.length - 5} lançamentos.</p> : null}
+            </div>
+          );
+        })()}
+
+        {weighs && calendar.data ? (
+          <div className="border-t border-border p-6 sm:p-8" data-testid="radar-detail-impact">
+            <h2 className="text-sm font-semibold">Impacto no mês</h2>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+              Com o que já está lançado e previsto, o mês deve fechar em <strong className="text-foreground tabular-nums">{formatBRL(calendar.data.projected_balance)}</strong>.
+              {(signal.impact ?? 0) > 0 && signal.related_entity_type !== "card" ? <> Sem esse excesso de {formatBRL(signal.impact ?? 0)}, fecharia em <strong className="text-foreground tabular-nums">{formatBRL(calendar.data.projected_balance + (signal.impact ?? 0))}</strong>.</> : null}
+            </p>
+          </div>
+        ) : null}
 
         <div className="space-y-2 border-t border-border p-6 sm:p-8">
           <h2 className="mb-1 text-sm font-semibold">O que fazer</h2>

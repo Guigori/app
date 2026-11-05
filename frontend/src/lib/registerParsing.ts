@@ -64,7 +64,7 @@ function findDate(text: string, today: string): string | null {
 /** Keyword → words expected in the user's category names. */
 const CATEGORY_HINTS: Array<[RegExp, string[]]> = [
   [/\b(uber|99|taxi|onibus|metro|gasolina|combustivel|estacionamento|pedagio)\b/, ["transporte"]],
-  [/\b(cafe|almoco|jantar|restaurante|lanche|ifood|padaria|pizza|hamburguer)\b/, ["alimentacao", "comida", "refeic", "restaurante"]],
+  [/\b(cafe|almoco|jantar|restaurante|lanche|ifood|padaria|pizza|hamburguer|pao|acai|sorvete|salgado|marmita)\b/, ["alimentacao", "comida", "refeic", "restaurante"]],
   [/\b(mercado|supermercado|feira|hortifruti)\b/, ["mercado", "supermercado"]],
   [/\b(aluguel|luz|energia|agua|internet|condominio|gas)\b/, ["moradia", "casa"]],
   [/\b(netflix|spotify|assinatura|prime|disney|youtube)\b/, ["assinatura", "lazer"]],
@@ -117,7 +117,8 @@ export function parseRegisterText(
     .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const name = text
     .replace(amount?.raw ?? "", " ")
-    .replace(accountWords.length ? new RegExp(`\\b(${accountWords.join("|")})\\b`, "gi") : /$^/, " ")
+    // Letter-aware edges: "\\b" fails next to an accented letter ("Itaú").
+    .replace(accountWords.length ? new RegExp(`(?<![\\p{L}\\d])(${accountWords.join("|")})(?![\\p{L}\\d])`, "giu") : /$^/, " ")
     .replace(/\b(gastei|paguei|comprei|recebi|ganhei|transferi|hoje|ontem|anteontem|reais|real|no pix|pelo pix|com o|com a|no|na|de|do|da|em|pelo|pela|para o|para a|para)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();

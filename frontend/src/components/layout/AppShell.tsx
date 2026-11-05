@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
-import { Outlet, useLocation, useNavigate, useNavigationType } from "react-router-dom";
+import { useLocation, useNavigate, useNavigationType, useOutlet } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { DialogsProvider } from "@/components/dialogs/DialogsProvider";
@@ -18,6 +18,9 @@ import { startPreferencesSync } from "@/lib/preferencesSync";
 
 export function AppShell() {
   const location = useLocation();
+  // The leaving screen keeps the page it had: a live <Outlet> would draw the new page in it too,
+  // leaving two copies on screen while it fades out.
+  const outlet = useOutlet();
   const [menuOpen, setMenuOpen] = useState(false);
   // Dragging in from the left edge opens the menu, like Calen.
   useEdgeSwipe(useCallback(() => setMenuOpen(true), []), !menuOpen);
@@ -75,8 +78,8 @@ export function AppShell() {
             {/* Each route fades/slides in, so navigation feels continuous instead of a jump. */}
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
-                // A redirect (/cartoes → /contas) is the same screen: no exit/enter between them.
-                key={location.pathname === "/cartoes" ? "/contas" : location.pathname}
+                // A redirect (/cartoes → /contas, /fluxo → Caixa in Fluxo) is the same screen: no exit/enter between them.
+                key={location.pathname === "/cartoes" ? "/contas" : location.pathname === "/fluxo" ? "/transacoes" : location.pathname}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
@@ -84,7 +87,7 @@ export function AppShell() {
               >
                 {/* Suspense inside the shell keeps sidebar and header in place while a page chunk loads. */}
                 <Suspense fallback={<FinnosPageLoading title="Abrindo" />}>
-                  <Outlet />
+                  {outlet}
                 </Suspense>
               </motion.div>
             </AnimatePresence>

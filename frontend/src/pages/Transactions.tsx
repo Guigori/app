@@ -1,8 +1,8 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useDeferredValue, useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useIsRestoring, useRouteState } from "@/lib/routeState";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowDown, ArrowUp, BellOff, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, ChevronRight, Search, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, BellOff, Wallet, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, ChevronRight, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions, fetchTransactionsPage, isTransactionListComplete } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -42,6 +42,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { Transaction, TxStatus, TxType } from "@/types/finnos";
 
+// Caixa (entrou, saiu, projeção) is a tab of Fluxo; its charts load only when it is opened.
+const Flow = lazy(() => import("@/pages/Flow"));
+
 function signedValue(t: Transaction): number {
   return t.type === "receita" ? t.value : -t.value;
 }
@@ -61,7 +64,9 @@ export default function Transactions() {
 
   const [month, setMonth] = useRouteState("fluxo:month", currentMonth);
   const [periodMode, setPeriodMode] = useState<"rolling30" | "month">("month");
-  const [flowView, setFlowView] = useRouteState<"calendario" | "categorias" | "lista">("fluxo:view", "calendario");
+  const [flowView, setFlowView] = useRouteState<"calendario" | "categorias" | "lista" | "caixa">("fluxo:view", "calendario");
+  // ?aba=caixa (Entrada / Saída / Saldo, the old /fluxo address, every "Ver no Caixa") opens the Caixa tab.
+  const linkedTab = searchParams.get("aba");
   const [selectedDate, setSelectedDate] = useRouteState("fluxo:date", todayISO);
   const [scope, setScope] = useRouteState<"dia" | "mes">("fluxo:scope", "mes");
   // Planned behaviour: compact week on phones (drag the handle for more), full month from tablet up.
@@ -124,6 +129,11 @@ export default function Transactions() {
       setSelectedDate(todayISO().slice(0, 7) === linkedMonth ? todayISO() : `${linkedMonth}-01`);
       setScope("mes");
     }
+    // In Caixa, metric / category / account belong to the Caixa view, not to the list filters.
+    if (linkedTab === "caixa") {
+      setFlowView("caixa");
+      return;
+    }
     if (linkedCategoryId) {
       setCategoryId(linkedCategoryId);
       setSelectedDonutCategory(linkedCategoryId);
@@ -139,7 +149,7 @@ export default function Transactions() {
       setType("todos");
       setFlowView("lista");
     }
-  }, [linkedCategoryId, linkedDate, linkedMetric, linkedMonth, restoring, setMonth, setSelectedDate, setScope, setCategoryId, setType, setFlowView]);
+  }, [linkedCategoryId, linkedDate, linkedMetric, linkedMonth, linkedTab, restoring, setMonth, setSelectedDate, setScope, setCategoryId, setType, setFlowView]);
 
 
   // The global "+" reads this, so a new entry lands on the day being viewed.
@@ -310,6 +320,18 @@ export default function Transactions() {
           projectedExpense: periodTotals?.projectedExpense ?? calendar?.projected_expense ?? 0,
         };
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
+  // Tapping a lançamento explains it; the edit and delete buttons inside keep their own action.
+  const detailProps = (t: Transaction) => ({
+    tabIndex: 0,
+    "aria-label": `Ver detalhes de ${t.name}`,
+    onClick: (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest("button, a")) return;
+      dialogs.openTransactionDetail(t);
+    },
+    onKeyDown: (event: KeyboardEvent) => {
+      if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); dialogs.openTransactionDetail(t); }
+    },
+  });
   const rolling = periodMode === "rolling30" && scope === "mes";
   const planned = plannedInView(
     (rolling ? (rollingCalendarsQuery.data ?? []).flatMap((c) => c.planned ?? []) : calendar?.planned) ?? [],
@@ -360,11 +382,12 @@ export default function Transactions() {
 
         {/* Always a horizontal, labelled segmented control: no vertical rail eating a column. */}
         <div className="flex self-start sm:justify-end" data-testid="flow-view-rail">
-          <div className="grid w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-card p-1 sm:flex sm:w-auto sm:rounded-full">
+          <div className="grid w-full grid-cols-4 gap-1 rounded-2xl border border-border bg-card p-1 sm:flex sm:w-auto sm:rounded-full">
             {([
               { key: "calendario" as const, label: "Calendário", icon: CalendarDays },
               { key: "categorias" as const, label: "Análise", icon: ChartPie },
               { key: "lista" as const, label: "Lista", icon: List },
+              { key: "caixa" as const, label: "Caixa", icon: Wallet },
             ]).map((item) => (
               <Button
                 key={item.key}
@@ -385,29 +408,35 @@ export default function Transactions() {
           </div>
         </div>
 
-        <div className="min-w-0 rounded-2xl border border-border bg-card px-5 py-4 sm:col-span-2">
-          {/* Same period as Início and Fluxo de caixa, so the numbers always match. */}
+        {flowView !== "caixa" ? <div className="min-w-0 rounded-2xl border border-border bg-card px-5 py-4 sm:col-span-2">
+          {/* Same period as Início and Caixa, so the numbers always match. */}
           <p className="mb-2 text-xs text-muted-foreground" data-testid="flow-strip-period">
             {scope === "dia" ? formatDate(selectedDate) : periodMode === "rolling30" ? "Últimos 30 dias" : monthLabel(month)}
           </p>
           <div className="grid grid-cols-3 items-center gap-3">
             <div className="contents" data-testid="flow-strip-real">
-              <Link to={`/fluxo?metric=receitas&month=${month}`} className="group -m-2 min-w-0 rounded-xl p-2 transition-colors hover:bg-muted/60" aria-label={`Ver fluxo de caixa: entrada`} data-testid="flow-strip-receitas">
+              <Link to={`/transacoes?aba=caixa&metric=receitas&month=${month}`} className="group -m-2 min-w-0 rounded-xl p-2 transition-colors hover:bg-muted/60" aria-label="Ver no Caixa: entrada" data-testid="flow-strip-receitas">
                 <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">Entrada<ChevronRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" /></p>
                 <p className="mt-1 break-words font-heading text-[12px] font-bold tabular-nums text-income sm:text-base">{money(strip.income)}</p>
               </Link>
-              <Link to={`/fluxo?metric=despesas&month=${month}`} className="group -m-2 min-w-0 rounded-xl p-2 transition-colors hover:bg-muted/60" aria-label={`Ver fluxo de caixa: saída`} data-testid="flow-strip-despesas">
+              <Link to={`/transacoes?aba=caixa&metric=despesas&month=${month}`} className="group -m-2 min-w-0 rounded-xl p-2 transition-colors hover:bg-muted/60" aria-label="Ver no Caixa: saída" data-testid="flow-strip-despesas">
                 <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">Saída<ChevronRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" /></p>
                 <p className="mt-1 break-words font-heading text-[12px] font-bold tabular-nums text-expense sm:text-base">{money(strip.expense)}</p>
               </Link>
-              <Link to={`/fluxo?metric=caixa&month=${month}`} className="group -m-2 min-w-0 rounded-xl p-2 transition-colors hover:bg-muted/60" aria-label={`Ver fluxo de caixa: saldo`} data-testid="flow-strip-caixa">
+              <Link to={`/transacoes?aba=caixa&metric=caixa&month=${month}`} className="group -m-2 min-w-0 rounded-xl p-2 transition-colors hover:bg-muted/60" aria-label="Ver no Caixa: saldo" data-testid="flow-strip-caixa">
                 <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">Saldo<ChevronRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" /></p>
                 <p className="mt-1 break-words font-heading text-[12px] font-bold tabular-nums text-foreground sm:text-base">{money(strip.income - strip.expense)}</p>
               </Link>
             </div>
           </div>
-        </div>
+        </div> : null}
       </div>
+
+      {flowView === "caixa" ? (
+        <Suspense fallback={<FinnosPageLoading title="Abrindo o Caixa" />}>
+          <Flow month={month} onMonthChange={changeMonth} />
+        </Suspense>
+      ) : <>
 
       <div className="flex items-center gap-2">
         <Button size="icon" variant={showSearch ? "default" : "outline"} onClick={() => setShowSearch((v) => !v)}
@@ -597,7 +626,7 @@ export default function Transactions() {
               </TableHeader>
               <TableBody>
                 {transactions.map((t) => (
-                  <TableRow key={t.id} id={`transaction-${t.id}`} data-testid="transaction-row" className={cn(highlightedTransactionId === t.id && "bg-primary/5 ring-2 ring-inset ring-primary/30")}>
+                  <TableRow key={t.id} id={`transaction-${t.id}`} {...detailProps(t)} data-testid="transaction-row" className={cn("cursor-pointer", highlightedTransactionId === t.id && "bg-primary/5 ring-2 ring-inset ring-primary/30")}>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(t.date)}</TableCell>
                     <TableCell>
                       <p className="font-medium text-foreground">{t.name}</p>
@@ -694,7 +723,7 @@ export default function Transactions() {
 
                 <div className="divide-y divide-border">
                   {group.items.map((t) => (
-                    <div key={t.id} id={`transaction-${t.id}`} className={cn("px-4 py-3.5 transition-colors", highlightedTransactionId === t.id && "bg-primary/5 ring-2 ring-inset ring-primary/30")} data-testid="transaction-card">
+                    <div key={t.id} id={`transaction-${t.id}`} {...detailProps(t)} className={cn("cursor-pointer px-4 py-3.5 transition-colors hover:bg-muted/40", highlightedTransactionId === t.id && "bg-primary/5 ring-2 ring-inset ring-primary/30")} data-testid="transaction-card">
                       <div className="flex items-start gap-3">
                         <span
                           className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
@@ -776,6 +805,7 @@ export default function Transactions() {
       }</div>
       ) : null}
       </div>
+      </>}
 
       <ConfirmDialog
         open={pendingDelete !== null}

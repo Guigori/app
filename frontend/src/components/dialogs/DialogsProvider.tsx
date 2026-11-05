@@ -4,6 +4,7 @@ import type { Account, Category, Transaction, TxType } from "@/types/finnos";
 // Each form loads the first time it is opened, not with the app.
 const AccountDialog = lazy(() => import("@/components/accounts/AccountDialog").then((m) => ({ default: m.AccountDialog })));
 const CategoryDialog = lazy(() => import("@/components/categories/CategoryDialog").then((m) => ({ default: m.CategoryDialog })));
+const TransactionDetailSheet = lazy(() => import("@/components/transactions/TransactionDetailSheet").then((m) => ({ default: m.TransactionDetailSheet })));
 const TransactionDialog = lazy(() => import("@/components/transactions/TransactionDialog").then((m) => ({ default: m.TransactionDialog })));
 
 export interface TransactionDialogInit {
@@ -26,6 +27,8 @@ export interface CategoryDialogInit {
 
 interface DialogsApi {
   openTransaction: (init?: TransactionDialogInit) => void;
+  /** What a lançamento means (budget, recurrence, impact); editing is one action inside it. */
+  openTransactionDetail: (transaction: Transaction) => void;
   openAccount: (account?: Account) => void;
   openCategory: (init?: CategoryDialogInit) => void;
 }
@@ -50,9 +53,14 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
   const [category, setCategory] = useState<{ open: boolean } & CategoryDialogInit>({ open: false });
 
   // Once opened, a form stays mounted so its closing animation still plays.
-  const [seen, setSeen] = useState({ tx: false, account: false, category: false });
+  const [detail, setDetail] = useState<{ open: boolean; transaction: Transaction | null }>({ open: false, transaction: null });
+  const [seen, setSeen] = useState({ tx: false, detail: false, account: false, category: false });
   const openTransaction = useCallback(
     (init?: TransactionDialogInit) => { setSeen((s) => ({ ...s, tx: true })); setTx({ open: true, ...init }); },
+    [],
+  );
+  const openTransactionDetail = useCallback(
+    (transaction: Transaction) => { setSeen((s) => ({ ...s, detail: true })); setDetail({ open: true, transaction }); },
     [],
   );
   const openAccount = useCallback(
@@ -65,7 +73,7 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <DialogsContext.Provider value={{ openTransaction, openAccount, openCategory }}>
+    <DialogsContext.Provider value={{ openTransaction, openTransactionDetail, openAccount, openCategory }}>
       {children}
       <Suspense fallback={null}>
       {seen.tx ? <TransactionDialog
@@ -77,6 +85,12 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
         syncOperationId={tx.syncOperationId}
         syncPayload={tx.syncPayload}
         firstAttemptAt={tx.firstAttemptAt}
+      /> : null}
+      {seen.detail ? <TransactionDetailSheet
+        open={detail.open}
+        onOpenChange={(open) => setDetail((prev) => ({ ...prev, open }))}
+        transaction={detail.transaction}
+        onEdit={(transaction) => openTransaction({ transaction })}
       /> : null}
       {seen.account ? <AccountDialog
         open={account.open}
