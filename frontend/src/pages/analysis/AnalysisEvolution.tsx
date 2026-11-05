@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { isThisMonth, pinIndex } from "@/lib/chartPin";
 import { fetchTrends } from "@/lib/data";
 import { currentMonth, monthLabel } from "@/lib/format";
 import { evolution } from "@/lib/analysisInsights";
@@ -15,6 +16,7 @@ export default function AnalysisEvolution() {
   const trends = useQuery({ queryKey: ["analysis-trends", Number(months), end], queryFn: () => fetchTrends(Number(months), end) });
   const { hidden, money } = useMoney();
   const data = trends.data ? evolution(trends.data.months) : null;
+  const pin = data ? pinIndex(data.months, (m) => isThisMonth(m)) : undefined;
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 pb-8 animate-fade-up" data-testid="analysis-evolution">
@@ -43,7 +45,7 @@ export default function AnalysisEvolution() {
                 <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
                 <YAxis hide={hidden} width={44} tickLine={false} axisLine={false} tick={axisTick} tickFormatter={axisMoney} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number, name: string) => [money(v), name === "income" ? "Receitas" : "Despesas"]} />
+                <Tooltip active defaultIndex={pin} contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number, name: string) => [money(v), name === "income" ? "Receitas" : "Despesas"]} />
                 <Bar dataKey="income" fill="var(--income)" radius={[4, 4, 0, 0]} maxBarSize={18} />
                 <Bar dataKey="expense" fill="var(--expense)" radius={[4, 4, 0, 0]} maxBarSize={18} />
               </BarChart>
@@ -60,7 +62,7 @@ export default function AnalysisEvolution() {
                   <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
                   <YAxis width={40} tickLine={false} axisLine={false} tick={axisTick} tickFormatter={(v: number) => `${v}%`} />
                   <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.5} />
-                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number) => [pct(v), "Da renda"]} />
+                  <Tooltip active defaultIndex={pin} contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number) => [pct(v), "Da renda"]} />
                   <Bar dataKey="rate" radius={[4, 4, 4, 4]} maxBarSize={22}>{data.months.map((m) => <Cell key={m.month} fill={(m.rate ?? 0) < 0 ? "var(--expense)" : "var(--primary)"} />)}</Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -75,7 +77,7 @@ export default function AnalysisEvolution() {
                   <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
                   <YAxis hide={hidden} width={44} tickLine={false} axisLine={false} tick={axisTick} tickFormatter={axisMoney} />
                   <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.5} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [money(v), "Acumulado"]} />
+                  <Tooltip active defaultIndex={pin} contentStyle={tooltipStyle} formatter={(v: number) => [money(v), "Acumulado"]} />
                   <Area type="monotone" dataKey="cumulative" stroke="var(--primary)" strokeWidth={2} fill="url(#evo-cum)" dot={{ r: 3, strokeWidth: 0, fill: "var(--primary)" }} activeDot={{ r: 5 }} />
                 </AreaChart>
               </ResponsiveContainer>

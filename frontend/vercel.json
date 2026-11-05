@@ -3,7 +3,7 @@
   "crons": [],
   "routes": [
     {
-      "src": "/api/(auth/(me|firebase-session|logout|firestore-smoke)|accounts(?:/.*)?|institutions(?:/.*)?|onboarding(?:/.*)?|categories(?:/.*)?|transactions(?:/.*)?|dashboard|analytics(?:/.*)?|cards(?:/.*)?|notifications(?:/.*)?|push(?:/.*)?|subscriptions(?:/.*)?|budgets(?:/.*)?|goals(?:/.*)?|investments(?:/.*)?|preferences|radar(?:/.*)?|ai(?:/.*)?|simulate(?:/.*)?|finance/(integrity|history|fiint|backup|backups(?:/.*)?|backups-run|restore|reconciliation/preview)|validation/finance(?:/.*)?)",
+      "src": "/api/(auth/(me|firebase-session|logout|firestore-smoke)|accounts(?:/.*)?|institutions(?:/.*)?|onboarding(?:/.*)?|categories(?:/.*)?|transactions(?:/.*)?|dashboard|analytics(?:/.*)?|cards(?:/.*)?|notifications(?:/.*)?|push(?:/.*)?|subscriptions(?:/.*)?|budgets(?:/.*)?|goals(?:/.*)?|investments(?:/.*)?|preferences|radar(?:/.*)?|ai(?:/.*)?|integrations/(shortcut-tokens(?:/[^/]+)?|shortcut-activity)|shortcuts/(opcoes|lancamentos)|simulate(?:/.*)?|finance/(integrity|history|fiint|backup|backups(?:/.*)?|backups-run|restore|reconciliation/preview)|validation/finance(?:/.*)?)",
       "dest": "/api"
     },
     {
@@ -15,6 +15,15 @@
         "X-Frame-Options": "DENY",
         "Permissions-Policy": "camera=(self), microphone=(self), geolocation=(), payment=()",
         "Content-Security-Policy-Report-Only": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://cdn.jsdelivr.net https://*.ingest.sentry.io https://*.ingest.us.sentry.io; frame-src https://*.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+      }
+    },
+    {
+      "src": "/atalhos/(.+)\\.shortcut",
+      "continue": true,
+      "headers": {
+        "Content-Type": "application/octet-stream",
+        "Content-Disposition": "attachment; filename=\"Registrar no FINNOS.shortcut\"",
+        "Cache-Control": "public, max-age=3600"
       }
     },
     {

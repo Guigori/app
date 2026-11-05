@@ -3,6 +3,7 @@ import { useRouteState } from "@/lib/routeState";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { pinIndex } from "@/lib/chartPin";
 import { ArrowDownLeft, ArrowUpRight, ChartColumn, ChartLine, ChevronRight, Eye, EyeOff, Wallet, X } from "lucide-react";
 import { fetchAccounts, fetchCalendar, fetchCategories, fetchDashboard, fetchFlow, fetchTransactions } from "@/lib/data";
 import { balanceTimeline, incomeSources, monthClose, upcoming, weeklyFlow } from "@/lib/cashFlow";
@@ -332,7 +333,7 @@ export default function Flow({ month: sharedMonth, onMonthChange }: { month?: st
                   <BarChart data={chartData} margin={{ top: 8, right: 4, left: 4, bottom: 0 }} onClick={(state) => focusMonth(chartData[Number(state?.activeTooltipIndex)]?.month)}>
                     <CartesianGrid vertical={false} stroke="var(--border)" />
                     <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                    <Tooltip cursor={{ fill: "var(--muted)" }} contentStyle={tooltipStyle} formatter={(value: number) => [hidden ? formatHiddenBRL() : formatBRL(value), TABS.find((t) => t.key === tab)?.label ?? ""]} />
+                    <Tooltip active defaultIndex={pinIndex(chartData, (m) => m.month === flow.month)} cursor={{ fill: "var(--muted)" }} contentStyle={tooltipStyle} formatter={(value: number) => [hidden ? formatHiddenBRL() : formatBRL(value), TABS.find((t) => t.key === tab)?.label ?? ""]} />
                     <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={30} className="cursor-pointer">
                       {chartData.map((entry, index) => (
                         <Cell
@@ -353,7 +354,7 @@ export default function Flow({ month: sharedMonth, onMonthChange }: { month?: st
                     </defs>
                     <CartesianGrid vertical={false} stroke="var(--border)" />
                     <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => [hidden ? formatHiddenBRL() : formatBRL(value), TABS.find((t) => t.key === tab)?.label ?? ""]} />
+                    <Tooltip active defaultIndex={pinIndex(chartData, (m) => m.month === flow.month)} contentStyle={tooltipStyle} formatter={(value: number) => [hidden ? formatHiddenBRL() : formatBRL(value), TABS.find((t) => t.key === tab)?.label ?? ""]} />
                     <Area type="monotone" dataKey="value" stroke={tone} strokeWidth={2} fill="url(#flow-area)" dot={false} activeDot={{ r: 4 }} />
                   </AreaChart>
                 )}
@@ -387,7 +388,7 @@ export default function Flow({ month: sharedMonth, onMonthChange }: { month?: st
                     <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
                     <YAxis hide={hidden} width={44} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} tickFormatter={axisMoney} />
                     <ReferenceLine y={0} stroke="var(--expense)" strokeOpacity={0.4} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number, name: string) => [hidden ? formatHiddenBRL() : formatBRL(v), name === "real" ? "Saldo" : "Previsto"]} />
+                    <Tooltip active defaultIndex={pinIndex(timeline, (p) => p.month === month)} contentStyle={tooltipStyle} formatter={(v: number, name: string) => [hidden ? formatHiddenBRL() : formatBRL(v), name === "real" ? "Saldo" : "Previsto"]} />
                     <Line type="monotone" dataKey="real" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3, strokeWidth: 0, fill: "var(--primary)" }} activeDot={{ r: 5 }} connectNulls={false} />
                     <Line type="monotone" dataKey="forecast" stroke="var(--primary)" strokeWidth={2} strokeDasharray="5 4" dot={{ r: 3, strokeWidth: 0, fill: "var(--primary)" }} activeDot={{ r: 5 }} connectNulls={false} />
                   </LineChart>

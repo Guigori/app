@@ -90,7 +90,7 @@ test("a sentence becomes several lançamentos to review, correct and register", 
   await createAccount(page);
   await page.goto("/registro-inteligente");
   await expect(page.getByTestId("quick-entry")).toBeVisible();
-  await page.getByRole("button", { name: "Registro inteligente: escrever, falar ou fotografar" }).click();
+  await page.getByRole("button", { name: "Registro inteligente: escrever como foi" }).click();
   const box = page.getByPlaceholder("Ex.: Paguei R$ 45 no Uber com o Nubank ontem");
   await box.fill("uber hoje às 9h00 por 16,90 e pão 8");
   await box.press("Enter");

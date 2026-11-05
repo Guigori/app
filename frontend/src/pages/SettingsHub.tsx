@@ -1,4 +1,4 @@
-import { ChevronRight, UserRound, Landmark, Tags, ChartPie, Repeat2, Palette, LayoutDashboard, PanelBottom, BarChart3, ShieldCheck, Cloud, Bell, Zap, CircleHelp, Info, PenLine } from "lucide-react";
+import { ChevronRight, Smartphone, UserRound, Landmark, Tags, ChartPie, Repeat2, Palette, LayoutDashboard, PanelBottom, BarChart3, ShieldCheck, Cloud, Bell, Zap, CircleHelp, Info, PenLine } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchMe } from "@/lib/data";
@@ -21,7 +21,8 @@ const groups = [
     { label: "Segurança e privacidade", description: "Conta e proteção de acesso", icon: ShieldCheck, href: "/configuracoes/perfil" },
     { label: "Dados e backup", description: "Exportar, importar e restaurar", icon: Cloud, href: "/configuracoes/dados" },
     { label: "Notificações", description: "Vencimentos e lembretes", icon: Bell, href: "/configuracoes/notificacoes" },
-    { label: "Integrações e automações", description: "Apple Pay, Atalhos e FINNOS IA", icon: Zap, href: "/configuracoes/integracoes", soon: true },
+    { label: "Instalar no celular", description: "Abrir pela tela inicial, como um app", icon: Smartphone, href: "#instalar", action: "install" },
+    { label: "Integrações e automações", description: "Apple Pay, Atalhos e conectar sua IA", icon: Zap, href: "/configuracoes/integracoes" },
   ] },
   { title: "Informações", items: [
     { label: "Ajuda e suporte", description: "Informações e feedback do beta", icon: CircleHelp, href: "/configuracoes/suporte" },
@@ -47,10 +48,9 @@ export function SettingsHub() {
           <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.title}</h2>
           <div className="overflow-hidden rounded-2xl border border-border bg-card">
             {group.items.map((item, index) => (
-              <Link key={item.label} to={item.href} className={`flex min-h-14 items-center gap-3 px-4 py-3 sm:min-h-16 text-card-foreground transition-colors hover:bg-accent focus-visible:bg-accent ${index ? "border-t border-border/70" : ""}`}>
+              <Link key={item.label} to={item.href} onClick={"action" in item ? (event) => { event.preventDefault(); window.dispatchEvent(new Event("finnos-install-open")); } : undefined} className={`flex min-h-14 items-center gap-3 px-4 py-3 sm:min-h-16 text-card-foreground transition-colors hover:bg-accent focus-visible:bg-accent ${index ? "border-t border-border/70" : ""}`}>
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><item.icon className="h-4 w-4" /></span>
                 <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{item.label}</span><span className="hidden text-xs text-muted-foreground sm:block">{item.description}</span></span>
-                {item.soon && <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">Em breve</span>}
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               </Link>
             ))}
