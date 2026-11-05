@@ -13,9 +13,9 @@ export interface Period { start: string; end: string; label: string; months: str
 export type Operation =
   | "total" | "count" | "average" | "top" | "trend" | "compare"
   | "balance" | "forecast" | "upcoming" | "budget" | "subscriptions" | "save" | "radar"
-  | "unusual" | "runway" | "months";
+  | "unusual" | "runway" | "months" | "goals";
 
-export interface Entity { kind: "category" | "account" | "card" | "merchant"; id?: string; name: string; term: string }
+export interface Entity { kind: "category" | "account" | "card" | "merchant" | "goal"; id?: string; name: string; term: string }
 
 export interface FinnQuery {
   op: Operation;
@@ -41,6 +41,8 @@ export interface QuestionContext {
   names: string[];
   /** User-taught aliases, normalized term → category id. */
   aliases?: Record<string, string>;
+  /** The user's goals, so "a meta do notebook" is recognised. */
+  goals?: { id: string; name: string }[];
 }
 
 const MONTHS = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -119,6 +121,7 @@ export function previousPeriod(p: Period): Period {
 
 function operation(q: string, entityCount: number): Operation | null {
   if (/\bcompar|\bversus\b|\bvs\b|\bcontra\b|diferenca entre/.test(q) || (entityCount >= 2 && /\b(ou|e)\b/.test(q))) return "compare";
+  if (/\b(metas?|objetivos?)\b/.test(q)) return "goals";
   if (/\b(mais (do )?que o (normal|costume|habitual)|acima do (normal|habitual|costume)|fora do normal|mais que de costume)\b/.test(q)) return "unusual";
   if (/\b(dura|durar|aguent\w*|chega|chegar|sobra ate|da ate)\b/.test(q) && /\b(ate|dia|salario|pagamento|fim do mes)\b/.test(q)) return "runway";
   if (/\b(quais|qual|que) (os |foram os )?(meses|mes)\b/.test(q) || /\bmeses mais (caros|pesados)\b/.test(q)) return "months";
@@ -140,6 +143,11 @@ function operation(q: string, entityCount: number): Operation | null {
 /** Recognises categories, accounts, cards and establishments named in the question. */
 export function findEntities(q: string, ctx: QuestionContext): Entity[] {
   const found: Entity[] = [];
+  // A goal named in the question ("meta do notebook"): its distinctive words are enough.
+  for (const g of ctx.goals ?? []) {
+    const words = norm(g.name).split(" ").filter((w) => w.length >= 4 && !STOP.has(w) && !["meta", "minha", "novo", "nova"].includes(w));
+    if (words.some((w) => new RegExp(`\\b${w}\\b`).test(q))) found.push({ kind: "goal", id: g.id, name: g.name, term: norm(g.name) });
+  }
   const has = (term: string) => term.length >= 3 && new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(q);
   for (const c of ctx.categories) { const t = norm(c.name); if (has(t)) found.push({ kind: "category", id: c.id, name: c.name, term: t }); }
   for (const [alias, id] of Object.entries(ctx.aliases ?? {})) {

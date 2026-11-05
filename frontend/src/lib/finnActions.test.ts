@@ -53,6 +53,7 @@ describe("FINNOS IA proposes, the user confirms", () => {
     expect(registerProposal("posso comprar 300 em 3x?", ctx)).toBeNull();
     expect(registerProposal("meu dinheiro dura até o dia 15?", ctx)).toBeNull();
     expect(registerProposal("vou fechar o mês com 500", ctx)).toBeNull();
+    expect(registerProposal("guardar 200 na meta notebook", ctx)).toBeNull();
   });
 
   it("finds every lançamento to move to another category", () => {

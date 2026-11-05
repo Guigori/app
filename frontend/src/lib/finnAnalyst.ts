@@ -6,6 +6,8 @@
 import { addMonth, formatDate } from "@/lib/format";
 import { norm, type Entity, type FinnQuery, type Period } from "@/lib/finnQuestion";
 import type { FinnVisual } from "@/lib/aiConversations";
+import { goalPlan, goalProgress } from "@/lib/goalProgress";
+import type { FinnosGoal } from "@/lib/goals";
 import type {
   Account, BudgetCycleProgress, BudgetSummary, CalendarMonth, Category, Flow, RadarSignal, SubscriptionItem, Transaction,
 } from "@/types/finnos";
@@ -21,6 +23,7 @@ export interface AnalystData {
   flow?: Flow | null;
   /** The next month's cash flow, when a question reaches into it ("dura até o dia 15?"). */
   nextFlow?: Flow | null;
+  goals?: FinnosGoal[];
   subscriptions?: SubscriptionItem[];
   radar?: RadarSignal[];
 }
@@ -71,7 +74,8 @@ function entityMatch(tx: Transaction, e: Entity): boolean {
 /** Same kind of entity: either one; different kinds: all of them ("uber no nubank"). */
 function matchesAll(tx: Transaction, entities: Entity[]): boolean {
   const kinds = new Map<string, Entity[]>();
-  for (const e of entities) kinds.set(e.kind, [...(kinds.get(e.kind) ?? []), e]);
+  // A goal is not something lançamentos belong to.
+  for (const e of entities.filter((x) => x.kind !== "goal")) kinds.set(e.kind, [...(kinds.get(e.kind) ?? []), e]);
   return [...kinds.values()].every((group) => group.some((e) => entityMatch(tx, e)));
 }
 
@@ -471,6 +475,59 @@ function monthsAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
   };
 }
 
+/** "Como estão minhas metas?", "quanto falta para o notebook?", "onde corto para chegar na meta?". */
+function goalsAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
+  const all = data.goals ?? [];
+  const focusId = q.entities.find((e) => e.kind === "goal")?.id;
+  const shown = focusId ? all.filter((g) => g.id === focusId) : all;
+  const links = [{ label: "Abrir metas", to: "/metas" }];
+  if (!shown.length) {
+    return { text: "Você ainda não tem metas. Crie a primeira em Patrimônio → Metas, e eu acompanho com você.", followUps: ["Onde posso economizar?"], links, query: q, steps: ["Procurando suas metas"] };
+  }
+  const rows = shown.map((g) => {
+    const account = data.accounts.find((a) => a.id === g.account);
+    const p = goalProgress(g, account ? account.balance : null, data.today);
+    return { g, p, plan: goalPlan(g, p.saved, data.today) };
+  });
+  // Where to cut: the three biggest expense categories of the last 3 months, 10% each.
+  const from = `${addMonth(data.today.slice(0, 7), -3)}-01`;
+  const to = `${addMonth(data.today.slice(0, 7), -1)}-31`;
+  const byCat = new Map<string, number>();
+  for (const tx of expenseRows(data, from, to)) byCat.set(tx.category_name ?? "Sem categoria", (byCat.get(tx.category_name ?? "Sem categoria") ?? 0) + tx.value / 3);
+  const cuts = [...byCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, avg]) => ({ name, cut: round(avg * 0.1) }));
+  const freed = round(cuts.reduce((s, c) => s + c.cut, 0));
+  const lead = rows.find((r) => r.p.status !== "concluida") ?? rows[0];
+  const monthName = (m: string | null) => (m ? ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"][Number(m.slice(5, 7)) - 1] + ` de ${m.slice(0, 4)}` : null);
+  const pace = lead.plan.pacePerMonth || (lead.g.contribution * (lead.g.frequency === "Semanal" ? 52 : lead.g.frequency === "Quinzenal" ? 26 : 12)) / 12;
+  const sooner = freed > 0 && lead.plan.remaining > 0 && pace > 0
+    ? Math.ceil(lead.plan.remaining / pace) - Math.ceil(lead.plan.remaining / (pace + freed)) : 0;
+  const one = rows.length === 1 || Boolean(focusId);
+  const text = one
+    ? lead.p.status === "concluida"
+      ? `A meta **${lead.g.name}** está concluída: ${money(lead.p.saved)} guardados.`
+      : `Na meta **${lead.g.name}** você tem ${money(lead.p.saved)} de ${money(lead.g.target)} (${Math.round(lead.p.percent)}%). Faltam **${money(lead.plan.remaining)}**` +
+        (lead.plan.neededPerMonth && lead.plan.deadline ? `: ${money(lead.plan.neededPerMonth)} por mês para chegar em ${monthName(lead.plan.deadline)}.` : ".") +
+        (lead.plan.finishAtPace ? ` No ritmo em que você tem guardado, termina em ${monthName(lead.plan.finishAtPace)}.` : "") +
+        (lead.p.status === "atrasada" ? ` Está ${money(lead.p.behindBy)} atrás do plano.` : "")
+    : `Você tem ${plural(rows.length, "meta", "metas")}: ${money(rows.reduce((s, r) => s + r.p.saved, 0))} guardados de ${money(rows.reduce((s, r) => s + r.g.target, 0))}. ` +
+      `${rows.filter((r) => r.p.status === "atrasada").length ? `${plural(rows.filter((r) => r.p.status === "atrasada").length, "está atrasada", "estão atrasadas")}.` : "Todas no ritmo."}`;
+  const tip = cuts.length && lead.p.status !== "concluida"
+    ? `Cortando 10% de ${cuts.map((c) => c.name).join(", ")} você libera cerca de ${money(freed)} por mês${sooner > 0 ? ` e chega na meta ${lead.g.name} ${plural(sooner, "mês", "meses")} antes` : ""}.`
+    : undefined;
+  return {
+    text,
+    visual: {
+      items: rows.map((r) => ({ label: r.g.name, value: `${money(r.p.saved)} de ${money(r.g.target)}`, detail: r.p.status === "concluida" ? "concluída" : `faltam ${money(r.plan.remaining)}${r.plan.neededPerMonth ? ` · ${money(r.plan.neededPerMonth)}/mês` : ""}${r.p.status === "atrasada" ? " · atrasada" : ""}` })),
+      ...(cuts.length && lead.p.status !== "concluida" ? { chart: { type: "hbar" as const, data: cuts.map((c) => ({ name: c.name, value: c.cut })), prefix: "" }, title: "Cortando 10%, por mês" } : {}),
+    },
+    insight: tip,
+    followUps: [one ? "Como estão todas as minhas metas?" : `Quanto falta para ${lead.g.name}?`, "Onde estou gastando mais do que o normal?"],
+    links,
+    query: q,
+    steps: ["Lendo suas metas", "Comparando com o que sobra por mês"],
+  };
+}
+
 /** An establishment keeps the spelling of its lançamentos ("Ônibus", not "Onibus"). */
 function spelled(e: Entity, data: AnalystData): Entity {
   if (e.kind !== "merchant") return e;
@@ -498,6 +555,7 @@ export function answer(parsed: FinnQuery, data: AnalystData): FinnAnswer {
     case "unusual": return unusualAnswer(q, data);
     case "runway": return runwayAnswer(q, data);
     case "months": return monthsAnswer(q, data);
+    case "goals": return goalsAnswer(q, data);
     default: return totalAnswer(q, data);
   }
 }

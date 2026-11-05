@@ -13,8 +13,15 @@ from finnos.routers.auth import require_user
 router = APIRouter(prefix='/goals',tags=['goals'])
 
 class GoalDeposit(FinanceModel):
+    """One movement of a goal. Older records only have date and value: they are contributions."""
     date: str = Field(pattern=r'^\d{4}-\d{2}-\d{2}$')
     value: Money = Field(ge=0)
+    # aporte adds to the goal, retirada takes from it.
+    kind: Literal['aporte', 'retirada'] = 'aporte'
+    # Where the money came from (aporte) or went to (retirada): an account, or another goal.
+    account_id: str | None = Field(None, max_length=120)
+    goal_id: str | None = Field(None, max_length=120)
+    note: str | None = Field(None, max_length=120)
 
 
 class GoalIn(FinanceModel):

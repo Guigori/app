@@ -4,6 +4,8 @@ import CriarMeta from "@/components/patrimonio/CriarMeta";
 import EditarMeta from "@/components/patrimonio/EditarMeta";
 import RendaPassiva from "@/components/patrimonio/RendaPassiva";
 import { GoalCard } from "@/components/patrimonio/GoalCard";
+import { GoalDetailSheet } from "@/components/patrimonio/GoalDetailSheet";
+import { GoalMoneySheet, type MoneyMode } from "@/components/patrimonio/GoalMoneySheet";
 import { Investimentos } from "@/components/patrimonio/Investimentos";
 import { investmentTotals, listInvestments } from "@/lib/investments";
 import { useQuery } from "@tanstack/react-query";
@@ -20,6 +22,9 @@ export default function Patrimonio() {
   const [tab, setTab] = useState<Tab>(location.pathname === "/metas" ? "metas" : location.pathname === "/investimentos" ? "investimentos" : "geral");
   const [creatingGoal, setCreatingGoal] = useState(false);
   const [editingGoal, setEditingGoal] = useState<FinnosGoal | null>(null);
+  // The goal whose detail is open, and the Guardar / Retirar sheet (by id, so they follow refetches).
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [money, setMoney] = useState<{ id: string; mode: MoneyMode } | null>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: fetchMe });
   const goalsQuery = useQuery({queryKey:["goals",me.data?.id], queryFn:()=>listGoals(me.data!.id),enabled:!!me.data});
@@ -41,8 +46,12 @@ export default function Patrimonio() {
     {accounts.isError && <div role="alert" className="rounded-2xl border border-destructive/30 p-4 text-sm text-destructive">Não foi possível consultar os saldos do patrimônio. <button type="button" onClick={() => void accounts.refetch()} className="font-semibold underline">Tentar novamente</button></div>}
     {tab==="metas" && goalsQuery.isPending && <div role="status" className="rounded-2xl border p-5 text-sm text-muted-foreground">Carregando suas metas...</div>}
     {tab==="metas" && goalsQuery.isError && <div role="alert" className="rounded-2xl border border-destructive/30 p-5 text-sm text-destructive">Não foi possível carregar suas metas. <button type="button" onClick={() => void goalsQuery.refetch()} className="font-semibold underline">Tentar novamente</button></div>}
-    {tab==="metas"&&!goalsQuery.isPending&&!goalsQuery.isError&&(editingGoal && me.data ? <EditarMeta key={editingGoal.id} goal={editingGoal} userId={me.data.id} onSaved={()=>{void goalsQuery.refetch();setEditingGoal(null)}} onClose={()=>setEditingGoal(null)}/> : creatingGoal && me.data ? <CriarMeta userId={me.data.id} onSaved={()=>void goalsQuery.refetch()} onClose={()=>setCreatingGoal(false)}/> : <section className="rounded-3xl border p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">Minhas metas</h2><p className="mt-1 text-sm text-muted-foreground">Seus planos, seu ritmo.</p></div><button disabled={!me.data} onClick={()=>setCreatingGoal(true)} className="rounded-full bg-primary px-5 py-3 font-semibold text-white disabled:opacity-50">+ Nova meta</button></div>{goals.length===0?<p className="mt-5 text-sm text-muted-foreground">Nenhuma meta salva. Crie sua primeira meta.</p>:<div className="mt-5 grid gap-3 sm:grid-cols-2">{goals.map(goal=><GoalCard key={goal.id} goal={goal} userId={me.data!.id} accounts={accounts.data ?? []} display={display} onEdit={()=>setEditingGoal(goal)} onSaved={()=>void goalsQuery.refetch()}/>)}</div>}<p className="mt-4 text-xs text-muted-foreground">Metas da conta sincronizadas; o planejamento não movimenta dinheiro.</p></section>)}
+    {tab==="metas"&&!goalsQuery.isPending&&!goalsQuery.isError&&(editingGoal && me.data ? <EditarMeta key={editingGoal.id} goal={editingGoal} userId={me.data.id} onSaved={()=>{void goalsQuery.refetch();setEditingGoal(null)}} onClose={()=>setEditingGoal(null)}/> : creatingGoal && me.data ? <CriarMeta userId={me.data.id} onSaved={()=>void goalsQuery.refetch()} onClose={()=>setCreatingGoal(false)}/> : <section className="rounded-3xl border p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">Minhas metas</h2><p className="mt-1 text-sm text-muted-foreground">Seus planos, seu ritmo.</p></div><button disabled={!me.data} onClick={()=>setCreatingGoal(true)} className="rounded-full bg-primary px-5 py-3 font-semibold text-white disabled:opacity-50">+ Nova meta</button></div>{goals.length===0?<p className="mt-5 text-sm text-muted-foreground">Nenhuma meta salva. Crie sua primeira meta.</p>:<div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">{goals.map(goal=><GoalCard key={goal.id} goal={goal} accounts={accounts.data ?? []} display={display} onOpen={()=>setDetailId(goal.id)} onDeposit={()=>setMoney({id:goal.id,mode:"aporte"})}/>)}</div>}<p className="mt-4 text-xs text-muted-foreground">Guardar e retirar mudam só a meta. O saldo das contas muda apenas quando você pede para registrar a transferência.</p></section>)}
     {tab==="investimentos"&&<section className="rounded-3xl border p-5"><h2 className="mb-4 text-xl font-bold">Meus investimentos</h2>{me.data?<Investimentos userId={me.data.id} display={display}/>:null}<div className="mt-5"><RendaPassiva/></div></section>}
-    <p className="text-center text-xs text-muted-foreground">Implementação inicial. Sem alterações em saldos ou transações.</p>
+    {me.data ? <>
+      <GoalDetailSheet goal={goals.find(g=>g.id===detailId) ?? null} goals={goals} accounts={accounts.data ?? []} open={Boolean(detailId)} onOpenChange={(o)=>{if(!o)setDetailId(null)}} display={display}
+        onMoney={(mode)=>{if(detailId)setMoney({id:detailId,mode})}} onEdit={()=>{const g=goals.find(x=>x.id===detailId);if(g){setDetailId(null);setEditingGoal(g)}}}/>
+      <GoalMoneySheet goal={goals.find(g=>g.id===money?.id) ?? null} goals={goals} accounts={accounts.data ?? []} userId={me.data.id} mode={money?.mode ?? "aporte"} open={Boolean(money)} onOpenChange={(o)=>{if(!o)setMoney(null)}} onDone={()=>void goalsQuery.refetch()} display={display}/>
+    </> : null}
   </div>;
 }

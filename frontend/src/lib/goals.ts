@@ -3,6 +3,17 @@ import { isLocalMode } from "@/lib/mode";
 import { cachedFetch } from "@/lib/offline/accountCache";
 import { fetchDashboard } from "@/lib/data";
 import { addMonth, currentMonth } from "@/lib/format";
+/** Older records have only date and value: they are contributions. */
+export type GoalMovement = {
+  date: string;
+  value: number;
+  kind?: "aporte" | "retirada";
+  /** The account the money came from (aporte) or went to (retirada). */
+  account_id?: string | null;
+  /** The other goal, when money moved between goals. */
+  goal_id?: string | null;
+  note?: string | null;
+};
 export type FinnosGoal = {
   id: string;
   name: string;
@@ -18,8 +29,8 @@ export type FinnosGoal = {
   remind: boolean;
   radar: boolean;
   createdAt: string;
-  /** Contributions recorded with "Guardar" (date + value). */
-  deposits?: { date: string; value: number }[];
+  /** Movements: contributions ("Guardar") and withdrawals, with where the money came from or went. */
+  deposits?: GoalMovement[];
   /** Progress follows the linked account's balance instead of the manual amount. */
   track_account?: boolean;
 };
