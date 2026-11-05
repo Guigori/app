@@ -34,6 +34,13 @@ describe("FINNOS IA proposes, the user confirms", () => {
     ]);
   });
 
+  it("does not take a time of day for an amount", () => {
+    const p = registerProposal("Uber hoje às 9h00 por 16,90", ctx, { intent: true });
+    if (p?.kind !== "register") throw new Error("expected a proposal");
+    expect(p.entries.map((e) => [e.name, e.value])).toEqual([["Uber", 16.9]]);
+    expect(p.unknown).toEqual(["às 9h00"]);
+  });
+
   it("uses what the user taught and the account named", () => {
     const p = registerProposal("anota lanche 25 no itaú ontem", ctx);
     if (p?.kind !== "register") throw new Error("expected a proposal");

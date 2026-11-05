@@ -90,7 +90,7 @@ export async function askFinnProposal(text: string, aliases: Record<string, stri
   if (found.kind === "register") {
     const n = found.entries.length;
     return {
-      text: `Preparei ${n === 1 ? "1 lançamento" : `${n} lançamentos`}. Confira, corrija o que precisar e registre.${found.unknown.length ? ` Não entendi: "${found.unknown.join("\", \"")}".` : ""}`,
+      text: `Preparei ${n === 1 ? "1 lançamento" : `${n} lançamentos`}. Confira, corrija o que precisar e registre.${found.unknown.length ? ` Não usei: "${found.unknown.join("\", \"")}".` : ""}`,
       steps: ["Preparando os lançamentos"], proposal: found,
     };
   }
