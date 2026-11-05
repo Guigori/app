@@ -85,8 +85,8 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
               </div>
             </div>
 
-            <Link to={`/fluxo?account_id=${encodeURIComponent(account.id)}`} onClick={() => onOpenChange(false)} className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full justify-between rounded-2xl")} data-testid="account-detail-cashflow">
-              <span className="flex items-center gap-2"><ChartNoAxesCombined className="h-4 w-4" aria-hidden="true" />Fluxo de caixa desta conta</span><ChevronRight className="h-4 w-4" aria-hidden="true" />
+            <Link to={`/transacoes?aba=caixa&account_id=${encodeURIComponent(account.id)}`} onClick={() => onOpenChange(false)} className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full justify-between rounded-2xl")} data-testid="account-detail-cashflow">
+              <span className="flex items-center gap-2"><ChartNoAxesCombined className="h-4 w-4" aria-hidden="true" />Caixa desta conta</span><ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Link>
 
             <div>

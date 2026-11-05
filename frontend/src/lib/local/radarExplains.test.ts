@@ -29,7 +29,7 @@ test("a category over its limit is told in reais, with the excess as impact", ()
   expect(alert).toMatchObject({ title: "Compras passou do limite", impact: 500, severity: "critical" });
   expect(alert?.metric?.replace(/\s/g, " ")).toBe("R$ 500,00 acima");
   expect(alert?.description).toContain("gastos de");
-  expect(radarTarget(alert!)).toEqual({ to: `/fluxo?month=2026-11&metric=despesas&category_id=${shop.id}`, label: "Ver no fluxo de caixa", short: "Ver gastos" });
+  expect(radarTarget(alert!)).toEqual({ to: `/transacoes?aba=caixa&month=2026-11&metric=despesas&category_id=${shop.id}`, label: "Ver no Caixa", short: "Ver gastos" });
 });
 
 test("a cash-flow signal leads to the projection", () => {

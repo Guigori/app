@@ -73,6 +73,6 @@ describe("FINNOS IA answers with the user's data", () => {
   });
 
   it("links to the cash flow already filtered", () => {
-    expect(ask("quanto gastei em restaurantes").links[0].to).toBe("/fluxo?month=2026-11&metric=despesas&category_id=rest");
+    expect(ask("quanto gastei em restaurantes").links[0].to).toBe("/transacoes?aba=caixa&month=2026-11&metric=despesas&category_id=rest");
   });
 });

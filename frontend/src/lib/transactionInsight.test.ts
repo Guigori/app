@@ -53,8 +53,8 @@ describe("lançamento detail", () => {
   });
 
   it("opens the cash flow on its month, tab and category", () => {
-    expect(cashFlowLink(tx({}))).toBe("/fluxo?month=2026-11&metric=despesas&category_id=rest");
-    expect(cashFlowLink(tx({ type: "transferencia" }))).toBe("/fluxo?month=2026-11&metric=caixa");
+    expect(cashFlowLink(tx({}))).toBe("/transacoes?aba=caixa&month=2026-11&metric=despesas&category_id=rest");
+    expect(cashFlowLink(tx({ type: "transferencia" }))).toBe("/transacoes?aba=caixa&month=2026-11&metric=caixa");
   });
 });
 

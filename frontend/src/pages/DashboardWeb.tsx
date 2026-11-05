@@ -35,7 +35,7 @@ export default function DashboardWeb() {
   const radar = useQuery({ queryKey: ["radar", month], queryFn: fetchRadar });
   const data = dashboard.data;
   const display = (amount: number) => hidden ? "••••••" : money(amount);
-  const go = (kind: MetricKind) => navigate(`/fluxo?month=${month}&metric=${metric[kind]}`);
+  const go = (kind: MetricKind) => navigate(`/transacoes?aba=caixa&month=${month}&metric=${metric[kind]}`);
   const days = calendar.data?.days ?? [];
   const [year, m] = month.split("-").map(Number);
   const count = new Date(year, m, 0).getDate();
@@ -114,7 +114,7 @@ export default function DashboardWeb() {
                 <select aria-label="Período do gráfico" value={chartPeriod} onChange={(e) => setChartPeriod(e.target.value)} className="h-8 rounded-full border border-border bg-background px-3 text-xs">
                   <option>7 dias</option><option>1 mês</option><option>3 meses</option><option>6 meses</option><option>1 ano</option>
                 </select>
-                <Link to={`/fluxo?month=${month}`} className="text-xs font-medium text-primary hover:underline">Fluxo de caixa <ArrowRight className="inline" size={12} /></Link>
+                <Link to={`/transacoes?aba=caixa&month=${month}`} className="text-xs font-medium text-primary hover:underline">Caixa <ArrowRight className="inline" size={12} /></Link>
               </div>
             </div>
             <div className="mt-2 flex-1">

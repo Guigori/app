@@ -301,7 +301,7 @@ export function SubscriptionsPanel({ data, transactions, accounts, cards, candid
                       <p className="text-xs text-muted-foreground">Encontrada nos lançamentos da categoria {row.entry.categoryName ?? "Assinaturas"}. Acompanhe aqui para guardar a data da cobrança, pausar e receber lembretes.</p>
                       <div className="flex flex-wrap gap-2">
                         <button type="button" onClick={() => follow(row.entry.last)} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-sm font-semibold text-primary-foreground" data-testid={`subscription-follow-${row.entry.key}`}><Plus className="h-4 w-4" aria-hidden="true" /> Acompanhar aqui</button>
-                        <Link to={row.entry.categoryId ? `/fluxo?metric=despesas&category_id=${encodeURIComponent(row.entry.categoryId)}` : "/fluxo?metric=despesas"} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-sm font-medium"><GitCompareArrows className="h-4 w-4" aria-hidden="true" /> Ver no Fluxo</Link>
+                        <Link to={row.entry.categoryId ? `/transacoes?aba=caixa&metric=despesas&category_id=${encodeURIComponent(row.entry.categoryId)}` : "/transacoes?aba=caixa&metric=despesas"} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-sm font-medium"><GitCompareArrows className="h-4 w-4" aria-hidden="true" /> Ver no Fluxo</Link>
                       </div>
                     </div>
                   ) : null}

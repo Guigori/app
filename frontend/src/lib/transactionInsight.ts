@@ -100,11 +100,11 @@ export function monthImpact(tx: Transaction, calendar: CalendarMonth | null | un
   };
 }
 
-/** Fluxo de caixa opened on this lançamento's month, tab and category. */
+/** Caixa (in Fluxo) opened on this lançamento's month, tab and category. */
 export function cashFlowLink(tx: Transaction): string {
   const metric = tx.type === "receita" ? "receitas" : tx.type === "despesa" ? "despesas" : "caixa";
   const category = tx.category_id && tx.type !== "transferencia" ? `&category_id=${encodeURIComponent(tx.category_id)}` : "";
-  return `/fluxo?month=${tx.date.slice(0, 7)}&metric=${metric}${category}`;
+  return `/transacoes?aba=caixa&month=${tx.date.slice(0, 7)}&metric=${metric}${category}`;
 }
 
 /**
