@@ -97,7 +97,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/contas": "Carteira",
   "/analise": "Análise",
   "/categorias": "Categorias",
-  "/fluxo": "Fluxo de caixa",
+  "/fluxo": "Fluxo de caixa", "/analise/evolucao": "Evolução", "/analise/categorias": "Categorias", "/analise/ritmo": "Ritmo do mês", "/analise/compromissos": "Compromissos",
   "/orcamento": "Orçamento",
   "/radar": "Radar",
   "/cartoes": "Cartões",

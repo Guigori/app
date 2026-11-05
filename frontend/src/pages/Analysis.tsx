@@ -9,6 +9,9 @@ import { currentMonth, monthLabel, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { FiintSection } from "@/components/analytics/FiintSection";
 import { InsightSheet, type InsightDetail } from "@/components/analytics/InsightSheet";
+import { Sparkline } from "@/components/dashboard/Sparkline";
+import { CalendarClock, ChartColumnBig, Gauge, Layers } from "lucide-react";
+import { rhythm, savingsRate } from "@/lib/analysisInsights";
 import { Card, CardContent } from "@/components/ui/card";
 
 const money = (v:number) => new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(v);
@@ -33,7 +36,10 @@ export default function Analysis() {
   const today=todayISO();
   const pastDays=(calendar.data?.days ?? []).filter(day=>day.date.slice(0,7)===month && day.date<=today);
   const peakDay=pastDays.reduce<(typeof pastDays)[number]|null>((best,day)=>day.expense>(best?.expense ?? 0)?day:best,null);
-  const daysWithoutSpending=pastDays.filter(day=>day.expense===0).length;
+  // The calendar lists only days with entries: count the month's elapsed days from the date.
+  const pace=calendar.data?rhythm(month,calendar.data.days,[],today):null;
+  const elapsedDays=pace?.daysElapsed ?? 0;
+  const daysWithoutSpending=Math.max(elapsedDays-pastDays.filter(day=>day.expense>0).length,0);
   const [detail,setDetail]=useState<InsightDetail|null>(null);
   const label=monthLabel(month);
   const topDays=[...pastDays].filter(day=>day.expense>0).sort((a,b)=>b.expense-a.expense).slice(0,3);
@@ -43,7 +49,7 @@ export default function Analysis() {
     gasto:()=>({title:"Gasto do mês",value:mask(money(d?.expense ?? 0)),explain:d?.prev_expense?`${expenseDelta>0?"Você gastou mais":"Você gastou menos"} que no mês anterior (${mask(money(d.prev_expense))}): ${pct(expenseDelta)} de diferença.`:"Total de despesas do mês. Ainda não há mês anterior para comparar.",chart:"expense",cta:{label:"Ver as despesas do mês",to:`/transacoes?month=${month}&metric=despesas`}}),
     orcamento:()=>({title:"Orçamento",value:budget.data?.planned?`${Math.round((budget.data.spent/budget.data.planned)*100)}% usado`:"Não configurado",explain:budget.data?.planned?`Dos ${mask(money(budget.data.planned))} planejados para o ciclo, ${mask(money(budget.data.spent))} já foram gastos.`:"Defina quanto quer gastar por categoria para acompanhar o ritmo do mês.",cta:{label:budget.data?.planned?"Abrir orçamento":"Configurar orçamento",to:budget.data?.planned?"/orcamento":"/orcamento/configuracoes"}}),
     pico:()=>({title:"Dia de maior gasto",value:peakDay?`${peakDay.date.slice(8,10)}/${peakDay.date.slice(5,7)} · ${mask(money(peakDay.expense))}`:"—",explain:"Os dias do mês, até hoje, em que mais saiu dinheiro. Ajuda a ver se um gasto pontual puxou o mês.",items:topDays.map(day=>({label:`${day.date.slice(8,10)}/${day.date.slice(5,7)}`,value:mask(money(day.expense)),tone:"expense" as const})),cta:{label:"Ver o dia no Fluxo",to:peakDay?`/transacoes?date=${peakDay.date}`:`/transacoes?month=${month}`}}),
-    semgastos:()=>({title:"Dias sem gastos",value:`${daysWithoutSpending} de ${pastDays.length}`,explain:"Dias deste mês, até hoje, em que nenhuma despesa foi registrada. Mais dias sem gastos costumam significar um mês mais leve.",cta:{label:"Ver o calendário",to:`/transacoes?month=${month}`}}),
+    semgastos:()=>({title:"Dias sem gastos",value:`${daysWithoutSpending} de ${elapsedDays}`,explain:"Dias deste mês, até hoje, em que nenhuma despesa foi registrada. Mais dias sem gastos costumam significar um mês mais leve.",cta:{label:"Ver o calendário",to:`/transacoes?month=${month}`}}),
     saldo:()=>({title:"Evolução do saldo",value:mask(money(d?.total_balance ?? 0)),explain:"Soma dos saldos das suas contas hoje. O gráfico mostra quanto sobrou ou faltou em cada mês.",chart:"net",cta:{label:"Abrir fluxo de caixa",to:`/fluxo?month=${month}&metric=caixa`}}),
     pesou:()=>({title:"O que mais pesou",value:top?top.name:"—",explain:top?`${top.name} somou ${mask(money(top.total))}, ${pct(top.percent)} das despesas de ${label}.`:"Ainda não há despesas categorizadas neste mês.",cta:{label:"Ver lançamentos da categoria",to:top?.category_id?`/transacoes?month=${month}&metric=despesas&category_id=${encodeURIComponent(top.category_id)}`:`/transacoes?month=${month}`}}),
   };
@@ -57,6 +63,18 @@ export default function Analysis() {
     if(top) return `${top.name} representa ${pct(top.percent)} dos seus gastos neste período.`;
     return d.month_balance>=0 ? "Seu resultado do período está positivo." : "Suas despesas superaram suas receitas neste período.";
   },[d,top]);
+
+  // Teasers for the sub-screens: one real number each.
+  const isCurrentMonth=month===currentMonth();
+  const projection=isCurrentMonth?pace?.projection ?? null:null;
+  const activeTrend=chartData.filter(m=>m.income>0||m.expense>0);
+  const avgRate=activeTrend.length?savingsRate(activeTrend.reduce((s,m)=>s+m.income,0),activeTrend.reduce((s,m)=>s+m.expense,0)):null;
+  const explore=[
+    {to:"/analise/evolucao",title:"Evolução",icon:ChartColumnBig,text:avgRate===null?"Receitas e despesas mês a mês":`Você guarda ${pct(avgRate)} da renda em média`,spark:chartData.map(m=>m.net)},
+    {to:`/analise/categorias?month=${month}`,title:"Categorias",icon:Layers,text:top?`${top.name} pesa ${pct(top.percent)} do mês`:"Onde vai o dinheiro e o que mudou",spark:null},
+    {to:`/analise/ritmo?month=${month}`,title:"Ritmo do mês",icon:Gauge,text:projection!==null?`No ritmo atual, fecha em ${mask(money(projection))}`:"Gasto por dia e por dia da semana",spark:null},
+    {to:"/analise/compromissos",title:"Compromissos",icon:CalendarClock,text:"Parcelas e fixos dos próximos meses",spark:null},
+  ];
 
   return <div className="mx-auto w-full max-w-5xl space-y-4 pb-8 animate-fade-up">
     <header className="flex flex-wrap items-center justify-between gap-3 sm:items-start">
@@ -86,6 +104,20 @@ export default function Analysis() {
       </div>}
     </CardContent></Card></button>
 
+    <section aria-label="Explorar análises">
+      <h2 className="mb-2 px-1 text-sm font-semibold text-muted-foreground">Explorar</h2>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {explore.map(item=>(
+          <Link key={item.title} to={item.to} className="flex min-w-0 flex-col rounded-[22px] border border-border bg-card p-4 transition-colors hover:bg-muted/40" data-testid={`analysis-explore-${item.to.split("/")[2].split("?")[0]}`}>
+            <span className="flex items-center justify-between"><span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary"><item.icon className="h-4.5 w-4.5"/></span><ChevronRight className="h-4 w-4 text-muted-foreground"/></span>
+            <span className="mt-3 font-heading text-sm font-semibold">{item.title}</span>
+            <span className="mt-0.5 text-xs text-muted-foreground">{item.text}</span>
+            {item.spark&&!hidden?<Sparkline values={item.spark} className="mt-2 h-8 text-primary"/>:null}
+          </Link>
+        ))}
+      </div>
+    </section>
+
     <button type="button" onClick={()=>open("descobertas")} className="block w-full text-left"><Card className="rounded-[24px] border-primary/15 bg-primary/[.035]"><CardContent className="flex items-center gap-3 p-5">
       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary"><Sparkles className="h-5 w-5"/></span>
       <div className="min-w-0 flex-1"><p className="font-heading font-semibold">Descobertas FINNOS</p><p className="text-sm text-muted-foreground">{hidden?"Valores ocultos":insight}</p></div><ChevronRight className="h-4 w-4"/>
@@ -95,7 +127,7 @@ export default function Analysis() {
       <AnalysisCard onOpen={()=>open("gasto")} title="Gasto do mês" value={mask(money(d?.expense ?? 0))} note={expenseDelta ? `${expenseDelta>0?"▲":"▼"} ${pct(expenseDelta)} vs. mês anterior` : "Mês atual"}/>
       <AnalysisCard onOpen={()=>open("orcamento")} title="Orçamento" value={hidden?"••••":budget.data?.planned ? `${Math.round((budget.data.spent/budget.data.planned)*100)}%` : "—"} note={budget.data?.planned ? "utilizado" : "não configurado"}/>
       <AnalysisCard onOpen={()=>open("pico")} title="Dia de maior gasto" value={peakDay ? `${peakDay.date.slice(8,10)}/${peakDay.date.slice(5,7)}` : "—"} note={peakDay ? mask(money(peakDay.expense)) : "sem gastos no período"}/>
-      <AnalysisCard onOpen={()=>open("semgastos")} title="Dias sem gastos" value={calendar.data ? String(daysWithoutSpending) : "—"} note={`de ${pastDays.length} ${pastDays.length===1?"dia":"dias"}`}/>
+      <AnalysisCard onOpen={()=>open("semgastos")} title="Dias sem gastos" value={calendar.data ? String(daysWithoutSpending) : "—"} note={`de ${elapsedDays} ${elapsedDays===1?"dia":"dias"}`}/>
     </div>
 
     <button type="button" onClick={()=>open("saldo")} className="block w-full text-left"><Card className="rounded-[24px] transition-colors hover:bg-muted/40"><CardContent className="p-5">
