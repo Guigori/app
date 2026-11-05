@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { budgetImpact, cashFlowLink, flowPath, monthImpact, monthlyHistory, rhythm } from "./transactionInsight";
-import type { BudgetSummary, CalendarMonth, SubscriptionItem, Transaction } from "@/types/finnos";
+import { allocationBreakdown, budgetImpact, cashFlowLink, cycleImpact, flowPath, monthImpact, monthlyHistory, rhythm } from "./transactionInsight";
+import type { BudgetCycleProgress, BudgetSummary, CalendarMonth, SubscriptionItem, Transaction } from "@/types/finnos";
 
 const tx = (over: Partial<Transaction>): Transaction => ({
   id: "t", name: "iFood", value: 86.4, type: "despesa", status: "pago", date: "2026-11-12",
@@ -55,5 +55,26 @@ describe("lançamento detail", () => {
   it("opens the cash flow on its month, tab and category", () => {
     expect(cashFlowLink(tx({}))).toBe("/fluxo?month=2026-11&metric=despesas&category_id=rest");
     expect(cashFlowLink(tx({ type: "transferencia" }))).toBe("/fluxo?month=2026-11&metric=caixa");
+  });
+});
+
+describe("budget cycle", () => {
+  const progress = {
+    start_date: "2026-11-01", end_date: "2026-11-30",
+    allocations: [{ category_id: "rest", name: "Restaurantes", planned: 500, spent: 300, committed: 110, projected_close: 410, available: 90 }],
+  } as BudgetCycleProgress;
+
+  it("reads the limit from the cycle the lançamento falls in", () => {
+    expect(cycleImpact(tx({}), progress)).toMatchObject({ budget: 500, spent: 410, remaining: 90, counted: false, status: "proximo" });
+    expect(cycleImpact(tx({ date: "2026-12-01" }), progress)).toBeNull();
+    expect(cycleImpact(tx({ category_id: "x" }), progress)).toBeNull();
+  });
+
+  it("splits what was paid from what is committed, and names what has no row", () => {
+    const rows = [tx({ id: "1", value: 300 }), tx({ id: "2", value: 60, status: "agendado" }), tx({ id: "3", category_id: "x" })];
+    const split = allocationBreakdown(rows, progress.allocations[0]);
+    expect(split.paid.map((r) => r.id)).toEqual(["1"]);
+    expect(split.committed.map((r) => r.id)).toEqual(["2"]);
+    expect(split.other).toBe(50);
   });
 });
