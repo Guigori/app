@@ -17,6 +17,8 @@ import type {
   CalendarMonth,
   DayFlow,
   PlannedCharge,
+  UpcomingItem,
+  UpcomingKind,
   Flow,
   FlowCategory,
   FlowParams,
@@ -812,10 +814,15 @@ export function localFlow(params: FlowParams): Flow {
     window.push(addMonth(focus, 1), addMonth(focus, 2));
   }
 
-  const txs = params.category_id
-    ? db.transactions.filter((t) => t.category_id === params.category_id)
-    : db.transactions;
-  const creditEvents = localCreditEvents(db).filter(item => !params.category_id || item.category_id === params.category_id);
+  // A card purchase carries the account that pays its invoice.
+  const txs = db.transactions.filter((t) =>
+    (!params.category_id || t.category_id === params.category_id)
+    && (!params.account_id || t.account_id === params.account_id));
+  // With an account, a refund counts only when its purchase is that account's.
+  const creditEvents = localCreditEvents(params.account_id ? { cards: db.cards, transactions: txs } : db)
+    .filter(item => !params.category_id || item.category_id === params.category_id);
+  const subscriptions = subscriptionsInCategory(db.subscriptions, params.category_id, db.categories.find(c => c.id === params.category_id)?.name)
+    .filter((sub) => !params.account_id || sub.account_id === params.account_id);
   const todayMonth = todayISO().slice(0, 7);
 
   const amount = occurrenceAmount;
@@ -863,10 +870,7 @@ export function localFlow(params: FlowParams): Flow {
       if (source.type === "receita") pIncome += amount(source);
       else pExpense += amount(source);
     }
-    for (const projected of localSubscriptionProjections(
-      subscriptionsInCategory(db.subscriptions, params.category_id, db.categories.find(c => c.id === params.category_id)?.name),
-      db.transactions, m, todayISO(),
-    )) {
+    for (const projected of localSubscriptionProjections(subscriptions, db.transactions, m, todayISO())) {
       pExpense += projected.subscription.value;
     }
     return {
@@ -911,6 +915,30 @@ export function localFlow(params: FlowParams): Flow {
       };
     });
 
+  // Mirror of analytics._upcoming: the focus month's projection, item by item.
+  const categoryOf = (id: string | null | undefined) => (id ? db.categories.find((c) => c.id === id) : undefined);
+  const upcomingItem = (t: { name: string; type: string; account_id?: string | null; category_id?: string | null }, date: string, value: number, kind: UpcomingKind): UpcomingItem => ({
+    date, name: t.name, value: round2(value), type: t.type === "receita" ? "receita" : "despesa", kind,
+    account_id: t.account_id ?? null, category_id: t.category_id ?? null,
+    category_name: categoryOf(t.category_id)?.name ?? null, category_color: categoryOf(t.category_id)?.color ?? null,
+  });
+  const [focusYear, focusMonth] = focus.split("-").map(Number);
+  const upcoming: UpcomingItem[] = [];
+  for (const tx of txs) {
+    const value = projection(tx, focus);
+    if (value === null) continue;
+    const date = tx.date.slice(0, 7) === focus ? tx.date : clampDay(focusYear, focusMonth, Number(tx.date.slice(8, 10)));
+    const kind: UpcomingKind = tx.installment ? "parcela" : tx.fixed ? "fixa" : tx.status === "pendente" ? "pendente" : "agendado";
+    upcoming.push({ ...upcomingItem(tx, date, value, kind), transaction_id: tx.id });
+  }
+  for (const source of recurringSources(focus)) {
+    upcoming.push(upcomingItem(source, clampDay(focusYear, focusMonth, Number(source.date.slice(8, 10))), amount(source), "fixa"));
+  }
+  for (const projected of localSubscriptionProjections(subscriptions, db.transactions, focus, todayISO())) {
+    upcoming.push({ ...upcomingItem({ ...projected.subscription, type: "despesa" }, projected.date, projected.subscription.value, "assinatura"), subscription_id: projected.subscription.id });
+  }
+  upcoming.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+
   const point = series.find((p) => p.month === focus);
   return {
     month: focus,
@@ -927,6 +955,7 @@ export function localFlow(params: FlowParams): Flow {
     total_net: round2(series.reduce((s, p) => s + p.net, 0)),
     series,
     categories,
+    upcoming,
   };
 }
 
