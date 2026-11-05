@@ -7,6 +7,9 @@ import { getApiErrorMessage } from "@/lib/errors";
 import { getMode, isLocalMode } from "@/lib/mode";
 import { askLocalFinnos } from "@/lib/local/ai";
 import { askFinnAnalyst } from "@/lib/askFinnAnalyst";
+import { memoryCommand, notesFor, personalSuggestions, readMemory, rememberFeedback, rememberTopic, writeMemory, type FinnMemory } from "@/lib/finnMemory";
+import type { FinnAnswer } from "@/lib/finnAnalyst";
+import { fetchCategories, fetchRadar } from "@/lib/data";
 import { clearFinnConversations, newFinnConversation, readFinnConversations, upsertFinnConversation, type FinnConversation } from "@/lib/aiConversations";
 import type { AiAnswer, AiKey, AiProvider, Category, CreditCard } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
@@ -38,25 +41,44 @@ export function AiPanel() {
 
   const suggestions=useMemo(()=>{
     const used=conversation.messages.filter(m=>m.role==="user").map(m=>m.content.toLowerCase());
-    return BASE_SUGGESTIONS.filter(s=>!used.some(u=>u.includes(s.toLowerCase().slice(0,12)))).slice(0,3);
+    // The user's own frequent questions come first.
+    const mine=personalSuggestions(readMemory());
+    return [...new Set([...mine,...BASE_SUGGESTIONS])].filter(s=>!used.some(u=>u.includes(s.toLowerCase().slice(0,12)))).slice(0,4);
   },[conversation.messages]);
 
   const speak=()=>{const w=window as any;const SR=w.SpeechRecognition||w.webkitSpeechRecognition;if(!SR){setError("Ditado por voz não está disponível neste navegador.");return}const rec=new SR();rec.lang="pt-BR";rec.interimResults=false;rec.onstart=()=>setListening(true);rec.onend=()=>setListening(false);rec.onerror=()=>setListening(false);rec.onresult=(e:any)=>setQuestion((v)=>[v,e.results[0][0].transcript].filter(Boolean).join(" "));rec.start()};
   const attachFile=async(file:File)=>{setAttachOpen(false);if(file.size>2_000_000){setError("Use um arquivo de até 2 MB nesta versão.");return}if(file.type.startsWith("text/")||/\\.(csv|txt)$/i.test(file.name)){const body=await file.text();setQuestion(`Analise este arquivo ${file.name} e identifique possíveis lançamentos. Não registre nada sem minha confirmação.\\n\\n${body.slice(0,12000)}`)}else{setQuestion(`Quero analisar o arquivo "${file.name}" para registrar gastos. Mostre uma prévia e peça minha confirmação antes de salvar.`);setError("A leitura automática de imagens/PDFs será concluída pelo processador de documentos do servidor; nenhum lançamento será salvo automaticamente.")}};
-  const feedback=(id:string,rating:"up"|"down")=>{if(local){localStorage.setItem(`finnos:ai-feedback:${id}`,rating);return}void apiPost("/ai/feedback",{rating,response_id:id})};
+  const feedback=(id:string,rating:"up"|"down")=>{
+    const message=conversation.messages.find(m=>m.id===id);
+    writeMemory(rememberFeedback(readMemory(),message?.query?.op??"geral",rating));
+    // A thumbs-down asks what to change, and the answer teaches the next replies.
+    if(rating==="down"&&conversation.messages.at(-1)?.id===id)persist({...conversation,messages:[...conversation.messages,{id:crypto.randomUUID(),role:"assistant",content:"Obrigado pelo retorno. O que eu posso melhorar?",followUps:["Responda mais curto","Quero respostas mais detalhadas","O que você sabe sobre mim?"],createdAt:new Date().toISOString()}]});
+    if(local){localStorage.setItem(`finnos:ai-feedback:${id}`,rating);return}void apiPost("/ai/feedback",{rating,response_id:id}).catch(()=>undefined)};
   const persist=(next:FinnConversation)=>{setConversation(next);upsertFinnConversation(next);setHistory(readFinnConversations())};
   const startNew=()=>{setConversation(newFinnConversation());setQuestion("");setError(null);setPendingContext(null);setHistoryOpen(false)};
   const [thinking,setThinking]=useState(false);
+  // Opening with what matters now, instead of waiting for a question.
+  const radarQuery=useQuery({queryKey:["radar"],queryFn:fetchRadar,enabled:open,staleTime:60000});
+  const noticed=(radarQuery.data?.items??[]).filter(s=>s.severity==="critical"||s.severity==="high").sort((a,b)=>b.score-a.score)[0];
   const ask=async(q:string)=>{
     const text=q.trim(); if(!text)return; setQuestion("");setError(null);setThinking(true);
     const user={id:crypto.randomUUID(),role:"user" as const,content:text,createdAt:new Date().toISOString()};
     let next={...conversation,title:conversation.messages.length?conversation.title:text.slice(0,52),messages:[...conversation.messages,user]};persist(next);
     try{
       const contextualText=pendingContext?`${text}\n\n[Contexto estruturado do FINNOS: ${JSON.stringify(pendingContext)}]`:text;
-      // The analyst answers free questions with the user's data in every mode, at no cost.
-      const analyst=pendingContext?null:await askFinnAnalyst(text,conversation.messages);
+      // Lessons first ("lembre que lanche é Restaurantes"), then the analyst, in every mode and at no cost.
+      const memory=readMemory();
+      const lesson=pendingContext?null:memoryCommand(text,memory,await fetchCategories().catch(()=>[]));
+      if(lesson){
+        writeMemory(lesson.memory);
+        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:lesson.text,followUps:lesson.followUps,createdAt:new Date().toISOString()}]};persist(next);
+        return;
+      }
+      const analyst=pendingContext?null:await askFinnAnalyst(text,conversation.messages,memory.aliases);
       if(analyst){
-        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:analyst.text,visual:analyst.visual,insight:analyst.insight,followUps:analyst.followUps,links:analyst.links,query:analyst.query,createdAt:new Date().toISOString()}]};persist(next);
+        writeMemory(rememberTopic(memory,analyst.query,text));
+        const shaped=styled(analyst,memory);
+        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:shaped.text,visual:shaped.visual,insight:analyst.insight,followUps:analyst.followUps,links:analyst.links,query:analyst.query,createdAt:new Date().toISOString()}]};persist(next);
         return;
       }
       const localReply=local?await askLocalFinnos(contextualText,undefined,conversation.messages):null;
@@ -99,13 +121,14 @@ export function AiPanel() {
       </header>
 
       {historyOpen?<div className="flex-1 overflow-y-auto p-5">
-        <div className="mb-5 flex items-center justify-between"><p className="text-sm text-muted-foreground">O FINNOS guarda até 3 conversas recentes neste dispositivo.</p>{history.length?<Button variant="ghost" size="sm" onClick={()=>{clearFinnConversations();setHistory([]);startNew()}}><Trash2 className="mr-2 h-4 w-4"/>Limpar</Button>:null}</div>
+        <div className="mb-5 flex items-center justify-between"><p className="text-sm text-muted-foreground">O FINNOS guarda até 10 conversas recentes neste dispositivo.</p>{history.length?<Button variant="ghost" size="sm" onClick={()=>{clearFinnConversations();setHistory([]);startNew()}}><Trash2 className="mr-2 h-4 w-4"/>Limpar</Button>:null}</div>
         <div className="space-y-3">{history.length?history.map(c=><button key={c.id} onClick={()=>{setConversation(c);setHistoryOpen(false)}} className="w-full rounded-2xl border border-border p-4 text-left hover:bg-muted"><strong className="block truncate">{c.title}</strong><span className="text-xs text-muted-foreground">{c.messages.filter(m=>m.role==="user").length} perguntas</span></button>):<p className="py-16 text-center text-sm text-muted-foreground">Nenhuma conversa anterior.</p>}</div>
       </div>:<>
         <main className="flex-1 space-y-4 overflow-y-auto p-5">
           {!conversation.messages.length?<div className="space-y-5">
             <div className="flex gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-5 w-5"/></div><div className="rounded-2xl border border-border bg-card p-4 text-sm leading-relaxed">Olá! Sou a FINNOS IA. Posso analisar seus gastos, orçamento, Radar e ajudar no seu planejamento financeiro. O que você quer entender hoje?</div></div>
             {appMode==="local"?<div className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground">Se quiser conectar ChatGPT, Claude ou Gemini e guardar sua chave com segurança, <Link to="/cadastro" onClick={()=>setOpen(false)} className="font-semibold text-primary">crie sua conta preservando seus dados</Link>.</div>:null}
+            {noticed?<div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm" data-testid="ai-opening-noticed"><p className="text-xs font-semibold text-primary">Hoje eu notei</p><p className="mt-1 font-medium">{noticed.title}{noticed.metric?` · ${noticed.metric}`:""}</p><button type="button" onClick={()=>void ask("O que o Radar está vendo?")} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary">Me explique<ChevronRight className="h-3.5 w-3.5"/></button></div>:null}
             <div className="grid gap-2">{suggestions.map(s=><button key={s} onClick={()=>void ask(s)} className="rounded-2xl bg-muted px-4 py-3 text-left text-sm font-medium hover:bg-accent">{s}</button>)}</div>
           </div>:conversation.messages.map(m=><div key={m.id} className={m.role==="user"?"flex justify-end":"flex justify-start gap-3"}>{m.role==="assistant"?<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-4 w-4"/></div>:null}<div className={m.role==="user"?"max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground":"max-w-[88%] rounded-2xl border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-line"}><span>{m.content.split("**").map((part,i)=>i%2?<strong key={i} className="font-semibold">{part}</strong>:part)}</span>{m.role==="assistant"&&m.visual?<Suspense fallback={null}><AiVisual visual={m.visual}/></Suspense>:null}
             {m.role==="assistant"&&m.insight?<div className="mt-3 rounded-xl bg-primary/5 p-3 text-xs leading-relaxed" data-testid="ai-insight"><p className="font-semibold text-primary">Eu notei também</p><p className="mt-0.5 text-foreground">{m.insight}</p></div>:null}
@@ -121,4 +144,16 @@ export function AiPanel() {
       </>}
     </SheetContent>
   </Sheet>;
+}
+
+/** Applies what the user asked about answers: short ones keep the first sentence and the numbers; notes are repeated back. */
+function styled(answer: FinnAnswer, memory: FinnMemory): { text: string; visual: FinnAnswer["visual"] } {
+  const notes = notesFor(memory, answer.query);
+  const said = notes.length ? `\n\nVocê me disse: ${notes.join("; ")}.` : "";
+  if (memory.style === "curto") {
+    const first = answer.text.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? answer.text;
+    const visual = answer.visual?.metrics ? { metrics: answer.visual.metrics } : undefined;
+    return { text: first + said, visual };
+  }
+  return { text: answer.text + said, visual: answer.visual };
 }
