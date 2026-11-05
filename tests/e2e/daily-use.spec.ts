@@ -86,6 +86,27 @@ test("Ver no Caixa opens the month with the lançamento in focus", async ({ page
   await expect(page.getByText(/Deve (sobrar|faltar) no fim do mês|(Sobrou|Faltou) no mês/)).toBeVisible();
 });
 
+test("a sentence becomes several lançamentos to review, correct and register", async ({ page }) => {
+  await createAccount(page);
+  await page.goto("/registro-inteligente");
+  await expect(page.getByTestId("quick-entry")).toBeVisible();
+  await page.getByRole("button", { name: "Registro inteligente: escrever, falar ou fotografar" }).click();
+  const box = page.getByPlaceholder("Ex.: Paguei R$ 45 no Uber com o Nubank ontem");
+  await box.fill("uber hoje às 9h00 por 16,90 e pão 8");
+  await box.press("Enter");
+  const recognized = page.getByTestId("register-recognized");
+  await expect(recognized.getByTestId("ai-proposal-entry")).toHaveCount(2);
+  await expect(recognized.getByTestId("register-unknown")).toContainText("às 9h00");
+  await recognized.getByLabel("Valor de Pão").fill("9,50");
+  await recognized.getByLabel("Valor de Pão").blur();
+  await recognized.getByTestId("ai-proposal-apply").click();
+  await expect(recognized.getByTestId("ai-proposal-status")).toContainText("Feito · 2");
+  await page.goto("/transacoes");
+  await page.getByTestId("flow-view-lista").click();
+  await expect(page.locator("text=Pão >> visible=true").first()).toBeVisible();
+  await expect(page.locator("text=-R$ 9,50 >> visible=true").first()).toBeVisible();
+});
+
 test("statement import flags what is already registered", async ({ page }) => {
   await createAccount(page);
   const csv = Buffer.from(`Data;Descrição;Valor\n${isoDaysAgo(2)};Padaria Teste;-12,50\n${isoDaysAgo(4)};Pix recebido;200,00`);
