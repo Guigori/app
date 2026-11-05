@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Download, FileSpreadsheet, FileUp, Upload } from "lucide-react";
-import { downloadBackup, downloadTransactionsCsv, restoreBackup } from "@/lib/backup";
+import { CloudUpload, Download, FileSpreadsheet, FileUp, Server, Upload } from "lucide-react";
+import { downloadBackup, downloadServerBackup, downloadTransactionsCsv, listServerBackups, restoreBackup, saveServerBackup } from "@/lib/backup";
 import { getApiErrorMessage } from "@/lib/errors";
 import { isLocalMode } from "@/lib/mode";
 import { StatementImportDialog } from "@/components/import/StatementImportDialog";
@@ -17,6 +17,7 @@ export function DataBackupCard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<File | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const serverCopies = useQuery({ queryKey: ["server-backups"], queryFn: listServerBackups, enabled: !local });
 
   const run = async (label: string, task: () => Promise<void>) => {
     setBusy(label);
@@ -50,6 +51,31 @@ export function DataBackupCard() {
             <span className="flex-1"><span className="block text-sm font-medium">{busy === "restore" ? "Restaurando…" : "Restaurar backup"}</span><span className="block text-xs text-muted-foreground">{local ? "Substitui os dados deste aparelho" : "Somente em uma conta sem dados"}</span></span>
           </button>
         </div>
+        {!local ? (
+          <div className="border-t border-border px-4 py-4" data-testid="settings-server-backups">
+            <div className="flex items-center justify-between gap-3">
+              <p className="flex items-center gap-2 text-sm font-medium"><Server className="h-4 w-4 text-primary" />Cópias guardadas no servidor</p>
+              <button type="button" disabled={Boolean(busy)} onClick={() => void run("snapshot", async () => { await saveServerBackup(); await serverCopies.refetch(); toast.success("Cópia guardada no servidor."); })}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-xs font-semibold hover:bg-muted disabled:opacity-50" data-testid="settings-save-server-backup">
+                <CloudUpload className="h-4 w-4" />{busy === "snapshot" ? "Guardando…" : "Guardar agora"}
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">Toda segunda-feira o FINNOS guarda uma cópia e mantém as {serverCopies.data?.keep ?? 8} mais recentes.</p>
+            {serverCopies.isPending ? <p className="mt-3 text-xs text-muted-foreground">Carregando…</p> : serverCopies.isError ? <p className="mt-3 text-xs text-destructive">Não foi possível listar as cópias.</p> : serverCopies.data?.items.length ? (
+              <ul className="mt-3 divide-y divide-border rounded-xl border border-border">
+                {serverCopies.data.items.map((copy) => (
+                  <li key={copy.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium">{new Date(copy.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="block text-xs text-muted-foreground">{copy.source === "semanal" ? "Semanal" : "Manual"} · {copy.counts.transactions ?? 0} lançamentos · {Math.max(1, Math.round(copy.bytes / 1024))} KB</span>
+                    </span>
+                    <button type="button" disabled={Boolean(busy)} onClick={() => void run(`dl-${copy.id}`, () => downloadServerBackup(copy.id))} className="inline-flex size-9 items-center justify-center rounded-full hover:bg-muted" aria-label="Baixar esta cópia"><Download className="h-4 w-4" /></button>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="mt-3 text-xs text-muted-foreground">Nenhuma cópia ainda. A primeira é feita na próxima segunda, ou agora em "Guardar agora".</p>}
+          </div>
+        ) : null}
         <input ref={fileInput} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { setPendingRestore(e.target.files?.[0] ?? null); e.target.value = ""; }} />
       </CardContent>
       <StatementImportDialog open={importOpen} onOpenChange={setImportOpen} />

@@ -1,0 +1,31 @@
+name: FINNOS · Backup semanal
+
+# Every Monday 06:00 UTC (03:00 in Brasília): the server keeps one compressed,
+# checksummed copy per user (newest 8). Uses the same FINNOS_CRON_SECRET as the
+# notifications dispatcher; without it the job is skipped, never failing open.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  weekly-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger FINNOS weekly backup
+        env:
+          FINNOS_CRON_SECRET: ${{ secrets.FINNOS_CRON_SECRET }}
+        run: |
+          if [ -z "$FINNOS_CRON_SECRET" ]; then
+            echo "FINNOS_CRON_SECRET is not configured; weekly backup skipped."
+            exit 0
+          fi
+          # Prints only the counts returned by the API (users/saved/skipped/failed), never data.
+          curl --fail-with-body --silent --show-error \
+            --request GET \
+            --header "Authorization: Bearer $FINNOS_CRON_SECRET" \
+            https://finnos.vercel.app/api/finance/backups-run
