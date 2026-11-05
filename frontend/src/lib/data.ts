@@ -246,7 +246,7 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
   const pending = (await listSyncOperations()).filter(isTransactionSyncOperation).filter((o) => o.kind === "transaction.create" && o.payload.status === "pago");
   let incomeDelta = 0, expenseDelta = 0;
   const series = base.series.map((point) => {
-    const ops = pending.filter((o) => o.payload.date.slice(0, 7) === point.month && (!params.category_id || o.payload.category_id === params.category_id));
+    const ops = pending.filter((o) => o.payload.date.slice(0, 7) === point.month && (!params.category_id || o.payload.category_id === params.category_id) && (!params.account_id || o.payload.account_id === params.account_id));
     const income = ops.filter((o) => o.payload.type === "receita").reduce((s,o)=>s+txAmount(o.payload),0);
     const expense = ops.filter((o) => o.payload.type === "despesa").reduce((s,o)=>s+txAmount(o.payload),0);
     if (point.month === base.month) { incomeDelta += income; expenseDelta += expense; }

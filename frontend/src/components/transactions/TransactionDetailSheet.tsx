@@ -87,6 +87,11 @@ export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, on
             <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm font-semibold">
               <span>{path.from}</span><ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" /><span>{path.to}</span>
             </p>
+            {tx.account_id && !tx.id.startsWith("offline:") ? (
+              <Link to={`/fluxo?month=${month}&account_id=${encodeURIComponent(tx.account_id)}`} onClick={close} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary" data-testid="transaction-detail-account-flow">
+                Fluxo de caixa de {tx.account_name}<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </Link>
+            ) : null}
           </section>
 
           {tx.type === "despesa" && tx.category_id ? (
