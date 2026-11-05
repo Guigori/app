@@ -11,7 +11,7 @@ type Props = {
   onSaved: () => void;
 };
 
-const field = "mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-foreground outline-none focus:border-[#4B2CFF]";
+const field = "mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-foreground outline-none focus:border-primary";
 const caption = "block text-sm font-medium text-foreground";
 
 export default function EditarMeta({ goal, userId, onClose, onSaved }: Props) {
@@ -63,7 +63,7 @@ export default function EditarMeta({ goal, userId, onClose, onSaved }: Props) {
     <section className="rounded-3xl border border-border bg-card p-5 sm:p-6" aria-label={`Editar meta ${goal.name}`}>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold tracking-wide text-[#4B2CFF] dark:text-[#A46DFF]">FINNOS · METAS</p>
+          <p className="text-xs font-semibold tracking-wide text-primary dark:text-[#A46DFF]">FINNOS · METAS</p>
           <h2 className="mt-1 text-xl font-bold text-foreground">Editar meta</h2>
           <p className="mt-1 text-sm text-muted-foreground">Ajuste seu planejamento sem movimentar o saldo bancário.</p>
         </div>
@@ -116,7 +116,7 @@ export default function EditarMeta({ goal, userId, onClose, onSaved }: Props) {
         </div>
         {error && <p className="sm:col-span-2 text-sm text-destructive" role="alert">{error}</p>}
         <div className="sm:col-span-2 flex flex-wrap gap-3">
-          <button type="submit" disabled={!valid || busy} className="inline-flex items-center gap-2 rounded-full bg-[#4B2CFF] px-5 py-3 font-semibold text-white disabled:opacity-50">
+          <button type="submit" disabled={!valid || busy} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 font-semibold text-white disabled:opacity-50">
             <Check size={17} /> {busy ? "Salvando..." : "Salvar alterações"}
           </button>
           <button type="button" onClick={onClose} disabled={busy} className="rounded-full border border-border px-5 py-3">Cancelar</button>

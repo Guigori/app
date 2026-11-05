@@ -59,3 +59,16 @@ def test_refuses_a_tampered_file(monkeypatch):
     with pytest.raises(HTTPException) as error:
         asyncio.run(backup.restore_backup(data, user={"id": "u"}))
     assert error.value.status_code == 400
+
+
+def test_checksum_survives_the_json_round_trip_of_real_firestore_values(monkeypatch):
+    """Firestore returns datetimes and Decimals; the downloaded file has strings/numbers."""
+    import json
+    from datetime import datetime, timezone
+    from decimal import Decimal
+
+    rows = {name: [] for name in backup.COLLECTIONS}
+    rows["accounts"] = [backup._clean({"id": "a1", "user_id": "u", "created_at": datetime(2026, 11, 5, 1, 36, 59, 123456, tzinfo=timezone.utc), "initial_balance": Decimal("120.50")})]
+    exported = {"format": "finnos-backup", "version": 1, "collections": rows, "checksum_sha256": backup.checksum(rows)}
+    downloaded = json.loads(json.dumps(exported))  # what the browser saves and later uploads
+    assert downloaded["checksum_sha256"] == backup.checksum(downloaded["collections"])

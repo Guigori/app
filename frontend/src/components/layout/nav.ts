@@ -1,6 +1,4 @@
 import {
-  ArrowUpDown,
-  CalendarDays,
   GitCompareArrows,
   CreditCard,
   Home,

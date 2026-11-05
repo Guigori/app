@@ -14,6 +14,8 @@
 }
 
 @theme inline {
+    /* Brand navy (FINNOS ink). The brand purple is --color-primary. */
+    --color-navy: #070F52;
     --font-heading: 'Sora Variable', sans-serif;
     --font-sans: 'DM Sans Variable', sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);

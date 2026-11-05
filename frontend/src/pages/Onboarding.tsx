@@ -10,6 +10,7 @@ import { fetchOnboarding, saveOnboarding, type OnboardingPercentages } from "@/l
 import type { TransactionInput } from "@/types/finnos";
 import { parseFinancialFile, type ImportRow } from "@/lib/importFinancial";
 import { daysAgoISO, fingerprint } from "@/lib/statementImport";
+import { pdfToStatementCsv } from "@/lib/pdfStatement";
 import { ImportReview } from "@/components/onboarding/ImportReview";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { CardDialog } from "@/components/cards/CardDialog";
@@ -164,8 +165,8 @@ export default function Onboarding() {
     setImportError("");
     setFileName(file.name);
     try {
-      if (!/\.(csv|ofx|qfx|txt)$/i.test(file.name)) throw new Error("Use CSV, OFX, QFX ou TXT. PDF ainda não é suportado.");
-      const text = await file.text();
+      if (!/\.(csv|ofx|qfx|txt|pdf)$/i.test(file.name)) throw new Error("Use PDF, CSV, OFX, QFX ou TXT.");
+      const text = /\.pdf$/i.test(file.name) ? await pdfToStatementCsv(file) : await file.text();
       const rows = parseFinancialFile(text, method === "invoice" ? "invoice" : "statement");
       const digest = await fingerprint(text);
       // Stable across devices/re-uploads. Server receipts are additionally scoped by verified UID.
@@ -291,9 +292,9 @@ export default function Onboarding() {
             {([["manual","Manual"],["statement","Extrato"],["invoice","Fatura"]] as const).map(([key,label]) => <button key={key} type="button" onClick={() => { setMethod(key); setImportRows([]); setImportError(""); }} className={"rounded-xl border px-3 py-3 text-sm font-medium " + (method === key ? "border-primary bg-primary/10" : "border-border")}>{label}</button>)}
           </div>
           {method !== "manual" && <div className="mt-4 space-y-3">
-            <input type="file" ref={inputRef} accept=".csv,.ofx,.qfx,.txt" className="hidden" onChange={e => { const f=e.target.files?.[0];if(f)void readFile(f); }} />
+            <input type="file" ref={inputRef} accept=".pdf,.csv,.ofx,.qfx,.txt" className="hidden" onChange={e => { const f=e.target.files?.[0];if(f)void readFile(f); }} />
             <Button variant="outline" onClick={() => inputRef.current?.click()}><Upload className="h-4 w-4"/> Selecionar {method === "invoice" ? "fatura" : "extrato"}</Button>
-            <p className="text-xs text-muted-foreground">{fileName || "CSV, OFX, QFX e TXT. PDF ainda não é aceito."}</p>
+            <p className="text-xs text-muted-foreground">{fileName || "PDF, CSV, OFX, QFX e TXT."}</p>
             {method === "invoice" && <label className="block text-sm">Cartão da fatura<select className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-2" value={cardId} onChange={e => setCardId(e.target.value)}><option value="">Escolher cartão</option>{cards.map(card => <option key={card.id} value={card.id}>{card.name}</option>)}</select></label>}
             {!!importRows.length && (method !== "invoice" || !!cardId) && <ImportReview rows={importRows} setRows={setImportRows} accounts={accounts} categories={categories} accountId={targetAccountId} setAccountId={setAccountId} onConfirm={confirmImport} busy={busy}/>}
             {importError && <p className="text-sm text-destructive" role="alert">{importError}</p>}

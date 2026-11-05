@@ -14,7 +14,6 @@ import { clearMyData, fetchMe, loadDemoData, updateMyName } from "@/lib/data";
 import { disableLocalMode, getMode, isLocalMode } from "@/lib/mode";
 import { AiKeysCard } from "@/components/ai/AiKeysCard";
 import { NotificationsCard } from "@/components/settings/NotificationsCard";
-import type { User } from "@/types/finnos";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,10 +41,13 @@ export default function Settings() {
 
   const savedNavigation = useNavigationPreferences();
   const savedHome = useHomePreferences();
+  // The preference hooks return a fresh object each render: compare them by value.
+  const savedHomeKey = JSON.stringify(savedHome);
+  const savedNavigationKey = JSON.stringify(savedNavigation);
   const [homePanel, setHomePanel] = useState(savedHome);
-  useEffect(() => setHomePanel(savedHome), [JSON.stringify(savedHome)]);
+  useEffect(() => setHomePanel(JSON.parse(savedHomeKey)), [savedHomeKey]);
   const [navigation, setNavigation] = useState<NavigationPreferences>(savedNavigation);
-  useEffect(() => setNavigation(savedNavigation), [JSON.stringify(savedNavigation)]);
+  useEffect(() => setNavigation(JSON.parse(savedNavigationKey)), [savedNavigationKey]);
 
   const mobileNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia" && item.slug !== "transacoes");
   const webNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia" && item.slug !== "transacoes");
@@ -316,7 +318,7 @@ export default function Settings() {
                         </div> : null;
                       })}
                     </div>
-                    <div className="flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-[#4B2CFF] text-white shadow-[0_4px_18px_rgba(75,44,255,.18)]" aria-label="Prévia do botão adicionar">
+                    <div className="flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-[0_4px_18px_rgba(75,44,255,.18)]" aria-label="Prévia do botão adicionar">
                       <span className="text-3xl font-light">+</span>
                     </div>
                   </div>

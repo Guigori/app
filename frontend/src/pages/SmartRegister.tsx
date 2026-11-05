@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { parseReceiptText, parseRegisterText } from "@/lib/registerParsing";
 import { getRegisterDefault } from "@/lib/registerPreferences";
+import { evaluateExpression, KEYS, OPS, pressKey, typedDisplay } from "@/lib/registerKeypad";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { TransactionInput } from "@/types/finnos";
@@ -12,34 +13,11 @@ import { formatBRL, isISODate, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
-import { ArrowLeft, ArrowUp, Camera, Check, ChevronRight, Mic, Paperclip, Plus, X, Wallet, CreditCard, Landmark, CalendarDays, Repeat2, StickyNote, Bell, Tag, FolderOpen, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Delete, MoreVertical, Search, Ban, WandSparkles, ReceiptText, Square } from "lucide-react";
+import { ArrowLeft, ArrowUp, Camera, Check, ChevronRight, Mic, Paperclip, Plus, X, Wallet, CreditCard, Landmark, Repeat2, StickyNote, Bell, Tag, FolderOpen, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Delete, MoreVertical, Search, Ban, WandSparkles, ReceiptText, Square } from "lucide-react";
 
 type Page = "entry" | "pay" | "start" | "manual" | "details" | "categories" | "accounts" | "installments" | "more" | "voice" | "receipt" | "review" | "done";
 type Kind = "Despesa" | "Receita" | "Transferência";
 const format = (n: string) => (Number(n || 0) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const OPS = ["+", "−", "×", "÷"];
-/** Calculator keypad: evaluates "12,50+3×2" with × ÷ before + −; a trailing operator is ignored. */
-function evaluateExpression(expr: string): number {
-  const tokens = expr.match(/\d+(?:,\d*)?|[+−×÷]/g) ?? [];
-  const nums: number[] = [];
-  const ops: string[] = [];
-  for (const t of tokens) {
-    if (OPS.includes(t)) ops.push(t);
-    else nums.push(Number(t.replace(",", ".")));
-  }
-  ops.length = Math.max(0, Math.min(ops.length, nums.length - 1));
-  const terms = [nums[0] ?? 0];
-  const signs: string[] = [];
-  ops.forEach((op, i) => {
-    const b = nums[i + 1];
-    if (op === "×") terms[terms.length - 1] *= b;
-    else if (op === "÷") terms[terms.length - 1] = b ? terms[terms.length - 1] / b : 0;
-    else { signs.push(op); terms.push(b); }
-  });
-  const result = signs.reduce((acc, op, i) => (op === "+" ? acc + terms[i + 1] : acc - terms[i + 1]), terms[0]);
-  return Math.round(result * 100) / 100;
-}
-const KEYS = ["1", "2", "3", "+", "4", "5", "6", "−", "7", "8", "9", "×", ",", "0", "⌫", "÷"];
 const KIND_UI: Record<Kind, { icon: typeof ArrowDownLeft; tint: string; amount: string }> = {
   Receita: { icon: ArrowDownLeft, tint: "bg-income/12 text-income", amount: "text-income" },
   Despesa: { icon: ArrowUpRight, tint: "bg-expense/12 text-expense", amount: "text-foreground" },
@@ -60,9 +38,10 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts });
   const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: fetchCards });
-  const categories = categoriesQuery.data ?? [];
-  const accounts = (accountsQuery.data ?? []).filter(a => a.active);
-  const cards = (cardsQuery.data ?? []).filter(c => c.active);
+  // Memoized: a new array every render would re-run the effects below for nothing.
+  const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
+  const accounts = useMemo(() => (accountsQuery.data ?? []).filter(a => a.active), [accountsQuery.data]);
+  const cards = useMemo(() => (cardsQuery.data ?? []).filter(c => c.active), [cardsQuery.data]);
   const cardsForAccount = (accountId: string) => cards.filter(c => c.payment_account_id === accountId || (!c.payment_account_id && (!c.institution || c.institution.toLocaleLowerCase("pt-BR") === accounts.find(a => a.id === accountId)?.institution?.toLocaleLowerCase("pt-BR"))));
   const [paymentPreferencesVersion, setPaymentPreferencesVersion] = useState(0);
   const [availablePayments, setAvailablePayments] = useState<string[]>([]);
@@ -78,7 +57,7 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
     setPaymentsLoading(true); setPaymentsError(false); setAvailablePayments([]);
     getAccountPaymentMethods(selected).then(methods => { if (!cancelled) setAvailablePayments(methods); }).catch(() => { if (!cancelled) setPaymentsError(true); }).finally(() => { if (!cancelled) setPaymentsLoading(false); });
     return () => { cancelled = true; };
-  }, [institutionId, paymentPreferencesVersion, accountsQuery.data]);
+  }, [institutionId, paymentPreferencesVersion, accounts]);
   const selectedCard = cards.find(c => c.id === selectedCardId);
   // Opens on the screen chosen in Configurações → Novo registro.
   const [page, setPage] = useState<Page>(() => (getRegisterDefault() === "inteligente" ? "start" : "entry"));
@@ -110,11 +89,11 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
     saveMutation.mutate(input);
   };
   
-  useEffect(() => { if (category && !categories.some(c => c.id === category)) setCategory(""); }, [categoriesQuery.data, category]);
-  useEffect(() => { if (account && !accounts.some(a => a.id === account)) setAccount(""); }, [accountsQuery.data, account]);
+  useEffect(() => { if (category && !categories.some(c => c.id === category)) setCategory(""); }, [categories, category]);
+  useEffect(() => { if (account && !accounts.some(a => a.id === account)) setAccount(""); }, [accounts, account]);
   // A single wallet is the obvious default; with several, the first one (changeable in the chip).
-  useEffect(() => { if (!account && accounts.length > 0) setAccount(accounts[0].id); }, [accountsQuery.data, account]);
-  useEffect(() => { if (selectedCardId && !cards.some(c => c.id === selectedCardId)) setSelectedCardId(null); }, [cardsQuery.data, selectedCardId]);
+  useEffect(() => { if (!account && accounts.length > 0) setAccount(accounts[0].id); }, [accounts, account]);
+  useEffect(() => { if (selectedCardId && !cards.some(c => c.id === selectedCardId)) setSelectedCardId(null); }, [cards, selectedCardId]);
   const selectedCategory = categories.find(c => c.id === category);
   const visibleCategories = selectedCategory && !categories.slice(0, 4).some(c => c.id === selectedCategory.id) ? [...categories.slice(0, 3), selectedCategory] : categories.slice(0, 4);
   const canSave = Number(value) > 0 && !!account && (kind === "Transferência" ? !!destination && destination !== account : !!category && !(kind === "Despesa" && selectedCategory?.name.toLocaleLowerCase("pt-BR") === "renda"));
@@ -195,23 +174,10 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
   const displayName = name.trim() || (kind === "Transferência" ? "Transferência" : selectedCategory?.name || kind);
   const close = () => (onClose ? onClose() : navigate(-1));
   /** What the user is typing, in Brazilian format ("1.234,5"), or the result when there is an operator. */
-  const typedAmount = (() => {
-    if (!expr || /[+−×÷]/.test(expr)) return null;
-    const [int, dec] = expr.split(",");
-    const intPart = Number(int || "0").toLocaleString("pt-BR");
-    return `R$ ${intPart}${dec !== undefined ? `,${dec}` : ""}`;
-  })();
+  const typedAmount = typedDisplay(expr);
   const clearTimer = useRef<number | null>(null);
   // Each key builds on the latest expression (fast typing never drops keys).
-  const press = (key: string) => setExpr((current) => {
-    const lastNumber = current.split(/[+−×÷]/).at(-1) ?? "";
-    if (key === "⌫") return current.slice(0, -1);
-    if (OPS.includes(key)) return !current ? current : OPS.includes(current.at(-1) ?? "") ? current.slice(0, -1) + key : current + key;
-    if (key === ",") return lastNumber.includes(",") ? current : current + (lastNumber ? "," : "0,");
-    if (lastNumber.includes(",") && lastNumber.split(",")[1].length >= 2) return current;
-    if (lastNumber.replace(",", "").length >= 9) return current;
-    return lastNumber === "0" ? current.slice(0, -1) + key : current + key;
-  });
+  const press = (key: string) => setExpr((current) => pressKey(current, key));
   const kindCategories = kind === "Receita"
     ? [...categories].sort((a, b) => Number(b.name.toLocaleLowerCase("pt-BR") === "renda") - Number(a.name.toLocaleLowerCase("pt-BR") === "renda"))
     : categories.filter((c) => c.name.toLocaleLowerCase("pt-BR") !== "renda");

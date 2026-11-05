@@ -105,7 +105,7 @@ export default function Subscriptions() {
         </div>
         {!creating && !editing && (
           <button type="button" onClick={() => { setCreating(true); setSelectedId(null); setError(""); }}
-            className="inline-flex items-center gap-2 rounded-full bg-[#4B2CFF] px-4 py-2.5 text-sm font-semibold text-white">
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-white">
             <Plus size={18} /> Nova assinatura
           </button>
         )}

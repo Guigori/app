@@ -6,7 +6,7 @@ import { fetchBudgetCycles, fetchBudgetCycleProgress, fetchCurrentBudgetCycle, f
 import { formatBRL } from "@/lib/format";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
