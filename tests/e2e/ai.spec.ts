@@ -78,3 +78,35 @@ test("FINNOS IA learns what the user teaches and keeps it in the account", async
   await expect.poll(() => saved.some((value) => value.includes("Uber é trabalho")), { timeout: 10000 }).toBe(true);
   expect(paidAsk.calls).toBe(0);
 });
+
+test("FINNOS IA prepares lançamentos from a sentence and saves only after the user confirms", async ({ page }) => {
+  const paidAsk = { calls: 0 };
+  await session(page, paidAsk);
+  const created: Array<Record<string, unknown>> = [];
+  await page.route("**/api/transactions", (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const body = route.request().postDataJSON();
+    created.push(body);
+    return route.fulfill(json({ ...tx(`new-${created.length}`, body.name, body.value), category_id: body.category_id }));
+  });
+  await page.goto("/contas");
+  await expect(page.getByRole("heading", { name: "Carteira" })).toBeVisible();
+  const input = page.getByPlaceholder("Pergunte ao FINNOS…");
+  await expect(async () => {
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("finnos-ai-open")));
+    await expect(input).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15000 });
+  await input.fill("café 3,80 e uber 14 hoje");
+  await input.press("Enter");
+  const proposal = page.getByTestId("ai-proposal");
+  await expect(proposal.getByTestId("ai-proposal-entry")).toHaveCount(2);
+  await expect(page.getByTestId("ai-steps")).toContainText("Preparando os lançamentos");
+  expect(created).toHaveLength(0);
+  // Correct the first value, untick nothing, then confirm.
+  await proposal.getByLabel("Valor de Café").fill("4,20");
+  await proposal.getByLabel("Valor de Café").blur();
+  await proposal.getByTestId("ai-proposal-apply").click();
+  await expect(page.getByTestId("ai-proposal-status")).toContainText("Feito · 2");
+  expect(created.map((c) => [c.name, c.value, c.category_id])).toEqual([["Café", 4.2, null], ["Uber", 14, "trans"]]);
+  expect(paidAsk.calls).toBe(0);
+});

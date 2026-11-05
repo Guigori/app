@@ -7,6 +7,7 @@ import { addMonth, todayISO } from "@/lib/format";
 import { norm, parseQuestion, type FinnQuery } from "@/lib/finnQuestion";
 import { answer, type FinnAnswer } from "@/lib/finnAnalyst";
 import type { FinnMessage } from "@/lib/aiConversations";
+import { proposalFor, type Proposal } from "@/lib/finnActions";
 
 const safe = async <T,>(work: Promise<T>): Promise<T | null> => { try { return await work; } catch { return null; } };
 
@@ -46,16 +47,63 @@ export async function askFinnAnalyst(text: string, history: FinnMessage[], alias
     : recent ?? [];
   const wants = (ops: FinnQuery["op"][]) => ops.includes(query.op);
   const cycleMeta = wants(["budget"]) ? await safe(fetchCurrentBudgetCycle()) : null;
-  const [budget, cycle, calendar, flow, subscriptions, radar] = await Promise.all([
+  const [budget, cycle, calendar, flow, nextFlow, subscriptions, radar] = await Promise.all([
     wants(["budget"]) ? safe(fetchBudget(month)) : null,
     cycleMeta?.id ? safe(fetchBudgetCycleProgress(cycleMeta.id)) : null,
     wants(["forecast"]) ? safe(fetchCalendar(month)) : null,
-    wants(["forecast", "upcoming"]) ? safe(fetchFlow({ month, months: 2 })) : null,
+    wants(["forecast", "upcoming", "runway"]) ? safe(fetchFlow({ month, months: 2 })) : null,
+    wants(["runway"]) ? safe(fetchFlow({ month: addMonth(month, 1), months: 2 })) : null,
     wants(["subscriptions"]) ? safe(fetchSubscriptions()) : null,
     safe(fetchRadar()),
   ]);
   return answer(query, {
     today, transactions, categories: categories ?? [], accounts: accounts ?? [],
-    budget, cycle, calendar, flow, subscriptions: subscriptions?.items ?? [], radar: radar?.items ?? [],
+    budget, cycle, calendar, flow, nextFlow, subscriptions: subscriptions?.items ?? [], radar: radar?.items ?? [],
   });
+}
+
+export interface FinnProposalReply {
+  text: string;
+  steps: string[];
+  proposal?: Proposal;
+  followUps?: string[];
+}
+
+/**
+ * A message that asks to change something ("café 3,80 e táxi 14 hoje", "mova a Padaria para
+ * Alimentação", "encontre assinaturas"): a proposal to review, or null when it asks nothing of the sort.
+ */
+export async function askFinnProposal(text: string, aliases: Record<string, string> = {}): Promise<FinnProposalReply | null> {
+  const today = todayISO();
+  const month = today.slice(0, 7);
+  const [categories, accounts, transactions, subscriptions] = await Promise.all([
+    safe(fetchCategories()), safe(fetchAccounts()),
+    safe(fetchTransactions({ start_date: `${addMonth(month, -11)}-01`, end_date: `${month}-31` })),
+    safe(fetchSubscriptions()),
+  ]);
+  const found = proposalFor(text, {
+    today, accounts: accounts ?? [], categories: categories ?? [], transactions: transactions ?? [],
+    subscriptions: subscriptions?.items ?? [], aliases,
+  });
+  if (!found) return null;
+  if ("error" in found) return { text: found.error, steps: [] };
+  if (found.kind === "register") {
+    const n = found.entries.length;
+    return {
+      text: `Preparei ${n === 1 ? "1 lançamento" : `${n} lançamentos`}. Confira, corrija o que precisar e registre.${found.unknown.length ? ` Não entendi: "${found.unknown.join("\", \"")}".` : ""}`,
+      steps: ["Preparando os lançamentos"], proposal: found,
+    };
+  }
+  if (found.kind === "recategorize") {
+    if (!found.ids.length) return { text: `Não encontrei lançamentos de "${found.term}" fora de ${found.toName}.`, steps: ["Procurando os lançamentos"] };
+    return {
+      text: `Encontrei ${found.ids.length === 1 ? "1 lançamento" : `${found.ids.length} lançamentos`} de "${found.term}" que podem ir para ${found.toName}.`,
+      steps: [`Lançamentos encontrados: ${found.ids.length}`], proposal: found,
+    };
+  }
+  if (!found.candidates.length) return { text: "Não encontrei pagamentos que se repetem todo mês fora das suas assinaturas.", steps: ["Procurando repetições no último ano"], followUps: ["Quais assinaturas eu pago?"] };
+  return {
+    text: `Encontrei ${found.candidates.length === 1 ? "1 pagamento que chega" : `${found.candidates.length} pagamentos que chegam`} todo mês e ainda não ${found.candidates.length === 1 ? "está" : "estão"} nas suas assinaturas:`,
+    steps: ["Procurando repetições no último ano"], proposal: found,
+  };
 }

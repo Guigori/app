@@ -19,6 +19,8 @@ export interface AnalystData {
   cycle?: BudgetCycleProgress | null;
   calendar?: CalendarMonth | null;
   flow?: Flow | null;
+  /** The next month's cash flow, when a question reaches into it ("dura até o dia 15?"). */
+  nextFlow?: Flow | null;
   subscriptions?: SubscriptionItem[];
   radar?: RadarSignal[];
 }
@@ -32,6 +34,8 @@ export interface FinnAnswer {
   followUps: string[];
   links: { label: string; to: string }[];
   query: FinnQuery;
+  /** What the analyst did to answer, shown as "✓ …" lines. */
+  steps?: string[];
 }
 
 const money = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v).replace(/ /g, " ");
@@ -351,6 +355,122 @@ function radarAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
   };
 }
 
+const expenseRows = (data: AnalystData, from: string, to: string) =>
+  data.transactions.filter((tx) => tx.type === "despesa" && tx.status === "pago" && counts(tx) && tx.date >= from && tx.date <= to);
+const isoDay = (month: string, day: number) => {
+  const last = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
+  return `${month}-${String(Math.min(day, last)).padStart(2, "0")}`;
+};
+
+/** "Onde estou gastando mais que o normal?": this month so far against the same days of the 3 previous months. */
+function unusualAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
+  const month = data.today.slice(0, 7);
+  const day = Number(data.today.slice(8, 10));
+  const byCategory = (rows: Transaction[]) => {
+    const out = new Map<string, { name: string; total: number }>();
+    for (const tx of rows) {
+      const key = tx.category_id ?? "none";
+      const g = out.get(key) ?? { name: tx.category_name ?? "Sem categoria", total: 0 };
+      g.total += tx.value;
+      out.set(key, g);
+    }
+    return out;
+  };
+  const now = byCategory(expenseRows(data, `${month}-01`, data.today));
+  const past = [1, 2, 3].map((n) => addMonth(month, -n)).map((m) => byCategory(expenseRows(data, `${m}-01`, isoDay(m, day))));
+  const rows = [...now.entries()].map(([key, g]) => {
+    const usual = past.reduce((s, map) => s + (map.get(key)?.total ?? 0), 0) / 3;
+    return { name: g.name, now: round(g.total), usual: round(usual), diff: round(g.total - usual) };
+  }).filter((r) => r.diff >= 5).sort((a, b) => b.diff - a.diff).slice(0, 5);
+  const top = rows[0];
+  const ratio = top && top.usual ? top.now / top.usual : null;
+  return {
+    text: top
+      ? `${top.name} está ${ratio && ratio >= 1.8 ? `${times(ratio)}× o normal` : `**${money(top.diff)}** acima do normal`} até hoje (${money(top.now)} contra ${money(top.usual)} nos mesmos dias de um mês comum). Voltando ao normal, você economiza cerca de **${money(top.diff)}** por mês.`
+      : "Nada está acima do normal neste mês até agora.",
+    visual: rows.length ? { title: "Acima de um mês comum", chart: { type: "hbar", data: rows.map((r) => ({ name: r.name, value: r.diff })) } } : undefined,
+    insight: noticed(data, q),
+    followUps: top ? [`Maiores lançamentos de ${top.name} neste mês`, `Evolução de ${top.name} por mês`] : ["Para onde foi meu dinheiro este mês?"],
+    links: [{ label: "Ver no Caixa", to: `/transacoes?aba=caixa&month=${month}&metric=despesas` }],
+    query: q,
+    steps: [`Comparando com um mês comum (os mesmos ${day} dias dos 3 meses anteriores)`],
+  };
+}
+
+/** "Meu dinheiro dura até o dia 15?": today's balance, the day-to-day pace and what is scheduled until then. */
+function runwayAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
+  const month = data.today.slice(0, 7);
+  const todayDay = Number(data.today.slice(8, 10));
+  const upcoming = [...(data.flow?.upcoming ?? []), ...(data.nextFlow?.upcoming ?? [])].filter((u) => u.date >= data.today);
+  const payday = upcoming.find((u) => u.type === "receita");
+  const target = q.day
+    ? (q.day > todayDay ? isoDay(month, q.day) : isoDay(addMonth(month, 1), q.day))
+    : payday?.date ?? isoDay(month, 31);
+  const start = round(data.accounts.filter((a) => a.active !== false).reduce((s, a) => s + a.balance, 0));
+  // Day-to-day spending: the last 30 days of paid expenses that are not fixed bills or installments.
+  const from = new Date(`${data.today}T12:00:00`); from.setDate(from.getDate() - 29);
+  const fromIso = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}-${String(from.getDate()).padStart(2, "0")}`;
+  // Kept unrounded: it is multiplied by the days, and only the shown figure is rounded.
+  const pace = expenseRows(data, fromIso, data.today).filter((tx) => !tx.fixed && !tx.installment).reduce((s, tx) => s + tx.value, 0) / 30;
+  const days = Math.max(1, Math.round((new Date(`${target}T12:00:00`).getTime() - new Date(`${data.today}T12:00:00`).getTime()) / 86_400_000));
+  // The payday itself is what the question waits for, so it is not counted in.
+  const until = upcoming.filter((u) => u.date <= target && !(payday && u === payday && !q.day));
+  const at = (iso: string) => {
+    const elapsed = Math.round((new Date(`${iso}T12:00:00`).getTime() - new Date(`${data.today}T12:00:00`).getTime()) / 86_400_000);
+    const scheduled = until.filter((u) => u.date <= iso).reduce((s, u) => s + (u.type === "receita" ? u.value : -u.value), 0);
+    return round(start - pace * elapsed + scheduled);
+  };
+  const points = Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(`${data.today}T12:00:00`); d.setDate(d.getDate() + Math.round((days * i) / 4));
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return { iso, name: `${iso.slice(8, 10)}/${iso.slice(5, 7)}`, value: at(iso) };
+  });
+  const end = points[points.length - 1].value;
+  const firstNegative = points.find((p) => p.value < 0);
+  const when = `${target.slice(8, 10)}/${target.slice(5, 7)}`;
+  return {
+    text: end >= 0
+      ? `Sim. No seu ritmo atual, devem sobrar cerca de **${money(end)}** em ${when}.`
+      : `Não: no seu ritmo atual, o saldo fica negativo por volta de ${firstNegative?.name ?? when}, e faltariam cerca de **${money(-end)}** em ${when}.`,
+    visual: { title: "Saldo dia a dia", chart: { type: "line", data: points.map(({ name, value }) => ({ name, value })), valueLabel: "Saldo" } },
+    insight: `Contei ${money(pace)} por dia de gastos do dia a dia (média dos últimos 30 dias) e ${plural(until.length, "lançamento previsto", "lançamentos previstos")} até ${when}.`,
+    followUps: ["Onde estou gastando mais que o normal?", "O que ainda vence este mês?"],
+    links: [{ label: "Ver projeção no Caixa", to: `/transacoes?aba=caixa&month=${month}&metric=projecao` }],
+    query: q,
+    steps: ["Calculando o seu ritmo de gastos", `Somando o que está previsto até ${when}`],
+  };
+}
+
+/** "Quais meses custaram mais este ano e por quê?": totals per month and what weighed most in each. */
+function monthsAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
+  const months = q.period.months.filter((m) => m <= data.today.slice(0, 7));
+  const rows = months.map((m) => {
+    const txs = expenseRows(data, `${m}-01`, `${m}-31`);
+    const byCat = new Map<string, number>();
+    for (const tx of txs) byCat.set(tx.category_name ?? "Sem categoria", (byCat.get(tx.category_name ?? "Sem categoria") ?? 0) + tx.value);
+    const [topName, topValue] = [...byCat.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["—", 0];
+    return { month: m, total: round(txs.reduce((s, tx) => s + tx.value, 0)), topName, topValue: round(topValue) };
+  });
+  const ranked = rows.filter((r) => r.total > 0).sort((a, b) => b.total - a.total);
+  const [first, second] = ranked;
+  const label = (m: string) => ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"][Number(m.slice(5, 7)) - 1];
+  return {
+    text: first
+      ? `${cap(label(first.month))} liderou com **${money(first.total)}**, principalmente por causa de ${first.topName} (${money(first.topValue)}).${second ? ` Em seguida veio ${label(second.month)}, puxado por ${second.topName}.` : ""}`
+      : `Não encontrei despesas ${inP(q.period)}.`,
+    visual: ranked.length ? {
+      title: "Despesas por mês",
+      chart: { type: "bar", data: rows.map((r) => ({ name: shortMonth(r.month), value: r.total })), valueLabel: "Total" },
+      items: ranked.slice(0, 5).map((r) => ({ label: cap(label(r.month)), value: money(r.total), detail: `principal: ${r.topName} (${money(r.topValue)})` })),
+    } : undefined,
+    insight: noticed(data, q),
+    followUps: first ? [`Maiores lançamentos de ${label(first.month)}`, `Evolução de ${first.topName} por mês`] : ["Para onde foi meu dinheiro este mês?"],
+    links: [{ label: "Ver no Caixa", to: `/transacoes?aba=caixa&month=${data.today.slice(0, 7)}&metric=despesas` }],
+    query: q,
+    steps: [`Comparando os meses desde ${label(months[0] ?? data.today.slice(0, 7))}`, "Vendo o que pesou em cada mês"],
+  };
+}
+
 /** An establishment keeps the spelling of its lançamentos ("Ônibus", not "Onibus"). */
 function spelled(e: Entity, data: AnalystData): Entity {
   if (e.kind !== "merchant") return e;
@@ -375,6 +495,9 @@ export function answer(parsed: FinnQuery, data: AnalystData): FinnAnswer {
     case "budget": return budgetAnswer(q, data);
     case "subscriptions": return subscriptionsAnswer(q, data);
     case "radar": return radarAnswer(q, data);
+    case "unusual": return unusualAnswer(q, data);
+    case "runway": return runwayAnswer(q, data);
+    case "months": return monthsAnswer(q, data);
     default: return totalAnswer(q, data);
   }
 }

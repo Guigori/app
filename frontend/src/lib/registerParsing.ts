@@ -117,7 +117,8 @@ export function parseRegisterText(
     .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const name = text
     .replace(amount?.raw ?? "", " ")
-    .replace(accountWords.length ? new RegExp(`\\b(${accountWords.join("|")})\\b`, "gi") : /$^/, " ")
+    // Letter-aware edges: "\\b" fails next to an accented letter ("Itaú").
+    .replace(accountWords.length ? new RegExp(`(?<![\\p{L}\\d])(${accountWords.join("|")})(?![\\p{L}\\d])`, "giu") : /$^/, " ")
     .replace(/\b(gastei|paguei|comprei|recebi|ganhei|transferi|hoje|ontem|anteontem|reais|real|no pix|pelo pix|com o|com a|no|na|de|do|da|em|pelo|pela|para o|para a|para)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
