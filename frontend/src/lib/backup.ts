@@ -17,10 +17,21 @@ function download(name: string, content: string, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// Goals and investments of local mode live in their own storage keys.
+const EXTRA_PREFIXES = ["finnos:goals:v1:", "finnos:investments:v1:"];
+function localExtras(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && EXTRA_PREFIXES.some((p) => key.startsWith(p))) out[key] = localStorage.getItem(key) ?? "[]";
+  }
+  return out;
+}
+
 /** Full backup: the server's checksummed export, or the whole local database. */
 export async function downloadBackup(): Promise<void> {
   const data = isLocalMode()
-    ? { format: "finnos-backup", version: 1, source: "local", exported_at: new Date().toISOString(), local_db: readDb() }
+    ? { format: "finnos-backup", version: 1, source: "local", exported_at: new Date().toISOString(), local_db: readDb(), local_extras: localExtras() }
     : await apiGet<Record<string, unknown>>("/finance/backup");
   download(`finnos-backup-${stamp()}.json`, JSON.stringify(data, null, 2), "application/json");
   markBackupDownloaded();
@@ -123,6 +134,10 @@ export async function restoreBackup(file: File): Promise<RestoreResult> {
     const db = data.local_db as LocalDb;
     if (!Array.isArray(db.accounts) || !Array.isArray(db.transactions) || !Array.isArray(db.categories)) throw new Error("Backup incompleto.");
     writeDb({ ...db, revision: Math.max(readDb().revision ?? 0, db.revision ?? 0) + 1 });
+    const extras = (data.local_extras ?? {}) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(extras)) {
+      if (EXTRA_PREFIXES.some((p) => key.startsWith(p)) && typeof value === "string") localStorage.setItem(key, value);
+    }
     return { restored: { transactions: Array.isArray(db.transactions) ? db.transactions.length : 0 } };
   }
   if (data.source === "local") throw new Error("Backup do modo local: use “Criar conta completa” no modo local para levar esses dados.");
