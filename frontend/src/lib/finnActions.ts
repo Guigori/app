@@ -80,13 +80,23 @@ function categoryFor(name: string, guessed: string | null, ctx: ActionContext): 
   return habit ?? guessed;
 }
 
-/** "café 3,80 e táxi 14 hoje", "anota 45 de mercado no nubank": one entry per amount. */
-export function registerProposal(text: string, ctx: ActionContext): Proposal | null {
+/**
+ * "café 3,80 e táxi 14 hoje", "anota 45 de mercado no nubank": one entry per amount.
+ * `intent: true` is for the register screen, where every sentence is meant to be registered.
+ */
+export function registerProposal(text: string, ctx: ActionContext, { intent = false }: { intent?: boolean } = {}): Proposal | null {
   const q = norm(text);
-  // norm() drops "?", so the question mark is read from the original text.
-  if (text.includes("?") || QUESTION.test(q) || /\b(transferi|transferencia)\b/.test(q)) return null;
-  // "uber nos últimos 3 meses" is about a period, not something to register.
-  if (/\b(meses|semanas|anos|vezes|ultim[oa]s?|media|total|compar\w*|evolucao|porcento)\b|%/.test(q)) return null;
+  if (/\b(transferi|transferencia|transfira)\b/.test(q)) return null;
+  if (!intent) {
+    // norm() drops "?", so the question mark is read from the original text.
+    if (text.includes("?") || QUESTION.test(q)) return null;
+    // "uber nos últimos 3 meses" is about a period, not something to register.
+    if (/\b(meses|semanas|anos|vezes|ultim[oa]s?|media|total|compar\w*|evolucao|porcento)\b|%/.test(q)) return null;
+  }
+  // A time of day ("às 9h00") is not an amount: set it aside and say so.
+  const TIME = /(?:(?<=^|\s)(?:às|as|a)\s+)?(?<![\d,.])\d{1,2}(?:h\d{0,2}|:\d{2})(?:min)?\b/giu;
+  const times = (text.match(TIME) ?? []).map((t) => t.trim());
+  text = text.replace(TIME, " ").replace(/\s+/g, " ").trim();
   const asked = LEAD_VERB.test(text);
   // Split on "e", ";", "+" and on commas that are not a decimal separator ("3,80").
   const clauses = text.replace(LEAD_VERB, "")
@@ -95,12 +105,12 @@ export function registerProposal(text: string, ctx: ActionContext): Proposal | n
   if (!withAmount.length) return null;
   // A bare list ("café 3,80 e táxi 14") counts as a request; anything else needs a verb.
   const shortList = withAmount.length >= 2 || clauses.length <= 2;
-  if (!asked && !REGISTER_VERB.test(q) && !shortList) return null;
+  if (!intent && !asked && !REGISTER_VERB.test(q) && !shortList) return null;
   const account = defaultAccount(ctx);
   if (!account) return null;
   const whole = parseRegisterText(text, { accounts: ctx.accounts, categories: ctx.categories, today: ctx.today });
   const entries: ProposedEntry[] = [];
-  const unknown: string[] = [];
+  const unknown: string[] = [...times];
   for (const clause of clauses) {
     const parsed = parseRegisterText(clause, { accounts: ctx.accounts, categories: ctx.categories, today: ctx.today });
     const leftover = norm(clause).replace(/\b(hoje|ontem|anteontem|e|de|da|do|no|na|com|um|uma|reais|real)\b/g, "").trim();
@@ -108,7 +118,7 @@ export function registerProposal(text: string, ctx: ActionContext): Proposal | n
       if (leftover && !/^(dia \d+|\d{1,2}\/\d{1,2})$/.test(leftover)) unknown.push(clause);
       continue;
     }
-    const name = parsed.name || "Lançamento";
+    const name = parsed.name.replace(/\b(por|pelo|pela)\b/gi, " ").replace(/\s+/g, " ").trim() || "Lançamento";
     entries.push({
       key: `${entries.length}-${name}`,
       include: true,

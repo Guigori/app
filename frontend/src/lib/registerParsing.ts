@@ -64,7 +64,7 @@ function findDate(text: string, today: string): string | null {
 /** Keyword → words expected in the user's category names. */
 const CATEGORY_HINTS: Array<[RegExp, string[]]> = [
   [/\b(uber|99|taxi|onibus|metro|gasolina|combustivel|estacionamento|pedagio)\b/, ["transporte"]],
-  [/\b(cafe|almoco|jantar|restaurante|lanche|ifood|padaria|pizza|hamburguer)\b/, ["alimentacao", "comida", "refeic", "restaurante"]],
+  [/\b(cafe|almoco|jantar|restaurante|lanche|ifood|padaria|pizza|hamburguer|pao|acai|sorvete|salgado|marmita)\b/, ["alimentacao", "comida", "refeic", "restaurante"]],
   [/\b(mercado|supermercado|feira|hortifruti)\b/, ["mercado", "supermercado"]],
   [/\b(aluguel|luz|energia|agua|internet|condominio|gas)\b/, ["moradia", "casa"]],
   [/\b(netflix|spotify|assinatura|prime|disney|youtube)\b/, ["assinatura", "lazer"]],

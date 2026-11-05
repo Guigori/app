@@ -2,20 +2,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { parseReceiptText, parseRegisterText } from "@/lib/registerParsing";
+import { registerProposal, type Proposal, type ProposalState, type ProposedEntry } from "@/lib/finnActions";
+import { applyProposal, undoProposal } from "@/lib/finnApply";
+import { readMemory } from "@/lib/finnMemory";
+import { ProposalCard } from "@/components/ai/ProposalCard";
 import { getRegisterDefault } from "@/lib/registerPreferences";
 import { evaluateExpression, KEYS, OPS, pressKey, typedDisplay } from "@/lib/registerKeypad";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { TransactionInput } from "@/types/finnos";
-import { createTransaction, fetchAccounts, fetchCards, fetchCategories } from "@/lib/data";
+import { createTransaction, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getAccountPaymentMethods } from "@/lib/accountPaymentPreferences";
-import { formatBRL, isISODate, todayISO } from "@/lib/format";
+import { addMonth, formatBRL, isISODate, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { ArrowLeft, ArrowUp, Camera, Check, ChevronRight, Mic, Paperclip, Plus, X, Wallet, CreditCard, Landmark, Repeat2, StickyNote, Bell, Tag, FolderOpen, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Delete, MoreVertical, Search, Ban, WandSparkles, ReceiptText, Square } from "lucide-react";
 
-type Page = "entry" | "pay" | "start" | "manual" | "details" | "categories" | "accounts" | "installments" | "more" | "voice" | "receipt" | "review" | "done";
+type Page = "entry" | "pay" | "start" | "manual" | "details" | "categories" | "accounts" | "installments" | "more" | "voice" | "receipt" | "review" | "recognized" | "done";
 type Kind = "Despesa" | "Receita" | "Transferência";
 const format = (n: string) => (Number(n || 0) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const KIND_UI: Record<Kind, { icon: typeof ArrowDownLeft; tint: string; amount: string }> = {
@@ -123,10 +127,30 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
     if (parsed.name) setName(parsed.name);
     setHistory([]); setPage("entry");
   };
+  // What was heard or typed becomes one entry per amount, reviewed before anything is saved
+  // ("café 3,80 e uber 14 hoje"). Transfers keep the single-entry form, which knows both accounts.
+  const [recognized, setRecognized] = useState<{ heard: string; proposal: Proposal; state: ProposalState } | null>(null);
+  const habitsQuery = useQuery({
+    queryKey: ["transactions", "register-habits"],
+    queryFn: () => fetchTransactions({ start_date: `${addMonth(todayISO().slice(0, 7), -5)}-01`, end_date: todayISO() }),
+    staleTime: 60_000,
+  });
   const interpret = (source = text) => {
     if (!source.trim()) return;
+    const found = registerProposal(source, {
+      today: todayISO(), accounts, categories, transactions: habitsQuery.data ?? [], subscriptions: [], aliases: readMemory().aliases,
+    }, { intent: true });
+    if (found?.kind === "register") {
+      setRecognized({ heard: source.trim(), proposal: found, state: { status: "pending" } });
+      go("recognized");
+      return;
+    }
     applyParsed(parseRegisterText(source, { accounts, categories, today: todayISO() }));
   };
+  const openInForm = (entry: ProposedEntry) => applyParsed({
+    value: entry.value, kind: entry.type === "receita" ? "Receita" : "Despesa", date: entry.date,
+    accountId: entry.accountId, categoryId: entry.categoryId, name: entry.name,
+  });
   // Voice: the browser's own speech recognition (pt-BR), no server involved.
   const startVoice = () => {
     const Speech = (window as unknown as { SpeechRecognition?: new () => SpeechLike; webkitSpeechRecognition?: new () => SpeechLike }).SpeechRecognition
@@ -336,6 +360,22 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
       {page === "installments" && <><h2 className="mb-6 text-xl font-semibold">Parcelamento</h2><div className="grid grid-cols-4 gap-2">{[1,2,3,4,5,6,10,12].map(n => <button key={n} onClick={() => setInstallments(n)} className={"rounded-xl p-3 " + (installments === n ? "bg-primary text-primary-foreground" : "bg-muted")}>{n}x</button>)}</div><p className="my-8 text-muted-foreground">Valor por parcela: {format(String(Number(value || 0) / installments))}</p><button onClick={back} className={button + " w-full bg-primary text-primary-foreground"}>Concluir</button></>}
       {page === "more" && <><h2 className="mb-5 text-xl font-semibold">Mais opções</h2><div className="space-y-1">{row("Data", date, () => document.getElementById("finnos-register-date")?.focus())}<input id="finnos-register-date" type="date" value={date} onChange={e => setDate(e.target.value)} className="mb-3 w-full rounded-xl bg-muted p-3"/>{row("Forma de pagamento", selectedCard ? "Crédito" : payment, () => {setDestinationPicker(false);go("accounts")})}<div className="flex items-center justify-between border-b border-border py-4"><span className="flex items-center gap-3"><Repeat2 size={18}/>Recorrência</span><button onClick={() => setRecurring(!recurring)} className="text-primary">{recurring ? "Sim" : "Não"}</button></div><label className="flex items-center gap-3 pt-4"><StickyNote size={18}/>Nota / Observação</label><textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Opcional" className="w-full rounded-xl bg-muted p-3"/><label className="flex items-center gap-3 pt-4"><Paperclip size={18}/>Anexos {attachment && "· " + attachment}</label><input type="file" accept="image/*,.pdf" onChange={e => setAttachment(e.target.files?.[0]?.name || "")} className="w-full py-3 text-sm"/><div className="flex items-center justify-between border-b border-border py-4"><span className="flex items-center gap-3"><Bell size={18}/>Lembrete</span><button onClick={() => setReminder(!reminder)} className="text-primary">{reminder ? "Sim" : "Não"}</button></div><label className="flex items-center gap-3 pt-4"><FolderOpen size={18}/>Projeto</label><input value={project} onChange={e => setProject(e.target.value)} placeholder="Opcional" className="w-full rounded-xl bg-muted p-3"/><label className="flex items-center gap-3 pt-4"><Tag size={18}/>Tags</label><input value={tags} onChange={e => setTags(e.target.value)} placeholder="Adicionar tags" className="w-full rounded-xl bg-muted p-3"/></div><button onClick={back} className={button + " mt-7 w-full bg-primary text-primary-foreground"}>Concluir</button></>}
       {page === "voice" && <div className="flex h-full flex-col items-center justify-center pb-10 text-center"><button type="button" onClick={listening ? stopVoice : startVoice} aria-label={listening ? "Parar" : "Falar"} className={"grid size-24 place-items-center rounded-full transition-colors " + (listening ? "bg-primary text-primary-foreground" : "bg-muted text-primary")}>{listening ? <Square size={30}/> : <Mic size={40}/>}</button>{listening ? <span className="mt-3 h-1 w-16 animate-pulse rounded-full bg-primary/60" aria-hidden="true"/> : null}<p className="mt-6 min-h-12 max-w-xs text-lg">{text || <span className="text-muted-foreground">{listening ? "Pode falar…" : "Toque e diga, por exemplo, “Paguei 45 no Uber”"}</span>}</p></div>}
+      {page === "recognized" && recognized && recognized.proposal.kind === "register" ? <div data-testid="register-recognized">
+        <h2 className="text-center text-xl font-semibold">Entendi <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-sm text-primary-foreground">{recognized.proposal.entries.length}</span></h2>
+        <p className="mt-2 text-center text-sm text-muted-foreground">“{recognized.heard}”</p>
+        <ProposalCard proposal={recognized.proposal} state={recognized.state} categories={categories} accounts={accounts}
+          onChange={(proposal) => setRecognized((r) => (r ? { ...r, proposal } : r))}
+          onCancel={() => { setRecognized(null); back(); }}
+          onApply={async () => { const state = await applyProposal(recognized.proposal); setRecognized((r) => (r ? { ...r, state } : r)); await queryClient.invalidateQueries(); }}
+          onUndo={async () => { if (recognized.state.status !== "applied") return; await undoProposal(recognized.state); setRecognized((r) => (r ? { ...r, state: { status: "undone" } } : r)); await queryClient.invalidateQueries(); }} />
+        {recognized.proposal.unknown.length ? <p className="mt-3 text-center text-xs text-muted-foreground" data-testid="register-unknown">Não usei: {recognized.proposal.unknown.map((u) => `“${u}”`).join(", ")}</p> : null}
+        {recognized.state.status === "pending" && recognized.proposal.entries.length === 1 ? (
+          <button type="button" onClick={() => openInForm((recognized.proposal as Extract<Proposal, { kind: "register" }>).entries[0])} className="mt-3 w-full text-center text-sm font-semibold text-primary">Abrir no formulário completo</button>
+        ) : null}
+        {recognized.state.status === "applied" || recognized.state.status === "undone" ? (
+          <button type="button" onClick={() => { setRecognized(null); setText(""); setHistory([]); setPage("entry"); onClose?.(); }} className={button + " mt-4 w-full bg-primary text-primary-foreground"} data-testid="register-recognized-done">Concluir</button>
+        ) : null}
+      </div> : null}
       {page === "receipt" && <div className="flex h-full flex-col items-center justify-center pb-10 text-center"><ReceiptText size={44} className="text-primary motion-safe:animate-pulse"/><p className="mt-5 font-medium">Lendo o recibo…</p><div className="mt-4 h-1.5 w-48 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${ocrProgress ?? 5}%` }}/></div>{attachment ? <p className="mt-3 max-w-xs truncate text-xs text-muted-foreground">{attachment}</p> : null}</div>}
       {page === "done" && <div className="py-10 text-center"><div className="mx-auto grid size-28 place-items-center rounded-full border-2 border-primary text-primary"><Check size={60}/></div><h2 className="mt-8 text-2xl">{saveStatus === "pending" ? "Salvo neste dispositivo" : "Registro realizado!"}</h2><p className="mt-5 text-3xl">{format(value)}</p><p className="mt-2 text-muted-foreground">{displayName}</p><p className="mt-8 text-sm text-muted-foreground">{saveStatus === "pending" ? "Aguardando conexão para sincronizar. Não apague os dados do aplicativo enquanto houver registros pendentes." : "Movimentação sincronizada com o FINNOS."}</p><button onClick={() => {setText("");setName("");setValue("");setSaveStatus(null);setExpr("");setPage("entry")}} className={button + " mt-8 w-full bg-primary text-primary-foreground"}>Novo registro</button></div>}
     </main>
