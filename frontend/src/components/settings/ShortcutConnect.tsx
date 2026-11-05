@@ -1,16 +1,17 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CheckCircle2, Copy, Loader2, Plus, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, Download, Loader2, Plus, Trash2, XCircle } from "lucide-react";
 import { apiDelete, apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 interface ShortcutToken { id: string; label: string; hint: string; created_at: string; last_used_at: string | null }
 interface Activity { at: string; action: string; ok: boolean; mensagem: string }
 
-/** A published ready-made shortcut (iCloud link). It asks for the code when added. */
-const READY_SHORTCUT = import.meta.env.VITE_FINNOS_SHORTCUT_URL as string | undefined;
+/** The signed ready-made shortcut (scripts/build_shortcut.py). It asks for the connection code when added. */
+const READY_SHORTCUT = "/atalhos/registrar-no-finnos.shortcut";
 
 async function copy(value: string, done = "Copiado.") {
   try { await navigator.clipboard.writeText(value); toast.success(done); } catch { toast.error("Não consegui copiar. Selecione e copie o texto."); }
@@ -32,8 +33,10 @@ function Code({ value }: { value: string }) {
 export function ShortcutConnect() {
   const queryClient = useQueryClient();
   const [label, setLabel] = useState("iPhone");
+  // "address|code": the one thing the ready-made shortcut asks for, so it works on any domain.
   const [fresh, setFresh] = useState<string | null>(null);
   const api = `${window.location.origin}/api/shortcuts`;
+  const addToShortcuts = () => { if (fresh) void copy(fresh, "Código copiado. Cole quando o Atalhos pedir."); };
 
   const list = useQuery({ queryKey: ["shortcut-tokens"], queryFn: () => apiGet<ShortcutToken[]>("/integrations/shortcut-tokens") });
   const activity = useQuery({ queryKey: ["shortcut-activity"], queryFn: () => apiGet<Activity[]>("/integrations/shortcut-activity") });
@@ -41,7 +44,7 @@ export function ShortcutConnect() {
 
   const create = useMutation({
     mutationFn: () => apiPost<ShortcutToken & { token: string }>("/integrations/shortcut-tokens", { label: label.trim() || "iPhone" }),
-    onSuccess: async (data) => { setFresh(data.token); await refresh(); },
+    onSuccess: async (data) => { setFresh(`${window.location.origin}|${data.token}`); await refresh(); },
     onError: (error) => toast.error(getApiErrorMessage(error, "Não foi possível gerar o código agora.")),
   });
   const revoke = useMutation({
@@ -58,13 +61,12 @@ export function ShortcutConnect() {
   return (
     <div className="space-y-5 text-sm" data-testid="shortcut-connect">
       <section className="space-y-2">
-        <h3 className="font-semibold">1. Gere o código do atalho</h3>
+        <h3 className="font-semibold">1. Gere o código de conexão</h3>
         <p className="text-muted-foreground">O código só serve para listar suas contas, cartões e categorias e para criar lançamentos. Ele não abre o resto da sua conta e pode ser desconectado a qualquer momento.</p>
         {fresh ? (
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3" data-testid="shortcut-fresh-token">
-            <p className="font-semibold">Copie agora: ele não aparece de novo.</p>
+            <p className="font-semibold">Guarde até colar no Atalhos: ele não aparece de novo.</p>
             <Code value={fresh} />
-            <button type="button" onClick={() => setFresh(null)} className="mt-2 text-xs font-semibold text-primary">Já copiei</button>
           </div>
         ) : (
           <div className="flex gap-2">
@@ -87,14 +89,16 @@ export function ShortcutConnect() {
       </section>
 
       <section className="space-y-2">
-        <h3 className="font-semibold">2. Coloque o atalho no iPhone</h3>
-        {READY_SHORTCUT ? (
-          <a href={READY_SHORTCUT} className="flex h-11 items-center justify-center rounded-2xl bg-primary font-semibold text-primary-foreground" data-testid="shortcut-ready">Adicionar o atalho "Registrar no FINNOS"</a>
-        ) : null}
-        <details className="rounded-2xl border border-border p-3" open={!READY_SHORTCUT}>
-          <summary className="cursor-pointer font-medium">{READY_SHORTCUT ? "Ou monte você mesmo" : "Monte no app Atalhos"} (uns 5 minutos)</summary>
+        <h3 className="font-semibold">2. Adicione o atalho pronto</h3>
+        <a href={READY_SHORTCUT} download="Registrar no FINNOS.shortcut" onClick={addToShortcuts} aria-disabled={!fresh}
+          className={cn("flex h-12 items-center justify-center gap-2 rounded-2xl font-semibold", fresh ? "bg-primary text-primary-foreground" : "pointer-events-none bg-muted text-muted-foreground")} data-testid="shortcut-ready">
+          <Download className="h-5 w-5" aria-hidden="true" />Adicionar ao Atalhos
+        </a>
+        <p className="text-muted-foreground">{fresh ? "O código já vai copiado. No iPhone, toque em Adicionar Atalho e cole o código quando ele pedir. Pronto: rode pela Siri (\"Registrar no FINNOS\"), pela tela de início ou pelo botão de Ação." : "Gere o código primeiro: o atalho pede por ele ao ser adicionado."}</p>
+        <details className="rounded-2xl border border-border p-3">
+          <summary className="cursor-pointer font-medium">Ou monte você mesmo (uns 5 minutos)</summary>
           <ol className="mt-3 space-y-3">
-            {step(1, <>Novo atalho → <strong>Obter Conteúdo do URL</strong>, com o endereço abaixo. Em <em>Cabeçalhos</em>, adicione <strong>Authorization</strong> com o valor <strong>Bearer</strong>, um espaço e o seu código.<Code value={`${api}/opcoes`} /></>)}
+            {step(1, <>Novo atalho → <strong>Obter Conteúdo do URL</strong>, com o endereço abaixo. Em <em>Cabeçalhos</em>, adicione <strong>Authorization</strong> com o valor <strong>Bearer</strong>, um espaço e o código (a parte que começa com fns_).<Code value={`${api}/opcoes`} /></>)}
             {step(2, <><strong>Pedir Entrada</strong> (Número): "Quanto foi?"</>)}
             {step(3, <>Para cada lista, use <strong>Obter Valor do Dicionário</strong> do resultado do passo 1 e depois <strong>Escolher da Lista</strong>: <code>tipos</code> (Despesa ou Receita), <code>formas</code> (Pix, Débito, Dinheiro, Vale, Crédito), <code>carteiras</code> (contas e cartões) e <code>categorias</code>.</>)}
             {step(4, <><strong>Pedir Entrada</strong> (Número): "Em quantas parcelas?", com 1 como padrão. Só vale no crédito.</>)}

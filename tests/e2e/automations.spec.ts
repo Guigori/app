@@ -94,10 +94,17 @@ test("an account connects a shortcut: the code shows once, then only its last di
   const box = page.getByTestId("shortcut-connect");
   await expect(box).toContainText("/api/shortcuts/lancamentos");
   await box.getByTestId("shortcut-create-token").click();
-  await expect(box.getByTestId("shortcut-fresh-token")).toContainText("fns_TESTE_codigo_de_exemplo_que_nao_vale_WXYZ");
-  await box.getByRole("button", { name: "Já copiei" }).click();
-  await expect(box).not.toContainText("fns_TESTE");
+  // The connection code carries the address, so the ready-made shortcut works on any domain.
+  await expect(box.getByTestId("shortcut-fresh-token")).toContainText(/https?:\/\/[^|]+\|fns_TESTE_codigo_de_exemplo_que_nao_vale_WXYZ/);
+  const ready = box.getByTestId("shortcut-ready");
+  await expect(ready).toHaveAttribute("href", "/atalhos/registrar-no-finnos.shortcut");
+  await expect(ready).not.toHaveAttribute("aria-disabled", "true");
   await expect(box.getByTestId("shortcut-tokens")).toContainText("•••• WXYZ");
-  await box.getByRole("button", { name: "Desconectar" }).click();
-  await expect(box.getByTestId("shortcut-tokens")).toHaveCount(0);
+  // The signed file is served as itself, not as the app page.
+  const file = await page.request.get("/atalhos/registrar-no-finnos.shortcut");
+  expect((await file.body()).subarray(0, 4).toString()).toBe("AEA1");
+  await page.reload();
+  await expect(page.getByTestId("shortcut-connect")).not.toContainText("fns_TESTE");
+  await page.getByTestId("shortcut-connect").getByRole("button", { name: "Desconectar" }).click();
+  await expect(page.getByTestId("shortcut-tokens")).toHaveCount(0);
 });

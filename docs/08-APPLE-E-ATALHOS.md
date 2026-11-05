@@ -22,7 +22,11 @@ Configurações → Integrações e automações.
 - O lançamento passa pela mesma validação e gravação do app (contas, cartões, faturas, parcelas) e fica com `source = "ios_shortcut"`.
 - O mesmo envio repetido em até 2 minutos (ou com o mesmo `id`) grava uma vez só.
 - Cada uso, aceito ou recusado, fica em `users/{uid}/integration_audit` e aparece em Atividade recente.
-- Atalho pronto para todos: publique o atalho pelo iCloud e defina `VITE_FINNOS_SHORTCUT_URL`; o botão "Adicionar o atalho" aparece.
+- Atalho pronto: `frontend/public/atalhos/registrar-no-finnos.shortcut`, servido como download.
+  - Em Integrações, "Gerar código" cria o código de conexão (`https://endereço|fns_…`) e "Adicionar ao Atalhos" baixa o atalho e copia o código.
+  - Ao adicionar, o Atalhos pede o código uma vez; o mesmo arquivo serve para qualquer usuário e domínio.
+  - Para mudar o atalho: edite `frontend/scripts/build_shortcut.py`, gere o arquivo e assine num Mac com `shortcuts sign --mode anyone -i <gerado> -o frontend/public/atalhos/registrar-no-finnos.shortcut`.
+  - A assinatura da Apple vale até 01/12/2027: assine de novo antes disso.
 
 ## Status
 Implementado e testado em testes automatizados; falta validar em um iPhone real.

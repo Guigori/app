@@ -171,3 +171,23 @@ def test_hourly_limit():
         tokens.next_window(start, count, 20)
     assert exc.value.status_code == 429
     assert tokens.next_window(start, count, 10 + tokens.RATE_WINDOW) == (10 + tokens.RATE_WINDOW, 1)
+
+
+def test_ready_made_shortcut_speaks_the_api():
+    """The shortcut Integrações hands out reads the /opcoes lists and sends the /lancamentos fields."""
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("build_shortcut", Path(__file__).parents[2] / "scripts" / "build_shortcut.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    workflow = module.build()
+    params = [a["WFWorkflowActionParameters"] for a in workflow["WFWorkflowActions"]]
+    read = {p["WFDictionaryKey"] for p in params if "WFDictionaryKey" in p}
+    assert set(module.OPTION_KEYS) | {"mensagem"} <= read
+    body = next(p["WFJSONValues"] for p in params if "WFJSONValues" in p)
+    sent = [item["WFKey"]["Value"]["string"] for item in body["Value"]["WFDictionaryFieldValueItems"]]
+    assert sent == module.BODY_KEYS and set(sent) <= set(shortcuts.LancamentoIn.model_fields)
+    urls = [p["WFURL"]["Value"]["string"] for p in params if "WFURL" in p]
+    assert urls == ["\ufffc/api/shortcuts/opcoes", "\ufffc/api/shortcuts/lancamentos"]
+    question = workflow["WFWorkflowImportQuestions"][0]
+    assert question["ActionIndex"] == 0 and "WFTextActionText" in params[0]

@@ -18,6 +18,15 @@
       }
     },
     {
+      "src": "/atalhos/(.+)\\.shortcut",
+      "continue": true,
+      "headers": {
+        "Content-Type": "application/octet-stream",
+        "Content-Disposition": "attachment; filename=\"Registrar no FINNOS.shortcut\"",
+        "Cache-Control": "public, max-age=3600"
+      }
+    },
+    {
       "handle": "filesystem"
     },
     {

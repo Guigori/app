@@ -20,6 +20,8 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   // Authenticated financial API responses are never stored in Cache Storage.
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/") || url.pathname === "/manifest.webmanifest") return;
+  // Downloads such as the ready-made shortcut must never replace the cached app shell.
+  if (url.pathname.startsWith("/atalhos/")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(
