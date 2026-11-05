@@ -1,5 +1,5 @@
 /** Pure helpers behind the lançamento detail: where the money went, its budget, its rhythm and its weight on the month. */
-import type { BudgetSummary, CalendarMonth, SubscriptionItem, Transaction } from "@/types/finnos";
+import type { BudgetAllocationProgress, BudgetCycleProgress, BudgetSummary, CalendarMonth, SubscriptionItem, Transaction } from "@/types/finnos";
 
 const norm = (text: string) => text.toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 
@@ -105,4 +105,38 @@ export function cashFlowLink(tx: Transaction): string {
   const metric = tx.type === "receita" ? "receitas" : tx.type === "despesa" ? "despesas" : "caixa";
   const category = tx.category_id && tx.type !== "transferencia" ? `&category_id=${encodeURIComponent(tx.category_id)}` : "";
   return `/fluxo?month=${tx.date.slice(0, 7)}&metric=${metric}${category}`;
+}
+
+/**
+ * The same weight read from the active budget cycle (the Orçamento screen). The cycle already
+ * counts scheduled expenses as committed, so nothing is added for this one.
+ */
+export function cycleImpact(tx: Transaction, progress: BudgetCycleProgress | null | undefined): BudgetImpact | null {
+  if (tx.type !== "despesa" || !tx.category_id || !progress) return null;
+  if (tx.date < progress.start_date || tx.date > progress.end_date) return null;
+  const row = progress.allocations.find((a) => a.category_id === tx.category_id);
+  if (!row || row.planned <= 0) return null;
+  const used = row.projected_close / row.planned;
+  return {
+    name: row.name ?? tx.category_name ?? "Categoria", budget: row.planned, spent: row.projected_close,
+    remaining: row.available, used, share: tx.value / row.planned, counted: false,
+    status: used > 1 ? "acima" : used >= 0.8 ? "proximo" : "dentro",
+  };
+}
+
+export interface AllocationBreakdown {
+  paid: Transaction[];
+  committed: Transaction[];
+  /** Installments of earlier purchases, fixed series and subscriptions the cycle counts without a row here. */
+  other: number;
+}
+
+/** Splits a category's lançamentos in a cycle into realised and committed, and what the totals hold beyond them. */
+export function allocationBreakdown(rows: Transaction[], allocation: Pick<BudgetAllocationProgress, "category_id" | "spent" | "committed">): AllocationBreakdown {
+  const own = rows.filter((row) => row.type === "despesa" && row.category_id === allocation.category_id);
+  const paid = own.filter((row) => row.status === "pago");
+  const committed = own.filter((row) => row.status !== "pago");
+  const listed = own.reduce((sum, row) => sum + row.value, 0);
+  const other = Math.round((allocation.spent + allocation.committed - listed) * 100) / 100;
+  return { paid, committed, other: other > 0.009 ? other : 0 };
 }

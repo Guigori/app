@@ -2,10 +2,10 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, ChartNoAxesCombined, ChevronRight, Pencil, Radar as RadarIcon } from "lucide-react";
 import { Link } from "react-router-dom";
-import { fetchBudget, fetchCalendar, fetchRadar, fetchSubscriptions, fetchTransactions } from "@/lib/data";
+import { fetchBudget, fetchBudgetCycleProgress, fetchCurrentBudgetCycle, fetchCalendar, fetchRadar, fetchSubscriptions, fetchTransactions } from "@/lib/data";
 import { addMonth, formatBRL, formatDate, formatHiddenBRL, formatSignedBRL, monthLabel } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
-import { budgetImpact, cashFlowLink, flowPath, monthImpact, monthlyHistory, rhythm, signedAmount, type Rhythm } from "@/lib/transactionInsight";
+import { budgetImpact, cashFlowLink, cycleImpact, flowPath, monthImpact, monthlyHistory, rhythm, signedAmount, type Rhythm } from "@/lib/transactionInsight";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { StatusBadge } from "@/components/shared/Badges";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -40,7 +40,15 @@ export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, on
   const month = tx?.date.slice(0, 7) ?? "";
   const enabled = open && Boolean(tx) && !tx?.id.startsWith("offline:");
   const months = month ? Array.from({ length: 6 }, (_, i) => addMonth(month, i - 5)) : [];
-  const budget = useQuery({ queryKey: ["budget", month], queryFn: () => fetchBudget(month), enabled: enabled && tx?.type === "despesa" });
+  const spends = enabled && tx?.type === "despesa";
+  const budget = useQuery({ queryKey: ["budget", month], queryFn: () => fetchBudget(month), enabled: spends });
+  // The Orçamento screen works in cycles; when one covers this date its limit is the one that counts.
+  const cycle = useQuery({ queryKey: ["budget-v2-current"], queryFn: fetchCurrentBudgetCycle, enabled: spends });
+  const cycleProgress = useQuery({
+    queryKey: ["budget-v2-progress", cycle.data?.id],
+    queryFn: () => fetchBudgetCycleProgress(cycle.data!.id),
+    enabled: spends && Boolean(cycle.data?.id),
+  });
   const calendar = useQuery({ queryKey: ["calendar", month, "todas"], queryFn: () => fetchCalendar(month), enabled });
   const history = useQuery({
     queryKey: ["transactions", "insight", tx?.name, month],
@@ -53,7 +61,10 @@ export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, on
   if (!tx) return null;
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
   const path = flowPath(tx);
-  const impact = budgetImpact(tx, budget.data);
+  const fromCycle = cycleImpact(tx, cycleProgress.data);
+  const impact = fromCycle ?? budgetImpact(tx, budget.data);
+  // Once the cycle answers, the monthly limit is not waited for.
+  const budgetPending = !fromCycle && (cycle.isPending || (Boolean(cycle.data?.id) && cycleProgress.isPending) || (budget.isPending && !budget.isError));
   const repeats = rhythm(tx, history.data ?? [], subscriptions.data?.items ?? []);
   const bars = monthlyHistory(tx, history.data ?? [], months);
   const peak = Math.max(...bars.map((b) => b.total), 0);
@@ -96,8 +107,8 @@ export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, on
 
           {tx.type === "despesa" && tx.category_id ? (
             <section className="rounded-2xl bg-muted/60 p-3.5" data-testid="transaction-detail-budget">
-              <h3 className="text-xs font-medium text-muted-foreground">Orçamento de {tx.category_name ?? "categoria"} · {monthLabel(month)}</h3>
-              {budget.isPending ? <div className="mt-2 h-8 animate-pulse rounded-lg bg-muted" /> : impact ? (
+              <h3 className="text-xs font-medium text-muted-foreground">Orçamento de {tx.category_name ?? "categoria"} · {fromCycle && cycleProgress.data ? `ciclo ${formatDate(cycleProgress.data.start_date).slice(0, 5)} a ${formatDate(cycleProgress.data.end_date).slice(0, 5)}` : monthLabel(month)}</h3>
+              {budgetPending ? <div className="mt-2 h-8 animate-pulse rounded-lg bg-muted" /> : impact ? (
                 <>
                   <p className="mt-1.5 text-sm font-semibold tabular-nums">{money(impact.spent)} de {money(impact.budget)} · {pct(impact.used)}</p>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-background" role="progressbar" aria-valuenow={Math.round(impact.used * 100)} aria-valuemin={0} aria-valuemax={100} aria-label="Uso do limite">
