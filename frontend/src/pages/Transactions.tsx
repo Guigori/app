@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useIsRestoring, useRouteState } from "@/lib/routeState";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowDown, ArrowUp, BellOff, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, ChevronRight, Search, Trash2, X } from "lucide-react";
@@ -53,18 +54,20 @@ export default function Transactions() {
   const linkedCategoryId = searchParams.get("category_id");
   const highlightedTransactionId = searchParams.get("highlight");
   const { hidden } = useBalanceHidden();
+  // Coming back to this entry: keep what the user had, instead of re-applying the link.
+  const restoring = useIsRestoring();
 
-  const [month, setMonth] = useState(currentMonth());
+  const [month, setMonth] = useRouteState("fluxo:month", currentMonth);
   const [periodMode, setPeriodMode] = useState<"rolling30" | "month">("month");
-  const [flowView, setFlowView] = useState<"calendario" | "categorias" | "lista">("calendario");
-  const [selectedDate, setSelectedDate] = useState(todayISO());
-  const [scope, setScope] = useState<"dia" | "mes">("mes");
+  const [flowView, setFlowView] = useRouteState<"calendario" | "categorias" | "lista">("fluxo:view", "calendario");
+  const [selectedDate, setSelectedDate] = useRouteState("fluxo:date", todayISO);
+  const [scope, setScope] = useRouteState<"dia" | "mes">("fluxo:scope", "mes");
   // Planned behaviour: compact week on phones (drag the handle for more), full month from tablet up.
   const [calendarExpanded, setCalendarExpanded] = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 640px)").matches);
   const [search, setSearch] = useState("");
-  const [type, setType] = useState<"todos" | TxType>("todos");
+  const [type, setType] = useRouteState<"todos" | TxType>("fluxo:type", "todos");
   const [status, setStatus] = useState<"todos" | TxStatus>("todos");
-  const [categoryId, setCategoryId] = useState("todas");
+  const [categoryId, setCategoryId] = useRouteState("fluxo:category", "todas");
   const [selectedDonutCategory, setSelectedDonutCategory] = useState<string | null>(null);
   const [accountId, setAccountId] = useState("todas");
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
@@ -103,7 +106,7 @@ export default function Transactions() {
   const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
-    if (!linkedDate || !/^\d{4}-\d{2}-\d{2}$/.test(linkedDate)) return;
+    if (restoring || !linkedDate || !/^\d{4}-\d{2}-\d{2}$/.test(linkedDate)) return;
     setPeriodMode("month");
     setMonth(linkedDate.slice(0, 7));
     setSelectedDate(linkedDate);
@@ -112,7 +115,7 @@ export default function Transactions() {
   }, [linkedDate]);
 
   useEffect(() => {
-    if (linkedDate) return;
+    if (restoring || linkedDate) return;
     if (linkedMonth && /^\d{4}-\d{2}$/.test(linkedMonth)) {
       setPeriodMode("month");
       setMonth(linkedMonth);

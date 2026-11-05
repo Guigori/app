@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { canGoBack } from "@/lib/navigation";
 import { Button } from "@/components/ui/button";
 
 /** Section roots and their tabs have no back control. Nested screens return
@@ -19,7 +20,7 @@ export function BackButton() {
     <Button
       variant="ghost"
       size="icon"
-      onClick={() => fromNotifications ? navigate(-1) : navigate(parentPath)}
+      onClick={() => (fromNotifications || canGoBack() ? navigate(-1) : navigate(parentPath))}
       className="mb-3 size-10 rounded-full border border-border bg-card text-foreground hover:bg-muted"
       aria-label={fromNotifications ? "Voltar para a central de notificações" : "Voltar para a seção anterior"}
       title="Voltar"

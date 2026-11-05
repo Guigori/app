@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useRouteState } from "@/lib/routeState";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -15,14 +16,14 @@ const pct = (v:number) => new Intl.NumberFormat("pt-BR",{maximumFractionDigits:1
 const delta = (now:number, prev:number|null) => !prev ? 0 : ((now-prev)/Math.abs(prev))*100;
 
 export default function Analysis() {
-  const [month,setMonth] = useState(currentMonth());
-  const [yearMode,setYearMode] = useState(false);
+  const [month,setMonth] = useRouteState("analise:month",currentMonth);
+  const [yearMode,setYearMode] = useRouteState("analise:year",false);
   const [hidden,setHidden] = useState(false);
   const [panel,setPanel] = useState<"calendar"|"filters"|null>(null);
   const [filter,setFilter] = useState<"all"|"income"|"expense">("all");
   const mask=(value:string)=>hidden?"••••••":value;
   const moveMonth=(offset:number)=>{const [y,m]=month.split("-").map(Number);const date=new Date(y,m-1+offset,1);setMonth(`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}`)};
-  const [mode,setMode] = useState<"cards"|"charts">("cards");
+  const [mode,setMode] = useRouteState<"cards"|"charts">("analise:mode","cards");
   const dashboard = useQuery({queryKey:["analysis-dashboard",month],queryFn:()=>fetchDashboard(month)});
   const trends = useQuery({queryKey:["analysis-trends",month],queryFn:()=>fetchTrends(6,month)});
   const budget = useQuery({queryKey:["analysis-budget",month],queryFn:()=>fetchBudget(month)});

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRouteState } from "@/lib/routeState";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, ChevronLeft, ChevronRight, CreditCard, Eye, EyeOff, Wallet } from "lucide-react";
@@ -22,9 +22,9 @@ const changeMonth = (month: string, delta: number) => {
 const metric: Record<MetricKind, string> = { income: "receitas", expense: "despesas", balance: "caixa", invested: "projecao" };
 
 export default function DashboardWeb() {
-  const [month, setMonth] = useState(currentMonth());
-  const [chartView, setChartView] = useState<"Projeção" | "Linhas" | "Barras" | "Pizza">("Projeção");
-  const [chartPeriod, setChartPeriod] = useState("1 mês");
+  const [month, setMonth] = useRouteState("inicio-web:month", currentMonth);
+  const [chartView, setChartView] = useRouteState<"Projeção" | "Linhas" | "Barras" | "Pizza">("inicio-web:chart", "Projeção");
+  const [chartPeriod, setChartPeriod] = useRouteState("inicio-web:period", "1 mês");
   const { hidden, toggle } = useBalanceHidden();
   const navigate = useNavigate();
   const dashboard = useQuery({ queryKey: ["dashboard", month], queryFn: () => fetchDashboard(month) });

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { offerStatementImport } from "@/lib/importOffer";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -77,8 +78,13 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
       const payload = { ...input, ...resolved };
       return account ? updateAccount(account.id, payload) : createAccount(payload);
     },
-    onSuccess: async () => {
-      toast.success(account ? "Conta atualizada." : "Conta criada.");
+    onSuccess: async (saved) => {
+      if (account) toast.success("Conta atualizada.");
+      else toast.success("Conta criada.", {
+        description: "Quer trazer os últimos 90 dias do extrato?",
+        duration: 12000,
+        action: saved?.id ? { label: "Importar extrato", onClick: () => offerStatementImport(`account:${saved.id}`) } : undefined,
+      });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["institutions"] }),

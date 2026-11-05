@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useRouteState } from "@/lib/routeState";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { canGoBack } from "@/lib/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { ArrowLeft, ChartColumn, ChartLine, ChevronRight, Eye, EyeOff } from "lucide-react";
@@ -41,13 +43,14 @@ type ChartKind = "barras" | "linhas";
 
 export default function Flow() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const initialTab = (params.get("metric") ?? "caixa") as FlowTab;
   const { hidden, toggle: toggleHidden } = useBalanceHidden();
 
-  const [month, setMonth] = useState(params.get("month") ?? currentMonth());
-  const [tab, setTab] = useState<FlowTab>(TABS.some((t) => t.key === initialTab) ? initialTab : "caixa");
-  const [period, setPeriod] = useState<FlowPeriod>("12");
-  const [chartKind, setChartKind] = useState<ChartKind>("barras");
+  const [month, setMonth] = useRouteState("caixa:month", () => params.get("month") ?? currentMonth());
+  const [tab, setTab] = useRouteState<FlowTab>("caixa:tab", () => (TABS.some((t) => t.key === initialTab) ? initialTab : "caixa"));
+  const [period, setPeriod] = useRouteState<FlowPeriod>("caixa:period", "12");
+  const [chartKind, setChartKind] = useRouteState<ChartKind>("caixa:chart", "barras");
   const [fromMonth, setFromMonth] = useState(addMonth(currentMonth(), -5));
   const [toMonth, setToMonth] = useState(currentMonth());
   const [categoryId, setCategoryId] = useState(params.get("category_id") || "todas");
@@ -109,11 +112,13 @@ export default function Flow() {
       <header className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
           {/* Cash flow is a detail of Fluxo, reached from its Entrada / Saída / Saldo. */}
+          {/* Back to wherever the user came from (Início, Fluxo, Análise…); Fluxo when opened directly. */}
           <Link
             to={`/transacoes?month=${month}`}
+            onClick={(event) => { if (canGoBack()) { event.preventDefault(); navigate(-1); } }}
             className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "mt-0.5 size-10 shrink-0 rounded-full border border-border bg-card")}
-            aria-label="Voltar para o Fluxo"
-            title="Voltar para o Fluxo"
+            aria-label="Voltar"
+            title="Voltar"
             data-testid="flow-breadcrumb-back"
           >
             <ArrowLeft className="h-5 w-5" aria-hidden="true" />

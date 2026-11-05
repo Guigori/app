@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useRouteState } from "@/lib/routeState";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { SlidersHorizontal } from "lucide-react";
@@ -42,9 +43,9 @@ export default function Dashboard() {
     queryFn: fetchMe,
     staleTime: 5 * 60 * 1000,
   });
-  const [month, setMonth] = useState<string | null>(null);
-  const [menuView, setMenuView] = useState<FinnosView>("Projeção");
-  const [menuInterval, setMenuInterval] = useState("1 mês");
+  const [month, setMonth] = useRouteState<string | null>("inicio:month", null);
+  const [menuView, setMenuView] = useRouteState<FinnosView>("inicio:view", "Projeção");
+  const [menuInterval, setMenuInterval] = useRouteState("inicio:period", "1 mês");
   const [menuSeries, setMenuSeries] = useState<FinnosSeries[]>(["Receitas","Despesas","Resultado"]);
   const [selectedCategory, setSelectedCategory] = useState<CategorySlice | null>(null);
   const dashboardQuery = useQuery({
