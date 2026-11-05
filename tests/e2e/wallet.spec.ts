@@ -82,7 +82,7 @@ test("an account opens its own cash flow, which can go back to every account", a
   await createCheckingAccount(page);
   await page.locator("[data-testid^=wallet-account-]").first().click();
   await page.getByTestId("account-detail-cashflow").click();
-  await expect(page).toHaveURL(/\/fluxo\?account_id=/);
+  await expect(page).toHaveURL(/\/transacoes\?aba=caixa&account_id=/);
   await expect(page.getByTestId("flow-account-filter")).toContainText("Conta Inter");
   await page.getByTestId("flow-tab-projecao").click();
   await expect(page.getByTestId("flow-upcoming")).toContainText("Nada previsto");

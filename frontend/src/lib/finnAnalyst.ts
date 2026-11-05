@@ -94,7 +94,7 @@ function linksFor(q: FinnQuery): FinnAnswer["links"] {
   const metric = q.type === "receita" ? "receitas" : "despesas";
   const extra = `${category ? `&category_id=${encodeURIComponent(category.id!)}` : ""}${account ? `&account_id=${encodeURIComponent(account.id!)}` : ""}`;
   return [
-    { label: "Ver no fluxo de caixa", to: `/fluxo?month=${month}&metric=${metric}${extra}` },
+    { label: "Ver no Caixa", to: `/transacoes?aba=caixa&month=${month}&metric=${metric}${extra}` },
     { label: "Ver lançamentos", to: `/transacoes?month=${month}&metric=${metric}${category ? `&category_id=${encodeURIComponent(category.id!)}` : ""}` },
   ];
 }
@@ -284,7 +284,7 @@ function forecastAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
     } : undefined,
     insight: noticed(data, q),
     followUps: ["O que ainda vence este mês?", "Onde posso economizar?"],
-    links: [{ label: "Ver projeção no fluxo de caixa", to: `/fluxo?month=${data.today.slice(0, 7)}&metric=projecao` }],
+    links: [{ label: "Ver projeção no Caixa", to: `/transacoes?aba=caixa&month=${data.today.slice(0, 7)}&metric=projecao` }],
     query: q,
   };
 }
@@ -298,7 +298,7 @@ function upcomingAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
     visual: items.length ? { title: "Ainda vai sair", items: items.slice(0, 8).map((u) => ({ label: u.name, value: money(u.value), detail: `${formatDate(u.date)} · ${u.date < data.today && (u.kind === "pendente" || u.kind === "agendado") ? "atrasado" : u.kind}` })) } : undefined,
     insight: noticed(data, q),
     followUps: ["Vou fechar o mês no positivo?", "Quais assinaturas eu pago?"],
-    links: [{ label: "Ver no fluxo de caixa", to: `/fluxo?month=${data.today.slice(0, 7)}&metric=despesas` }],
+    links: [{ label: "Ver no Caixa", to: `/transacoes?aba=caixa&month=${data.today.slice(0, 7)}&metric=despesas` }],
     query: q,
   };
 }

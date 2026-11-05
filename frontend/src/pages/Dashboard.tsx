@@ -92,7 +92,7 @@ export default function Dashboard() {
   // Every card/chart opens the full Fluxo screen (never a side panel), so the browser
   // back gesture returns to the Home exactly where it was.
   const openFlow = (metric: MetricKind) =>
-    navigate(`/fluxo?month=${activeMonth}&metric=${METRIC_TAB[metric]}`);
+    navigate(`/transacoes?aba=caixa&month=${activeMonth}&metric=${METRIC_TAB[metric]}`);
 
   return (
     <div className="min-w-0 space-y-5 overflow-x-hidden animate-fade-up sm:space-y-6">

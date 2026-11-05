@@ -99,8 +99,8 @@ export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, on
               <span>{path.from}</span><ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" /><span>{path.to}</span>
             </p>
             {tx.account_id && !tx.id.startsWith("offline:") ? (
-              <Link to={`/fluxo?month=${month}&account_id=${encodeURIComponent(tx.account_id)}`} onClick={close} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary" data-testid="transaction-detail-account-flow">
-                Fluxo de caixa de {tx.account_name}<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              <Link to={`/transacoes?aba=caixa&month=${month}&account_id=${encodeURIComponent(tx.account_id)}`} onClick={close} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary" data-testid="transaction-detail-account-flow">
+                Caixa de {tx.account_name}<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
               </Link>
             ) : null}
           </section>
@@ -166,7 +166,7 @@ export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, on
 
           <div className="grid gap-2 pt-1">
             <Link to={cashFlowLink(tx)} onClick={close} className={cn(buttonVariants(), "h-11 justify-between rounded-2xl")} data-testid="transaction-detail-cashflow">
-              <span className="flex items-center gap-2"><ChartNoAxesCombined className="h-4 w-4" aria-hidden="true" />Ver no fluxo de caixa</span><ChevronRight className="h-4 w-4" aria-hidden="true" />
+              <span className="flex items-center gap-2"><ChartNoAxesCombined className="h-4 w-4" aria-hidden="true" />Ver no Caixa</span><ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Link>
             <Button variant="outline" className="h-11 justify-between rounded-2xl" onClick={() => { close(); onEdit(tx); }} data-testid="transaction-detail-edit">
               <span className="flex items-center gap-2"><Pencil className="h-4 w-4" aria-hidden="true" />Editar lançamento</span><ChevronRight className="h-4 w-4" aria-hidden="true" />
