@@ -1,4 +1,4 @@
-import { currentMonth, toLocalISO } from "@/lib/format";
+import { addMonth, currentMonth, toLocalISO } from "@/lib/format";
 import { localBudget, localDashboard, localListCards, localListTransactions } from "@/lib/local/engine";
 import type { Radar, RadarSignal } from "@/types/finnos";
 
@@ -33,6 +33,23 @@ export function localRadar(): Radar {
   const daysInMonth=new Date(today.getFullYear(),today.getMonth()+1,0).getDate(), remainingDays=Math.max(1,daysInMonth-today.getDate()+1);
   if(budget.remaining>0&&budget.planned>0){
     items.push(signal({id:`safe-spend-${month}`,type:"opportunity",severity:"normal",title:"Ritmo seguro até o fim do mês",description:`Você pode distribuir o orçamento restante pelos próximos ${remainingDays} dias`,explanation:"É uma referência de ritmo, não uma autorização para gastar: compromissos futuros ainda precisam ser considerados.",metric:`${money(budget.remaining/remainingDays)}/dia`,score:42,related_entity_type:"cashflow",related_entity_id:null,expires_at:endOfMonth(month),evidence:[{label:"Orçamento restante",value:money(budget.remaining)},{label:"Dias restantes",value:String(remainingDays)}]}));
+  }
+  // Same proactive alerts as the server Radar: invoice overdue / due soon, and the month's pace.
+  const todayISO=toLocalISO(today), dayMs=86400000;
+  for(const card of localListCards()){
+    if(!card.payable_due||!(card.payable_invoice??0))continue;
+    const days=Math.round((new Date(card.payable_due+"T12:00:00").getTime()-new Date(todayISO+"T12:00:00").getTime())/dayMs);
+    const amount=money(card.payable_invoice??0);
+    if(days<0)items.push(signal({id:`card-overdue-${card.id}-${card.payable_cycle}`,type:"risk",severity:"critical",title:`Fatura ${card.name} vencida`,description:`${amount} venceu há ${-days} dia${days===-1?"":"s"}`,explanation:"A fatura fechou e passou do vencimento sem pagamento registrado. Se você já pagou, registre o pagamento na fatura para o saldo e o limite ficarem corretos.",metric:amount,score:100,related_entity_type:"card",related_entity_id:card.id,expires_at:null,evidence:[{label:"Vencimento",value:card.payable_due},{label:"Dias em atraso",value:String(-days)},{label:"Valor em aberto",value:amount}]}));
+    else if(days<=3)items.push(signal({id:`card-due-${card.id}-${card.payable_cycle}`,type:"risk",severity:"high",title:`Fatura ${card.name} vence ${days===0?"hoje":days===1?"amanhã":`em ${days} dias`}`,description:`${amount} a pagar até ${card.payable_due.slice(8,10)}/${card.payable_due.slice(5,7)}`,explanation:"A fatura já fechou e ainda não tem pagamento registrado. Pague (e registre o pagamento) para evitar juros e manter o limite correto.",metric:amount,score:96,related_entity_type:"card",related_entity_id:card.id,expires_at:card.payable_due,evidence:[{label:"Vencimento",value:card.payable_due},{label:"Valor",value:amount}]}));
+  }
+  const previous=localDashboard(addMonth(month,-1));
+  if(today.getDate()>=7&&previous.expense>0&&today.getDate()<daysInMonth){
+    const projected=dashboard.expense/today.getDate()*daysInMonth;
+    if(projected>=previous.expense*1.15){
+      const pct=Math.round((projected/previous.expense-1)*100);
+      items.push(signal({id:`month-pace-${month}`,type:"deviation",severity:pct>=30?"high":"medium",title:"O mês está mais caro que o anterior",description:`No ritmo atual, as despesas fecham em ${money(projected)} (+${pct}%)`,explanation:`Até hoje foram ${money(dashboard.expense)} em ${today.getDate()} dias. Mantendo esse ritmo até o dia ${daysInMonth}, o mês passaria o anterior (${money(previous.expense)}).`,metric:`+${pct}%`,score:pct>=30?86:76,related_entity_type:"cashflow",related_entity_id:null,expires_at:endOfMonth(month),evidence:[{label:"Gasto até hoje",value:money(dashboard.expense)},{label:"Projeção do mês",value:money(projected)},{label:"Mês anterior",value:money(previous.expense)}]}));
+    }
   }
   for(const card of localListCards()){
     const close=Math.ceil((new Date(card.next_closing+"T12:00:00").getTime()-today.getTime())/86400000);

@@ -98,6 +98,15 @@ async def _signals(user_id: str) -> list[dict]:
         if key in seen:
             signals.append(dict(id=f"duplicate-{t['id']}", type='risk', severity='high', title='Possível cobrança duplicada', description=f"{t['name']} aparece duas vezes por {brl(key[1])}", explanation='Encontramos dois lançamentos com mesmo nome, valor e data. Vale conferir antes de considerar ambos corretos.', metric=brl(key[1]), score=92, related_entity_type='transaction', related_entity_id=t['id'], expires_at=(today + timedelta(days=14)).isoformat(), evidence=[{'label': 'Valor', 'value': brl(key[1])}, {'label': 'Data', 'value': t['date']}]))
         seen[key] = t['id']
+    # Whole-month pace: at this rhythm, does the month end well above last month?
+    days_total = monthrange(today.year, today.month)[1]
+    spent_now = monthly_competency(txs, card_docs, month)["expense"]
+    spent_prev = monthly_competency(txs, card_docs, add_months(month, -1))["expense"]
+    if today.day >= 7 and spent_prev > 0 and today.day < days_total:
+        projected_month = spent_now / today.day * days_total
+        if projected_month >= spent_prev * D("1.15"):
+            pct = int(round((projected_month / spent_prev - 1) * 100))
+            signals.append(dict(id=f'month-pace-{month}', type='deviation', severity='high' if pct >= 30 else 'medium', title='O mês está mais caro que o anterior', description=f'No ritmo atual, as despesas fecham em {brl(projected_month)} (+{pct}%)', explanation=f'Até hoje foram {brl(spent_now)} em {today.day} dias. Mantendo esse ritmo até o dia {days_total}, o mês passaria o anterior ({brl(spent_prev)}).', metric=f'+{pct}%', score=86 if pct >= 30 else 76, related_entity_type='cashflow', related_entity_id=None, expires_at=month_end(month), evidence=[{'label': 'Gasto até hoje', 'value': brl(spent_now)}, {'label': 'Projeção do mês', 'value': brl(projected_month)}, {'label': 'Mês anterior', 'value': brl(spent_prev)}]))
     (card_txs, accounts) = await card_context(user_id)
     for doc in active_cards:
         card = await build_card(doc, card_txs, accounts)
@@ -106,6 +115,11 @@ async def _signals(user_id: str) -> list[dict]:
         if card.payable_due and card.payable_invoice > 0 and card.payable_due < today_s:
             late = (today - date.fromisoformat(card.payable_due)).days
             signals.append(dict(id=f'card-overdue-{card.id}-{card.payable_cycle}', type='risk', severity='critical', title=f'Fatura {card.name} vencida', description=f'{brl(card.payable_invoice)} venceu há {late} dia{("s" if late != 1 else "")}', explanation='A fatura fechou e passou do vencimento sem pagamento registrado. Se você já pagou, registre o pagamento na fatura para o saldo e o limite ficarem corretos.', metric=brl(card.payable_invoice), score=100, related_entity_type='card', related_entity_id=card.id, expires_at=None, evidence=[{'label': 'Vencimento', 'value': card.payable_due}, {'label': 'Dias em atraso', 'value': str(late)}, {'label': 'Valor em aberto', 'value': brl(card.payable_invoice)}]))
+        elif card.payable_due and card.payable_invoice > 0 and 0 <= (date.fromisoformat(card.payable_due) - today).days <= 3:
+            # Before it is late: a closed invoice due within three days.
+            due_in = (date.fromisoformat(card.payable_due) - today).days
+            when = 'hoje' if due_in == 0 else ('amanhã' if due_in == 1 else f'em {due_in} dias')
+            signals.append(dict(id=f'card-due-{card.id}-{card.payable_cycle}', type='risk', severity='high', title=f'Fatura {card.name} vence {when}', description=f'{brl(card.payable_invoice)} a pagar até {card.payable_due[8:10]}/{card.payable_due[5:7]}', explanation='A fatura já fechou e ainda não tem pagamento registrado. Pague (e registre o pagamento) para evitar juros e manter o limite correto.', metric=brl(card.payable_invoice), score=96, related_entity_type='card', related_entity_id=card.id, expires_at=card.payable_due, evidence=[{'label': 'Vencimento', 'value': card.payable_due}, {'label': 'Valor', 'value': brl(card.payable_invoice)}]))
         monthly = []
         for offset in (1, 2, 3):
             m = add_months(month, -offset)

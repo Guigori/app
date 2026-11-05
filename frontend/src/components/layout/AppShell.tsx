@@ -14,6 +14,7 @@ import { LocalNotificationPulse, NotificationPermissionPrompt } from "@/componen
 import { useEdgeSwipe } from "@/lib/useEdgeSwipe";
 import { ConnectivityStatus } from "@/components/sync/ConnectivityStatus";
 import { StatementImportHost } from "@/components/import/StatementImportHost";
+import { startPreferencesSync } from "@/lib/preferencesSync";
 
 export function AppShell() {
   const location = useLocation();
@@ -23,6 +24,8 @@ export function AppShell() {
   // Like a native app: a new screen (and a reload) opens at the top; going back returns
   // to the exact scroll position the user left. Positions are kept per history entry.
   const navigationType = useNavigationType();
+  // Dock shortcuts, Início panel and the "+" default follow the account to every device.
+  useEffect(() => startPreferencesSync(), []);
   const navigate = useNavigate();
   // The entry the app opened on has no history key ("default"). Give it one, so coming
   // back to it (or reloading) restores the screen like any other entry.

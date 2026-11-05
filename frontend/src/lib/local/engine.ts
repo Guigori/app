@@ -1095,6 +1095,9 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
     if (cycle > closing) future = round2(future + outstanding);
   }
   const invoice = round2(Math.max(0, (totals.get(closing) ?? 0) - (paidCycles[closing]?.amount ?? 0)));
+  // The invoice that already closed (the cycle before the open one) and what is still owed on it.
+  const previousClosing = addDays(start, -1);
+  const payable = round2(Math.max(0, (totals.get(previousClosing) ?? 0) - (paidCycles[previousClosing]?.amount ?? 0)));
   const account = accounts.find((a) => a.id === doc.payment_account_id);
   return {
     ...doc,
@@ -1109,6 +1112,9 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
     next_closing: closing,
     next_due: dueDate(closing, doc.closing_day, doc.due_day),
     best_purchase_day: addDays(closing, 1),
+    payable_invoice: payable,
+    payable_cycle: payable > 0 ? previousClosing : null,
+    payable_due: payable > 0 ? dueDate(previousClosing, doc.closing_day, doc.due_day) : null,
   };
 }
 export function localListCards(): CreditCard[] {

@@ -12,6 +12,11 @@ from finnos.routers.auth import require_user
 
 router = APIRouter(prefix='/goals',tags=['goals'])
 
+class GoalDeposit(FinanceModel):
+    date: str = Field(pattern=r'^\d{4}-\d{2}-\d{2}$')
+    value: Money = Field(ge=0)
+
+
 class GoalIn(FinanceModel):
     name: str = Field(min_length=1,max_length=100)
     category: str = Field(max_length=100)
@@ -25,6 +30,9 @@ class GoalIn(FinanceModel):
     strategy: str | None = Field(None,max_length=50)
     remind: bool = True
     radar: bool = True
+    # Contributions recorded in the app and optional "follow this account's balance".
+    deposits: list[GoalDeposit] = Field(default_factory=list, max_length=600)
+    track_account: bool = False
 
     @model_validator(mode='after')
     def valid_saved(self):

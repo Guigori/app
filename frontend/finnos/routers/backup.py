@@ -25,7 +25,7 @@ BACKUP_VERSION = 1
 # Order matters for restore: every reference points to an earlier collection.
 COLLECTIONS = (
     "institutions", "accounts", "categories", "cards", "subscriptions",
-    "goals", "budget_cycles", "transactions", "notification_preferences",
+    "goals", "investments", "budget_cycles", "transactions", "notification_preferences",
 )
 READ_LIMIT = 20000
 
@@ -73,7 +73,7 @@ async def export_backup(user: dict = Depends(require_user)):
 # Restore only into an account that has no financial data yet, so a backup can
 # never be merged into (or duplicate) existing records. Default categories are
 # reused by name and their IDs remapped inside the restored documents.
-RESTORE_MUST_BE_EMPTY = ("institutions", "accounts", "cards", "subscriptions", "goals", "budget_cycles", "transactions")
+RESTORE_MUST_BE_EMPTY = ("institutions", "accounts", "cards", "subscriptions", "goals", "investments", "budget_cycles", "transactions")
 
 
 def _normalize(text: str) -> str:

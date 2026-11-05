@@ -18,6 +18,10 @@ export type FinnosGoal = {
   remind: boolean;
   radar: boolean;
   createdAt: string;
+  /** Contributions recorded with "Guardar" (date + value). */
+  deposits?: { date: string; value: number }[];
+  /** Progress follows the linked account's balance instead of the manual amount. */
+  track_account?: boolean;
 };
 const key = (userId: string) => `finnos:goals:v1:${userId}`;
 function localGoals(userId: string): FinnosGoal[] {

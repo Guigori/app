@@ -14,6 +14,7 @@ export function getRegisterDefault(): RegisterDefault {
 export function setRegisterDefault(value: RegisterDefault): void {
   try {
     localStorage.setItem(KEY, value);
+    window.dispatchEvent(new Event("finnos-register-default"));
   } catch {
     // Private mode: the choice simply isn't remembered.
   }

@@ -263,7 +263,7 @@ def validate_refs(db, uid, name, doc, transaction, original_tx=None):
         for cycle in rows(db, uid, 'budget_cycles', transaction):
             if cycle['id'] != doc['id'] and not cycle.get('closed_at') and cycle['start_date'] <= doc['end_date'] and cycle['end_date'] >= doc['start_date']:
                 raise HTTPException(409, "Já existe orçamento nesse período.")
-    if name == "goals":
+    if name in {"goals", "investments"}:
         fields = [("account", "accounts")]
     if name == "subscriptions":
         fields = [("account_id", "accounts"), ("category_id", "categories"), ("card_id", "cards")]
@@ -590,7 +590,7 @@ db = SimpleNamespace(
             "categories",
             "transactions",
             "cards",
-            "notification_states", "notification_preferences", "budget_cycles", "radar_states", "radar_feedback", "goals", "subscriptions", "ai_keys", "ai_feedback",
+            "notification_states", "notification_preferences", "budget_cycles", "radar_states", "radar_feedback", "goals", "investments", "subscriptions", "ai_keys", "ai_feedback",
         ]
     }
 )

@@ -105,6 +105,10 @@ export default function EditarMeta({ goal, userId, onClose, onSaved }: Props) {
           </select>
         </label>
         <div className="sm:col-span-2 flex flex-wrap gap-5 text-sm">
+          <label className="flex items-center gap-2" title="Use quando o dinheiro da meta fica numa conta só dela (poupança, caixinha).">
+            <input type="checkbox" checked={Boolean(draft.track_account)} onChange={event => set("track_account", event.target.checked)} data-testid="goal-track-account" />
+            Acompanhar o saldo desta conta
+          </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={draft.remind} onChange={event => set("remind", event.target.checked)} />
             Lembrar aportes
