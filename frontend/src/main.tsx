@@ -8,6 +8,7 @@ import App from './App.tsx'
 import { queryClient } from './lib/queryClient'
 import { initializeLocalPersistence } from './lib/local/store'
 import { initMonitoring } from './lib/monitoring'
+import { serviceWorkerSupported } from './lib/platform'
 
 async function bootstrap() {
   initMonitoring()
@@ -25,7 +26,7 @@ async function bootstrap() {
     </StrictMode>,
   )
 
-  if ("serviceWorker" in navigator) {
+  if (serviceWorkerSupported()) {
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined)
     })

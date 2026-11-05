@@ -19,6 +19,7 @@ from finnos.lib.monitoring import init_sentry
 init_sentry()
 from firebase_admin import auth, credentials, exceptions
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -83,6 +84,30 @@ def same_origin(request: Request):
         raise HTTPException(403, "Origem da requisição inválida.")
 
 
+def bearer_token(request: Request) -> str:
+    scheme, _, token = request.headers.get("authorization", "").partition(" ")
+    return token.strip() if scheme.lower() == "bearer" else ""
+
+
+def same_origin_or_bearer(request: Request):
+    """CSRF protege só a sessão por cookie. O app nativo (origem capacitor://localhost)
+    autentica com `Authorization: Bearer <ID token>`, que um site de terceiros não consegue
+    anexar a uma requisição do navegador, então a checagem de Origin não se aplica."""
+    if bearer_token(request):
+        return
+    same_origin(request)
+
+
+def request_claims(request: Request):
+    token = bearer_token(request)
+    if token:
+        return verified_claims(token)
+    cookie = request.cookies.get(COOKIE)
+    if not cookie:
+        raise HTTPException(401, "Não autenticado. Entre novamente.")
+    return verified_claims(cookie, session=True)
+
+
 def verified_claims(token: str, *, session=False):
     verifier = auth.verify_session_cookie if session else auth.verify_id_token
     try:
@@ -145,10 +170,7 @@ def firebase_session(request: Request, response: Response):
 
 @app.get("/api/auth/me")
 def me(request: Request):
-    cookie = request.cookies.get(COOKIE)
-    if not cookie:
-        raise HTTPException(401, "Não autenticado. Entre novamente.")
-    claims = verified_claims(cookie, session=True)
+    claims = request_claims(request)
     if request.headers.get("x-finnos-user-id") and request.headers["x-finnos-user-id"] != claims["uid"]:
         raise HTTPException(401, "A identidade da sessão mudou.")
     return user_out(claims)
@@ -158,13 +180,10 @@ class ProfileNameIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
 
 
-@app.patch("/api/auth/me", dependencies=[Depends(same_origin)])
+@app.patch("/api/auth/me", dependencies=[Depends(same_origin_or_bearer)])
 def update_profile_name(payload: ProfileNameIn, request: Request):
     """The display name belongs to the Firebase identity, not to Firestore."""
-    session_cookie = request.cookies.get(COOKIE)
-    if not session_cookie:
-        raise HTTPException(401, "Não autenticado. Entre novamente.")
-    claims = verified_claims(session_cookie, session=True)
+    claims = request_claims(request)
     name = payload.name.strip()
     if not name:
         raise HTTPException(422, "Informe um nome válido.")
@@ -259,6 +278,17 @@ def firestore_smoke(request: Request):
 
 
 from finnos.routes import mount
-mount(app, lambda: firebase_app(), lambda *args, **kwargs: verified_claims(*args, **kwargs), same_origin)
+mount(app, lambda: firebase_app(), lambda *args, **kwargs: verified_claims(*args, **kwargs), same_origin_or_bearer)
+# App nativo (Capacitor/iOS): o WebView roda em capacitor://localhost, outra origem.
+# Só essa origem, só com Authorization Bearer e sem cookies (allow_credentials=False).
+# Adicionado por último para ficar como middleware mais externo e responder o preflight.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["capacitor://localhost"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-FINNOS-User-ID"],
+    max_age=600,
+)
 # Passwordless validation bootstrap retired after conventional A/B/C login passed.
 # No route may create test identities or mint validation login tokens.

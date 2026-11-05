@@ -1,6 +1,7 @@
 // Session boundary helpers. The session itself is an httpOnly cookie the backend sets —
 // this module only makes sure the react-query cache never leaks across sessions.
 import { apiPost } from "@/lib/api";
+import { isNative } from "@/lib/platform";
 import { revokePushForSession } from "@/lib/push";
 import { queryClient } from "@/lib/queryClient";
 import { clearAccountCache } from "@/lib/offline/accountCache";
@@ -19,7 +20,8 @@ export async function endSession(): Promise<void> {
   // Revoke this device's push enrolment while the session can still authorize it.
   await revokePushForSession();
   try {
-    await apiPost("/auth/logout");
+    // No nativo não existe cookie para apagar; o signOut do Firebase abaixo encerra a sessão.
+    if (!isNative()) await apiPost("/auth/logout");
   } finally {
     if (firebaseAuth) await signOut(firebaseAuth).catch(() => undefined);
     queryClient.clear();

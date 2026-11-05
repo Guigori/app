@@ -1,7 +1,8 @@
 import { firebaseAuth } from "@/lib/firebase";
+import { apiBase, isNative } from "@/lib/platform";
 // Typed fetch layer over the FastAPI backend. Base is the relative "/api" prefix so the
 // same code works in dev (Vite proxies /api → the Firestore API on :8002) and behind a single origin in prod.
-const BASE = "/api";
+const BASE = apiBase();
 
 // Fields are declared, not constructor parameter properties: tsconfig sets
 // erasableSyntaxOnly, which rejects `constructor(readonly status: number)`.
@@ -19,13 +20,19 @@ export class ApiError extends Error {
 
 type JsonBody = unknown;
 
+// Web: a sessão vai no cookie httpOnly. App nativo (capacitor://localhost) não tem cookie de
+// mesma origem, então envia o ID token do Firebase (renovado pelo SDK) como Bearer.
+async function nativeAuthHeader(): Promise<Record<string, string>> {
+  if (!isNative() || !firebaseAuth?.currentUser) return {};
+  return { Authorization: `Bearer ${await firebaseAuth.currentUser.getIdToken()}` };
+}
+
 async function request<T>(method: string, path: string, body?: JsonBody, extraHeaders?: Record<string, string>): Promise<T> {
   const requestUid = firebaseAuth?.currentUser?.uid;
-  // Auth rides the httpOnly session cookie automatically — never add auth headers here.
   const res = await fetch(`${BASE}${path}`, {
     method,
-    credentials: "same-origin",
-    headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...extraHeaders, ...(firebaseAuth?.currentUser ? { "X-FINNOS-User-ID": firebaseAuth.currentUser.uid } : {}) },
+    credentials: isNative() ? "omit" : "same-origin",
+    headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...extraHeaders, ...(await nativeAuthHeader()), ...(firebaseAuth?.currentUser ? { "X-FINNOS-User-ID": firebaseAuth.currentUser.uid } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
@@ -51,6 +58,13 @@ export const apiPatch = <T>(path: string, body?: JsonBody) =>
 export const apiDelete = <T>(path: string, headers?: Record<string, string>) => request<T>("DELETE", path, undefined, headers);
 
 export async function apiPostWithBearer<T>(path: string, token: string, body?: JsonBody): Promise<T> {
+  // App nativo: não há cookie de sessão. O login só confirma o token no servidor (GET /auth/me)
+  // e as chamadas seguintes levam o Bearer (ver nativeAuthHeader).
+  if (isNative() && path === "/auth/firebase-session") {
+    const check = await fetch(`${BASE}/auth/me`, { method: "GET", credentials: "omit", headers: { Authorization: `Bearer ${token}` } });
+    if (!check.ok) throw new ApiError(check.status, await check.json().catch(() => null));
+    return (await check.json()) as T;
+  }
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: {
