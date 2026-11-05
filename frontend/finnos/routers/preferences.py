@@ -14,8 +14,10 @@ from finnos.routers.auth import require_user
 
 router = APIRouter(prefix="/preferences", tags=["preferences"])
 
-ALLOWED = {"navigation", "home", "register_default"}
+ALLOWED = {"navigation", "home", "register_default", "finn_memory"}
 MAX_VALUE = 4000
+# FINNOS IA memory (aliases, notes, topics) is capped on the client; it needs more room than a layout.
+MAX_BY_KEY = {"finn_memory": 12000}
 
 
 class PreferencesIn(BaseModel):
@@ -38,7 +40,7 @@ async def save_preferences(payload: PreferencesIn, user=Depends(require_user)):
     unknown = set(payload.values) - ALLOWED
     if unknown:
         raise HTTPException(422, "Preferência desconhecida.")
-    if any(len(v) > MAX_VALUE for v in payload.values.values()):
+    if any(len(v) > MAX_BY_KEY.get(k, MAX_VALUE) for k, v in payload.values.items()):
         raise HTTPException(422, "Preferência grande demais.")
     data = {"values": payload.values, "updated_at": datetime.now(timezone.utc).isoformat()}
     await run_in_threadpool(lambda: _doc(user["id"]).set(data, merge=True))

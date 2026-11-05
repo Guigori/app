@@ -53,3 +53,28 @@ test("FINNOS IA answers a free question with the user's data, without a paid cal
   await expect(page.getByText("Ainda não sei responder essa pergunta com os seus dados.", { exact: false })).toBeVisible();
   expect(paidAsk.calls).toBe(1);
 });
+
+test("FINNOS IA learns what the user teaches and keeps it in the account", async ({ page }) => {
+  const paidAsk = { calls: 0 };
+  await session(page, paidAsk);
+  const saved: string[] = [];
+  await page.route("**/api/preferences", (route) => {
+    if (route.request().method() === "PUT") saved.push(route.request().postDataJSON().values.finn_memory ?? "");
+    return route.fulfill(json({ values: {} }));
+  });
+  await page.goto("/contas");
+  await expect(page.getByRole("heading", { name: "Carteira" })).toBeVisible();
+  const input = page.getByPlaceholder("Pergunte ao FINNOS…");
+  await expect(async () => {
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("finnos-ai-open")));
+    await expect(input).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15000 });
+  await input.fill("lembre que Uber é trabalho");
+  await input.press("Enter");
+  await expect(page.getByText("Anotado: Uber é trabalho.", { exact: false })).toBeVisible();
+  await input.fill("quanto gastei de uber este mês?");
+  await input.press("Enter");
+  await expect(page.getByText("Você me disse: Uber é trabalho.", { exact: false })).toBeVisible();
+  await expect.poll(() => saved.some((value) => value.includes("Uber é trabalho")), { timeout: 10000 }).toBe(true);
+  expect(paidAsk.calls).toBe(0);
+});

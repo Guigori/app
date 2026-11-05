@@ -31,3 +31,24 @@ def test_round_trip_and_validation(monkeypatch):
         with pytest.raises(HTTPException) as error:
             asyncio.run(preferences.save_preferences(preferences.PreferencesIn(values=bad), user=me))
         assert error.value.status_code == 422
+
+
+def test_finn_memory_has_room_but_is_still_bounded(monkeypatch):
+    stored = {}
+
+    class Doc:
+        def get(self):
+            return SimpleNamespace(exists=bool(stored), to_dict=lambda: stored)
+
+        def set(self, data, merge=False):
+            stored.update(data)
+
+    monkeypatch.setattr(preferences, "_doc", lambda uid: Doc())
+    monkeypatch.setattr(preferences, "run_in_threadpool", lambda fn: asyncio.sleep(0, result=fn()))
+    me = {"id": "u1"}
+    memory = '{"v":1,"aliases":{"lanche":"rest"}}' + " " * 6000
+    asyncio.run(preferences.save_preferences(preferences.PreferencesIn(values={"finn_memory": memory}), user=me))
+    assert stored["values"]["finn_memory"] == memory
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(preferences.save_preferences(preferences.PreferencesIn(values={"finn_memory": "x" * 13000}), user=me))
+    assert error.value.status_code == 422

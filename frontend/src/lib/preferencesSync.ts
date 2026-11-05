@@ -8,6 +8,8 @@ const SYNCED = {
   navigation: { storage: "finnos:navigation-preferences:v2", event: "finnos-navigation-preferences" },
   home: { storage: "finnos:home-preferences:v1", event: "finnos-home-preferences" },
   register_default: { storage: "finnos:register-default:v1", event: "finnos-register-default" },
+  // What the user taught FINNOS IA (lib/finnMemory), so it knows them on every device.
+  finn_memory: { storage: "finnos:finn-memory:v1", event: "finnos-finn-memory" },
 } as const;
 type Key = keyof typeof SYNCED;
 

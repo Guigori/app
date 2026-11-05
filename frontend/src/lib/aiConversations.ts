@@ -16,7 +16,7 @@ export type FinnMessage = {
 export type FinnConversation = { id: string; title: string; updatedAt: string; messages: FinnMessage[] };
 
 const key = () => `finnos:ai-conversations:${getMode()}:${getMode() === "account" ? firebaseAuth?.currentUser?.uid ?? "unauthenticated" : "device"}`;
-const MAX = 3;
+const MAX = 10;
 
 export function readFinnConversations(): FinnConversation[] {
   try { return JSON.parse(localStorage.getItem(key()) ?? "[]") as FinnConversation[]; } catch { return []; }
