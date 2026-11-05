@@ -178,7 +178,7 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                         <li
                           key={transaction.id}
                           className="flex min-w-0 cursor-pointer items-center gap-3 rounded-lg py-3 transition-colors hover:bg-muted/40"
-                          onClick={() => dialogs.openTransaction({ transaction })}
+                          onClick={() => dialogs.openTransactionDetail(transaction)}
                         >
                           <span
                             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"

@@ -71,7 +71,7 @@ export function RecentTransactions({
         ) : (
           <ul className="divide-y divide-border">
             {transactions.map((t) => (
-              <li key={t.id} className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-lg py-3 transition-colors hover:bg-muted/40 min-[390px]:gap-3" onClick={() => dialogs.openTransaction({ transaction: t })} data-testid="recent-transaction-item">
+              <li key={t.id} className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-lg py-3 transition-colors hover:bg-muted/40 min-[390px]:gap-3" onClick={() => dialogs.openTransactionDetail(t)} data-testid="recent-transaction-item">
                 <span
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
                   style={{ backgroundColor: (t.category_color ?? "#64748B") + "1A", color: t.category_color ?? "#64748B" }}

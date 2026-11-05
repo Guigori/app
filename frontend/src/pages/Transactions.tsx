@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useIsRestoring, useRouteState } from "@/lib/routeState";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
@@ -310,6 +310,18 @@ export default function Transactions() {
           projectedExpense: periodTotals?.projectedExpense ?? calendar?.projected_expense ?? 0,
         };
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
+  // Tapping a lançamento explains it; the edit and delete buttons inside keep their own action.
+  const detailProps = (t: Transaction) => ({
+    tabIndex: 0,
+    "aria-label": `Ver detalhes de ${t.name}`,
+    onClick: (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest("button, a")) return;
+      dialogs.openTransactionDetail(t);
+    },
+    onKeyDown: (event: KeyboardEvent) => {
+      if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); dialogs.openTransactionDetail(t); }
+    },
+  });
   const rolling = periodMode === "rolling30" && scope === "mes";
   const planned = plannedInView(
     (rolling ? (rollingCalendarsQuery.data ?? []).flatMap((c) => c.planned ?? []) : calendar?.planned) ?? [],
@@ -597,7 +609,7 @@ export default function Transactions() {
               </TableHeader>
               <TableBody>
                 {transactions.map((t) => (
-                  <TableRow key={t.id} id={`transaction-${t.id}`} data-testid="transaction-row" className={cn(highlightedTransactionId === t.id && "bg-primary/5 ring-2 ring-inset ring-primary/30")}>
+                  <TableRow key={t.id} id={`transaction-${t.id}`} {...detailProps(t)} data-testid="transaction-row" className={cn("cursor-pointer", highlightedTransactionId === t.id && "bg-primary/5 ring-2 ring-inset ring-primary/30")}>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(t.date)}</TableCell>
                     <TableCell>
                       <p className="font-medium text-foreground">{t.name}</p>
@@ -694,7 +706,7 @@ export default function Transactions() {
 
                 <div className="divide-y divide-border">
                   {group.items.map((t) => (
-                    <div key={t.id} id={`transaction-${t.id}`} className={cn("px-4 py-3.5 transition-colors", highlightedTransactionId === t.id && "bg-primary/5 ring-2 ring-inset ring-primary/30")} data-testid="transaction-card">
+                    <div key={t.id} id={`transaction-${t.id}`} {...detailProps(t)} className={cn("cursor-pointer px-4 py-3.5 transition-colors hover:bg-muted/40", highlightedTransactionId === t.id && "bg-primary/5 ring-2 ring-inset ring-primary/30")} data-testid="transaction-card">
                       <div className="flex items-start gap-3">
                         <span
                           className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
