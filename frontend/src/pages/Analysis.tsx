@@ -77,14 +77,14 @@ export default function Analysis() {
   ];
 
   return <div className="mx-auto w-full max-w-5xl space-y-4 pb-8 animate-fade-up">
-    <header className="flex flex-wrap items-center justify-between gap-3 sm:items-start">
+    <header className="flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="font-heading text-2xl font-bold tracking-tight sm:text-3xl">Análise</h1><p data-keep className="text-sm text-muted-foreground">{yearMode ? month.slice(0,4) : monthLabel(month)}</p></div>
-      <div className="relative z-20 flex flex-row items-center gap-1 rounded-full border border-border bg-card p-1 shadow-sm sm:flex-col sm:gap-2 sm:p-1.5" aria-label="Menu vertical FINNOS">
-        <button type="button" onClick={()=>setPanel(panel==="calendar"?null:"calendar")} aria-label="Selecionar mês ou ano" className="grid h-10 w-10 place-items-center rounded-full sm:h-11 sm:w-11 text-foreground"><CalendarDays className="h-5 w-5"/></button>
-        <button type="button" onClick={()=>setHidden(!hidden)} aria-label={hidden?"Mostrar valores":"Ocultar valores"} aria-pressed={hidden} className="grid h-10 w-10 place-items-center rounded-full sm:h-11 sm:w-11 text-foreground">{hidden?<EyeOff className="h-5 w-5"/>:<Eye className="h-5 w-5"/>}</button>
-        <button type="button" onClick={()=>setMode("cards")} aria-label="Modo Cards" aria-pressed={mode==="cards"} className={`grid h-10 w-10 place-items-center rounded-full sm:h-11 sm:w-11 ${mode==="cards"?"bg-primary text-primary-foreground":"text-foreground"}`}><LayoutGrid className="h-5 w-5"/></button>
-        <button type="button" onClick={()=>setMode("charts")} aria-label="Modo Gráficos" aria-pressed={mode==="charts"} className={`grid h-10 w-10 place-items-center rounded-full sm:h-11 sm:w-11 ${mode==="charts"?"bg-primary text-primary-foreground":"text-foreground"}`}><ChartPie className="h-5 w-5"/></button>
-        <button type="button" onClick={()=>setPanel(panel==="filters"?null:"filters")} aria-label="Filtros" className="grid h-10 w-10 place-items-center rounded-full sm:h-11 sm:w-11 text-foreground"><SlidersHorizontal className="h-5 w-5"/></button>
+      <div className="relative z-20 flex flex-row items-center gap-1 rounded-full border border-border bg-card p-1 shadow-sm" aria-label="Menu FINNOS">
+        <button type="button" onClick={()=>setPanel(panel==="calendar"?null:"calendar")} aria-label="Selecionar mês ou ano" className="grid h-10 w-10 place-items-center rounded-full text-foreground"><CalendarDays className="h-5 w-5"/></button>
+        <button type="button" onClick={()=>setHidden(!hidden)} aria-label={hidden?"Mostrar valores":"Ocultar valores"} aria-pressed={hidden} className="grid h-10 w-10 place-items-center rounded-full text-foreground">{hidden?<EyeOff className="h-5 w-5"/>:<Eye className="h-5 w-5"/>}</button>
+        <button type="button" onClick={()=>setMode("cards")} aria-label="Modo Cards" aria-pressed={mode==="cards"} className={`grid h-10 w-10 place-items-center rounded-full ${mode==="cards"?"bg-primary text-primary-foreground":"text-foreground"}`}><LayoutGrid className="h-5 w-5"/></button>
+        <button type="button" onClick={()=>setMode("charts")} aria-label="Modo Gráficos" aria-pressed={mode==="charts"} className={`grid h-10 w-10 place-items-center rounded-full ${mode==="charts"?"bg-primary text-primary-foreground":"text-foreground"}`}><ChartPie className="h-5 w-5"/></button>
+        <button type="button" onClick={()=>setPanel(panel==="filters"?null:"filters")} aria-label="Filtros" className="grid h-10 w-10 place-items-center rounded-full text-foreground"><SlidersHorizontal className="h-5 w-5"/></button>
       </div>
     </header>
     {panel==="calendar" && <div className="rounded-2xl border bg-card p-4 shadow-sm">

@@ -337,15 +337,15 @@ export default function Transactions() {
 
   return (
     <div className="relative flex flex-col gap-4 animate-fade-up">
-      <div className="grid grid-cols-1 items-start gap-x-3 gap-y-3 sm:grid-cols-[minmax(0,1fr)_4.5rem]" data-testid="flow-header-grid">
+      <div className="grid grid-cols-1 items-start gap-x-3 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto]" data-testid="flow-header-grid">
         <div className="min-w-0 pt-1">
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo</h1>
           <p className="mt-1 text-sm text-muted-foreground">O que entrou, saiu e o que vem pela frente.</p>
         </div>
 
-        {/* Phones: labelled segmented tabs under the title (no tall icon rail leaving a blank gap). */}
-        <div className="flex self-start sm:row-span-2 sm:justify-end" data-testid="flow-view-rail">
-          <div className="grid w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-card p-1 sm:flex sm:w-auto sm:flex-col sm:rounded-full">
+        {/* Always a horizontal, labelled segmented control: no vertical rail eating a column. */}
+        <div className="flex self-start sm:justify-end" data-testid="flow-view-rail">
+          <div className="grid w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-card p-1 sm:flex sm:w-auto sm:rounded-full">
             {([
               { key: "calendario" as const, label: "Calendário", icon: CalendarDays },
               { key: "categorias" as const, label: "Análise", icon: ChartPie },
@@ -356,7 +356,7 @@ export default function Transactions() {
                 type="button"
                 size="sm"
                 variant={flowView === item.key ? "default" : "ghost"}
-                className="h-10 gap-1.5 rounded-xl px-2 sm:h-9 sm:w-9 sm:rounded-full sm:px-0"
+                className="h-10 gap-1.5 rounded-xl px-2 sm:h-9 sm:rounded-full sm:px-3"
                 onClick={() => setFlowView(item.key)}
                 aria-label={`Visualizar ${item.label}`}
                 aria-pressed={flowView === item.key}
@@ -364,13 +364,13 @@ export default function Transactions() {
                 data-testid={`flow-view-${item.key}`}
               >
                 <item.icon className="h-4 w-4" aria-hidden="true" />
-                <span className="text-xs font-semibold sm:sr-only">{item.label}</span>
+                <span className="text-xs font-semibold">{item.label}</span>
               </Button>
             ))}
           </div>
         </div>
 
-        <div className="min-w-0 rounded-2xl border border-border bg-card px-5 py-4 sm:col-span-1">
+        <div className="min-w-0 rounded-2xl border border-border bg-card px-5 py-4 sm:col-span-2">
           {/* Same period as Início and Fluxo de caixa, so the numbers always match. */}
           <p className="mb-2 text-xs text-muted-foreground" data-testid="flow-strip-period">
             {scope === "dia" ? formatDate(selectedDate) : periodMode === "rolling30" ? "Últimos 30 dias" : monthLabel(month)}
