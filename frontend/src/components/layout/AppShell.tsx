@@ -14,6 +14,7 @@ import { LocalNotificationPulse, NotificationPermissionPrompt } from "@/componen
 import { useEdgeSwipe } from "@/lib/useEdgeSwipe";
 import { ConnectivityStatus } from "@/components/sync/ConnectivityStatus";
 import { StatementImportHost } from "@/components/import/StatementImportHost";
+import { InstallAppPrompt } from "@/components/layout/InstallAppPrompt";
 import { startPreferencesSync } from "@/lib/preferencesSync";
 
 export function AppShell() {
@@ -100,6 +101,7 @@ export function AppShell() {
         <ConnectivityStatus />
         <StatementImportHost />
         <NotificationPermissionPrompt />
+        <InstallAppPrompt />
         <LocalNotificationPulse />
       </div>
     </DialogsProvider>

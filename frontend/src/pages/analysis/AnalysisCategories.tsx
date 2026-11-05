@@ -52,7 +52,7 @@ export default function AnalysisCategories() {
                 <BarChart data={top} layout="vertical" margin={{ top: 0, right: 64, left: 0, bottom: 0 }} barCategoryGap={8}>
                   <XAxis type="number" hide />
                   <YAxis type="category" dataKey="name" width={104} tickLine={false} axisLine={false} tick={{ ...axisTick, fill: "var(--foreground)" }} />
-                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number) => [`${money(v)}${total > 0 ? ` · ${pct((v / total) * 100)}` : ""}`, "Gasto"]} />
+                  <Tooltip active defaultIndex={0} contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number) => [`${money(v)}${total > 0 ? ` · ${pct((v / total) * 100)}` : ""}`, "Gasto"]} />
                   <Bar dataKey="current" radius={[0, 4, 4, 0]} maxBarSize={22} label={hidden ? undefined : { position: "right", formatter: (v: unknown) => short(Number(v)), fill: "var(--muted-foreground)", fontSize: 12 }}>
                     {top.map((c) => <Cell key={c.id} fill={c.color} />)}
                   </Bar>

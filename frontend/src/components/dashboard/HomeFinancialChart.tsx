@@ -10,6 +10,7 @@ import { fetchCalendar, fetchTrends } from "@/lib/data";
 import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatHiddenBRL, todayISO } from "@/lib/format";
 import { buildMonthlyCumulativeRows, defaultDailyTooltipIndex, selectVisibleDailyRows } from "@/lib/homeChart";
+import { isThisMonth, pinIndex } from "@/lib/chartPin";
 import type { MetricKind } from "@/types/finnos";
 import type { FinnosView, FinnosSeries } from "@/components/shared/FinnosVerticalMenu";
 
@@ -38,6 +39,14 @@ const METRIC_UI = {
   Resultado: { icon: Equal, color: "var(--finnos-purple)", soft: "bg-violet-500/10 text-violet-400" },
 } as const;
 
+type ProjectionKey = "balance" | "income" | "expense";
+const PROJECTION_KEYS: ProjectionKey[] = ["balance", "income", "expense"];
+const PROJECTION_UI: Record<ProjectionKey, { label: string; color: string }> = {
+  balance: { label: "Saldo", color: "var(--finnos-purple-live)" },
+  income: { label: "Receitas", color: "var(--income)" },
+  expense: { label: "Despesas", color: "var(--expense)" },
+};
+
 function addMonth(value: string, direction: -1 | 1): string {
   const [year, month] = value.split("-").map(Number);
   const date = new Date(year, month - 1 + direction, 1);
@@ -57,8 +66,10 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
   const showIncome = menuSeries.includes("Receitas");
   const showExpense = menuSeries.includes("Despesas");
   const showResult = menuSeries.includes("Resultado");
-  const [selectedMetric, setSelectedMetric] = useState<"Receitas" | "Despesas" | "Resultado" | null>(null);
-  const [projectionMetric, setProjectionMetric] = useState<"balance" | "income" | "expense">("balance");
+  // Several series can be on at once; none selected means all of them.
+  const [selectedMetrics, setSelectedMetrics] = useState<Array<"Receitas" | "Despesas" | "Resultado">>([]);
+  const selectedMetric = selectedMetrics.length === 1 ? selectedMetrics[0] : null;
+  const [projectionSeries, setProjectionSeries] = useState<ProjectionKey[]>(["balance"]);
   const [projectionMonth, setProjectionMonth] = useState(month);
   const [projectionDragX, setProjectionDragX] = useState<number | null>(null);
   const chartScrollerRef = useRef<HTMLDivElement | null>(null);
@@ -92,8 +103,8 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
   }, [calendarQuery.data, daily, month, period, trendsQuery.data]);
 
   const defaultTooltipIndex = useMemo(
-    () => daily ? defaultDailyTooltipIndex(chartData, month, todayISO()) : undefined,
-    [chartData, daily, month],
+    () => daily ? defaultDailyTooltipIndex(chartData, month, todayISO()) : pinIndex(trendsQuery.data?.months ?? [], (m) => isThisMonth(m)),
+    [chartData, daily, month, trendsQuery.data],
   );
 
   const projectionData = useMemo(() => {
@@ -128,15 +139,20 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
         forecastIncome += day?.projected_income ?? 0;
         forecastExpense += day?.projected_expense ?? 0;
       }
-      const actualValue = projectionMetric === "income" ? actualIncome : projectionMetric === "expense" ? actualExpense : openingBalance + actualIncome - actualExpense;
-      const forecastValue = projectionMetric === "income" ? forecastIncome : projectionMetric === "expense" ? forecastExpense : total + (forecastIncome - realisedIncome) - (forecastExpense - realisedExpense);
-      return {
-        label: String(n).padStart(2, "0"),
-        actual: n <= cutoffDay ? Math.round(actualValue * 100) / 100 : null,
-        forecast: n >= cutoffDay && cutoffDay > 0 ? Math.round((n === cutoffDay ? actualValue : forecastValue) * 100) / 100 : null,
+      const row: Record<string, number | string | null> = { label: String(n).padStart(2, "0"), estimate: n > cutoffDay ? 1 : 0 };
+      const values: Record<ProjectionKey, [number, number]> = {
+        balance: [openingBalance + actualIncome - actualExpense, total + (forecastIncome - realisedIncome) - (forecastExpense - realisedExpense)],
+        income: [actualIncome, forecastIncome],
+        expense: [actualExpense, forecastExpense],
       };
+      for (const key of PROJECTION_KEYS) {
+        const [actualValue, forecastValue] = values[key];
+        row[`${key}Actual`] = n <= cutoffDay ? Math.round(actualValue * 100) / 100 : null;
+        row[`${key}Forecast`] = n >= cutoffDay && cutoffDay > 0 ? Math.round((n === cutoffDay ? actualValue : forecastValue) * 100) / 100 : null;
+      }
+      return row;
     });
-  }, [calendarQuery.data?.days, projectionMonth, projectionMetric, total]);
+  }, [calendarQuery.data?.days, projectionMonth, total]);
 
   useEffect(() => {
     if (view !== "bars" || !daily || !chartScrollerRef.current) return;
@@ -166,8 +182,8 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
     { name: "Despesas", value: Math.max(periodSummary.expense, 0), fill: METRIC_UI.Despesas.color, metric: "expense" as MetricKind },
   ].filter((item) => item.value > 0);
   const selectedPieItem = selectedMetric ? pieData.find((item) => item.name === selectedMetric) ?? null : null;
-  const metricVisible = (name: "Receitas" | "Despesas" | "Resultado") => !selectedMetric || selectedMetric === name;
-  const toggleMetric = (name: "Receitas" | "Despesas" | "Resultado") => setSelectedMetric((current) => current === name ? null : name);
+  const metricVisible = (name: "Receitas" | "Despesas" | "Resultado") => selectedMetrics.length === 0 || selectedMetrics.includes(name);
+  const toggleMetric = (name: "Receitas" | "Despesas" | "Resultado") => setSelectedMetrics((current) => current.includes(name) ? current.filter((x) => x !== name) : [...current, name]);
 
   const tooltipStyle = {
     background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 16,
@@ -176,8 +192,25 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
   const isLoading = daily ? calendarQuery.isPending : trendsQuery.isPending;
   const periodLabel = menuInterval;
 
-  const projectionColor = projectionMetric === "income" ? "var(--income)" : projectionMetric === "expense" ? "var(--expense)" : "var(--finnos-purple-live)";
-  const projectionLabel = projectionMetric === "income" ? "Receitas" : projectionMetric === "expense" ? "Despesas" : "Saldo";
+  const projectionColor = PROJECTION_UI[projectionSeries[0] ?? "balance"].color;
+  const toggleProjection = (key: ProjectionKey) => setProjectionSeries((current) => current.includes(key) ? (current.length > 1 ? current.filter((x) => x !== key) : current) : [...current, key]);
+  // The tooltip starts on today (the last day of a past month, the first of a future one).
+  const todayLabel = projectionMonth === todayISO().slice(0, 7) ? todayISO().slice(8, 10) : projectionMonth < todayISO().slice(0, 7) ? String(projectionData.at(-1)?.label) : "01";
+  const projectionTooltipIndex = pinIndex(projectionData, (row) => row.label === todayLabel);
+  // One line per selected series: the real value up to today, the estimate after it.
+  const projectionTooltip = ({ label }: { label?: string | number }) => {
+    const row = projectionData.find((item) => item.label === label);
+    if (!row) return null;
+    return (
+      <div style={tooltipStyle} className="px-3 py-2" data-testid="home-chart-tooltip">
+        <p className="text-xs font-medium text-muted-foreground">Dia {row.label}{row.estimate ? " · estimativa" : ""}</p>
+        {projectionSeries.map((key) => {
+          const value = (row[`${key}Actual`] ?? row[`${key}Forecast`]) as number | null;
+          return <p key={key} className="mt-1 flex items-center gap-1.5 text-sm"><span className="size-2 rounded-full" style={{ backgroundColor: PROJECTION_UI[key].color }} aria-hidden="true" /><span className="text-muted-foreground">{PROJECTION_UI[key].label}</span><strong className="ml-auto pl-3 tabular-nums">{value === null || value === undefined ? "—" : money(value)}</strong></p>;
+        })}
+      </div>
+    );
+  };
   const shiftProjectionMonth = (direction: -1 | 1) => setProjectionMonth((current) => addMonth(current, direction));
 
   return (
@@ -225,7 +258,7 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
             <span className="text-xs font-medium text-muted-foreground">{monthLabel(projectionMonth)}</span>
             <button type="button" onClick={() => shiftProjectionMonth(1)} className="rounded-full px-2 py-1 text-lg text-muted-foreground" aria-label="Próximo mês">›</button>
           </div>
-          <div className="h-[300px] w-full sm:h-[330px]">
+          <div className="h-[280px] w-full sm:h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsLineChart data={projectionData} margin={{ top: 16, right: 12, left: -8, bottom: 0 }}>
                 <defs>
@@ -238,26 +271,33 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
                 <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.36} strokeDasharray="4 6" />
                 <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: "var(--border)" }} minTickGap={42} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
                 <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(value: number, name: string) => [money(value), name === "actual" ? `${projectionLabel} real` : `${projectionLabel} · estimativa`]} labelFormatter={(label) => `Dia ${label}`} />
-                <Area type="monotone" dataKey="forecast" stroke="none" fill="url(#finnosForecastSmoke)" connectNulls={false} />
-                <Line type="monotone" dataKey="actual" name="actual" stroke={projectionColor} strokeWidth={3.25} dot={false} activeDot={{ r: 5, fill: projectionColor, stroke: "var(--background)", strokeWidth: 2 }} connectNulls={false} />
-                <Line type="monotone" dataKey="forecast" name="forecast" stroke={projectionColor} strokeOpacity={0.78} strokeWidth={2.75} strokeDasharray="8 7" dot={false} activeDot={{ r: 5, fill: "var(--background)", stroke: projectionColor, strokeWidth: 3 }} connectNulls={false} />
+                <Tooltip active defaultIndex={projectionTooltipIndex} content={projectionTooltip} cursor={{ stroke: "var(--muted-foreground)", strokeOpacity: 0.5 }} />
+                {projectionSeries.length === 1 ? <Area type="monotone" dataKey={`${projectionSeries[0]}Forecast`} stroke="none" fill="url(#finnosForecastSmoke)" connectNulls={false} tooltipType="none" activeDot={false} /> : null}
+                {projectionSeries.flatMap((key) => [
+                  <Line key={`${key}a`} type="monotone" dataKey={`${key}Actual`} stroke={PROJECTION_UI[key].color} strokeWidth={3.25} dot={false} activeDot={{ r: 5, fill: PROJECTION_UI[key].color, stroke: "var(--background)", strokeWidth: 2 }} connectNulls={false} />,
+                  <Line key={`${key}f`} type="monotone" dataKey={`${key}Forecast`} stroke={PROJECTION_UI[key].color} strokeOpacity={0.78} strokeWidth={2.75} strokeDasharray="8 7" dot={false} activeDot={{ r: 5, fill: "var(--background)", stroke: PROJECTION_UI[key].color, strokeWidth: 3 }} connectNulls={false} />,
+                ])}
               </RechartsLineChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs">
-            {([["balance", "Saldo"], ["income", "Receitas"], ["expense", "Despesas"]] as const).map(([key, label]) => (
-              <button key={key} type="button" onClick={() => setProjectionMetric(key)} className={`rounded-full border px-3 py-1.5 font-medium transition-colors ${projectionMetric === key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"}`}>
-                {label}
-              </button>
-            ))}
+            {PROJECTION_KEYS.map((key) => {
+              const on = projectionSeries.includes(key);
+              return (
+                <button key={key} type="button" onClick={() => toggleProjection(key)} aria-pressed={on} data-testid={`home-chart-series-${key}`}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-medium transition-colors ${on ? "border-transparent bg-card text-foreground shadow-sm ring-2" : "border-border bg-card text-muted-foreground"}`}
+                  style={on ? { ["--tw-ring-color" as string]: PROJECTION_UI[key].color } : undefined}>
+                  <span className="size-2 rounded-full" style={{ backgroundColor: PROJECTION_UI[key].color }} aria-hidden="true" />{PROJECTION_UI[key].label}
+                </button>
+              );
+            })}
             <span className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-muted-foreground"><span className="h-0 w-5 border-t-2 border-dashed" style={{ borderColor: projectionColor }} />Estimativa</span>
           </div>
           <p className="mt-2 hidden text-center text-xs text-muted-foreground sm:block">Arraste para os lados para mudar de mês.</p>
         </div>
       ) : view === "pie" ? (
         <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 py-1 sm:min-h-[270px] sm:flex-row sm:gap-10 sm:py-2">
-          <div className="relative h-44 w-44 shrink-0 sm:h-48 sm:w-48" onClick={(event) => { if (event.target === event.currentTarget) setSelectedMetric(null); }}>
+          <div className="relative h-44 w-44 shrink-0 sm:h-48 sm:w-48" onClick={(event) => { if (event.target === event.currentTarget) setSelectedMetrics([]); }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => money(value)} />
@@ -296,6 +336,7 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={daily ? 18 : 8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
                 <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
                 <Tooltip
+                  active
                   defaultIndex={defaultTooltipIndex}
                   cursor={{ fill: "var(--muted)", opacity: 0.25 }}
                   contentStyle={tooltipStyle}
@@ -318,6 +359,7 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={daily ? 18 : 8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
                 <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
                 <Tooltip
+                  active
                   defaultIndex={defaultTooltipIndex}
                   contentStyle={tooltipStyle}
                   formatter={(value: number) => money(value)}
@@ -333,14 +375,14 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs" role="group" aria-label="Filtrar série do gráfico">
             <button
               type="button"
-              onClick={() => setSelectedMetric(null)}
-              className={`rounded-full border px-3 py-1.5 font-medium transition-colors ${selectedMetric === null ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"}`}
+              onClick={() => setSelectedMetrics([])}
+              className={`rounded-full border px-3 py-1.5 font-medium transition-colors ${selectedMetrics.length === 0 ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"}`}
             >
               Todos
             </button>
-            {showExpense && <button type="button" onClick={() => setSelectedMetric("Despesas")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium transition-colors ${selectedMetric === "Despesas" ? "border-rose-400 bg-rose-500/10 text-rose-600" : "border-border text-muted-foreground"}`}><span className="flex h-5 w-5 items-center justify-center rounded-lg bg-rose-500/10"><ArrowUpRight className="h-3.5 w-3.5 text-rose-400" /></span>Despesas</button>}
-            {showIncome && <button type="button" onClick={() => setSelectedMetric("Receitas")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium transition-colors ${selectedMetric === "Receitas" ? "border-emerald-400 bg-emerald-500/10 text-emerald-600" : "border-border text-muted-foreground"}`}><span className="flex h-5 w-5 items-center justify-center rounded-lg bg-emerald-500/10"><ArrowDownLeft className="h-3.5 w-3.5 text-emerald-400" /></span>Receitas</button>}
-            {showResult && <button type="button" onClick={() => setSelectedMetric("Resultado")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium transition-colors ${selectedMetric === "Resultado" ? "border-violet-400 bg-violet-500/10 text-violet-600" : "border-border text-muted-foreground"}`}><span className="flex h-5 w-5 items-center justify-center rounded-lg bg-violet-500/10"><Equal className="h-3.5 w-3.5 text-violet-400" /></span>Resultado</button>}
+            {showExpense && <button type="button" onClick={() => toggleMetric("Despesas")} aria-pressed={selectedMetrics.includes("Despesas")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium transition-colors ${selectedMetrics.includes("Despesas") ? "border-rose-400 bg-rose-500/10 text-rose-600" : "border-border text-muted-foreground"}`}><span className="flex h-5 w-5 items-center justify-center rounded-lg bg-rose-500/10"><ArrowUpRight className="h-3.5 w-3.5 text-rose-400" /></span>Despesas</button>}
+            {showIncome && <button type="button" onClick={() => toggleMetric("Receitas")} aria-pressed={selectedMetrics.includes("Receitas")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium transition-colors ${selectedMetrics.includes("Receitas") ? "border-emerald-400 bg-emerald-500/10 text-emerald-600" : "border-border text-muted-foreground"}`}><span className="flex h-5 w-5 items-center justify-center rounded-lg bg-emerald-500/10"><ArrowDownLeft className="h-3.5 w-3.5 text-emerald-400" /></span>Receitas</button>}
+            {showResult && <button type="button" onClick={() => toggleMetric("Resultado")} aria-pressed={selectedMetrics.includes("Resultado")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium transition-colors ${selectedMetrics.includes("Resultado") ? "border-violet-400 bg-violet-500/10 text-violet-600" : "border-border text-muted-foreground"}`}><span className="flex h-5 w-5 items-center justify-center rounded-lg bg-violet-500/10"><Equal className="h-3.5 w-3.5 text-violet-400" /></span>Resultado</button>}
           </div>
         </div>
       )}

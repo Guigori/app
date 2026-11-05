@@ -3,6 +3,7 @@ import { useRouteState } from "@/lib/routeState";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { pinIndex } from "@/lib/chartPin";
 import { CalendarDays, ChevronRight, Eye, EyeOff, LayoutGrid, ChartPie, SlidersHorizontal, Sparkles, TrendingUp, WalletCards } from "lucide-react";
 import { fetchBudget, fetchCalendar, fetchDashboard, fetchTrends } from "@/lib/data";
 import { currentMonth, monthLabel, todayISO } from "@/lib/format";
@@ -98,7 +99,7 @@ export default function Analysis() {
         {filter!=="income" && <Metric label="Despesas" value={d?.expense ?? 0} change={expenseDelta} negative hidden={hidden}/>}
         <Metric label="Resultado" value={d?.month_balance ?? 0} change={0} hidden={hidden}/>
       </div> : <div className="h-52">
-        <ResponsiveContainer width="100%" height="100%"><BarChart data={chartData}><CartesianGrid vertical={false} strokeDasharray="3 3" opacity={.18}/><XAxis dataKey="label" axisLine={false} tickLine={false}/><YAxis hide/><Tooltip formatter={(v)=>money(Number(v))}/><Bar dataKey="income" name="Receitas" fill="var(--primary)" radius={[5,5,0,0]}/><Bar dataKey="expense" name="Despesas" fill="#A46DFF" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer>
+        <ResponsiveContainer width="100%" height="100%"><BarChart data={chartData}><CartesianGrid vertical={false} strokeDasharray="3 3" opacity={.18}/><XAxis dataKey="label" axisLine={false} tickLine={false}/><YAxis hide/><Tooltip active defaultIndex={pinIndex(chartData,(m)=>m.month===month)} formatter={(v)=>money(Number(v))}/><Bar dataKey="income" name="Receitas" fill="var(--primary)" radius={[5,5,0,0]}/><Bar dataKey="expense" name="Despesas" fill="#A46DFF" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer>
       </div>}
     </CardContent></Card></button>
 

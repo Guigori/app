@@ -5,6 +5,7 @@ import { parseReceiptText, parseRegisterText } from "@/lib/registerParsing";
 import { registerProposal, type Proposal, type ProposalState, type ProposedEntry } from "@/lib/finnActions";
 import { applyProposal, undoProposal } from "@/lib/finnApply";
 import { readMemory } from "@/lib/finnMemory";
+import { readRegisterLink } from "@/lib/registerLink";
 import { ProposalCard } from "@/components/ai/ProposalCard";
 import { TransferPreview } from "@/components/transactions/TransferPreview";
 import { getRegisterDefault } from "@/lib/registerPreferences";
@@ -19,6 +20,9 @@ import { useBalanceHidden } from "@/lib/balance";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { ArrowLeft, ArrowUp, Camera, Check, ChevronRight, Mic, Paperclip, Plus, X, Wallet, CreditCard, Landmark, Repeat2, StickyNote, Bell, Tag, FolderOpen, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Delete, MoreVertical, Search, Ban, WandSparkles, ReceiptText, Square } from "lucide-react";
+
+/** Voice, receipt photo and file attachment are hidden until they work reliably on every phone; the code stays. */
+const MEDIA_INPUTS = false;
 
 type Page = "entry" | "pay" | "start" | "manual" | "details" | "categories" | "accounts" | "installments" | "more" | "voice" | "receipt" | "review" | "recognized" | "done";
 type Kind = "Despesa" | "Receita" | "Transferência";
@@ -148,6 +152,28 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
     }
     applyParsed(parseRegisterText(source, { accounts, categories, today: todayISO() }));
   };
+  // Opened from Apple Shortcuts or the Wallet automation: understand the sentence once the wallet
+  // has loaded, then clear the address so a reload does not register it again.
+  // A Shortcut may reuse the open tab, changing only the "#": listen for that too (page only, not the sheet).
+  const [linkHash, setLinkHash] = useState(() => (embedded ? "" : window.location.hash));
+  useEffect(() => {
+    if (embedded) return;
+    const onHash = () => setLinkHash(window.location.hash);
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [embedded]);
+  useEffect(() => {
+    if (!linkHash || !accountsQuery.isSuccess || !categoriesQuery.isSuccess) return;
+    const link = readRegisterLink(linkHash);
+    setLinkHash("");
+    if (!link) return;
+    window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    setText(link.sentence);
+    setRecognized(null);
+    setHistory([]);
+    interpret(link.sentence);
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkHash, accountsQuery.isSuccess, categoriesQuery.isSuccess]);
   const openInForm = (entry: ProposedEntry) => applyParsed({
     value: entry.value, kind: entry.type === "receita" ? "Receita" : "Despesa", date: entry.date,
     accountId: entry.accountId, categoryId: entry.categoryId, name: entry.name,
@@ -255,7 +281,7 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
           })}
         </div>
         <div className="flex shrink-0 items-center">
-          <button type="button" onClick={() => go("start")} aria-label="Registro inteligente: escrever, falar ou fotografar" title="Registro inteligente" className="grid size-11 place-items-center rounded-full text-primary hover:bg-muted"><WandSparkles size={20} /></button>
+          <button type="button" onClick={() => go("start")} aria-label={MEDIA_INPUTS ? "Registro inteligente: escrever, falar ou fotografar" : "Registro inteligente: escrever como foi"} title="Registro inteligente" className="grid size-11 place-items-center rounded-full text-primary hover:bg-muted"><WandSparkles size={20} /></button>
           <button type="button" onClick={() => go("more")} aria-label="Mais opções" className="grid size-11 place-items-center rounded-full border border-border bg-card"><MoreVertical size={20} /></button>
         </div>
       </header>
@@ -352,7 +378,7 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
   }
   const row = (label: string, val: string, action: () => void) => <button onClick={action} className="flex w-full items-center justify-between border-b border-border py-4 text-left text-sm"><span>{label}</span><span className="flex items-center gap-2 text-primary">{val}<ChevronRight size={15}/></span></button>;
   return <div className={embedded ? "flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground" : "mx-auto flex min-h-[min(790px,90dvh)] w-full max-w-md flex-col overflow-hidden rounded-[30px] border border-border bg-background text-foreground shadow-2xl"}>
-    <header className="flex items-center gap-3 px-6 pt-7 pb-4"><div className="grid size-11 place-items-center rounded-2xl bg-primary/12 text-primary"><WandSparkles size={20}/></div><div className="flex-1"><div className="font-semibold">Registro inteligente</div><div className="text-xs text-muted-foreground">Escreva, fale ou fotografe</div></div><button aria-label="Voltar" onClick={back} className="grid size-10 place-items-center rounded-full hover:bg-muted"><ArrowLeft size={20}/></button></header>
+    <header className="flex items-center gap-3 px-6 pt-7 pb-4"><div className="grid size-11 place-items-center rounded-2xl bg-primary/12 text-primary"><WandSparkles size={20}/></div><div className="flex-1"><div className="font-semibold">Registro inteligente</div><div className="text-xs text-muted-foreground">{MEDIA_INPUTS ? "Escreva, fale ou fotografe" : "Escreva como foi, em uma frase"}</div></div><button aria-label="Voltar" onClick={back} className="grid size-10 place-items-center rounded-full hover:bg-muted"><ArrowLeft size={20}/></button></header>
     <main key={page} className="min-h-0 flex-1 animate-in fade-in slide-in-from-bottom-3 overflow-y-auto overscroll-contain px-6 py-5 duration-300">
       {page === "start" && <><h1 className="mt-2 text-2xl font-semibold leading-tight">Como foi?</h1><div className="mt-5 flex flex-wrap gap-2">{["Café 9 reais no Pix", "Recebi 3100 de salário", "Uber 23 ontem"].map(t => <button key={t} onClick={() => interpret(t)} className="rounded-full border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted">{t}</button>)}</div></>}
       {page === "manual" && <><div className="text-center text-xs text-muted-foreground">REGISTRO MANUAL</div><div className="my-9 text-center text-5xl font-semibold">{format(value)}</div><input aria-label="Nome da movimentação" value={name} onChange={e => setName(e.target.value)} placeholder="Nome da movimentação" className="mb-8 w-full rounded-xl bg-muted p-4 text-center outline-none"/><div className="grid grid-cols-3 gap-2">{["1","2","3","4","5","6","7","8","9","C","0","⌫"].map(k => <button key={k} type="button" className="rounded-full bg-muted py-2.5 text-xl" onClick={() => setValue(v => { const cents = String(Math.round((Number(v) || 0) * 100)); const next = k === "C" ? "" : k === "⌫" ? cents.slice(0, -1) : cents.replace(/^0+/, "") + k; return (Number(next || "0") / 100).toFixed(2); })}>{k}</button>)}</div><button disabled={Number(value) <= 0} onClick={() => go("details")} className={button + " mt-4 w-full bg-primary text-primary-foreground disabled:opacity-40"}>Continuar</button></>}
@@ -387,7 +413,7 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
       {page === "receipt" && <div className="flex h-full flex-col items-center justify-center pb-10 text-center"><ReceiptText size={44} className="text-primary motion-safe:animate-pulse"/><p className="mt-5 font-medium">Lendo o recibo…</p><div className="mt-4 h-1.5 w-48 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${ocrProgress ?? 5}%` }}/></div>{attachment ? <p className="mt-3 max-w-xs truncate text-xs text-muted-foreground">{attachment}</p> : null}</div>}
       {page === "done" && <div className="py-10 text-center"><div className="mx-auto grid size-28 place-items-center rounded-full border-2 border-primary text-primary"><Check size={60}/></div><h2 className="mt-8 text-2xl">{saveStatus === "pending" ? "Salvo neste dispositivo" : "Registro realizado!"}</h2><p className="mt-5 text-3xl">{format(value)}</p><p className="mt-2 text-muted-foreground">{displayName}</p><p className="mt-8 text-sm text-muted-foreground">{saveStatus === "pending" ? "Aguardando conexão para sincronizar. Não apague os dados do aplicativo enquanto houver registros pendentes." : "Movimentação sincronizada com o FINNOS."}</p><button onClick={() => {setText("");setName("");setValue("");setSaveStatus(null);setExpr("");setPage("entry")}} className={button + " mt-8 w-full bg-primary text-primary-foreground"}>Novo registro</button></div>}
     </main>
-    {page === "start" && <div className="mx-4 mb-3 shrink-0 rounded-3xl bg-muted p-3"><textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); interpret(); } }} placeholder="Ex.: Paguei R$ 45 no Uber com o Nubank ontem" className="h-16 w-full resize-none bg-transparent p-2 text-base outline-none"/><div className="flex items-center gap-1"><button type="button" aria-label="Fotografar recibo" onClick={() => cameraInput.current?.click()} className="grid size-11 place-items-center rounded-full hover:bg-background/60"><Camera size={21}/></button><button type="button" aria-label="Falar" onClick={() => { go("voice"); startVoice(); }} className="grid size-11 place-items-center rounded-full hover:bg-background/60"><Mic size={21}/></button><button type="button" aria-label="Anexar arquivo" onClick={() => fileInput.current?.click()} className="grid size-11 place-items-center rounded-full hover:bg-background/60"><Paperclip size={21}/></button><button type="button" aria-label="Interpretar" disabled={!text.trim()} onClick={() => interpret()} className="ml-auto grid size-11 place-items-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"><ArrowUp size={21}/></button></div></div>}
+    {page === "start" && <div className="mx-4 mb-3 shrink-0 rounded-3xl bg-muted p-3"><textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); interpret(); } }} placeholder="Ex.: Paguei R$ 45 no Uber com o Nubank ontem" className="h-16 w-full resize-none bg-transparent p-2 text-base outline-none"/><div className="flex items-center gap-1">{MEDIA_INPUTS ? <><button type="button" aria-label="Fotografar recibo" onClick={() => cameraInput.current?.click()} className="grid size-11 place-items-center rounded-full hover:bg-background/60"><Camera size={21}/></button><button type="button" aria-label="Falar" onClick={() => { go("voice"); startVoice(); }} className="grid size-11 place-items-center rounded-full hover:bg-background/60"><Mic size={21}/></button><button type="button" aria-label="Anexar arquivo" onClick={() => fileInput.current?.click()} className="grid size-11 place-items-center rounded-full hover:bg-background/60"><Paperclip size={21}/></button></> : <span className="px-2 text-xs text-muted-foreground">Voz, foto e anexo chegam em breve.</span>}<button type="button" aria-label="Interpretar" disabled={!text.trim()} onClick={() => interpret()} className="ml-auto grid size-11 place-items-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"><ArrowUp size={21}/></button></div></div>}
     <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { go("receipt"); void readFile(f); } }}/>
     <input ref={fileInput} type="file" accept="image/*,.txt,.csv,text/plain,text/csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { go("receipt"); void readFile(f); } }}/>
     {!embedded && <footer className="pb-3 text-center text-xs text-muted-foreground">FINNOS · Registro de movimentações</footer>}

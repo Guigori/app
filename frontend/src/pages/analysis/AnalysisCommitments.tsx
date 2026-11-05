@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { pinIndex } from "@/lib/chartPin";
 import { fetchDashboard, fetchSubscriptions, fetchTransactions } from "@/lib/data";
 import { currentMonth } from "@/lib/format";
 import { commitments } from "@/lib/analysisInsights";
@@ -44,7 +45,7 @@ export default function AnalysisCommitments() {
                 <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
                 <YAxis hide={hidden} width={44} tickLine={false} axisLine={false} tick={axisTick} tickFormatter={axisMoney} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number, name: string) => [money(v), name === "fixed" ? "Fixos e assinaturas" : "Parcelas"]} />
+                <Tooltip active defaultIndex={pinIndex(data.months, (m) => m.month === month)} contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number, name: string) => [money(v), name === "fixed" ? "Fixos e assinaturas" : "Parcelas"]} />
                 {/* Stacked with a 2px surface gap between segments. */}
                 <Bar dataKey="fixed" stackId="c" fill="var(--primary)" stroke="var(--card)" strokeWidth={2} maxBarSize={32} />
                 <Bar dataKey="installments" stackId="c" fill="var(--expense)" stroke="var(--card)" strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={32} />

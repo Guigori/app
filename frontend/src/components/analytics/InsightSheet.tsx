@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { isThisMonth, pinIndex } from "@/lib/chartPin";
 import { ArrowRight } from "lucide-react";
 import type { MonthTrend } from "@/types/finnos";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -36,14 +37,14 @@ export function InsightSheet({ detail, trend, hidden, onClose }: { detail: Insig
                   <AreaChart data={trend} margin={{ top: 6, right: 4, left: 4, bottom: 0 }}>
                     <CartesianGrid vertical={false} stroke="var(--border)" />
                     <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                    <Tooltip contentStyle={tooltip} formatter={(v: number) => [money(v), "Resultado"]} />
+                    <Tooltip active defaultIndex={pinIndex(trend, (m) => isThisMonth(m))} contentStyle={tooltip} formatter={(v: number) => [money(v), "Resultado"]} />
                     <Area type="monotone" dataKey="net" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.12} strokeWidth={2} />
                   </AreaChart>
                 ) : (
                   <BarChart data={trend} margin={{ top: 6, right: 4, left: 4, bottom: 0 }}>
                     <CartesianGrid vertical={false} stroke="var(--border)" />
                     <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                    <Tooltip contentStyle={tooltip} cursor={{ fill: "var(--muted)" }} formatter={(v: number, name: string) => [money(v), name === "income" ? "Receitas" : "Despesas"]} />
+                    <Tooltip active defaultIndex={pinIndex(trend, (m) => isThisMonth(m))} contentStyle={tooltip} cursor={{ fill: "var(--muted)" }} formatter={(v: number, name: string) => [money(v), name === "income" ? "Receitas" : "Despesas"]} />
                     {detail.chart === "income-expense" ? <Bar dataKey="income" fill="var(--income)" radius={[5, 5, 0, 0]} maxBarSize={18} /> : null}
                     <Bar dataKey="expense" fill="var(--expense)" radius={[5, 5, 0, 0]} maxBarSize={18} />
                   </BarChart>

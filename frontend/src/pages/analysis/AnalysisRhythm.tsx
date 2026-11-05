@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { pinIndex } from "@/lib/chartPin";
 import { fetchCalendar, fetchTransactions } from "@/lib/data";
 import { currentMonth, formatDate, monthLabel, todayISO } from "@/lib/format";
 import { addMonths, daysInMonth, monthPortion, rhythm, weekdayAverages } from "@/lib/analysisInsights";
@@ -54,7 +55,7 @@ export default function AnalysisRhythm() {
                 <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis dataKey="day" tickLine={false} axisLine={false} tick={axisTick} interval={4} />
                 <YAxis hide={hidden} width={44} tickLine={false} axisLine={false} tick={axisTick} tickFormatter={axisMoney} />
-                <Tooltip contentStyle={tooltipStyle} labelFormatter={(d: number) => `Dia ${d}`} formatter={(v: number, name: string) => [money(v), name === "current" ? monthLabel(month) : monthLabel(addMonths(month, -1))]} />
+                <Tooltip active defaultIndex={pinIndex(data.curve, (p) => month === today.slice(0, 7) && p.day === Number(today.slice(8, 10)))} contentStyle={tooltipStyle} labelFormatter={(d: number) => `Dia ${d}`} formatter={(v: number, name: string) => [money(v), name === "current" ? monthLabel(month) : monthLabel(addMonths(month, -1))]} />
                 <Line type="monotone" dataKey="previous" stroke="var(--muted-foreground)" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls={false} />
                 <Line type="monotone" dataKey="current" stroke="var(--primary)" strokeWidth={2} dot={false} activeDot={{ r: 5 }} connectNulls={false} />
               </LineChart>
@@ -70,7 +71,7 @@ export default function AnalysisRhythm() {
                   <CartesianGrid vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
                   <YAxis hide width={0} />
-                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number) => [money(v), "Média"]} />
+                  <Tooltip active defaultIndex={maxWeekday} contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number) => [money(v), "Média"]} />
                   {/* Emphasis: the costliest weekday in primary, the rest recessive. */}
                   <Bar dataKey="average" radius={[4, 4, 0, 0]} maxBarSize={28}>
                     {weekdays.map((w, i) => <Cell key={w.label} fill={i === maxWeekday ? "var(--primary)" : "color-mix(in srgb, var(--primary) 28%, var(--card))"} />)}
