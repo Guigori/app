@@ -423,6 +423,17 @@ export interface DayFlow {
   active_count: number;
 }
 
+/** A registered subscription expected on a day: a plan, not a transaction. */
+export interface PlannedCharge {
+  date: string;
+  subscription_id: string;
+  name: string;
+  value: number;
+  account_id: string | null;
+  card_id: string | null;
+  category_id: string | null;
+}
+
 export interface CalendarMonth {
   month: string;
   days: DayFlow[];
@@ -432,6 +443,8 @@ export interface CalendarMonth {
   projected_income: number;
   projected_expense: number;
   projected_balance: number;
+  /** Older servers omit it. */
+  planned?: PlannedCharge[];
 }
 
 // --- Cartões (mirror: backend/models/cards.py CardIn/CardOut) ---

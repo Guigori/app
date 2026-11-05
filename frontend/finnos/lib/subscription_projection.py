@@ -6,6 +6,7 @@ has already been entered, whether as paid, pending, or scheduled. Legacy fixed
 transactions with identical billing identity own their own future forecast.
 """
 import calendar
+import unicodedata
 from datetime import date
 
 from finnos.lib.money import cents
@@ -90,3 +91,19 @@ def planned_subscriptions_in_period(
             ) if start <= charge <= end
         )
     return out
+
+
+def is_subscription_category(category: dict | None) -> bool:
+    """The user's "Assinaturas" category, whatever its accents or case."""
+    name = unicodedata.normalize("NFD", str((category or {}).get("name") or ""))
+    return "assinatura" in "".join(c for c in name if not unicodedata.combining(c)).casefold()
+
+
+def subscriptions_in_category(
+    subscriptions: list[dict], category_id: str, category: dict | None,
+) -> list[dict]:
+    """Filtering by the "Assinaturas" category keeps every registered plan,
+    whatever category each one was saved under; any other keeps its own."""
+    if is_subscription_category(category):
+        return subscriptions
+    return [sub for sub in subscriptions if sub.get("category_id") == category_id]

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { fluxoSubscriptions, monthlyCost, seedFromTransaction, nextMonthlyDate, subscriptionsByCard, upcomingCharges, whenLabel } from "./subscriptionsView";
+import { fluxoSubscriptions, monthlyCost, plannedInView, seedFromTransaction, nextMonthlyDate, subscriptionsByCard, upcomingCharges, whenLabel } from "./subscriptionsView";
 import { sortSignals } from "./radarUi";
-import type { RadarSignal, SubscriptionItem, Transaction } from "@/types/finnos";
+import type { PlannedCharge, RadarSignal, SubscriptionItem, Transaction } from "@/types/finnos";
 
 const sub = (over: Partial<SubscriptionItem>): SubscriptionItem => ({
   id: "s", name: "Serviço", value: 30, category_id: null, category_name: null, category_color: null,
@@ -80,5 +80,26 @@ describe("subscriptions found in Fluxo", () => {
   it("uses a charge already scheduled in Fluxo as the next one", () => {
     expect(seedFromTransaction(tx({ date: "2026-11-12" }), "2026-11-04").next_charge).toBe("2026-11-12");
     expect(seedFromTransaction(tx({ date: "2026-10-12" }), "2026-11-04").next_charge).toBe("2026-11-12");
+  });
+});
+
+describe("planned charges in Fluxo", () => {
+  const charge = (over: Partial<PlannedCharge>): PlannedCharge => ({
+    date: "2026-11-12", subscription_id: "s", name: "Netflix", value: 44.9, account_id: "a", card_id: null, category_id: null, ...over,
+  });
+  const all = { from: "2026-11-01", to: "2026-11-30", type: "todos", status: "todos", accountId: "todas", search: "" };
+  const items = [charge({}), charge({ subscription_id: "t", name: "Spotify", date: "2026-11-20", account_id: "b" })];
+
+  it("keeps the charges of the day or period on screen", () => {
+    expect(plannedInView(items, { ...all, from: "2026-11-12", to: "2026-11-12" }).map((p) => p.name)).toEqual(["Netflix"]);
+    expect(plannedInView(items, all)).toHaveLength(2);
+  });
+
+  it("follows the account, search, type and status filters", () => {
+    expect(plannedInView(items, { ...all, accountId: "b" }).map((p) => p.name)).toEqual(["Spotify"]);
+    expect(plannedInView(items, { ...all, search: "spoti" }).map((p) => p.name)).toEqual(["Spotify"]);
+    expect(plannedInView(items, { ...all, type: "receita" })).toEqual([]);
+    expect(plannedInView(items, { ...all, status: "pago" })).toEqual([]);
+    expect(plannedInView(items, { ...all, status: "agendado" })).toHaveLength(2);
   });
 });

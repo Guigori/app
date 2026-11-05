@@ -108,6 +108,17 @@ class DayFlow(BaseModel):
     count: int
 
 
+class PlannedCharge(BaseModel):
+    """A registered subscription expected on a day; a plan, not a transaction."""
+    date: str
+    subscription_id: str
+    name: str
+    value: Money
+    account_id: Optional[str] = None
+    card_id: Optional[str] = None
+    category_id: Optional[str] = None
+
+
 class CalendarOut(BaseModel):
     month: str
     days: List[DayFlow]
@@ -117,3 +128,4 @@ class CalendarOut(BaseModel):
     projected_income: Money
     projected_expense: Money
     projected_balance: Money
+    planned: List[PlannedCharge] = []

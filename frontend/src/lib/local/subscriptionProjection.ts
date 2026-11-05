@@ -1,5 +1,6 @@
 import type { SubscriptionItem, Transaction } from "@/types/finnos";
 import { moneyCents } from "@/lib/roundMoney";
+import { isSubscriptionCategory } from "@/lib/subscriptionsView";
 
 /** FIN-13: an active subscription is a plan, never a paid bank debit.
  * Preserve billing day (29–31 through February), and suppress a future
@@ -28,6 +29,14 @@ function matchingBill(sub: SubscriptionItem, tx: Transaction): boolean {
     && (tx.card_id || null) === (sub.card_id || null)
     && (tx.category_id || null) === (sub.category_id || null)
     && moneyCents(tx.value) === moneyCents(sub.value);
+}
+
+/** Mirror of subscriptions_in_category: "Assinaturas" keeps every registered plan. */
+export function subscriptionsInCategory(
+  subs: SubscriptionItem[], categoryId: string | undefined, categoryName: string | null | undefined,
+): SubscriptionItem[] {
+  if (!categoryId || isSubscriptionCategory(categoryName)) return subs;
+  return subs.filter(sub => sub.category_id === categoryId);
 }
 
 export function localSubscriptionProjections(

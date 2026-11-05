@@ -1,5 +1,5 @@
 /** Pure helpers behind the Assinaturas tab: monthly cost, upcoming charges and per-card totals. */
-import type { SubscriptionInput, SubscriptionItem, Transaction } from "@/types/finnos";
+import type { PlannedCharge, SubscriptionInput, SubscriptionItem, Transaction } from "@/types/finnos";
 
 const DAY = 86_400_000;
 
@@ -141,4 +141,27 @@ export function fluxoSubscriptions(txs: Transaction[], items: SubscriptionItem[]
   }
   onlyInFluxo.sort((a, b) => a.nextCharge.localeCompare(b.nextCharge));
   return { matched, onlyInFluxo };
+}
+
+export interface PlannedFilter {
+  from: string;
+  to: string;
+  type: string;
+  status: string;
+  accountId: string;
+  search: string;
+}
+
+/**
+ * The calendar's planned subscription charges that match Fluxo's other filters. They are
+ * expenses still to happen, so an income/transfer or "pago" filter hides them.
+ */
+export function plannedInView(planned: PlannedCharge[], f: PlannedFilter): PlannedCharge[] {
+  if (f.type !== "todos" && f.type !== "despesa") return [];
+  if (f.status !== "todos" && f.status !== "agendado") return [];
+  const query = normName(f.search);
+  return planned.filter((item) =>
+    item.date >= f.from && item.date <= f.to
+    && (f.accountId === "todas" || item.account_id === f.accountId)
+    && (!query || normName(item.name).includes(query)));
 }
