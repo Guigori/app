@@ -12,7 +12,8 @@ export interface Period { start: string; end: string; label: string; months: str
 
 export type Operation =
   | "total" | "count" | "average" | "top" | "trend" | "compare"
-  | "balance" | "forecast" | "upcoming" | "budget" | "subscriptions" | "save" | "radar";
+  | "balance" | "forecast" | "upcoming" | "budget" | "subscriptions" | "save" | "radar"
+  | "unusual" | "runway" | "months";
 
 export interface Entity { kind: "category" | "account" | "card" | "merchant"; id?: string; name: string; term: string }
 
@@ -27,6 +28,8 @@ export interface FinnQuery {
   vague: boolean;
   /** "Qual foi meu maior gasto": one lançamento, not a ranking of categories. */
   single?: boolean;
+  /** "Dura até o dia 15?": the day asked about. */
+  day?: number;
 }
 
 export interface QuestionContext {
@@ -116,6 +119,9 @@ export function previousPeriod(p: Period): Period {
 
 function operation(q: string, entityCount: number): Operation | null {
   if (/\bcompar|\bversus\b|\bvs\b|\bcontra\b|diferenca entre/.test(q) || (entityCount >= 2 && /\b(ou|e)\b/.test(q))) return "compare";
+  if (/\b(mais (do )?que o (normal|costume|habitual)|acima do (normal|habitual|costume)|fora do normal|mais que de costume)\b/.test(q)) return "unusual";
+  if (/\b(dura|durar|aguent\w*|chega|chegar|sobra ate|da ate)\b/.test(q) && /\b(ate|dia|salario|pagamento|fim do mes)\b/.test(q)) return "runway";
+  if (/\b(quais|qual|que) (os |foram os )?(meses|mes)\b/.test(q) || /\bmeses mais (caros|pesados)\b/.test(q)) return "months";
   if (/\b(econom|cortar|reduzir|gastar menos|guardar mais)/.test(q)) return "save";
   if (/\b(radar|alerta|alertas|atencao|preocupar|risco)\b/.test(q)) return "radar";
   if (/\bassinatura/.test(q)) return "subscriptions";
@@ -175,7 +181,9 @@ export function parseQuestion(text: string, ctx: QuestionContext, previousQuery?
   }
   // "comparado com o mês passado": the comparison is between periods, not entities.
   const versusPast = /\b(mes passado|mes anterior|periodo anterior|ano passado)\b/.test(q) && /\bcompar|\bvs\b|\bcontra\b|\bem relacao\b/.test(q);
-  const current = versusPast ? parsePeriod(q.replace(/\b(mes passado|mes anterior|ano passado)\b/g, ""), ctx.today).period : p;
+  let current = versusPast ? parsePeriod(q.replace(/\b(mes passado|mes anterior|ano passado)\b/g, ""), ctx.today).period : p;
+  // "Quais meses custaram mais?" looks at the year unless a period is named.
+  if (op === "months" && !explicit) current = parsePeriod("este ano", ctx.today).period;
   const resolved = op ?? (entities.length ? "total" : "total");
   return {
     op: resolved === "compare" && entities.length < 2 ? "compare" : resolved,
@@ -184,6 +192,7 @@ export function parseQuestion(text: string, ctx: QuestionContext, previousQuery?
     previous: previousPeriod(current),
     entities,
     vague: !op && !entities.length && !explicit,
+    day: Number(q.match(/\bdia (\d{1,2})\b/)?.[1]) || undefined,
     single: /\b(maior|mais cara?) (gasto|compra|despesa|lancamento|receita|entrada)\b/.test(q) && !/\bcategoria/.test(q),
   };
 }
