@@ -4,6 +4,8 @@ import { ArrowLeft, Clock3, History, RefreshCcw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { fetchFinanceHistory, fetchFinanceIntegrity } from "@/lib/data";
 import { isLocalMode } from "@/lib/mode";
+import { useBalanceHidden } from "@/lib/balance";
+import { FiintSection } from "@/components/analytics/FiintSection";
 import type { FinanceHistoryEvent } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -54,6 +56,7 @@ function eventTitle(item: FinanceHistoryEvent) {
 
 export default function FinanceHistory() {
   const [kind, setKind] = useState("all");
+  const { hidden } = useBalanceHidden();
   const integrityQuery = useQuery({
     queryKey: ["finance-integrity"],
     queryFn: fetchFinanceIntegrity,
@@ -89,6 +92,8 @@ export default function FinanceHistory() {
         </Button>
       </div>
     </div>
+    {/* How long the records cover; moved out of Análise so that screen stays about the numbers. */}
+    <FiintSection hidden={hidden} />
     {!isLocalMode() && (
       <Card data-testid="historical-invoice-review">
         <CardContent className="space-y-3 p-4">

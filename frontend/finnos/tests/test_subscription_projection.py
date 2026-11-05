@@ -169,6 +169,50 @@ def test_calendar_subscription_forecast_is_not_a_paid_purchase(monkeypatch):
 
 
 
+def test_calendar_category_filter_lists_planned_subscriptions(monkeypatch):
+    docs = {
+        "transactions": [
+            {"id": "food", "name": "Mercado", "type": "despesa", "status": "pago",
+             "date": "2026-10-05", "value": 300, "account_id": "bank", "category_id": "food"},
+            {"id": "gym", "name": "Academia", "type": "despesa", "status": "agendado",
+             "date": "2026-10-20", "value": 99, "account_id": "bank", "category_id": "subs"},
+        ],
+        "cards": [],
+        "subscriptions": [sub(next_charge="2026-10-29"), sub(id="off", name="Spotify", active=False)],
+        "categories": [{"id": "subs", "name": "Assinaturas"}, {"id": "food", "name": "Alimentação"}],
+    }
+    class Cursor:
+        def __init__(self, rows): self.rows = rows
+        async def to_list(self, max_count): return self.rows
+    class Coll:
+        def __init__(self, name): self.name = name
+        def find(self, query): return Cursor(docs[self.name])
+        async def find_one(self, query):
+            assert query["user_id"] == "owner"
+            return next((row for row in docs[self.name] if row["id"] == query["id"]), None)
+    monkeypatch.setattr(analytics, "db", SimpleNamespace(**{name: Coll(name) for name in docs}))
+    monkeypatch.setattr(analytics, "today_iso", lambda: "2026-10-10")
+    async def revision(uid): return 1
+    async def history(uid, months, selected_cards, expected): return docs["transactions"]
+    monkeypatch.setattr(analytics, "finance_revision", revision)
+    monkeypatch.setattr(analytics, "read_projection_history", history)
+
+    every = asyncio.run(analytics.calendar_month(month="2026-10", user={"id": "owner"}))
+    assert [(p.date, p.name) for p in every.planned] == [("2026-10-29", "Netflix")]
+    assert every.expense == Decimal("300")
+
+    # "Assinaturas" keeps every registered plan, even one saved as "streaming".
+    subs = asyncio.run(analytics.calendar_month(month="2026-10", user={"id": "owner"}, category_id="subs"))
+    assert [day.date for day in subs.days] == ["2026-10-20", "2026-10-29"]
+    assert subs.expense == 0
+    assert subs.projected_expense == Decimal("148.90")
+    assert [p.subscription_id for p in subs.planned] == ["sub"]
+
+    food = asyncio.run(analytics.calendar_month(month="2026-10", user={"id": "owner"}, category_id="food"))
+    assert [day.date for day in food.days] == ["2026-10-05"]
+    assert food.planned == []
+
+
 def test_subscription_income_ratio_excludes_bank_refund_receipts(monkeypatch):
     from finnos.routers import subscriptions as router
     collections = {

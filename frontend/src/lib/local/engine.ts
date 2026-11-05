@@ -16,6 +16,7 @@ import type {
   CategorySlice,
   CalendarMonth,
   DayFlow,
+  PlannedCharge,
   Flow,
   FlowCategory,
   FlowParams,
@@ -44,7 +45,7 @@ import type {
 import { spendingPace } from "@/lib/budgetPace";
 import { roundBRL } from "@/lib/roundMoney";
 import { localCreditEvents, creditsForMonth } from "@/lib/local/competency";
-import { localSubscriptionProjections } from "@/lib/local/subscriptionProjection";
+import { localSubscriptionProjections, subscriptionsInCategory } from "@/lib/local/subscriptionProjection";
 
 /** Sanitized, append-only history. Mirrors the server record_event contract. */
 function localAudit(db: LocalDb, entity: string, action: "created" | "updated" | "deleted",
@@ -863,7 +864,7 @@ export function localFlow(params: FlowParams): Flow {
       else pExpense += amount(source);
     }
     for (const projected of localSubscriptionProjections(
-      db.subscriptions.filter(sub => !params.category_id || sub.category_id === params.category_id),
+      subscriptionsInCategory(db.subscriptions, params.category_id, db.categories.find(c => c.id === params.category_id)?.name),
       db.transactions, m, todayISO(),
     )) {
       pExpense += projected.subscription.value;
@@ -930,11 +931,14 @@ export function localFlow(params: FlowParams): Flow {
 }
 
 /** Per-day entradas/saídas of a month — mirrors backend calendar_month(). */
-export function localCalendar(month: string): CalendarMonth {
+export function localCalendar(month: string, categoryId?: string): CalendarMonth {
   const db = readDb();
   const [start, end] = monthBounds(month);
   const buckets = new Map<string, DayFlow>();
-  for (const tx of db.transactions) {
+  // With a category, only its movements count; every bill still prevents a planned charge twice.
+  const inCategory = (tx: { category_id?: string | null }) => !categoryId || tx.category_id === categoryId;
+  const transactions = db.transactions.filter(inCategory);
+  for (const tx of transactions) {
     if (tx.date < start || tx.date > end) continue;
     const day =
       buckets.get(tx.date) ??
@@ -955,7 +959,7 @@ export function localCalendar(month: string): CalendarMonth {
   }
   // A parcelado row is stored once; its later installments belong on their own
   // calendar days (mirror of analytics.calendar_month). No clickable count.
-  for (const source of db.transactions) {
+  for (const source of transactions) {
     if (!source.installment || source.date.slice(0, 7) === month
         || (source.type !== "receita" && source.type !== "despesa")
         || source.invoice_payment || source.invoice_refund) continue;
@@ -980,7 +984,7 @@ export function localCalendar(month: string): CalendarMonth {
   // FIN-08/14: bank refund is a cash receipt but NOT ordinary income.
   // Both bank reimbursements and merchant credits reverse the purchase as
   // negative spend in the calendar on the event date.
-  for (const credit of creditsForMonth(localCreditEvents(db), month)) {
+  for (const credit of creditsForMonth(localCreditEvents(db), month).filter(inCategory)) {
     const day = buckets.get(credit.date) ?? {
       date: credit.date, income: 0, expense: 0, projected_income: 0,
       projected_expense: 0, count: 0, active_count: 0,
@@ -989,10 +993,14 @@ export function localCalendar(month: string): CalendarMonth {
     if (credit.kind === "merchant_credit") day.count += 1;
     buckets.set(credit.date, day);
   }
+  const subscriptions = subscriptionsInCategory(db.subscriptions, categoryId, db.categories.find(c => c.id === categoryId)?.name);
+  const planned: PlannedCharge[] = [];
   for (const projected of localSubscriptionProjections(
-    db.subscriptions, db.transactions, month, todayISO(),
+    subscriptions, db.transactions, month, todayISO(),
   )) {
     const key = projected.date;
+    const { id, name, value, account_id, card_id, category_id } = projected.subscription;
+    planned.push({ date: key, subscription_id: id, name, value, account_id, card_id: card_id ?? null, category_id: category_id ?? null });
     const day = buckets.get(key) ?? {
       date: key, income: 0, expense: 0, projected_income: 0,
       projected_expense: 0, count: 0, active_count: 0,
@@ -1017,6 +1025,7 @@ export function localCalendar(month: string): CalendarMonth {
     projected_income: pIncome,
     projected_expense: pExpense,
     projected_balance: round2(income - expense + pIncome - pExpense),
+    planned: planned.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name)),
   };
 }
 

@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { getAccountPaymentMethods, setAccountPaymentMethods, clearLocalAccountPaymentMethods, PAYMENT_METHODS, type PaymentMethod } from "@/lib/accountPaymentPreferences";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { PlusCircle, Wallet } from "lucide-react";
+import { CreditCard as CreditCardIcon, PlusCircle, Wallet } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { deleteAccount, fetchAccounts, fetchCards, fetchInstitutions } from "@/lib/data";
+import { deleteAccount, fetchAccounts, fetchCards, fetchInstitutions, fetchSubscriptions } from "@/lib/data";
+import { cn } from "@/lib/utils";
+import { CardsPanel } from "@/components/cards/CardsPanel";
 import { CardDialog } from "@/components/cards/CardDialog";
 import { WalletInstitutions } from "@/components/accounts/WalletInstitutions";
 import { InstitutionManagerDialog } from "@/components/accounts/InstitutionManagerDialog";
@@ -17,7 +20,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Account, CreditCard } from "@/types/finnos";
 
+type WalletTab = "contas" | "cartoes";
+const TABS: { key: WalletTab; label: string; icon: typeof Wallet }[] = [
+  { key: "contas", label: "Contas", icon: Wallet },
+  { key: "cartoes", label: "Cartões", icon: CreditCardIcon },
+];
+
 export default function Accounts() {
+  // The tab lives in the URL (?aba=cartoes) so links, reloads and "voltar" land on the same place.
+  const [params, setParams] = useSearchParams();
+  const tab: WalletTab = TABS.some((t) => t.key === params.get("aba")) ? (params.get("aba") as WalletTab) : "contas";
+  const setTab = (next: WalletTab) => setParams((current) => {
+    const copy = new URLSearchParams(current);
+    if (next === "contas") copy.delete("aba"); else copy.set("aba", next);
+    return copy;
+  }, { replace: true });
   const dialogs = useDialogs();
   const queryClient = useQueryClient();
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts });
@@ -30,7 +47,10 @@ export default function Accounts() {
     }
   } });
   const institutionsQuery = useQuery({ queryKey: ["institutions"], queryFn: fetchInstitutions });
+  const subscriptionsQuery = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions });
   const cards = cardsQuery.data ?? [];
+  const subscriptions = subscriptionsQuery.data?.items ?? [];
+  const counts: Record<WalletTab, number> = { contas: accounts.length, cartoes: cards.length };
   const institutions = institutionsQuery.data ?? [];
   const [cardDialog, setCardDialog] = useState<{ open: boolean; card?: CreditCard }>({ open: false });
   const [institutionManagerOpen, setInstitutionManagerOpen] = useState(false);
@@ -82,14 +102,25 @@ export default function Accounts() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Carteira</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Instituições, contas e cartões com saldos e faturas organizados.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Suas contas e cartões, com saldos e faturas.</p>
         </div>
         {/* Compact pills on phones, one row. */}
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
           <Button size="sm" className="h-9 shrink-0 rounded-full px-3.5" onClick={() => dialogs.openAccount()} data-testid="new-account-button"><PlusCircle className="h-4 w-4"/> Nova conta</Button>
-          <Button size="sm" variant="outline" className="h-9 shrink-0 rounded-full px-3.5" onClick={() => setCardDialog({ open: true })}><PlusCircle className="h-4 w-4"/> Novo cartão</Button>
+          <Button size="sm" variant="outline" className="h-9 shrink-0 rounded-full px-3.5" onClick={() => setCardDialog({ open: true })} data-testid="new-card-button"><PlusCircle className="h-4 w-4"/> Novo cartão</Button>
           <Button size="sm" variant="outline" className="h-9 shrink-0 rounded-full px-3.5" onClick={() => setInstitutionManagerOpen(true)}>Instituições</Button>
         </div>
+      </div>
+
+      <div className="flex gap-1 rounded-full border border-border bg-muted/60 p-1" role="tablist" aria-label="Áreas da carteira">
+        {TABS.map(({ key, label, icon: Icon }) => (
+          <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} data-testid={`wallet-tab-${key}`}
+            className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full px-2 py-2 text-sm font-medium transition-colors duration-150", tab === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+            <Icon className="hidden h-4 w-4 sm:block" aria-hidden="true" />
+            {label}
+            {counts[key] > 0 ? <span className={cn("rounded-full px-1.5 text-xs tabular-nums", tab === key ? "bg-primary/10 text-primary" : "bg-background/70")}>{counts[key]}</span> : null}
+          </button>
+        ))}
       </div>
 
       {(accountsQuery.isPending || cardsQuery.isPending || institutionsQuery.isPending) ? (
@@ -99,6 +130,8 @@ export default function Accounts() {
           <p>{getApiErrorMessage(accountsQuery.error ?? cardsQuery.error ?? institutionsQuery.error, "Não foi possível carregar sua Carteira.")}</p>
           <Button variant="outline" onClick={() => { void accountsQuery.refetch(); void cardsQuery.refetch(); void institutionsQuery.refetch(); }}>Tentar novamente</Button>
         </CardContent></Card>
+      ) : tab === "cartoes" ? (
+        <CardsPanel cards={cards} subscriptions={subscriptions} onCreate={() => setCardDialog({ open: true })} onEdit={card => setCardDialog({ open: true, card })} />
       ) : accounts.length === 0 && cards.length === 0 && institutions.length === 0 ? (
         <EmptyState icon={<Wallet className="h-5 w-5"/>} title="Sua Carteira está vazia"
           description="Adicione uma conta bancária ou um cartão para começar."

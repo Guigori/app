@@ -38,9 +38,8 @@ const Budget = lazy(() => import("@/pages/Budget"));
 const BudgetSettings = lazy(() => import("@/pages/BudgetSettings"));
 const FinanceHistory = lazy(() => import("@/pages/FinanceHistory"));
 const Flow = lazy(() => import("@/pages/Flow"));
-const Cards = lazy(() => import("@/pages/Cards"));
-const CardInvoice = lazy(() => import("@/pages/CardInvoice"));
 const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
+const CardInvoice = lazy(() => import("@/pages/CardInvoice"));
 const Radar = lazy(() => import("@/pages/Radar"));
 const RadarDetail = lazy(() => import("@/pages/RadarDetail"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
@@ -83,7 +82,7 @@ export default function App() {
             <Route path="/configuracoes/:section" element={<Settings />} />
             <Route path="/configuracoes/integracoes" element={<SettingsIntegrations />} />
             <Route path="/configuracoes/graficos" element={<ChartSettings />} />
-            <Route path="/cartoes" element={<Cards />} />
+            <Route path="/cartoes" element={<Navigate to="/contas?aba=cartoes" replace />} />
             <Route path="/cartoes/:cardId" element={<CardInvoice />} />
             <Route path="/orcamento" element={<Budget />} />
             <Route path="/orcamento/configuracoes" element={<BudgetSettings />} />

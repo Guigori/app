@@ -259,9 +259,10 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
     total_net: base.total_net + series.reduce((sum,p,i)=>sum + (p.net-base.series[i].net),0) };
 }
 
-export async function fetchCalendar(month: string): Promise<CalendarMonth> {
-  if (isLocalMode()) return localCalendar(month);
-  return cachedFetch(`calendar:${month}`, () => apiGet<CalendarMonth>(`/analytics/calendar?month=${month}`));
+export async function fetchCalendar(month: string, categoryId?: string): Promise<CalendarMonth> {
+  if (isLocalMode()) return localCalendar(month, categoryId);
+  const category = categoryId ? `&category_id=${encodeURIComponent(categoryId)}` : "";
+  return cachedFetch(`calendar:${month}${categoryId ? `:${categoryId}` : ""}`, () => apiGet<CalendarMonth>(`/analytics/calendar?month=${month}${category}`));
 }
 
 

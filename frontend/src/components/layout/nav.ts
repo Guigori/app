@@ -1,11 +1,10 @@
 import {
   GitCompareArrows,
-  CreditCard,
   Home,
   PieChart,
   ChartNoAxesCombined,
-  Repeat,
   Radar,
+  Repeat,
   Settings,
   Sparkles,
   Tags,
@@ -55,7 +54,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/analise", label: "Análise", icon: ChartNoAxesCombined, slug: "analise" },
       { to: "/categorias", label: "Categorias", icon: Tags, slug: "categorias" },
-      { to: "/cartoes", label: "Cartões", icon: CreditCard, slug: "cartoes" },
       { to: "/assinaturas", label: "Assinaturas", icon: Repeat, slug: "assinaturas" },
     ],
   },

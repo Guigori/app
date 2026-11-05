@@ -30,6 +30,8 @@ import { MonthSelector } from "@/components/dashboard/MonthSelector";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { PlannedCharges } from "@/components/subscriptions/PlannedCharges";
+import { plannedInView } from "@/lib/subscriptionsView";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { StatusBadge } from "@/components/shared/Badges";
 import { Badge } from "@/components/ui/badge";
@@ -161,7 +163,9 @@ export default function Transactions() {
   };
 
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts });
-  const calendarQuery = useQuery({ queryKey: ["calendar", month], queryFn: () => fetchCalendar(month) });
+  // The calendar follows the category filter, so its days and planned charges match the list.
+  const calendarCategory = categoryId === "todas" ? undefined : categoryId;
+  const calendarQuery = useQuery({ queryKey: ["calendar", month, calendarCategory ?? "todas"], queryFn: () => fetchCalendar(month, calendarCategory) });
   const calendar = calendarQuery.data;
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
   const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
@@ -268,9 +272,9 @@ export default function Transactions() {
   const rollingStart = rollingRange.start.slice(0, 7);
   const rollingEnd = rollingRange.end.slice(0, 7);
   const rollingCalendarsQuery = useQuery({
-    queryKey: ["calendar", "rolling30", rollingStart, rollingEnd],
+    queryKey: ["calendar", "rolling30", rollingStart, rollingEnd, calendarCategory ?? "todas"],
     queryFn: async () => Promise.all(
-      [...new Set([rollingStart, rollingEnd])].map(fetchCalendar),
+      [...new Set([rollingStart, rollingEnd])].map((m) => fetchCalendar(m, calendarCategory)),
     ),
     enabled: periodMode === "rolling30" && scope === "mes" && pagedList,
   });
@@ -306,6 +310,15 @@ export default function Transactions() {
           projectedExpense: periodTotals?.projectedExpense ?? calendar?.projected_expense ?? 0,
         };
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
+  const rolling = periodMode === "rolling30" && scope === "mes";
+  const planned = plannedInView(
+    (rolling ? (rollingCalendarsQuery.data ?? []).flatMap((c) => c.planned ?? []) : calendar?.planned) ?? [],
+    {
+      from: scope === "dia" ? selectedDate : rolling ? rollingRange.start : `${month}-01`,
+      to: scope === "dia" ? selectedDate : rolling ? rollingRange.end : `${month}-31`,
+      type, status, accountId, search: deferredSearch,
+    },
+  );
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteTransaction(id),
@@ -530,6 +543,7 @@ export default function Transactions() {
           Sem conexão: mostrando só as páginas carregadas antes. Conecte-se para ver todos os lançamentos do período.
         </p>
       )}
+      {flowView !== "categorias" ? <PlannedCharges items={planned} categories={categories} hidden={hidden} /> : null}
       {flowView !== "categorias" || selectedDonutCategory ? (
       <div className="min-w-0">{
       listPending ? (
@@ -545,7 +559,7 @@ export default function Transactions() {
             </Button>
           </CardContent>
         </Card>
-      ) : transactions.length === 0 ? (
+      ) : transactions.length === 0 ? (planned.length && flowView !== "categorias" ? null : (
         <EmptyState
           icon={<PlusCircle className="h-5 w-5" aria-hidden="true" />}
           title={scope === "dia" ? `Nenhuma transação em ${formatDate(selectedDate)}` : "Nenhuma transação encontrada no período"}
@@ -562,7 +576,7 @@ export default function Transactions() {
             </Button>
           }
         />
-      ) : (
+      )) : (
         <>
           <p className="text-sm text-muted-foreground" data-testid="transactions-count">
             {transactions.length} {transactions.length === 1 ? "transação" : "transações"}{pagedList ? " carregadas" : ""}

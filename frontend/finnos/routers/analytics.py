@@ -1,7 +1,7 @@
 from finnos.lib.money import D, installment_portion, installment_schedule, quantize_brl
 
 """Analytics: month-over-month trends and the monthly budget view."""
-from typing import List, Optional
+from typing import Annotated, List, Optional
 from fastapi import APIRouter, Depends, Query
 from finnos.lib.db import db
 from finnos.lib.account_balances import finance_revision
@@ -10,7 +10,7 @@ from finnos.lib.projection_reads import read_projection_history
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, month_portion, months_between
 from finnos.lib.recurrence import monthly_projection_sources
-from finnos.lib.subscription_projection import planned_subscriptions
+from finnos.lib.subscription_projection import planned_subscriptions, subscriptions_in_category
 from finnos.lib.category_pace import monthly_pace
 from finnos.lib.competency import monthly_competency, credit_events, positive_category_slices
 from finnos.lib.transaction_amount import occurrence_amount as _amount
@@ -19,6 +19,7 @@ from finnos.models.analytics import (
     BudgetSummary,
     CalendarOut,
     DayFlow,
+    PlannedCharge,
     FlowCategory,
     FlowOut,
     FlowPoint,
@@ -209,11 +210,13 @@ async def flow(
         user["id"], list(dict.fromkeys([*window, focus])), cards, revision,
     )
     source_txs = txs  # preserve all bills for subscription duplicate detection
-    if category_id:
-        txs = [tx for tx in txs if tx.get("category_id") == category_id]
-        subscriptions = [sub for sub in subscriptions if sub.get("category_id") == category_id]
     categories = await db.categories.find({"user_id": user["id"]}).to_list(500)
     cat_by_id = {c["id"]: c for c in categories}
+    if category_id:
+        txs = [tx for tx in txs if tx.get("category_id") == category_id]
+        subscriptions = subscriptions_in_category(
+            subscriptions, category_id, cat_by_id.get(category_id),
+        )
     today_month = today_iso()[:7]
     series: list[FlowPoint] = []
     for m in window:
@@ -298,8 +301,12 @@ async def flow(
 async def calendar_month(
     month: Optional[str] = Query(default=None, pattern="^\\d{4}-\\d{2}$"),
     user: dict = Depends(require_user),
+    category_id: Annotated[Optional[str], Query()] = None,
 ) -> CalendarOut:
-    """Per-day entradas/saídas of the month, plus what is still only expected."""
+    """Per-day entradas/saídas of the month, plus what is still only expected.
+
+    With a category, only that category's movements and planned charges count.
+    """
     m = month or today_iso()[:7]
     # Capture revision before cards/subscriptions. The projection scan keeps
     # the current month's entries, fixed historical series and original card
@@ -310,6 +317,11 @@ async def calendar_month(
         {"user_id": user["id"]}
     ).to_list(500)
     history = await read_projection_history(user["id"], [m], cards, revision)
+    source_history = history  # every bill, so a planned charge is never shown twice
+    if category_id:
+        category = await db.categories.find_one({"id": category_id, "user_id": user["id"]})
+        history = [tx for tx in history if tx.get("category_id") == category_id]
+        subscriptions = subscriptions_in_category(subscriptions, category_id, category)
     txs = [tx for tx in history if tx.get("date", "")[:7] == m]
     buckets: dict[str, DayFlow] = {}
     for tx in txs:
@@ -395,9 +407,11 @@ async def calendar_month(
         for events in (card.get(ledger) or {}).values()
         for entry in events
     ):
-        for credit in credit_events(cards, history):
+        for credit in credit_events(cards, source_history):
             day_key = credit["date"]
             if day_key[:7] != m:
+                continue
+            if category_id and credit.get("category_id") != category_id:
                 continue
             is_new_day = day_key not in buckets
             day = buckets.setdefault(
@@ -412,13 +426,19 @@ async def calendar_month(
             # count; do not duplicate it on the calendar.
     # A subscription is a forecast only. It does not turn into a bank debit,
     # and an existing or recurring transaction suppresses its projection.
+    planned: list[PlannedCharge] = []
     if subscriptions:
         # Historical fixed expenses suppress double forecasting even if their
         # original date is years before this calendar month.
         for sub, charge in planned_subscriptions(
-            subscriptions, history, m, today_iso()
+            subscriptions, source_history, m, today_iso()
         ):
             key = charge.isoformat()
+            planned.append(PlannedCharge(
+                date=key, subscription_id=sub["id"], name=sub.get("name") or "",
+                value=D(sub["value"]), account_id=sub.get("account_id"),
+                card_id=sub.get("card_id"), category_id=sub.get("category_id"),
+            ))
             day = buckets.setdefault(
                 key, DayFlow(date=key, income=D("0.0"),
                              expense=D("0.0"), projected_income=D("0.0"),
@@ -443,4 +463,5 @@ async def calendar_month(
         projected_income=p_income,
         projected_expense=p_expense,
         projected_balance=quantize_brl(income - expense + p_income - p_expense),
+        planned=sorted(planned, key=lambda item: (item.date, item.name)),
     )
