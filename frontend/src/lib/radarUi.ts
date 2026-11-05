@@ -38,6 +38,6 @@ export function isRecurringCandidate(signal: RadarSignal): boolean {
 export function radarTarget(signal: RadarSignal): { to: string; label: string } {
   if (signal.related_entity_type === "card" && signal.related_entity_id) return { to: `/cartoes/${signal.related_entity_id}`, label: "Abrir fatura" };
   if (signal.related_entity_type === "category" && signal.related_entity_id) return { to: `/fluxo?metric=despesas&category_id=${encodeURIComponent(signal.related_entity_id)}`, label: "Ver categoria" };
-  if (isRecurringCandidate(signal)) return { to: "/contas?aba=assinaturas", label: "Ver assinaturas" };
+  if (isRecurringCandidate(signal)) return { to: "/assinaturas", label: "Ver assinaturas" };
   return { to: "/fluxo", label: "Ver fluxo" };
 }

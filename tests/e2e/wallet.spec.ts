@@ -67,13 +67,13 @@ test("manages standalone institutions and refuses silent account creation", asyn
   await expect(dialog.getByText("Banco Novo")).toHaveCount(0);
 });
 
-test("cards and subscriptions live inside Carteira, and old links land on their tab", async ({ page }) => {
+test("cards live inside Carteira and Assinaturas stays its own screen", async ({ page }) => {
   await page.goto("/cartoes");
   await expect(page).toHaveURL(/\/contas\?aba=cartoes$/);
   await expect(page.getByTestId("wallet-tab-cartoes")).toHaveAttribute("aria-selected", "true");
-  await page.goto("/assinaturas");
-  await expect(page).toHaveURL(/\/contas\?aba=assinaturas$/);
-  await expect(page.getByTestId("subscriptions-panel")).toBeVisible();
   await page.getByTestId("wallet-tab-contas").click();
   await expect(page).toHaveURL(/\/contas$/);
+  await page.goto("/assinaturas");
+  await expect(page).toHaveURL(/\/assinaturas$/);
+  await expect(page.getByTestId("subscriptions-panel")).toBeVisible();
 });

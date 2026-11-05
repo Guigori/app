@@ -38,6 +38,7 @@ const Budget = lazy(() => import("@/pages/Budget"));
 const BudgetSettings = lazy(() => import("@/pages/BudgetSettings"));
 const FinanceHistory = lazy(() => import("@/pages/FinanceHistory"));
 const Flow = lazy(() => import("@/pages/Flow"));
+const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
 const CardInvoice = lazy(() => import("@/pages/CardInvoice"));
 const Radar = lazy(() => import("@/pages/Radar"));
 const RadarDetail = lazy(() => import("@/pages/RadarDetail"));
@@ -89,7 +90,7 @@ export default function App() {
             <Route path="/fluxo" element={<Flow />} />
             <Route path="/radar" element={<Radar />} />
             <Route path="/radar/:signalId" element={<RadarDetail />} />
-            <Route path="/assinaturas" element={<Navigate to="/contas?aba=assinaturas" replace />} />
+            <Route path="/assinaturas" element={<Subscriptions />} />
             <Route path="/analise" element={<Analysis />} />
             <Route path="/analise/evolucao" element={<AnalysisEvolution />} />
             <Route path="/analise/categorias" element={<AnalysisCategories />} />

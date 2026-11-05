@@ -30,7 +30,12 @@ export function AppShell() {
   // The entry the app opened on has no history key ("default"). Give it one, so coming
   // back to it (or reloading) restores the screen like any other entry.
   useEffect(() => {
-    if (location.key === "default") navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: location.state });
+    if (location.key !== "default") return;
+    // A <Navigate> below may already have redirected (/cartoes → /contas?aba=cartoes): that entry
+    // has its own key, and replacing it with this render's old address would undo the redirect.
+    const here = `${location.pathname}${location.search}${location.hash}`;
+    if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== here) return;
+    navigate(here, { replace: true, state: location.state });
   }, [location.key, location.pathname, location.search, location.hash, location.state, navigate]);
   const positions = useRef(new Map<string, number>());
   useLayoutEffect(() => {
@@ -70,7 +75,8 @@ export function AppShell() {
             {/* Each route fades/slides in, so navigation feels continuous instead of a jump. */}
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
-                key={location.pathname}
+                // A redirect (/cartoes → /contas) is the same screen: no exit/enter between them.
+                key={location.pathname === "/cartoes" ? "/contas" : location.pathname}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}

@@ -104,7 +104,7 @@ export default function RadarDetail() {
         <div className="space-y-2 border-t border-border p-6 sm:p-8">
           <h2 className="mb-1 text-sm font-semibold">O que fazer</h2>
           {recurring ? (
-            <Link to={`/contas?aba=assinaturas&novo=${encodeURIComponent(signal.id)}`} className={cn(buttonVariants(), "h-11 w-full justify-between rounded-2xl")}>
+            <Link to={`/assinaturas?novo=${encodeURIComponent(signal.id)}`} className={cn(buttonVariants(), "h-11 w-full justify-between rounded-2xl")}>
               <span className="flex items-center gap-2"><Repeat className="h-4 w-4" aria-hidden="true" />Adicionar como assinatura</span><ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           ) : null}

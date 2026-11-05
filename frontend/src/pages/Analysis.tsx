@@ -7,7 +7,6 @@ import { CalendarDays, ChevronRight, Eye, EyeOff, LayoutGrid, ChartPie, SlidersH
 import { fetchBudget, fetchCalendar, fetchDashboard, fetchTrends } from "@/lib/data";
 import { currentMonth, monthLabel, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { FiintSection } from "@/components/analytics/FiintSection";
 import { InsightSheet, type InsightDetail } from "@/components/analytics/InsightSheet";
 import { Sparkline } from "@/components/dashboard/Sparkline";
 import { CalendarClock, ChartColumnBig, Gauge, Layers } from "lucide-react";
@@ -92,7 +91,6 @@ export default function Analysis() {
       <div className="flex gap-2"><Button variant={!yearMode?"default":"outline"} onClick={()=>setYearMode(false)}>Mês</Button><Button variant={yearMode?"default":"outline"} onClick={()=>setYearMode(true)}>Ano</Button><Button variant="outline" onClick={()=>setPanel(null)}>Concluir</Button></div>
     </div>}
     {panel==="filters" && <div className="rounded-2xl border bg-card p-4 shadow-sm"><p className="mb-3 font-semibold">Filtrar análises</p><div className="flex flex-wrap gap-2">{(["all","income","expense"] as const).map(v=><Button key={v} variant={filter===v?"default":"outline"} onClick={()=>setFilter(v)}>{v==="all"?"Todos":v==="income"?"Receitas":"Despesas"}</Button>)}</div><Button className="mt-3" variant="outline" onClick={()=>setPanel(null)}>Concluir</Button></div>}
-    <FiintSection hidden={hidden} />
     <button type="button" onClick={()=>open("periodo")} className="block w-full text-left"><Card className="rounded-[24px] transition-colors hover:bg-muted/40"><CardContent className="p-5">
       <div className="mb-4 flex items-center justify-between"><h2 className="font-heading font-semibold">Visão do período</h2><ChevronRight className="h-4 w-4 text-muted-foreground"/></div>
       {mode==="cards" ? <div className="grid grid-cols-3 divide-x">
@@ -135,7 +133,7 @@ export default function Analysis() {
       {mode==="charts" && <div className="mt-3 h-28"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><Area type="monotone" dataKey="net" stroke="var(--primary)" fill="#8C5BFF" fillOpacity={.12} strokeWidth={2}/></AreaChart></ResponsiveContainer></div>}
     </CardContent></Card></button>
 
-    <AnalysisRow to="/contas?aba=assinaturas" title="Assinaturas" value="Ver gastos recorrentes" icon={<WalletCards className="h-5 w-5"/>}/>
+    <AnalysisRow to="/assinaturas" title="Assinaturas" value="Ver gastos recorrentes" icon={<WalletCards className="h-5 w-5"/>}/>
     <AnalysisRow onOpen={()=>open("pesou")} title="O que mais pesou neste mês" value={hidden?"••••••":top ? `${top.name} · ${money(top.total)} · ${pct(top.percent)}` : "Sem dados suficientes"} icon={<TrendingUp className="h-5 w-5"/>}/>
 
     <InsightSheet detail={detail} trend={chartData} hidden={hidden} onClose={()=>setDetail(null)}/>

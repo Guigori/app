@@ -74,7 +74,7 @@ test("FIINT displays twelve audited months and never fabricates a score on HTTP 
     is_financial_health_score: false, writes_data: false,
     disclaimer: "Não é uma avaliação da saúde financeira.",
   })));
-  await page.goto("/analise");
+  await page.goto("/historico");
   const fiint = page.getByTestId("fiint-maturity");
   await expect(fiint).toBeVisible();
   await expect(fiint).toContainText("60");

@@ -57,7 +57,8 @@ export function seedFromTransaction(tx: Transaction, today: string): Partial<Sub
     name: tx.name,
     value: tx.installment_value ?? tx.value,
     recurrence: "mensal",
-    next_charge: nextMonthlyDate(tx.date, today),
+    // A charge already scheduled in Fluxo is the next one; a past one repeats next month.
+    next_charge: tx.date >= today ? tx.date : nextMonthlyDate(tx.date, today),
     account_id: tx.account_id ?? "",
     card_id: tx.card_id ?? null,
     category_id: tx.category_id ?? null,
@@ -78,4 +79,66 @@ export function toInput(item: SubscriptionItem, patch: Partial<SubscriptionInput
     notes: item.notes ?? null,
     ...patch,
   };
+}
+
+const normName = (text: string) => text.toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+
+/** A subscription as it appears in Fluxo: expenses in the "Assinaturas" category, grouped by name. */
+export interface FluxoSubscription {
+  key: string;
+  name: string;
+  value: number;
+  lastDate: string;
+  nextCharge: string;
+  count: number;
+  accountId: string;
+  cardId: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryColor: string | null;
+  last: Transaction;
+}
+
+export function isSubscriptionCategory(name: string | null | undefined): boolean {
+  return Boolean(name && normName(name).includes("assinatura"));
+}
+
+/**
+ * Groups the subscription expenses registered in Fluxo and splits them into the ones already
+ * followed here (matched by name to a registered subscription) and the ones only in Fluxo.
+ */
+export function fluxoSubscriptions(txs: Transaction[], items: SubscriptionItem[], today: string) {
+  const groups = new Map<string, Transaction[]>();
+  for (const tx of txs) {
+    if (tx.type !== "despesa" || !isSubscriptionCategory(tx.category_name)) continue;
+    const key = normName(tx.name);
+    if (!key) continue;
+    groups.set(key, [...(groups.get(key) ?? []), tx]);
+  }
+  const registered = new Map(items.map((item) => [normName(item.name), item]));
+  const matched = new Map<string, FluxoSubscription>();
+  const onlyInFluxo: FluxoSubscription[] = [];
+  for (const [key, rows] of groups) {
+    const sorted = [...rows].sort((a, b) => b.date.localeCompare(a.date));
+    const last = sorted[0];
+    const entry: FluxoSubscription = {
+      key,
+      name: last.name,
+      value: last.installment_value ?? last.value,
+      lastDate: last.date,
+      nextCharge: last.date >= today ? last.date : nextMonthlyDate(last.date, today),
+      count: rows.length,
+      accountId: last.account_id,
+      cardId: last.card_id,
+      categoryId: last.category_id,
+      categoryName: last.category_name,
+      categoryColor: last.category_color,
+      last,
+    };
+    const item = registered.get(key);
+    if (item) matched.set(item.id, entry);
+    else onlyInFluxo.push(entry);
+  }
+  onlyInFluxo.sort((a, b) => a.nextCharge.localeCompare(b.nextCharge));
+  return { matched, onlyInFluxo };
 }

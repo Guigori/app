@@ -185,7 +185,7 @@ export function CardsPanel({ cards, subscriptions, onCreate, onEdit }: {
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                     <span>Pagamento por {card.payment_account_name ?? "conta não definida"}.</span>
                     {subsByCard.get(card.id) ? (
-                      <Link to="/contas?aba=assinaturas" replace className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 font-semibold text-foreground hover:bg-muted/70" data-testid={`card-subscriptions-${card.id}`}>
+                      <Link to="/assinaturas" className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 font-semibold text-foreground hover:bg-muted/70" data-testid={`card-subscriptions-${card.id}`}>
                         <Repeat className="h-3.5 w-3.5" aria-hidden="true" />
                         {subsByCard.get(card.id)!.count} {subsByCard.get(card.id)!.count === 1 ? "assinatura" : "assinaturas"} · {money(subsByCard.get(card.id)!.monthly)}/mês
                       </Link>

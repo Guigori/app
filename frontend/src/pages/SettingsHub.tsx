@@ -8,7 +8,7 @@ const groups = [
     { label: "Contas e cartões", description: "Bancos, cartões e faturas", icon: Landmark, href: "/contas" },
     { label: "Categorias", description: "Organização das movimentações", icon: Tags, href: "/categorias" },
     { label: "Orçamento", description: "Modelos, limites e planejamento", icon: ChartPie, href: "/orcamento/configuracoes" },
-    { label: "Assinaturas", description: "Serviços e cobranças", icon: Repeat2, href: "/contas?aba=assinaturas" },
+    { label: "Assinaturas", description: "Serviços e cobranças", icon: Repeat2, href: "/assinaturas" },
   ] },
   { title: "Personalização", items: [
     { label: "Aparência", description: "Tema claro, escuro ou sistema", icon: Palette, href: "/configuracoes/aparencia" },

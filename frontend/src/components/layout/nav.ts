@@ -4,6 +4,7 @@ import {
   PieChart,
   ChartNoAxesCombined,
   Radar,
+  Repeat,
   Settings,
   Sparkles,
   Tags,
@@ -53,6 +54,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/analise", label: "Análise", icon: ChartNoAxesCombined, slug: "analise" },
       { to: "/categorias", label: "Categorias", icon: Tags, slug: "categorias" },
+      { to: "/assinaturas", label: "Assinaturas", icon: Repeat, slug: "assinaturas" },
     ],
   },
   {

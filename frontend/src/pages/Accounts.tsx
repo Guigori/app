@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { getAccountPaymentMethods, setAccountPaymentMethods, clearLocalAccountPaymentMethods, PAYMENT_METHODS, type PaymentMethod } from "@/lib/accountPaymentPreferences";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CreditCard as CreditCardIcon, PlusCircle, Repeat, Wallet } from "lucide-react";
+import { CreditCard as CreditCardIcon, PlusCircle, Wallet } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { deleteAccount, fetchAccounts, fetchCards, fetchInstitutions, fetchRadar, fetchSubscriptions } from "@/lib/data";
-import { isRecurringCandidate } from "@/lib/radarUi";
+import { deleteAccount, fetchAccounts, fetchCards, fetchInstitutions, fetchSubscriptions } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { CardsPanel } from "@/components/cards/CardsPanel";
-import { SubscriptionsPanel } from "@/components/subscriptions/SubscriptionsPanel";
 import { CardDialog } from "@/components/cards/CardDialog";
 import { WalletInstitutions } from "@/components/accounts/WalletInstitutions";
 import { InstitutionManagerDialog } from "@/components/accounts/InstitutionManagerDialog";
@@ -22,11 +20,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Account, CreditCard } from "@/types/finnos";
 
-type WalletTab = "contas" | "cartoes" | "assinaturas";
+type WalletTab = "contas" | "cartoes";
 const TABS: { key: WalletTab; label: string; icon: typeof Wallet }[] = [
   { key: "contas", label: "Contas", icon: Wallet },
   { key: "cartoes", label: "Cartões", icon: CreditCardIcon },
-  { key: "assinaturas", label: "Assinaturas", icon: Repeat },
 ];
 
 export default function Accounts() {
@@ -51,10 +48,9 @@ export default function Accounts() {
   } });
   const institutionsQuery = useQuery({ queryKey: ["institutions"], queryFn: fetchInstitutions });
   const subscriptionsQuery = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions });
-  const radarQuery = useQuery({ queryKey: ["radar"], queryFn: fetchRadar, staleTime: 60_000, enabled: tab === "assinaturas" });
   const cards = cardsQuery.data ?? [];
   const subscriptions = subscriptionsQuery.data?.items ?? [];
-  const counts: Record<WalletTab, number> = { contas: accounts.length, cartoes: cards.length, assinaturas: subscriptions.filter((s) => s.active).length };
+  const counts: Record<WalletTab, number> = { contas: accounts.length, cartoes: cards.length };
   const institutions = institutionsQuery.data ?? [];
   const [cardDialog, setCardDialog] = useState<{ open: boolean; card?: CreditCard }>({ open: false });
   const [institutionManagerOpen, setInstitutionManagerOpen] = useState(false);
@@ -106,7 +102,7 @@ export default function Accounts() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Carteira</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Contas, cartões e assinaturas no mesmo lugar.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Suas contas e cartões, com saldos e faturas.</p>
         </div>
         {/* Compact pills on phones, one row. */}
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
@@ -127,18 +123,7 @@ export default function Accounts() {
         ))}
       </div>
 
-      {tab === "assinaturas" ? (
-        subscriptionsQuery.isPending ? (
-          <FinnosPageLoading title="Carregando assinaturas" description="Conferindo seus serviços cadastrados." />
-        ) : subscriptionsQuery.isError || !subscriptionsQuery.data ? (
-          <Card role="alert"><CardContent className="space-y-3 p-5">
-            <p>Não foi possível carregar suas assinaturas.</p>
-            <Button variant="outline" onClick={() => void subscriptionsQuery.refetch()}>Tentar novamente</Button>
-          </CardContent></Card>
-        ) : (
-          <SubscriptionsPanel data={subscriptionsQuery.data} candidates={(radarQuery.data?.items ?? []).filter(isRecurringCandidate)} />
-        )
-      ) : (accountsQuery.isPending || cardsQuery.isPending || institutionsQuery.isPending) ? (
+      {(accountsQuery.isPending || cardsQuery.isPending || institutionsQuery.isPending) ? (
         <FinnosPageLoading title="Carregando Carteira" description="Organizando suas instituições, contas e cartões." />
       ) : (accountsQuery.isError || cardsQuery.isError || institutionsQuery.isError) ? (
         <Card role="alert" data-testid="accounts-load-error"><CardContent className="space-y-3 p-5">

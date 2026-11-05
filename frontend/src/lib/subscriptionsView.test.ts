@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { monthlyCost, nextMonthlyDate, subscriptionsByCard, upcomingCharges, whenLabel } from "./subscriptionsView";
+import { fluxoSubscriptions, monthlyCost, seedFromTransaction, nextMonthlyDate, subscriptionsByCard, upcomingCharges, whenLabel } from "./subscriptionsView";
 import { sortSignals } from "./radarUi";
-import type { RadarSignal, SubscriptionItem } from "@/types/finnos";
+import type { RadarSignal, SubscriptionItem, Transaction } from "@/types/finnos";
 
 const sub = (over: Partial<SubscriptionItem>): SubscriptionItem => ({
   id: "s", name: "Serviço", value: 30, category_id: null, category_name: null, category_color: null,
@@ -50,5 +50,35 @@ describe("radar order", () => {
   it("puts urgent signals first, then the highest score", () => {
     const sorted = sortSignals([signal("a", "normal", 99), signal("b", "critical", 10), signal("c", "high", 50), signal("d", "high", 80)]);
     expect(sorted.map((s) => s.id)).toEqual(["b", "d", "c", "a"]);
+  });
+});
+
+describe("subscriptions found in Fluxo", () => {
+  const tx = (over: Partial<Transaction>) => ({
+    id: "t", name: "Netflix", value: 44.9, installment_value: null, type: "despesa", date: "2026-10-12",
+    account_id: "a", card_id: null, category_id: "c", category_name: "Assinaturas", category_color: "#f00", ...over,
+  }) as Transaction;
+
+  it("groups by name, keeps the latest charge and projects the next one", () => {
+    const { onlyInFluxo, matched } = fluxoSubscriptions([
+      tx({ id: "1", date: "2026-09-12", value: 39.9 }),
+      tx({ id: "2", date: "2026-10-12" }),
+      tx({ id: "3", name: "Mercado", category_name: "Alimentação" }),
+      tx({ id: "4", name: "Salário", type: "receita" }),
+    ], [], "2026-11-04");
+    expect(matched.size).toBe(0);
+    expect(onlyInFluxo).toHaveLength(1);
+    expect(onlyInFluxo[0]).toMatchObject({ name: "Netflix", value: 44.9, count: 2, lastDate: "2026-10-12", nextCharge: "2026-11-12" });
+  });
+
+  it("links a Fluxo charge to the subscription with the same name instead of listing it twice", () => {
+    const { onlyInFluxo, matched } = fluxoSubscriptions([tx({ name: "NETFLIX " })], [sub({ id: "s1", name: "Netflix" })], "2026-11-04");
+    expect(onlyInFluxo).toHaveLength(0);
+    expect(matched.get("s1")?.count).toBe(1);
+  });
+
+  it("uses a charge already scheduled in Fluxo as the next one", () => {
+    expect(seedFromTransaction(tx({ date: "2026-11-12" }), "2026-11-04").next_charge).toBe("2026-11-12");
+    expect(seedFromTransaction(tx({ date: "2026-10-12" }), "2026-11-04").next_charge).toBe("2026-11-12");
   });
 });
