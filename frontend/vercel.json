@@ -7,6 +7,17 @@
       "dest": "/api"
     },
     {
+      "src": "/(.*)",
+      "continue": true,
+      "headers": {
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "X-Frame-Options": "DENY",
+        "Permissions-Policy": "camera=(self), microphone=(self), geolocation=(), payment=()",
+        "Content-Security-Policy-Report-Only": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://cdn.jsdelivr.net https://*.ingest.sentry.io https://*.ingest.us.sentry.io; frame-src https://*.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+      }
+    },
+    {
       "handle": "filesystem"
     },
     {
