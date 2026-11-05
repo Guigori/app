@@ -686,6 +686,8 @@ export interface RadarSignal {
   expires_at: string | null;
   evidence: { label: string; value: string }[];
   detected_at: string | null;
+  /** Reais above the limit or the usual pattern; older servers omit it. */
+  impact?: number | null;
 }
 
 export interface Radar {
