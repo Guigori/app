@@ -1,21 +1,22 @@
 import { useState, type ReactNode } from "react";
-import { Bell, BrainCircuit, ChevronDown, Copy, KeyRound, Play, ShieldCheck, Smartphone, WalletCards, Zap } from "lucide-react";
+import { Bell, BrainCircuit, ChevronDown, Copy, KeyRound, Play, Send, ShieldCheck, Smartphone, WalletCards, Zap } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { isLocalMode } from "@/lib/mode";
 import { registerLinkBase } from "@/lib/registerLink";
 import { AiKeysCard } from "@/components/ai/AiKeysCard";
+import { ShortcutConnect } from "@/components/settings/ShortcutConnect";
 import { cn } from "@/lib/utils";
 
-type Status = "pronto" | "indisponivel";
+type Status = "pronto" | "indisponivel" | "conta";
 
-/** How to connect FINNOS to the iPhone without an App Store app: Shortcuts open the register filled in. */
+/** How to connect FINNOS to the iPhone without an App Store app: Shortcuts register directly, or open the register filled in. */
 export default function SettingsIntegrations() {
   const base = registerLinkBase(window.location.origin);
   const local = isLocalMode();
   // "#sua-ia" (from the FINNOS IA panel) opens straight on connecting an AI.
   const { hash } = useLocation();
-  const [open, setOpen] = useState<string | null>(hash === "#sua-ia" ? "sua-ia" : "atalhos");
+  const [open, setOpen] = useState<string | null>(hash === "#sua-ia" ? "sua-ia" : local ? "atalhos" : "sem-abrir");
   const copy = async (value: string) => {
     try { await navigator.clipboard.writeText(value); toast.success("Copiado. Cole no app Atalhos."); } catch { toast.error("Não consegui copiar. Selecione e copie o texto."); }
   };
@@ -26,9 +27,16 @@ export default function SettingsIntegrations() {
     </span>
   );
 
+  const needsAccount = <p className="text-sm">No modo local não há servidor para o atalho falar. <Link to="/cadastro" className="font-semibold text-primary">Crie sua conta preservando seus dados</Link> para usar.</p>;
+
   const items: Array<{ id: string; name: string; description: string; icon: typeof Zap; status: Status; body: ReactNode }> = [
     {
-      id: "atalhos", name: "Apple Atalhos: registro rápido", icon: Zap, status: "pronto",
+      id: "sem-abrir", name: "Atalhos: registrar sem abrir o app", icon: Send, status: local ? "conta" : "pronto",
+      description: "Valor, tipo, forma de pagamento, conta ou cartão, categoria e parcelas, direto no iPhone. Também a cada compra com Apple Pay.",
+      body: local ? needsAccount : <ShortcutConnect />,
+    },
+    {
+      id: "atalhos", name: "Atalhos: abrir já preenchido", icon: Zap, status: "pronto",
       description: "Fale ou digite \"café 3,80 e uber 14\" pela Siri ou por um botão na tela de início.",
       body: (
         <ol className="list-decimal space-y-2 pl-5 text-sm">
@@ -42,7 +50,7 @@ export default function SettingsIntegrations() {
       ),
     },
     {
-      id: "applepay", name: "Registro por Apple Pay", icon: WalletCards, status: "pronto",
+      id: "applepay", name: "Apple Pay: abrir já preenchido", icon: WalletCards, status: "pronto",
       description: "Cada compra por aproximação com a Carteira abre o FINNOS já preenchido para você confirmar.",
       body: (
         <ol className="list-decimal space-y-2 pl-5 text-sm">
@@ -57,10 +65,10 @@ export default function SettingsIntegrations() {
     {
       id: "notificacoes", name: "Notificações da Carteira", icon: Bell, status: "indisponivel",
       description: "O iPhone não deixa nenhum app ou site ler as notificações de outros apps.",
-      body: <p className="text-sm">As compras feitas com a Carteira chegam pelo <strong>Registro por Apple Pay</strong>, acima, que usa a automação oficial do iPhone.</p>,
+      body: <p className="text-sm">As compras feitas com a Carteira chegam pela automação <strong>Transação</strong> do iPhone: veja "A cada compra com Apple Pay" em <strong>Registrar sem abrir o app</strong>, acima.</p>,
     },
     {
-      id: "sua-ia", name: "Conectar sua IA", icon: KeyRound, status: local ? "indisponivel" : "pronto",
+      id: "sua-ia", name: "Conectar sua IA", icon: KeyRound, status: local ? "conta" : "pronto",
       description: "Use sua chave do ChatGPT, Claude ou Gemini para a FINNOS IA responder qualquer pergunta, com seus dados como contexto.",
       body: local
         ? <p className="text-sm">No modo local a chave não tem onde ficar guardada com segurança. <Link to="/cadastro" className="font-semibold text-primary">Crie sua conta preservando seus dados</Link> para conectar sua IA.</p>
@@ -82,10 +90,10 @@ export default function SettingsIntegrations() {
           <button type="button" onClick={() => setOpen(open === item.id ? null : item.id)} aria-expanded={open === item.id} className="flex w-full items-start gap-3 p-4 text-left">
             <span className="rounded-xl bg-primary/10 p-2 text-primary"><item.icon className="h-5 w-5" aria-hidden="true" /></span>
             <span className="min-w-0 flex-1"><span className="block font-medium">{item.name}</span><span className="mt-1 block text-xs text-muted-foreground">{item.description}</span></span>
-            <span className={cn("shrink-0 rounded-full px-2 py-1 text-xs font-semibold", item.status === "pronto" ? "bg-income/10 text-income" : "bg-muted text-muted-foreground")}>{item.status === "pronto" ? "Disponível" : item.id === "sua-ia" ? "Precisa de conta" : "Indisponível no iPhone"}</span>
+            <span className={cn("shrink-0 rounded-full px-2 py-1 text-xs font-semibold", item.status === "pronto" ? "bg-income/10 text-income" : "bg-muted text-muted-foreground")}>{item.status === "pronto" ? "Disponível" : item.status === "conta" ? "Precisa de conta" : "Indisponível no iPhone"}</span>
             <ChevronDown className={cn("mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", open === item.id && "rotate-180")} aria-hidden="true" />
           </button>
-          {open === item.id ? <div className="px-4 pb-4 pl-[3.75rem]">{item.body}</div> : null}
+          {open === item.id ? <div className="px-4 pb-4 sm:pl-[3.75rem]">{item.body}</div> : null}
         </section>
       ))}
     </div>
@@ -96,7 +104,7 @@ export default function SettingsIntegrations() {
     </div>
 
     <ul className="space-y-2 text-xs text-muted-foreground">
-      <li className="flex gap-2"><ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />Os dados vão depois do "#" do endereço: ficam no seu iPhone e não passam pelo servidor. Nada é gravado sem a sua confirmação.</li>
+      <li className="flex gap-2"><ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />Registrar sem abrir: o código só lista nomes e cria lançamentos, cada uso aparece em Atividade recente e você desconecta quando quiser. Abrir já preenchido: os dados vão depois do "#" do endereço, não passam pelo servidor e nada é gravado sem a sua confirmação.</li>
       <li className="flex gap-2"><Smartphone className="h-4 w-4 shrink-0" aria-hidden="true" />No iPhone, os links dos Atalhos abrem no Safari. Mantenha o FINNOS conectado no Safari para o registro abrir direto.</li>
     </ul>
   </main>;

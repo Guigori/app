@@ -72,3 +72,32 @@ test("Integrações has the place to connect your own AI", async ({ page }) => {
   // Local mode keeps no keys, so it points to creating an account.
   await expect(item).toContainText("Crie sua conta preservando seus dados");
 });
+
+test("an account connects a shortcut: the code shows once, then only its last digits, and it can be disconnected", async ({ page }) => {
+  // Account mode with the API simulated: nothing reaches a real account.
+  await page.addInitScript(() => window.localStorage.removeItem("finnos:mode"));
+  let tokens: Array<Record<string, unknown>> = [];
+  const json = (body: unknown, status = 200) => ({ status, contentType: "application/json", body: JSON.stringify(body) });
+  await page.route("**/api/**", (route) => {
+    const url = route.request().url();
+    const method = route.request().method();
+    if (url.includes("/auth/me")) return route.fulfill(json({ id: "u1", name: "Teste", email: "teste@example.com", created_at: "2026-01-01", session_mode: "account" }));
+    if (url.includes("/integrations/shortcut-tokens") && method === "POST") {
+      tokens = [{ id: "abcd1234abcd1234", label: "iPhone", hint: "WXYZ", created_at: "2026-11-05", last_used_at: null }];
+      return route.fulfill(json({ ...tokens[0], token: "fns_TESTE_codigo_de_exemplo_que_nao_vale_WXYZ" }, 201));
+    }
+    if (url.includes("/integrations/shortcut-tokens/") && method === "DELETE") { tokens = []; return route.fulfill({ status: 204, body: "" }); }
+    if (url.includes("/integrations/shortcut-tokens")) return route.fulfill(json(tokens));
+    return route.fulfill(json([]));
+  });
+  await page.goto("/configuracoes/integracoes");
+  const box = page.getByTestId("shortcut-connect");
+  await expect(box).toContainText("/api/shortcuts/lancamentos");
+  await box.getByTestId("shortcut-create-token").click();
+  await expect(box.getByTestId("shortcut-fresh-token")).toContainText("fns_TESTE_codigo_de_exemplo_que_nao_vale_WXYZ");
+  await box.getByRole("button", { name: "Já copiei" }).click();
+  await expect(box).not.toContainText("fns_TESTE");
+  await expect(box.getByTestId("shortcut-tokens")).toContainText("•••• WXYZ");
+  await box.getByRole("button", { name: "Desconectar" }).click();
+  await expect(box.getByTestId("shortcut-tokens")).toHaveCount(0);
+});
