@@ -1,4 +1,5 @@
 import { useRouteState } from "@/lib/routeState";
+import { BackupReminder } from "@/components/settings/BackupReminder";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, ChevronLeft, ChevronRight, CreditCard, Eye, EyeOff, Wallet } from "lucide-react";
@@ -73,6 +74,7 @@ export default function DashboardWeb() {
         </div>
       </header>
 
+      <BackupReminder />
       {dashboard.isError && <div role="alert" className="rounded-2xl border border-destructive/30 p-5 text-sm">Não foi possível carregar o resumo financeiro. <button className="ml-2 underline" onClick={() => dashboard.refetch()}>Tentar novamente</button></div>}
       {dashboard.isPending && <div className="h-36 animate-pulse rounded-2xl bg-muted" aria-label="Carregando resumo" />}
       {data && (
@@ -83,7 +85,7 @@ export default function DashboardWeb() {
             { title: "Despesas do mês", amount: data.expense, icon: ArrowUpRight, kind: "expense" as MetricKind, series: expenseSeries, tone: "text-expense" },
             { title: "Resultado do mês", amount: data.month_balance, icon: CreditCard, kind: "balance" as MetricKind, series: netSeries, tone: data.month_balance >= 0 ? "text-income" : "text-expense" },
           ].map(({ title, amount, icon: Icon, kind, highlight, series, tone }) => (
-            <button key={title} onClick={() => go(kind)} className={`group rounded-2xl border p-5 text-left transition-colors hover:border-primary/30 ${highlight ? "border-primary/30 bg-gradient-to-br from-[#070F52] to-[#4B2CFF] text-white" : "border-border bg-card"}`}>
+            <button key={title} onClick={() => go(kind)} className={`group rounded-2xl border p-5 text-left transition-colors hover:border-primary/30 ${highlight ? "border-primary/30 bg-gradient-to-br from-navy to-primary text-white" : "border-border bg-card"}`}>
               <div className="flex items-center justify-between gap-3"><span className={`text-sm ${highlight ? "text-white/75" : "text-muted-foreground"}`}>{title}</span><Icon size={18} className={highlight ? "text-white/75" : "text-primary"} /></div>
               <p className="mt-3 font-heading text-2xl font-semibold tracking-tight tabular-nums">{display(amount)}</p>
               <Sparkline values={hidden ? [] : series} className={`mt-3 ${tone} ${highlight ? "opacity-90" : ""}`} label={`Evolução de ${title.toLowerCase()} no mês`} />

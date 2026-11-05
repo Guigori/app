@@ -38,7 +38,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { Account, Category, Transaction, TxStatus, TxType } from "@/types/finnos";
+import type { Transaction, TxStatus, TxType } from "@/types/finnos";
 
 function signedValue(t: Transaction): number {
   return t.type === "receita" ? t.value : -t.value;
@@ -112,7 +112,7 @@ export default function Transactions() {
     setSelectedDate(linkedDate);
     setScope("dia");
     setFlowView("calendario");
-  }, [linkedDate]);
+  }, [linkedDate, restoring, setMonth, setSelectedDate, setScope, setFlowView]);
 
   useEffect(() => {
     if (restoring || linkedDate) return;
@@ -137,7 +137,7 @@ export default function Transactions() {
       setType("todos");
       setFlowView("lista");
     }
-  }, [linkedCategoryId, linkedDate, linkedMetric, linkedMonth]);
+  }, [linkedCategoryId, linkedDate, linkedMetric, linkedMonth, restoring, setMonth, setSelectedDate, setScope, setCategoryId, setType, setFlowView]);
 
 
   // The global "+" reads this, so a new entry lands on the day being viewed.
@@ -164,8 +164,8 @@ export default function Transactions() {
   const calendarQuery = useQuery({ queryKey: ["calendar", month], queryFn: () => fetchCalendar(month) });
   const calendar = calendarQuery.data;
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
-  const accounts = accountsQuery.data ?? [];
-  const categories = categoriesQuery.data ?? [];
+  const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
+  const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
 
   const rollingRange = useMemo(() => {
     const end = todayISO();
@@ -219,12 +219,14 @@ export default function Transactions() {
     if (pagesQuery.data?.pages.at(-1)?.items.length === 0) {
       void pagesQuery.fetchNextPage();
     }
+    // The query object itself is new every render; its fields are the real inputs.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [pagedList, pagesQuery.data, pagesQuery.hasNextPage, pagesQuery.isFetching, pagesQuery.fetchNextPage]);
-  const monthTransactions = transactionsQuery.data ?? [];
-  const transactions = pagedList
+  const monthTransactions = useMemo(() => transactionsQuery.data ?? [], [transactionsQuery.data]);
+  const transactions = useMemo(() => pagedList
     ? pagesQuery.data?.pages.flatMap(page => page.items) ?? []
     : monthTransactions.slice().sort((a, b) => (sortDir === "desc"
-      ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)));
+      ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date))), [pagedList, pagesQuery.data, monthTransactions, sortDir]);
   // AUD-07: offline, say when only the pages loaded online are available.
   const completenessQuery = useQuery({
     queryKey: ["transactions", "complete", filters, online],
@@ -286,7 +288,7 @@ export default function Transactions() {
       }),
       { income: 0, expense: 0, projectedIncome: 0, projectedExpense: 0 },
     );
-  }, [periodMode, scope, pagedList, monthTransactions,
+  }, [periodMode, scope, pagedList, monthTransactions, calendar?.projected_income, calendar?.projected_expense,
       rollingCalendarsQuery.data, rollingRange]);
 
   const strip =

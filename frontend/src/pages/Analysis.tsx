@@ -100,7 +100,7 @@ export default function Analysis() {
         {filter!=="income" && <Metric label="Despesas" value={d?.expense ?? 0} change={expenseDelta} negative hidden={hidden}/>}
         <Metric label="Resultado" value={d?.month_balance ?? 0} change={0} hidden={hidden}/>
       </div> : <div className="h-52">
-        <ResponsiveContainer width="100%" height="100%"><BarChart data={chartData}><CartesianGrid vertical={false} strokeDasharray="3 3" opacity={.18}/><XAxis dataKey="label" axisLine={false} tickLine={false}/><YAxis hide/><Tooltip formatter={(v)=>money(Number(v))}/><Bar dataKey="income" name="Receitas" fill="#4B2CFF" radius={[5,5,0,0]}/><Bar dataKey="expense" name="Despesas" fill="#A46DFF" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer>
+        <ResponsiveContainer width="100%" height="100%"><BarChart data={chartData}><CartesianGrid vertical={false} strokeDasharray="3 3" opacity={.18}/><XAxis dataKey="label" axisLine={false} tickLine={false}/><YAxis hide/><Tooltip formatter={(v)=>money(Number(v))}/><Bar dataKey="income" name="Receitas" fill="var(--primary)" radius={[5,5,0,0]}/><Bar dataKey="expense" name="Despesas" fill="#A46DFF" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer>
       </div>}
     </CardContent></Card></button>
 
@@ -132,7 +132,7 @@ export default function Analysis() {
 
     <button type="button" onClick={()=>open("saldo")} className="block w-full text-left"><Card className="rounded-[24px] transition-colors hover:bg-muted/40"><CardContent className="p-5">
       <div className="flex items-center justify-between"><div><p className="text-sm font-medium">Evolução do saldo</p><p className="mt-1 text-2xl font-bold">{mask(money(d?.total_balance ?? 0))}</p></div><TrendingUp className="h-5 w-5 text-primary"/></div>
-      {mode==="charts" && <div className="mt-3 h-28"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><Area type="monotone" dataKey="net" stroke="#4B2CFF" fill="#8C5BFF" fillOpacity={.12} strokeWidth={2}/></AreaChart></ResponsiveContainer></div>}
+      {mode==="charts" && <div className="mt-3 h-28"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><Area type="monotone" dataKey="net" stroke="var(--primary)" fill="#8C5BFF" fillOpacity={.12} strokeWidth={2}/></AreaChart></ResponsiveContainer></div>}
     </CardContent></Card></button>
 
     <AnalysisRow to="/assinaturas" title="Assinaturas" value="Ver gastos recorrentes" icon={<WalletCards className="h-5 w-5"/>}/>

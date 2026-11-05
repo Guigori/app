@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { isLocalMode } from "@/lib/mode";
 import { RecurrenceScopeDialog } from "@/components/transactions/RecurrenceScopeDialog";
@@ -10,7 +10,7 @@ import { getApiErrorMessage } from "@/lib/errors";
 import { updateQueuedTransaction, flushSyncQueue, queueTransaction, getSyncOperation, discardConflictedOperation } from "@/lib/sync/queue";
 import { formatBRL, parseAmount, todayISO, TX_STATUS_LABEL, TX_TYPE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { Account, Category, Transaction, TransactionInput, TxStatus, TxType } from "@/types/finnos";
+import type { Transaction, TransactionInput, TxStatus, TxType } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -41,7 +41,7 @@ interface TransactionDialogProps {
   firstAttemptAt?: string;
 }
 
-export function TransactionDialog({ open, onOpenChange, initialType, initialDate, transaction, syncOperationId, syncPayload, firstAttemptAt }: TransactionDialogProps) {
+export function TransactionDialog({ open, onOpenChange, initialType, initialDate, transaction, syncOperationId, syncPayload }: TransactionDialogProps) {
   const queryClient = useQueryClient();
   const [type, setType] = useState<TxType>("despesa");
   const [name, setName] = useState("");
@@ -77,9 +77,9 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     staleTime: 60_000,
   });
   const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: fetchCards, enabled: open, staleTime: 60_000 });
-  const cards = (cardsQuery.data ?? []).filter((c) => c.active);
-  const accounts = accountsQuery.data ?? [];
-  const categories = categoriesQuery.data ?? [];
+  const cards = useMemo(() => (cardsQuery.data ?? []).filter((c) => c.active), [cardsQuery.data]);
+  const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
+  const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
   const syncReviewQuery = useQuery({
     queryKey: ["sync-operation", syncOperationId],
     queryFn: () => getSyncOperation(syncOperationId!),

@@ -13,7 +13,7 @@ type Props = {
   onSave: (input: SubscriptionInput) => Promise<void>;
 };
 
-const field = "mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-foreground outline-none focus:border-[#4B2CFF]";
+const field = "mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-foreground outline-none focus:border-primary";
 
 function inputFor(original?: SubscriptionItem | null): SubscriptionInput {
   return original ? {
@@ -64,7 +64,7 @@ export default function SubscriptionEditor({ original, saving, error, onClose, o
     <section className="rounded-3xl border border-border bg-card p-5 sm:p-6" aria-label={original ? `Editar assinatura ${original.name}` : "Nova assinatura"}>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold tracking-widest text-[#4B2CFF] dark:text-[#A46DFF]">FINNOS · ASSINATURAS</p>
+          <p className="text-xs font-semibold tracking-widest text-primary dark:text-[#A46DFF]">FINNOS · ASSINATURAS</p>
           <h2 className="mt-2 text-xl font-bold text-foreground">{original ? "Editar assinatura" : "Nova assinatura"}</h2>
           <p className="mt-1 text-sm text-muted-foreground">Cadastre o serviço sem criar uma despesa financeira automaticamente.</p>
         </div>
@@ -119,7 +119,7 @@ export default function SubscriptionEditor({ original, saving, error, onClose, o
         </label>
         {error && <p className="text-sm text-destructive sm:col-span-2" role="alert">{error}</p>}
         <div className="flex flex-wrap gap-3 sm:col-span-2">
-          <button type="submit" disabled={!valid || saving} className="inline-flex items-center gap-2 rounded-full bg-[#4B2CFF] px-5 py-3 font-semibold text-white disabled:opacity-50">
+          <button type="submit" disabled={!valid || saving} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 font-semibold text-white disabled:opacity-50">
             <Check size={17} /> {saving ? "Salvando..." : original ? "Salvar alterações" : "Adicionar assinatura"}
           </button>
           <button type="button" onClick={onClose} disabled={saving} className="rounded-full border border-border px-5 py-3">Cancelar</button>

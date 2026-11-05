@@ -1027,14 +1027,6 @@ function clampDay(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`;
 }
 
-function shiftMonths(iso: string, months: number): string {
-  const year = Number(iso.slice(0, 4));
-  const month = Number(iso.slice(5, 7));
-  const day = Number(iso.slice(8, 10));
-  const idx = year * 12 + (month - 1) + months;
-  return clampDay(Math.floor(idx / 12), (idx % 12) + 1, day);
-}
-
 function addDays(iso: string, days: number): string {
   const d = new Date(`${iso}T12:00:00`);
   d.setDate(d.getDate() + days);

@@ -27,7 +27,11 @@ const GENERIC = new Set(["compra", "pagamento", "pix", "debito", "credito", "tra
 const tokens = (text: string) =>
   new Set(text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("pt-BR").replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((t) => t.length >= 3 && !GENERIC.has(t) && !/^\d+$/.test(t)));
 
+const plain = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").replace(/\s+/g, " ").trim();
+
 export function nameSimilarity(a: string, b: string): number {
+  // Identical descriptions are the same name, even when made only of bank words ("PIX RECEBIDO").
+  if (plain(a) && plain(a) === plain(b)) return 1;
   const x = tokens(a);
   const y = tokens(b);
   if (!x.size || !y.size) return 0;

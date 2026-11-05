@@ -8,7 +8,7 @@ export function AuthLayout({ children, signup = false }: { children: ReactNode; 
   return (
     <div className="min-h-svh bg-white lg:grid lg:h-svh lg:grid-cols-[0.9fr_1.1fr] lg:overflow-hidden">
       {!mobileIntroDone ? (
-        <section className="relative flex min-h-svh flex-col overflow-hidden bg-[linear-gradient(0deg,#4B2CFF_0%,#070F52_46%,#020619_100%)] px-7 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] text-white lg:hidden">
+        <section className="relative flex min-h-svh flex-col overflow-hidden bg-[linear-gradient(0deg,var(--finnos-purple)_0%,var(--finnos-app)_46%,#020619_100%)] px-7 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] text-white lg:hidden">
           <div className="absolute inset-x-0 top-0 h-[32%] bg-[linear-gradient(180deg,rgba(0,0,0,.30),transparent)]" />
           <FinnosLogo variant="dark" className="relative z-20 w-44" />
           <FinnosIcon className="pointer-events-none absolute right-[-32%] top-[10%] h-[55vh] w-[55vh] rotate-[-14deg] opacity-30" />
@@ -23,7 +23,7 @@ export function AuthLayout({ children, signup = false }: { children: ReactNode; 
             <button
               type="button"
               onClick={() => setMobileIntroDone(true)}
-              className="mt-8 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-white font-semibold text-[#070F52] shadow-lg transition active:scale-[.98]"
+              className="mt-8 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-white font-semibold text-navy shadow-lg transition active:scale-[.98]"
               data-testid="mobile-auth-continue"
             >
               Continuar
@@ -33,7 +33,7 @@ export function AuthLayout({ children, signup = false }: { children: ReactNode; 
         </section>
       ) : null}
 
-      <aside className="relative hidden h-svh overflow-hidden bg-[linear-gradient(0deg,#4B2CFF_0%,#070F52_46%,#020619_100%)] px-10 py-8 text-white lg:flex lg:flex-col xl:px-14">
+      <aside className="relative hidden h-svh overflow-hidden bg-[linear-gradient(0deg,var(--finnos-purple)_0%,var(--finnos-app)_46%,#020619_100%)] px-10 py-8 text-white lg:flex lg:flex-col xl:px-14">
         <div className="absolute inset-x-0 top-0 h-[32%] bg-[linear-gradient(180deg,rgba(0,0,0,.30),transparent)]" />
         <FinnosLogo variant="dark" className="relative z-20 w-44 xl:w-48" />
         <FinnosIcon className="pointer-events-none absolute right-[-20%] top-[10%] h-[58vh] w-[58vh] rotate-[-14deg] opacity-26" />

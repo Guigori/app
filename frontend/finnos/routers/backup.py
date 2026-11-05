@@ -6,11 +6,14 @@ write makes the request fail (409) instead of returning a mixed snapshot.
 Nothing is truncated silently: the adapter raises above its read limit.
 Secrets (AI provider keys) and internal sync receipts are never exported.
 """
+import base64
+import gzip
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.encoders import jsonable_encoder
 from starlette.concurrency import run_in_threadpool
 
 from finnos.lib import db as store
@@ -37,13 +40,18 @@ def checksum(collections: dict) -> str:
 
 
 def _clean(doc: dict) -> dict:
-    # The owner is implied by the account that restores the file.
-    return {key: value for key, value in doc.items() if key != "user_id"}
+    # The owner is implied by the account that restores the file. Values are made
+    # JSON-native here (datetimes → ISO strings, Decimal → number) so the checksum is
+    # computed over exactly what the downloaded file contains.
+    return jsonable_encoder({key: value for key, value in doc.items() if key != "user_id"})
 
 
 @router.get("/backup")
 async def export_backup(user: dict = Depends(require_user)):
-    uid = user["id"]
+    return await build_backup(user["id"])
+
+
+async def build_backup(uid: str) -> dict:
     before = await finance_revision(uid)
     collections = {}
     for name in COLLECTIONS:
@@ -125,3 +133,118 @@ async def restore_backup(payload: dict, user: dict = Depends(require_user)):
             count += 1
         restored[name] = count
     return {"restored": restored, "reused_categories": len(ids)}
+
+
+
+# --- Weekly server-side copies ------------------------------------------------
+# Each copy is the same checksummed backup, gzip + base64, split into parts so a
+# large history never exceeds Firestore's 1 MiB document limit. The metadata
+# document is written last: a copy without it is incomplete and never listed.
+SNAPSHOT_KEEP = 8
+SNAPSHOT_PART = 700_000
+SNAPSHOT_MIN_INTERVAL = timedelta(days=6)
+CRON_USER_LIMIT = 500
+
+
+def _snapshots(uid: str):
+    return store.root(store.client(), uid).collection("backup_snapshots")
+
+
+def encode_snapshot(data: dict) -> list[str]:
+    raw = base64.b64encode(gzip.compress(json.dumps(data, default=str, ensure_ascii=False).encode("utf-8"))).decode("ascii")
+    return [raw[i:i + SNAPSHOT_PART] for i in range(0, len(raw), SNAPSHOT_PART)] or [""]
+
+
+def decode_snapshot(parts: list[str]) -> dict:
+    return json.loads(gzip.decompress(base64.b64decode("".join(parts))).decode("utf-8"))
+
+
+def _list_snapshots(uid: str) -> list[dict]:
+    rows = []
+    for snap in _snapshots(uid).stream(timeout=15):
+        meta = snap.to_dict() or {}
+        if meta.get("created_at"):
+            rows.append({"id": snap.id, **{k: meta[k] for k in ("created_at", "counts", "parts", "bytes", "source") if k in meta}})
+    return sorted(rows, key=lambda r: r["id"], reverse=True)
+
+
+async def save_snapshot(uid: str, source: str) -> dict:
+    data = await build_backup(uid)
+    parts = encode_snapshot(data)
+    sid = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+    def write():
+        ref = _snapshots(uid).document(sid)
+        for n, part in enumerate(parts):
+            ref.collection("parts").document(f"{n:04d}").set({"data": part})
+        meta = {"created_at": data["exported_at"], "counts": data["counts"], "checksum_sha256": data["checksum_sha256"], "parts": len(parts), "bytes": sum(map(len, parts)), "source": source}
+        ref.set(meta)
+        # Retention: keep the newest copies only (these are FINNOS's own copies, not user records).
+        for old in sorted(_snapshots(uid).list_documents(), key=lambda d: d.id, reverse=True)[SNAPSHOT_KEEP:]:
+            for part in old.collection("parts").list_documents():
+                part.delete()
+            old.delete()
+        return {"id": sid, **{k: meta[k] for k in ("created_at", "counts", "parts", "bytes", "source")}}
+
+    return await run_in_threadpool(write)
+
+
+@router.get("/backups")
+async def list_snapshots(user: dict = Depends(require_user)):
+    return {"items": await run_in_threadpool(lambda: _list_snapshots(user["id"])), "keep": SNAPSHOT_KEEP}
+
+
+@router.post("/backups", status_code=201)
+async def create_snapshot(user: dict = Depends(require_user)):
+    uid = user["id"]
+    latest = await run_in_threadpool(lambda: _list_snapshots(uid))
+    if latest and datetime.fromisoformat(latest[0]["created_at"]) > datetime.now(timezone.utc) - timedelta(minutes=10):
+        raise HTTPException(429, "Uma cópia acabou de ser guardada. Tente de novo em alguns minutos.")
+    return await save_snapshot(uid, "manual")
+
+
+@router.get("/backups/{snapshot_id}")
+async def download_snapshot(snapshot_id: str, user: dict = Depends(require_user)):
+    uid = user["id"]
+
+    def read():
+        ref = _snapshots(uid).document(store.resource_id(snapshot_id))
+        meta = ref.get()
+        if not meta.exists or not (meta.to_dict() or {}).get("created_at"):
+            raise HTTPException(404, "Cópia não encontrada.")
+        parts = [doc.to_dict().get("data", "") for doc in sorted(ref.collection("parts").stream(timeout=15), key=lambda d: d.id)]
+        return meta.to_dict(), parts
+
+    meta, parts = await run_in_threadpool(read)
+    if len(parts) != meta.get("parts"):
+        raise HTTPException(409, "Cópia incompleta.")
+    data = decode_snapshot(parts)
+    if data.get("checksum_sha256") != checksum(data.get("collections", {})):
+        raise HTTPException(409, "Cópia corrompida (checksum não confere).")
+    return data
+
+
+@router.get("/backups-run")
+async def run_weekly_snapshots(authorization: str | None = Header(default=None)):
+    """Weekly job (GitHub Actions, Bearer FINNOS_CRON_SECRET): one copy per user, at most every 6 days."""
+    from finnos.lib.push_transport import require_cron_secret
+
+    require_cron_secret(authorization)
+    users = await run_in_threadpool(lambda: [ref.id for ref in store.client().collection("users").list_documents(page_size=CRON_USER_LIMIT + 1)])
+    if len(users) > CRON_USER_LIMIT:
+        raise HTTPException(503, "Mais usuários que o limite do backup semanal; paginação necessária.")
+    saved = skipped = failed = 0
+    for uid in users:
+        token = store.active_uid.set(uid)
+        try:
+            latest = await run_in_threadpool(lambda: _list_snapshots(uid))
+            if latest and datetime.fromisoformat(latest[0]["created_at"]) > datetime.now(timezone.utc) - SNAPSHOT_MIN_INTERVAL:
+                skipped += 1
+                continue
+            await save_snapshot(uid, "semanal")
+            saved += 1
+        except Exception:  # one user's failure never stops the others; counts only, no data in logs
+            failed += 1
+        finally:
+            store.active_uid.reset(token)
+    return {"users": len(users), "saved": saved, "skipped": skipped, "failed": failed}

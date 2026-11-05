@@ -34,6 +34,57 @@ export async function downloadBackup(): Promise<void> {
     ? { format: "finnos-backup", version: 1, source: "local", exported_at: new Date().toISOString(), local_db: readDb(), local_extras: localExtras() }
     : await apiGet<Record<string, unknown>>("/finance/backup");
   download(`finnos-backup-${stamp()}.json`, JSON.stringify(data, null, 2), "application/json");
+  markBackupDownloaded();
+}
+
+// --- Copies kept by the server (weekly + "Guardar cópia agora") ---------------
+export interface ServerBackup {
+  id: string;
+  created_at: string;
+  counts: Record<string, number>;
+  bytes: number;
+  source: "semanal" | "manual";
+}
+
+export function listServerBackups(): Promise<{ items: ServerBackup[]; keep: number }> {
+  return apiGet("/finance/backups");
+}
+
+export function saveServerBackup(): Promise<ServerBackup> {
+  return apiPost("/finance/backups", {});
+}
+
+export async function downloadServerBackup(id: string): Promise<void> {
+  const data = await apiGet<Record<string, unknown>>(`/finance/backups/${encodeURIComponent(id)}`);
+  download(`finnos-backup-${id.slice(0, 8)}.json`, JSON.stringify(data, null, 2), "application/json");
+  markBackupDownloaded();
+}
+
+// --- Reminder to keep a copy of your own -------------------------------------
+const LAST_DOWNLOAD = "finnos:backup-last-download";
+const FIRST_SEEN = "finnos:backup-first-seen";
+const SNOOZE = "finnos:backup-reminder-snooze";
+const DAY = 86_400_000;
+
+function markBackupDownloaded() {
+  try { localStorage.setItem(LAST_DOWNLOAD, new Date().toISOString()); } catch { /* private mode */ }
+}
+
+/** Local mode keeps data only in this browser: remind weekly. Accounts have server copies: monthly. */
+export function backupReminderDue(now = Date.now()): boolean {
+  try {
+    const every = (isLocalMode() ? 7 : 30) * DAY;
+    if (Number(localStorage.getItem(SNOOZE) ?? 0) > now) return false;
+    if (!localStorage.getItem(FIRST_SEEN)) localStorage.setItem(FIRST_SEEN, String(now));
+    const last = Date.parse(localStorage.getItem(LAST_DOWNLOAD) ?? "") || Number(localStorage.getItem(FIRST_SEEN));
+    return now - last >= every;
+  } catch {
+    return false;
+  }
+}
+
+export function snoozeBackupReminder(days = 7): void {
+  try { localStorage.setItem(SNOOZE, String(Date.now() + days * DAY)); } catch { /* private mode */ }
 }
 
 const csvCell = (value: unknown) => {
