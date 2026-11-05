@@ -22,7 +22,7 @@ const groups = [
     { label: "Dados e backup", description: "Exportar, importar e restaurar", icon: Cloud, href: "/configuracoes/dados" },
     { label: "Notificações", description: "Vencimentos e lembretes", icon: Bell, href: "/configuracoes/notificacoes" },
     { label: "Instalar no celular", description: "Abrir pela tela inicial, como um app", icon: Smartphone, href: "#instalar", action: "install" },
-    { label: "Integrações e automações", description: "Apple Pay, Atalhos e FINNOS IA", icon: Zap, href: "/configuracoes/integracoes" },
+    { label: "Integrações e automações", description: "Apple Pay, Atalhos e conectar sua IA", icon: Zap, href: "/configuracoes/integracoes" },
   ] },
   { title: "Informações", items: [
     { label: "Ajuda e suporte", description: "Informações e feedback do beta", icon: CircleHelp, href: "/configuracoes/suporte" },

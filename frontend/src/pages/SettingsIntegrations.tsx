@@ -1,7 +1,10 @@
 import { useState, type ReactNode } from "react";
-import { Bell, BrainCircuit, ChevronDown, Copy, Play, ShieldCheck, Smartphone, WalletCards, Zap } from "lucide-react";
+import { Bell, BrainCircuit, ChevronDown, Copy, KeyRound, Play, ShieldCheck, Smartphone, WalletCards, Zap } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
+import { isLocalMode } from "@/lib/mode";
 import { registerLinkBase } from "@/lib/registerLink";
+import { AiKeysCard } from "@/components/ai/AiKeysCard";
 import { cn } from "@/lib/utils";
 
 type Status = "pronto" | "indisponivel";
@@ -9,7 +12,10 @@ type Status = "pronto" | "indisponivel";
 /** How to connect FINNOS to the iPhone without an App Store app: Shortcuts open the register filled in. */
 export default function SettingsIntegrations() {
   const base = registerLinkBase(window.location.origin);
-  const [open, setOpen] = useState<string | null>("atalhos");
+  const local = isLocalMode();
+  // "#sua-ia" (from the FINNOS IA panel) opens straight on connecting an AI.
+  const { hash } = useLocation();
+  const [open, setOpen] = useState<string | null>(hash === "#sua-ia" ? "sua-ia" : "atalhos");
   const copy = async (value: string) => {
     try { await navigator.clipboard.writeText(value); toast.success("Copiado. Cole no app Atalhos."); } catch { toast.error("Não consegui copiar. Selecione e copie o texto."); }
   };
@@ -54,6 +60,13 @@ export default function SettingsIntegrations() {
       body: <p className="text-sm">As compras feitas com a Carteira chegam pelo <strong>Registro por Apple Pay</strong>, acima, que usa a automação oficial do iPhone.</p>,
     },
     {
+      id: "sua-ia", name: "Conectar sua IA", icon: KeyRound, status: local ? "indisponivel" : "pronto",
+      description: "Use sua chave do ChatGPT, Claude ou Gemini para a FINNOS IA responder qualquer pergunta, com seus dados como contexto.",
+      body: local
+        ? <p className="text-sm">No modo local a chave não tem onde ficar guardada com segurança. <Link to="/cadastro" className="font-semibold text-primary">Crie sua conta preservando seus dados</Link> para conectar sua IA.</p>
+        : <AiKeysCard />,
+    },
+    {
       id: "ia", name: "FINNOS IA", icon: BrainCircuit, status: "pronto",
       description: "Pergunte sobre seus gastos, metas e orçamento, ou peça para registrar e organizar.",
       body: <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("finnos-ai-open"))} className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Abrir a FINNOS IA</button>,
@@ -69,7 +82,7 @@ export default function SettingsIntegrations() {
           <button type="button" onClick={() => setOpen(open === item.id ? null : item.id)} aria-expanded={open === item.id} className="flex w-full items-start gap-3 p-4 text-left">
             <span className="rounded-xl bg-primary/10 p-2 text-primary"><item.icon className="h-5 w-5" aria-hidden="true" /></span>
             <span className="min-w-0 flex-1"><span className="block font-medium">{item.name}</span><span className="mt-1 block text-xs text-muted-foreground">{item.description}</span></span>
-            <span className={cn("shrink-0 rounded-full px-2 py-1 text-xs font-semibold", item.status === "pronto" ? "bg-income/10 text-income" : "bg-muted text-muted-foreground")}>{item.status === "pronto" ? "Disponível" : "Indisponível no iPhone"}</span>
+            <span className={cn("shrink-0 rounded-full px-2 py-1 text-xs font-semibold", item.status === "pronto" ? "bg-income/10 text-income" : "bg-muted text-muted-foreground")}>{item.status === "pronto" ? "Disponível" : item.id === "sua-ia" ? "Precisa de conta" : "Indisponível no iPhone"}</span>
             <ChevronDown className={cn("mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", open === item.id && "rotate-180")} aria-hidden="true" />
           </button>
           {open === item.id ? <div className="px-4 pb-4 pl-[3.75rem]">{item.body}</div> : null}

@@ -64,3 +64,11 @@ test("the balance chart keeps the tooltip on today, with every selected line", a
   await expect(tooltip).toContainText("Despesas");
   await expect(chart.getByTestId("home-chart-tooltip")).toHaveCount(1);
 });
+
+test("Integrações has the place to connect your own AI", async ({ page }) => {
+  await page.goto("/configuracoes/integracoes#sua-ia");
+  const item = page.getByTestId("integration-sua-ia");
+  await expect(item).toContainText("Conectar sua IA");
+  // Local mode keeps no keys, so it points to creating an account.
+  await expect(item).toContainText("Crie sua conta preservando seus dados");
+});
