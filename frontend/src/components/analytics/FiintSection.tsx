@@ -49,7 +49,7 @@ export function FiintSection({ hidden }: { hidden: boolean }) {
         </button>
       </header>
       <div className="grid gap-3 sm:grid-cols-[1fr_1.3fr]">
-        <div className="rounded-2xl bg-[#070F52] p-5 text-white">
+        <div className="rounded-2xl bg-navy p-5 text-white">
           <p className="text-sm text-white/75">{data.score_label}</p>
           <p className="mt-3 text-4xl font-bold">{data.score}<span className="text-base text-white/60">/100</span></p>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/20">
@@ -90,7 +90,7 @@ export function FiintSection({ hidden }: { hidden: boolean }) {
               className="flex min-w-0 flex-col items-center gap-1">
               <div className="flex h-14 w-full items-end gap-px rounded-t bg-muted/40 px-1">
                 <div className="w-1/2 rounded-t bg-[#8C5BFF]" style={{ height: `${Math.max(0, Math.min(100, Math.abs(row.income) / max * 100))}%` }} />
-                <div className="w-1/2 rounded-t bg-[#4B2CFF]" style={{ height: `${Math.max(0, Math.min(100, Math.abs(row.expense) / max * 100))}%` }} />
+                <div className="w-1/2 rounded-t bg-primary" style={{ height: `${Math.max(0, Math.min(100, Math.abs(row.expense) / max * 100))}%` }} />
               </div>
               <span className="text-xs text-muted-foreground">{row.month.slice(5)}</span>
             </div>

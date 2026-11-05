@@ -1,6 +1,5 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
 import { readFirebaseConfig } from "./firebaseConfig";
 
 const { config, error } = readFirebaseConfig({
@@ -20,7 +19,8 @@ export const firebaseApp = firebaseConfigured
   : null;
 
 export const firebaseAuth = firebaseApp ? getAuth(firebaseApp) : null;
-export const firestore = firebaseApp ? getFirestore(firebaseApp) : null;
+// The browser never talks to Firestore directly: every read and write goes through the
+// FastAPI server (Admin SDK). Not loading the client SDK keeps ~1 MB out of the app.
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });

@@ -15,6 +15,7 @@ describe("nameSimilarity", () => {
   it("ignores bank filler words", () => {
     expect(nameSimilarity("COMPRA PIX PADARIA BOM PAO", "Padaria")).toBe(1);
     expect(nameSimilarity("PIX ENVIADO", "Padaria")).toBe(0);
+    expect(nameSimilarity("PIX RECEBIDO", "Pix recebido")).toBe(1);
   });
 });
 

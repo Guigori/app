@@ -50,7 +50,7 @@ function monthLabel(value: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-export function HomeFinancialChart({ month, total, income, expense, result, onOpenMetric, menuView, menuInterval, menuSeries, bare = false }: HomeFinancialChartProps) {
+export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuInterval, menuSeries, bare = false }: HomeFinancialChartProps) {
   const { hidden } = useBalanceHidden();
   const view = VIEW_TO_CHART[menuView];
   const period = PERIOD_TO_CHART[menuInterval] ?? "1m";

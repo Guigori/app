@@ -196,7 +196,7 @@ export function MobileNav() {
           <button
             type="button"
             onClick={() => setRegisterOpen(open => !open)}
-            className="flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-[#4B2CFF] text-white shadow-[0_4px_18px_rgba(75,44,255,.18)] transition-all duration-300 active:scale-95"
+            className="flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-[0_4px_18px_rgba(75,44,255,.18)] transition-all duration-300 active:scale-95"
             aria-label={registerOpen ? "Fechar Registro Inteligente" : "Abrir Registro Inteligente"}
             aria-expanded={registerOpen}
             data-testid="mobile-quick-action-button"

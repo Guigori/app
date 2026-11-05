@@ -25,7 +25,7 @@ function defaultDates(period:BudgetPeriod,startRaw?:string){
  if(period==="semanal")e.setDate(e.getDate()+6);
  else if(period==="quinzenal")e.setDate(e.getDate()+14);
  else if(period==="mensal")e.setMonth(e.getMonth()+1,0);
- else e.setFullYear(e.getFullYear()+1),e.setDate(e.getDate()-1);
+ else { e.setFullYear(e.getFullYear()+1); e.setDate(e.getDate()-1); }
  return {start:iso(s),end:iso(e)};
 }
 
@@ -42,7 +42,11 @@ export default function BudgetSettings(){
  const [extraordinary,setExtraordinary]=useState(false);
  const [alloc,setAlloc]=useState<Record<string,AllocationDraft>>({});
 
+ // Load the saved cycle into the form once per cycle id; refetches must not wipe edits.
+ // oxlint-disable-next-line react-hooks/exhaustive-deps
  useEffect(()=>{if(existing){setMode(existing.mode);setPeriod(existing.period);setStart(existing.start_date);setEnd(existing.end_date);setIncome(String(existing.expected_income||""));setNotes(existing.notes??"");setExtraordinary(existing.extraordinary);setAlloc(Object.fromEntries(existing.allocations.map(a=>[a.category_id,{planned:String(a.planned||""),priority:a.priority,rollover:a.rollover}])));}else{const d=defaultDates(period);setStart(d.start);setEnd(d.end);setIncome("");setNotes("");setExtraordinary(false);setAlloc({});}},[existing?.id,target]);
+ // Only a period change proposes a new end date; editing the start must not override it.
+ // oxlint-disable-next-line react-hooks/exhaustive-deps
  useEffect(()=>{if(!existing){const d=defaultDates(period,start||undefined);setEnd(d.end)}},[period]);
 
  const categories=(cats.data??[]).filter(c=>c.name);

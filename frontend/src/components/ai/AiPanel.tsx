@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Clock3, FileText, Loader2, Mic, Plus, Send, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from "lucide-react";
@@ -8,11 +8,12 @@ import { getMode, isLocalMode } from "@/lib/mode";
 import { askLocalFinnos } from "@/lib/local/ai";
 import { clearFinnConversations, newFinnConversation, readFinnConversations, upsertFinnConversation, type FinnConversation } from "@/lib/aiConversations";
 import type { AiAnswer, AiKey, AiProvider, Category, CreditCard } from "@/types/finnos";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigationPreferences } from "@/lib/navigationPreferences";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { AiVisual } from "@/components/ai/AiVisual";
+// Charts only load when an answer actually has one (keeps recharts out of the first download).
+const AiVisual = lazy(() => import("@/components/ai/AiVisual").then((m) => ({ default: m.AiVisual })));
 
 const BASE_SUGGESTIONS = ["Quanto gastei este mês?", "Onde posso economizar?", "Como está minha regra 50/30/20?", "O que merece minha atenção no Radar?"];
 
@@ -92,7 +93,7 @@ export function AiPanel() {
             <div className="flex gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-5 w-5"/></div><div className="rounded-2xl border border-border bg-card p-4 text-sm leading-relaxed">Olá! Sou a FINNOS IA. Posso analisar seus gastos, orçamento, Radar e ajudar no seu planejamento financeiro. O que você quer entender hoje?</div></div>
             {appMode==="local"?<div className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground">Se quiser conectar ChatGPT, Claude ou Gemini e guardar sua chave com segurança, <Link to="/cadastro" onClick={()=>setOpen(false)} className="font-semibold text-primary">crie sua conta preservando seus dados</Link>.</div>:null}
             <div className="grid gap-2">{suggestions.map(s=><button key={s} onClick={()=>void ask(s)} className="rounded-2xl bg-muted px-4 py-3 text-left text-sm font-medium hover:bg-accent">{s}</button>)}</div>
-          </div>:conversation.messages.map(m=><div key={m.id} className={m.role==="user"?"flex justify-end":"flex justify-start gap-3"}>{m.role==="assistant"?<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-4 w-4"/></div>:null}<div className={m.role==="user"?"max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground":"max-w-[88%] rounded-2xl border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-line"}><span>{m.content.replace(/\*\*/g,"")}</span>{m.role==="assistant"&&m.visual?<AiVisual visual={m.visual}/>:null}{m.role==="assistant"?<div className="mt-2 flex gap-1 text-muted-foreground"><button onClick={()=>feedback(m.id,"up")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta útil"><ThumbsUp className="h-3.5 w-3.5"/></button><button onClick={()=>feedback(m.id,"down")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta não útil"><ThumbsDown className="h-3.5 w-3.5"/></button></div>:null}</div></div>)}
+          </div>:conversation.messages.map(m=><div key={m.id} className={m.role==="user"?"flex justify-end":"flex justify-start gap-3"}>{m.role==="assistant"?<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-4 w-4"/></div>:null}<div className={m.role==="user"?"max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground":"max-w-[88%] rounded-2xl border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-line"}><span>{m.content.replace(/\*\*/g,"")}</span>{m.role==="assistant"&&m.visual?<Suspense fallback={null}><AiVisual visual={m.visual}/></Suspense>:null}{m.role==="assistant"?<div className="mt-2 flex gap-1 text-muted-foreground"><button onClick={()=>feedback(m.id,"up")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta útil"><ThumbsUp className="h-3.5 w-3.5"/></button><button onClick={()=>feedback(m.id,"down")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta não útil"><ThumbsDown className="h-3.5 w-3.5"/></button></div>:null}</div></div>)}
           {askMutation.isPending?<div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin"/>Analisando suas finanças…</div>:null}
           {error?<p className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>:null}
         </main>

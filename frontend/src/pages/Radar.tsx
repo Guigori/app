@@ -2,8 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { fetchRadar } from "@/lib/data";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import type { RadarSignal } from "@/types/finnos";
 
 const LABEL = { risk: "Risco", deviation: "Desvio", information: "Informação", opportunity: "Oportunidade" } as const;

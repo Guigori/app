@@ -163,7 +163,7 @@ export default function Login() {
                 </p>
               ) : null}
 
-              <Button type="submit" className="h-12 w-full rounded-xl bg-[#070F52] text-white transition-colors hover:bg-[#5B35FF] active:bg-[#4B2CFF]" disabled={loginMutation.isPending || demoMutation.isPending} data-testid="login-submit-button">
+              <Button type="submit" className="h-12 w-full rounded-xl bg-navy text-white transition-colors hover:bg-[#5B35FF] active:bg-primary" disabled={loginMutation.isPending || demoMutation.isPending} data-testid="login-submit-button">
                 {loginMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" aria-label="Entrando" /> : loginSucceeded ? <Check className="h-5 w-5" aria-label="Conectado" /> : "Entrar"}
               </Button>
             </form>
@@ -179,7 +179,7 @@ export default function Login() {
 
             <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
               <Button
-                className="h-11 min-w-0 rounded-xl border border-[#DCD6FF] bg-[#F1EDFF] px-2 text-xs font-semibold text-[#4B2CFF] shadow-none transition-colors hover:bg-[#5B35FF] hover:text-white active:bg-[#4B2CFF] sm:px-4 sm:text-sm"
+                className="h-11 min-w-0 rounded-xl border border-[#DCD6FF] bg-[#F1EDFF] px-2 text-xs font-semibold text-primary shadow-none transition-colors hover:bg-[#5B35FF] hover:text-white active:bg-primary sm:px-4 sm:text-sm"
                 onClick={() => { setFormError(null); demoMutation.mutate(); }}
                 disabled={loginMutation.isPending || demoMutation.isPending}
                 data-testid="demo-login-button"
@@ -188,7 +188,7 @@ export default function Login() {
               </Button>
 
               <Button
-                className="h-11 min-w-0 rounded-xl border border-[#DCD6FF] bg-[#F1EDFF] px-2 text-xs font-semibold text-[#4B2CFF] shadow-none transition-colors hover:bg-[#5B35FF] hover:text-white active:bg-[#4B2CFF] sm:px-4 sm:text-sm"
+                className="h-11 min-w-0 rounded-xl border border-[#DCD6FF] bg-[#F1EDFF] px-2 text-xs font-semibold text-primary shadow-none transition-colors hover:bg-[#5B35FF] hover:text-white active:bg-primary sm:px-4 sm:text-sm"
                 onClick={startLocalMode}
                 disabled={loginMutation.isPending || demoMutation.isPending}
                 data-testid="local-mode-button"
