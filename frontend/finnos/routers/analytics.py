@@ -20,6 +20,7 @@ from finnos.models.analytics import (
     CalendarOut,
     DayFlow,
     PlannedCharge,
+    UpcomingItem,
     FlowCategory,
     FlowOut,
     FlowPoint,
@@ -176,6 +177,42 @@ def _projection(tx: dict, month: str) -> float | None:
     return _unpaid_portion(tx, month)
 
 
+def _upcoming(txs, subscriptions, source_txs, month, cat_by_id) -> list[UpcomingItem]:
+    """The same three sources the focus month's projection sums, item by item."""
+    from calendar import monthrange
+    year, number = map(int, month.split("-"))
+    last = monthrange(year, number)[1]
+
+    def item(tx, date_key, value, kind):
+        category = cat_by_id.get(tx.get("category_id") or "", {})
+        return UpcomingItem(
+            date=date_key, name=tx.get("name") or "", value=quantize_brl(D(value)),
+            type="receita" if tx.get("type") == "receita" else "despesa", kind=kind,
+            account_id=tx.get("account_id"), category_id=tx.get("category_id"),
+            category_name=category.get("name"), category_color=category.get("color"),
+        )
+
+    out: list[UpcomingItem] = []
+    for tx in txs:
+        value = _projection(tx, month)
+        if value is None:
+            continue
+        same_month = str(tx.get("date") or "")[:7] == month
+        date_key = tx["date"] if same_month else f"{month}-{min(int(tx['date'][8:10]), last):02d}"
+        kind = ("parcela" if tx.get("installment") else "fixa" if tx.get("fixed")
+                else "pendente" if tx.get("status") == "pendente" else "agendado")
+        entry = item(tx, date_key, value, kind)
+        entry.transaction_id = tx.get("id")
+        out.append(entry)
+    for source, date_key in monthly_projection_sources(txs, month):
+        out.append(item(source, date_key, _amount(source), "fixa"))
+    for sub, charge in planned_subscriptions(subscriptions, source_txs, month, today_iso()):
+        entry = item({**sub, "type": "despesa"}, charge.isoformat(), sub["value"], "assinatura")
+        entry.subscription_id = sub.get("id")
+        out.append(entry)
+    return sorted(out, key=lambda e: (e.date, e.name))
+
+
 @router.get("/flow", response_model=FlowOut)
 async def flow(
     month: Optional[str] = Query(default=None, pattern="^\\d{4}-\\d{2}$"),
@@ -184,6 +221,7 @@ async def flow(
     to_month: Optional[str] = Query(default=None, pattern="^\\d{4}-\\d{2}$"),
     category_id: Optional[str] = Query(default=None),
     user: dict = Depends(require_user),
+    account_id: Annotated[Optional[str], Query()] = None,
 ) -> FlowOut:
     """Cash flow for a period: realised income/expense per month, the projection for the
     months ahead and where the money went in the focus month.
@@ -217,6 +255,10 @@ async def flow(
         subscriptions = subscriptions_in_category(
             subscriptions, category_id, cat_by_id.get(category_id),
         )
+    if account_id:
+        # A card purchase carries the account that pays its invoice.
+        txs = [tx for tx in txs if tx.get("account_id") == account_id]
+        subscriptions = [sub for sub in subscriptions if sub.get("account_id") == account_id]
     today_month = today_iso()[:7]
     series: list[FlowPoint] = []
     for m in window:
@@ -279,6 +321,7 @@ async def flow(
         for key, value, percent in positive_category_slices(by_cat)
     ]
     point = next((p for p in series if p.month == focus), None)
+    upcoming = _upcoming(txs, subscriptions, source_txs, focus, cat_by_id)
     return FlowOut(
         month=focus,
         from_month=window[0],
@@ -294,6 +337,7 @@ async def flow(
         total_net=quantize_brl(sum((p.net for p in series))),
         series=series,
         categories=breakdown,
+        upcoming=upcoming,
     )
 
 
