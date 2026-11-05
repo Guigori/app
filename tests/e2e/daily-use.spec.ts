@@ -40,6 +40,29 @@ test("quick entry: typed on the keyboard, saved and listed in Fluxo", async ({ p
   await expect(page.locator("text=Café teste >> visible=true").first()).toBeVisible();
 });
 
+test("tapping a lançamento explains it, and editing is one action inside", async ({ page }) => {
+  await createAccount(page);
+  await page.goto("/registro-inteligente");
+  await expect(page.getByTestId("quick-entry")).toBeVisible();
+  for (const key of ["4", "2"]) await page.keyboard.press(key);
+  await expect(page.getByTestId("quick-entry-amount")).toHaveText("R$ 42");
+  await page.getByRole("textbox", { name: "Nota" }).fill("Detalhe teste");
+  await page.getByRole("radiogroup", { name: "Categoria" }).getByRole("radio").nth(1).click();
+  await page.getByTestId("quick-entry-save").click();
+  await expect(page.getByRole("status").filter({ hasText: "Salvo" })).toBeVisible();
+  await page.goto("/transacoes");
+  await page.locator("text=Detalhe teste >> visible=true").first().click();
+  const detail = page.getByTestId("transaction-detail");
+  await expect(detail).toBeVisible();
+  await expect(detail.getByTestId("transaction-detail-value")).toHaveText("-R$ 42,00");
+  await expect(detail.getByTestId("transaction-detail-path")).toContainText("Conta Teste");
+  await expect(detail.getByTestId("transaction-detail-rhythm")).toContainText("avulso");
+  await expect(detail.getByTestId("transaction-detail-cashflow")).toHaveAttribute("href", /\/fluxo\?month=\d{4}-\d{2}&metric=despesas/);
+  await detail.getByTestId("transaction-detail-edit").click();
+  await expect(detail).toBeHidden();
+  await expect(page.getByRole("dialog")).toBeVisible();
+});
+
 test("statement import flags what is already registered", async ({ page }) => {
   await createAccount(page);
   const csv = Buffer.from(`Data;Descrição;Valor\n${isoDaysAgo(2)};Padaria Teste;-12,50\n${isoDaysAgo(4)};Pix recebido;200,00`);
