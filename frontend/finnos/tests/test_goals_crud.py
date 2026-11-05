@@ -86,3 +86,25 @@ def test_goals_suggestion_route_not_shadowed_by_detail():
     detail_index = next(i for i, (path, methods) in enumerate(routes)
                         if path.endswith("/{goal_id}") and "GET" in methods)
     assert index < detail_index
+
+
+def test_goal_movements_keep_source_kind_and_old_records(monkeypatch):
+    store = GoalsStore()
+    monkeypatch.setattr(goals, "db", SimpleNamespace(goals=store))
+    app = FastAPI()
+    app.include_router(goals.router, prefix="/api")
+    app.dependency_overrides[require_user] = lambda: {"id": "alice"}
+    body = {**sample(saved=70), "deposits": [
+        {"date": "2026-10-05", "value": 30},
+        {"date": "2026-10-20", "value": 50, "kind": "aporte", "account_id": "bank-a", "note": "13º"},
+        {"date": "2026-11-02", "value": 30, "kind": "retirada", "goal_id": "g-other"},
+    ]}
+    with TestClient(app) as client:
+        saved = client.put("/api/goals/g-a", json=body)
+        assert saved.status_code == 200, saved.text
+        moves = saved.json()["deposits"]
+        assert moves[0]["kind"] == "aporte" and moves[0]["account_id"] is None
+        assert moves[1]["account_id"] == "bank-a" and moves[1]["note"] == "13º"
+        assert moves[2]["kind"] == "retirada" and moves[2]["goal_id"] == "g-other"
+        bad = client.put("/api/goals/g-a", json={**body, "deposits": [{"date": "2026-11-02", "value": 1, "kind": "saque"}]})
+        assert bad.status_code == 422

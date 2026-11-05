@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { answer, type AnalystData } from "./finnAnalyst";
 import { norm, parseQuestion, type QuestionContext } from "./finnQuestion";
 import type { Account, Category, RadarSignal, Transaction } from "@/types/finnos";
+import type { FinnosGoal } from "@/lib/goals";
 
 const tx = (over: Partial<Transaction>): Transaction => ({
   id: Math.random().toString(36).slice(2), name: "Uber", value: 30, type: "despesa", status: "pago", date: "2026-11-02",
@@ -110,5 +111,29 @@ describe("FINNOS IA reads the month against the usual", () => {
     expect(lasts.text).toContain("Sim. No seu ritmo atual, devem sobrar cerca de **R$ 3.176,67** em 15/11.");
     const short = answer(parseQuestion("meu dinheiro dura até o dia 15?", ctx), { ...d, flow: { upcoming: [{ date: "2026-11-10", name: "Aluguel", value: 5000, type: "despesa", kind: "fixa" }] } as AnalystData["flow"] });
     expect(short.text).toContain("Não: no seu ritmo atual, o saldo fica negativo");
+  });
+});
+
+describe("FINNOS IA knows the user's goals", () => {
+  const goal = {
+    id: "nb", name: "Meu notebook novo", category: "Compras", mode: "inteligente", target: 6000, saved: 1500, months: 6,
+    contribution: 911.16, frequency: "Mensal", account: "x", strategy: "equilibrado", remind: true, radar: true,
+    createdAt: "2026-09-01T12:00:00Z", deposits: [{ date: "2026-10-05", value: 1000, kind: "aporte" }],
+  } as FinnosGoal;
+  const spend = ["2026-08", "2026-09", "2026-10"].map((m) => tx({ name: "iFood", value: 300, date: `${m}-10`, category_id: "rest", category_name: "Restaurantes" }));
+  const d: AnalystData = { today: "2026-11-05", transactions: spend, categories, accounts, goals: [goal], radar: [] };
+  const withGoals = { ...ctx, goals: [{ id: "nb", name: "Meu notebook novo" }] };
+
+  it("answers about one goal named in the question, with the monthly amount and where to cut", () => {
+    const q = parseQuestion("quanto falta para a meta do notebook?", withGoals);
+    expect(q).toMatchObject({ op: "goals", entities: [{ kind: "goal", id: "nb" }] });
+    const a = answer(q, d);
+    expect(a.text).toContain("Na meta **Meu notebook novo** você tem R$ 1.500,00 de R$ 6.000,00 (25%). Faltam **R$ 4.500,00**: R$ 1.125,00 por mês para chegar em março de 2027.");
+    expect(a.insight).toContain("Cortando 10% de Restaurantes você libera cerca de R$ 30,00 por mês");
+    expect(a.visual?.chart?.type).toBe("hbar");
+  });
+
+  it("says there are no goals yet, instead of guessing", () => {
+    expect(answer(parseQuestion("como estão minhas metas?", ctx), { ...d, goals: [] }).text).toContain("ainda não tem metas");
   });
 });

@@ -7,7 +7,7 @@ export type FinnVisual = {
   title?: string;
   metrics?: { label: string; value: string; tone?: "positive" | "negative" | "neutral" }[];
   items?: { label: string; value: string; detail?: string }[];
-  chart?: { type: "line" | "donut" | "bar" | "hbar"; data: { name: string; value: number; secondary?: number }[]; valueLabel?: string; secondaryLabel?: string };
+  chart?: { type: "line" | "donut" | "bar" | "hbar"; data: { name: string; value: number; secondary?: number }[]; valueLabel?: string; secondaryLabel?: string; /** Sign before each bar value ("+" by default). */ prefix?: string };
 };
 export type FinnMessage = {
   id: string; role: "user" | "assistant"; content: string; createdAt: string; visual?: FinnVisual;

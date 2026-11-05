@@ -90,6 +90,8 @@ export function registerProposal(text: string, ctx: ActionContext, { intent = fa
   if (!intent) {
     // norm() drops "?", so the question mark is read from the original text.
     if (text.includes("?") || QUESTION.test(q)) return null;
+    // Money for a goal goes through the goal's Guardar, not a lançamento.
+    if (/\b(metas?|objetivos?)\b/.test(q)) return null;
     // "uber nos últimos 3 meses" is about a period, not something to register.
     if (/\b(meses|semanas|anos|vezes|ultim[oa]s?|media|total|compar\w*|evolucao|porcento)\b|%/.test(q)) return null;
   }

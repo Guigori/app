@@ -1,8 +1,9 @@
 /** Gathers the user's data (local or online, through lib/data) and lets the analyst answer. */
 import {
   fetchAccounts, fetchBudget, fetchBudgetCycleProgress, fetchCalendar, fetchCards, fetchCategories,
-  fetchCurrentBudgetCycle, fetchFlow, fetchRadar, fetchSubscriptions, fetchTransactions,
+  fetchCurrentBudgetCycle, fetchFlow, fetchMe, fetchRadar, fetchSubscriptions, fetchTransactions,
 } from "@/lib/data";
+import { listGoals } from "@/lib/goals";
 import { addMonth, todayISO } from "@/lib/format";
 import { norm, parseQuestion, type FinnQuery } from "@/lib/finnQuestion";
 import { answer, type FinnAnswer } from "@/lib/finnAnalyst";
@@ -24,10 +25,12 @@ export async function askFinnAnalyst(text: string, history: FinnMessage[], alias
   const today = todayISO();
   const month = today.slice(0, 7);
   const recentStart = `${addMonth(month, -5)}-01`;
-  const [categories, accounts, cards, recent] = await Promise.all([
+  const [categories, accounts, cards, recent, me] = await Promise.all([
     safe(fetchCategories()), safe(fetchAccounts()), safe(fetchCards()),
     safe(fetchTransactions({ start_date: recentStart, end_date: `${month}-31` })),
+    safe(fetchMe()),
   ]);
+  const goals = me ? await safe(listGoals(me.id)) ?? [] : [];
   const previous = [...history].reverse().find((m) => m.role === "assistant" && m.query)?.query ?? null;
   const query: FinnQuery = parseQuestion(text, {
     today,
@@ -36,6 +39,7 @@ export async function askFinnAnalyst(text: string, history: FinnMessage[], alias
     cards: cards ?? [],
     names: [...new Set((recent ?? []).map((tx) => norm(tx.name)))],
     aliases,
+    goals: goals.map((g) => ({ id: g.id, name: g.name })),
   }, previous);
   if (query.vague) return null;
 
@@ -58,7 +62,7 @@ export async function askFinnAnalyst(text: string, history: FinnMessage[], alias
   ]);
   return answer(query, {
     today, transactions, categories: categories ?? [], accounts: accounts ?? [],
-    budget, cycle, calendar, flow, nextFlow, subscriptions: subscriptions?.items ?? [], radar: radar?.items ?? [],
+    goals, budget, cycle, calendar, flow, nextFlow, subscriptions: subscriptions?.items ?? [], radar: radar?.items ?? [],
   });
 }
 
