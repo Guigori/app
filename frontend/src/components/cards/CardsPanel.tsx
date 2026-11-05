@@ -1,15 +1,11 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { CalendarClock, CreditCard as CreditCardIcon, Pencil, Plus, Sparkles } from "lucide-react";
-import { fetchCards } from "@/lib/data";
+import { CalendarClock, CreditCard as CreditCardIcon, Pencil, Repeat, Sparkles } from "lucide-react";
+import { subscriptionsByCard } from "@/lib/subscriptionsView";
 import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatDate, formatHiddenBRL, todayISO } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { CreditCard } from "@/types/finnos";
-import { CardDialog } from "@/components/cards/CardDialog";
-import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
+import type { CreditCard, SubscriptionItem } from "@/types/finnos";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -20,31 +16,30 @@ function usageTone(percent: number) {
   return { bar: "bg-income", label: "Uso tranquilo", badge: "secondary" as const };
 }
 
-export default function Cards() {
-  const [dialog, setDialog] = useState<{ open: boolean; card?: CreditCard }>({ open: false });
+/** The Cartões tab of Carteira: each card's invoice, limit, dates and the subscriptions it pays. */
+export function CardsPanel({ cards, subscriptions, onCreate, onEdit }: {
+  cards: CreditCard[];
+  subscriptions: SubscriptionItem[];
+  onCreate: () => void;
+  onEdit: (card: CreditCard) => void;
+}) {
   const { hidden } = useBalanceHidden();
-  const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: fetchCards });
-  const cards = cardsQuery.data ?? [];
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
+  const subsByCard = subscriptionsByCard(subscriptions);
+  const openTotal = cards.filter((card) => card.active).reduce((sum, card) => sum + card.current_invoice, 0);
+  const limitTotal = cards.filter((card) => card.active).reduce((sum, card) => sum + card.limit, 0);
+  const availableTotal = cards.filter((card) => card.active).reduce((sum, card) => sum + card.available, 0);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Cartões</h1>
-          <p className="mt-1 text-sm text-muted-foreground" data-testid="cards-subtitle">
-            Fatura a pagar, limite usado, fechamento e melhor dia de compra.
-          </p>
+    <div className="space-y-5" data-testid="cards-panel">
+      {cards.length > 0 ? (
+        <div className="grid grid-cols-3 gap-2 sm:gap-3" data-testid="cards-summary">
+          <div className="rounded-2xl border border-border bg-card p-3 sm:p-4"><p className="text-xs text-muted-foreground">Em faturas</p><p className="mt-1 font-heading text-base font-bold tabular-nums sm:text-xl">{money(openTotal)}</p></div>
+          <div className="rounded-2xl border border-border bg-card p-3 sm:p-4"><p className="text-xs text-muted-foreground">Disponível</p><p className="mt-1 font-heading text-base font-bold tabular-nums sm:text-xl">{money(availableTotal)}</p></div>
+          <div className="rounded-2xl border border-border bg-card p-3 sm:p-4"><p className="text-xs text-muted-foreground">Limite total</p><p className="mt-1 font-heading text-base font-bold tabular-nums sm:text-xl">{money(limitTotal)}</p></div>
         </div>
-        <Button onClick={() => setDialog({ open: true })} data-testid="new-card-button">
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Novo cartão
-        </Button>
-      </div>
-
-      {cardsQuery.isPending ? (
-        <FinnosPageLoading title="Carregando cartões" description="Atualizando faturas, limites e melhores dias de compra." />
-      ) : cards.length === 0 ? (
+      ) : null}
+      {cards.length === 0 ? (
         <div
           className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-border px-6 py-14 text-center"
           data-testid="cards-empty-state"
@@ -54,7 +49,7 @@ export default function Cards() {
           <p className="max-w-md text-sm text-muted-foreground">
             Cadastre seus cartões para acompanhar a fatura aberta, o limite comprometido e o melhor dia de compra.
           </p>
-          <Button onClick={() => setDialog({ open: true })} data-testid="cards-empty-create-button">
+          <Button onClick={onCreate} data-testid="cards-empty-create-button">
             Cadastrar cartão
           </Button>
         </div>
@@ -90,7 +85,7 @@ export default function Cards() {
                         size="icon-sm"
                         variant="ghost"
                         className="text-white/80 hover:bg-white/15 hover:text-white"
-                        onClick={() => setDialog({ open: true, card })}
+                        onClick={() => onEdit(card)}
                         aria-label={`Editar ${card.name}`}
                         data-testid={`card-edit-${card.id}`}
                       >
@@ -187,9 +182,15 @@ export default function Cards() {
                     </div>
                   </div>
 
-                  <p className="text-xs text-muted-foreground">
-                    Pagamento por {card.payment_account_name ?? "conta não definida"}.
-                  </p>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>Pagamento por {card.payment_account_name ?? "conta não definida"}.</span>
+                    {subsByCard.get(card.id) ? (
+                      <Link to="/contas?aba=assinaturas" replace className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 font-semibold text-foreground hover:bg-muted/70" data-testid={`card-subscriptions-${card.id}`}>
+                        <Repeat className="h-3.5 w-3.5" aria-hidden="true" />
+                        {subsByCard.get(card.id)!.count} {subsByCard.get(card.id)!.count === 1 ? "assinatura" : "assinaturas"} · {money(subsByCard.get(card.id)!.monthly)}/mês
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
               </motion.article>
             );
@@ -197,11 +198,6 @@ export default function Cards() {
         </div>
       )}
 
-      <CardDialog
-        open={dialog.open}
-        onOpenChange={(open) => setDialog((prev) => ({ ...prev, open }))}
-        card={dialog.card}
-      />
     </div>
   );
 }

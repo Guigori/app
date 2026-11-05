@@ -9,9 +9,9 @@ import { navItemsFor, useNavigationPreferences } from "@/lib/navigationPreferenc
 
 
 
-/** Cash flow (/fluxo) is a detail screen of Fluxo (/transacoes). */
+/** Cash flow (/fluxo) is a detail screen of Fluxo (/transacoes); a card invoice belongs to Carteira. */
 function isSubPage(to: string, pathname: string) {
-  return to === "/transacoes" && pathname.startsWith("/fluxo");
+  return (to === "/transacoes" && pathname.startsWith("/fluxo")) || (to === "/contas" && pathname.startsWith("/cartoes/"));
 }
 
 function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: string) => void }) {

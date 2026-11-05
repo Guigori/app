@@ -7,6 +7,8 @@ import type { SubscriptionInput, SubscriptionItem } from "@/types/finnos";
 
 type Props = {
   original?: SubscriptionItem | null;
+  /** Prefill for a new subscription, e.g. a recurring expense found by the Radar. */
+  seed?: Partial<SubscriptionInput>;
   saving: boolean;
   error: string;
   onClose: () => void;
@@ -39,8 +41,8 @@ function inputFor(original?: SubscriptionItem | null): SubscriptionInput {
   };
 }
 
-export default function SubscriptionEditor({ original, saving, error, onClose, onSave }: Props) {
-  const [draft, setDraft] = useState<SubscriptionInput>(() => inputFor(original));
+export default function SubscriptionEditor({ original, seed, saving, error, onClose, onSave }: Props) {
+  const [draft, setDraft] = useState<SubscriptionInput>(() => ({ ...inputFor(original), ...(original ? {} : seed) }));
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts });
   const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards });
   const categories = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });

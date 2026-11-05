@@ -38,9 +38,7 @@ const Budget = lazy(() => import("@/pages/Budget"));
 const BudgetSettings = lazy(() => import("@/pages/BudgetSettings"));
 const FinanceHistory = lazy(() => import("@/pages/FinanceHistory"));
 const Flow = lazy(() => import("@/pages/Flow"));
-const Cards = lazy(() => import("@/pages/Cards"));
 const CardInvoice = lazy(() => import("@/pages/CardInvoice"));
-const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
 const Radar = lazy(() => import("@/pages/Radar"));
 const RadarDetail = lazy(() => import("@/pages/RadarDetail"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
@@ -83,7 +81,7 @@ export default function App() {
             <Route path="/configuracoes/:section" element={<Settings />} />
             <Route path="/configuracoes/integracoes" element={<SettingsIntegrations />} />
             <Route path="/configuracoes/graficos" element={<ChartSettings />} />
-            <Route path="/cartoes" element={<Cards />} />
+            <Route path="/cartoes" element={<Navigate to="/contas?aba=cartoes" replace />} />
             <Route path="/cartoes/:cardId" element={<CardInvoice />} />
             <Route path="/orcamento" element={<Budget />} />
             <Route path="/orcamento/configuracoes" element={<BudgetSettings />} />
@@ -91,7 +89,7 @@ export default function App() {
             <Route path="/fluxo" element={<Flow />} />
             <Route path="/radar" element={<Radar />} />
             <Route path="/radar/:signalId" element={<RadarDetail />} />
-            <Route path="/assinaturas" element={<Subscriptions />} />
+            <Route path="/assinaturas" element={<Navigate to="/contas?aba=assinaturas" replace />} />
             <Route path="/analise" element={<Analysis />} />
             <Route path="/analise/evolucao" element={<AnalysisEvolution />} />
             <Route path="/analise/categorias" element={<AnalysisCategories />} />
