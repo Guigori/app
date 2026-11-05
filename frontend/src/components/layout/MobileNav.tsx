@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
 import { cn } from "@/lib/utils";
 import { type NavItem } from "@/components/layout/nav";
@@ -201,7 +201,8 @@ export function MobileNav() {
             aria-expanded={registerOpen}
             data-testid="mobile-quick-action-button"
           >
-            <Plus className={cn("h-8 w-8 transition-transform duration-300", registerOpen && "rotate-45")} aria-hidden="true" />
+            {/* A real X while the register is open: tapping it closes the register. */}
+            {registerOpen ? <X className="h-8 w-8" aria-hidden="true" /> : <Plus className="h-8 w-8" aria-hidden="true" />}
           </button>
         </div>
       </motion.nav>
