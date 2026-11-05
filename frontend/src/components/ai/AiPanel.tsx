@@ -1,17 +1,19 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight, Clock3, FileText, Loader2, Mic, Plus, Send, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Check, ChevronRight, Clock3, FileText, Loader2, Mic, Plus, Send, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { getMode, isLocalMode } from "@/lib/mode";
 import { askLocalFinnos } from "@/lib/local/ai";
-import { askFinnAnalyst } from "@/lib/askFinnAnalyst";
+import { askFinnAnalyst, askFinnProposal } from "@/lib/askFinnAnalyst";
+import { applyProposal, undoProposal } from "@/lib/finnApply";
+import { ProposalCard } from "@/components/ai/ProposalCard";
 import { memoryCommand, notesFor, personalSuggestions, readMemory, rememberFeedback, rememberTopic, writeMemory, type FinnMemory } from "@/lib/finnMemory";
 import type { FinnAnswer } from "@/lib/finnAnalyst";
-import { fetchCategories, fetchRadar } from "@/lib/data";
-import { clearFinnConversations, newFinnConversation, readFinnConversations, upsertFinnConversation, type FinnConversation } from "@/lib/aiConversations";
-import type { AiAnswer, AiKey, AiProvider, Category, CreditCard } from "@/types/finnos";
+import { fetchAccounts, fetchCategories, fetchRadar } from "@/lib/data";
+import { clearFinnConversations, newFinnConversation, readFinnConversations, upsertFinnConversation, type FinnConversation, type FinnMessage } from "@/lib/aiConversations";
+import type { AiAnswer, AiKey, AiProvider, CreditCard } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigationPreferences } from "@/lib/navigationPreferences";
@@ -36,7 +38,9 @@ export function AiPanel() {
   const keysQuery=useQuery({queryKey:["ai-keys"],queryFn:()=>apiGet<AiKey[]>("/ai/keys"),enabled:open&&!local,staleTime:30000});
   const activeProvider=(keysQuery.data?.[0]?.provider||"") as AiProvider|"";
   const cardsQuery=useQuery({queryKey:["cards"],queryFn:()=>apiGet<CreditCard[]>("/cards"),enabled:open&&!local,staleTime:30000});
-  const categoriesQuery=useQuery({queryKey:["categories"],queryFn:()=>apiGet<Category[]>("/categories"),enabled:open&&!local,staleTime:30000});
+  const categoriesQuery=useQuery({queryKey:["categories"],queryFn:fetchCategories,enabled:open,staleTime:30000});
+  const accountsQuery=useQuery({queryKey:["accounts"],queryFn:fetchAccounts,enabled:open,staleTime:30000});
+  const queryClient=useQueryClient();
   const askMutation=useMutation({mutationFn:({q,history}:{q:string;history:{role:"user"|"assistant";content:string}[]})=>apiPost<AiAnswer>("/ai/ask",{provider:activeProvider,question:q,history})});
 
   const suggestions=useMemo(()=>{
@@ -57,6 +61,9 @@ export function AiPanel() {
   const persist=(next:FinnConversation)=>{setConversation(next);upsertFinnConversation(next);setHistory(readFinnConversations())};
   const startNew=()=>{setConversation(newFinnConversation());setQuestion("");setError(null);setPendingContext(null);setHistoryOpen(false)};
   const [thinking,setThinking]=useState(false);
+  // Proposal edits and their outcome live on the message, so the conversation keeps them.
+  const patchMessage=(id:string,patch:Partial<FinnMessage>)=>setConversation(prev=>{const updated={...prev,messages:prev.messages.map(m=>m.id===id?{...m,...patch}:m)};upsertFinnConversation(updated);setHistory(readFinnConversations());return updated});
+  const refresh=()=>queryClient.invalidateQueries();
   // Opening with what matters now, instead of waiting for a question.
   const radarQuery=useQuery({queryKey:["radar"],queryFn:fetchRadar,enabled:open,staleTime:60000});
   const noticed=(radarQuery.data?.items??[]).filter(s=>s.severity==="critical"||s.severity==="high").sort((a,b)=>b.score-a.score)[0];
@@ -74,11 +81,17 @@ export function AiPanel() {
         next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:lesson.text,followUps:lesson.followUps,createdAt:new Date().toISOString()}]};persist(next);
         return;
       }
+      // A change to make ("café 3,80 e táxi 14", "mova a Padaria para Alimentação") becomes a proposal to review.
+      const proposed=pendingContext?null:await askFinnProposal(text,memory.aliases);
+      if(proposed){
+        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:proposed.text,steps:proposed.steps,proposal:proposed.proposal,proposalState:proposed.proposal?{status:"pending"}:undefined,followUps:proposed.followUps,createdAt:new Date().toISOString()}]};persist(next);
+        return;
+      }
       const analyst=pendingContext?null:await askFinnAnalyst(text,conversation.messages,memory.aliases);
       if(analyst){
         writeMemory(rememberTopic(memory,analyst.query,text));
         const shaped=styled(analyst,memory);
-        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:shaped.text,visual:shaped.visual,insight:analyst.insight,followUps:analyst.followUps,links:analyst.links,query:analyst.query,createdAt:new Date().toISOString()}]};persist(next);
+        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:shaped.text,visual:shaped.visual,steps:analyst.steps,insight:analyst.insight,followUps:analyst.followUps,links:analyst.links,query:analyst.query,createdAt:new Date().toISOString()}]};persist(next);
         return;
       }
       const localReply=local?await askLocalFinnos(contextualText,undefined,conversation.messages):null;
@@ -130,7 +143,12 @@ export function AiPanel() {
             {appMode==="local"?<div className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground">Se quiser conectar ChatGPT, Claude ou Gemini e guardar sua chave com segurança, <Link to="/cadastro" onClick={()=>setOpen(false)} className="font-semibold text-primary">crie sua conta preservando seus dados</Link>.</div>:null}
             {noticed?<div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm" data-testid="ai-opening-noticed"><p className="text-xs font-semibold text-primary">Hoje eu notei</p><p className="mt-1 font-medium">{noticed.title}{noticed.metric?` · ${noticed.metric}`:""}</p><button type="button" onClick={()=>void ask("O que o Radar está vendo?")} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary">Me explique<ChevronRight className="h-3.5 w-3.5"/></button></div>:null}
             <div className="grid gap-2">{suggestions.map(s=><button key={s} onClick={()=>void ask(s)} className="rounded-2xl bg-muted px-4 py-3 text-left text-sm font-medium hover:bg-accent">{s}</button>)}</div>
-          </div>:conversation.messages.map(m=><div key={m.id} className={m.role==="user"?"flex justify-end":"flex justify-start gap-3"}>{m.role==="assistant"?<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-4 w-4"/></div>:null}<div className={m.role==="user"?"max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground":"max-w-[88%] rounded-2xl border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-line"}><span>{m.content.split("**").map((part,i)=>i%2?<strong key={i} className="font-semibold">{part}</strong>:part)}</span>{m.role==="assistant"&&m.visual?<Suspense fallback={null}><AiVisual visual={m.visual}/></Suspense>:null}
+          </div>:conversation.messages.map(m=><div key={m.id} className={m.role==="user"?"flex justify-end":"flex justify-start gap-3"}>{m.role==="assistant"?<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-4 w-4"/></div>:null}<div className={m.role==="user"?"max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground":"max-w-[88%] rounded-2xl border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-line"}>{m.role==="assistant"&&m.steps?.length?<ul className="mb-2 space-y-0.5 text-xs text-muted-foreground" data-testid="ai-steps">{m.steps.map(step=><li key={step} className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5" aria-hidden="true"/>{step}</li>)}</ul>:null}<span>{m.content.split("**").map((part,i)=>i%2?<strong key={i} className="font-semibold">{part}</strong>:part)}</span>
+            {m.role==="assistant"&&m.proposal&&m.proposalState?<ProposalCard proposal={m.proposal} state={m.proposalState} categories={categoriesQuery.data??[]} accounts={accountsQuery.data??[]}
+              onChange={proposal=>patchMessage(m.id,{proposal})}
+              onCancel={()=>patchMessage(m.id,{proposalState:{status:"cancelled"}})}
+              onApply={async()=>{try{const state=await applyProposal(m.proposal!);patchMessage(m.id,{proposalState:state});await refresh()}catch(e){setError(getApiErrorMessage(e,"Não foi possível salvar tudo agora. Confira no Fluxo o que já entrou antes de tentar de novo."))}}}
+              onUndo={async()=>{if(m.proposalState?.status!=="applied")return;try{await undoProposal(m.proposalState);patchMessage(m.id,{proposalState:{status:"undone"}});await refresh()}catch(e){setError(getApiErrorMessage(e,"Não foi possível desfazer agora."))}}}/>:null}{m.role==="assistant"&&m.visual?<Suspense fallback={null}><AiVisual visual={m.visual}/></Suspense>:null}
             {m.role==="assistant"&&m.insight?<div className="mt-3 rounded-xl bg-primary/5 p-3 text-xs leading-relaxed" data-testid="ai-insight"><p className="font-semibold text-primary">Eu notei também</p><p className="mt-0.5 text-foreground">{m.insight}</p></div>:null}
             {m.role==="assistant"&&m.links?.length?<div className="mt-3 flex flex-wrap gap-2">{m.links.map(l=><Link key={l.to} to={l.to} onClick={()=>setOpen(false)} className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">{l.label}<ChevronRight className="h-3.5 w-3.5"/></Link>)}</div>:null}
             {m.role==="assistant"&&m.followUps?.length&&m.id===conversation.messages.at(-1)?.id?<div className="mt-3 flex flex-wrap gap-1.5" data-testid="ai-follow-ups">{m.followUps.map(f=><button key={f} type="button" onClick={()=>void ask(f)} className="rounded-full border border-border px-3 py-1.5 text-left text-xs font-medium hover:bg-muted">{f}</button>)}</div>:null}{m.role==="assistant"?<div className="mt-2 flex gap-1 text-muted-foreground"><button onClick={()=>feedback(m.id,"up")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta útil"><ThumbsUp className="h-3.5 w-3.5"/></button><button onClick={()=>feedback(m.id,"down")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta não útil"><ThumbsDown className="h-3.5 w-3.5"/></button></div>:null}</div></div>)}

@@ -76,3 +76,39 @@ describe("FINNOS IA answers with the user's data", () => {
     expect(ask("quanto gastei em restaurantes").links[0].to).toBe("/transacoes?aba=caixa&month=2026-11&metric=despesas&category_id=rest");
   });
 });
+
+describe("FINNOS IA reads the month against the usual", () => {
+  const usual = (m: string) => [tx({ name: "iFood", value: 30, date: `${m}-02`, category_id: "rest", category_name: "Restaurantes" })];
+  const rows = [
+    ...usual("2026-08"), ...usual("2026-09"), ...usual("2026-10"),
+    tx({ name: "iFood", value: 70, date: "2026-11-02", category_id: "rest", category_name: "Restaurantes" }),
+    tx({ name: "Viagem", value: 900, date: "2026-07-10", category_id: "trip", category_name: "Viagem" }),
+  ];
+  const d: AnalystData = { today: "2026-11-05", transactions: rows, categories, accounts, radar: [] };
+
+  it("finds where spending is above a usual month, comparing the same days", () => {
+    const a = answer(parseQuestion("onde estou gastando mais do que o normal?", ctx), d);
+    expect(a.query.op).toBe("unusual");
+    expect(a.text).toContain("Restaurantes está 2,3× o normal");
+    expect(a.text).toContain("economiza cerca de **R$ 40,00** por mês");
+    expect(a.visual?.chart).toMatchObject({ type: "hbar", data: [{ name: "Restaurantes", value: 40 }] });
+    expect(a.steps?.[0]).toContain("os mesmos 5 dias");
+  });
+
+  it("names the costliest months of the year and why", () => {
+    const a = answer(parseQuestion("quais meses custaram mais este ano e por quê?", ctx), d);
+    expect(a.query.op).toBe("months");
+    expect(a.text).toContain("Julho liderou com **R$ 900,00**, principalmente por causa de Viagem");
+    expect(a.visual?.chart?.data).toHaveLength(11);
+  });
+
+  it("says whether the money lasts until a day, from the balance, the pace and what is scheduled", () => {
+    const flow = { upcoming: [{ date: "2026-11-10", name: "Aluguel", value: 1000, type: "despesa", kind: "fixa" }] } as AnalystData["flow"];
+    const lasts = answer(parseQuestion("meu dinheiro dura até o dia 15?", ctx), { ...d, flow });
+    expect(lasts.query).toMatchObject({ op: "runway", day: 15 });
+    // 4.200 in the bank, 2,33 a day of day-to-day spending for 10 days, 1.000 of rent.
+    expect(lasts.text).toContain("Sim. No seu ritmo atual, devem sobrar cerca de **R$ 3.176,67** em 15/11.");
+    const short = answer(parseQuestion("meu dinheiro dura até o dia 15?", ctx), { ...d, flow: { upcoming: [{ date: "2026-11-10", name: "Aluguel", value: 5000, type: "despesa", kind: "fixa" }] } as AnalystData["flow"] });
+    expect(short.text).toContain("Não: no seu ritmo atual, o saldo fica negativo");
+  });
+});
