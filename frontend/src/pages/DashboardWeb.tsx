@@ -1,4 +1,5 @@
 import { useRouteState } from "@/lib/routeState";
+import { BackupReminder } from "@/components/settings/BackupReminder";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, ChevronLeft, ChevronRight, CreditCard, Eye, EyeOff, Wallet } from "lucide-react";
@@ -73,6 +74,7 @@ export default function DashboardWeb() {
         </div>
       </header>
 
+      <BackupReminder />
       {dashboard.isError && <div role="alert" className="rounded-2xl border border-destructive/30 p-5 text-sm">Não foi possível carregar o resumo financeiro. <button className="ml-2 underline" onClick={() => dashboard.refetch()}>Tentar novamente</button></div>}
       {dashboard.isPending && <div className="h-36 animate-pulse rounded-2xl bg-muted" aria-label="Carregando resumo" />}
       {data && (

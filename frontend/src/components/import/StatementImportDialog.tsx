@@ -9,6 +9,7 @@ import { parseFinancialFile, type ImportRow } from "@/lib/importFinancial";
 import { matchImportRows, type ImportMatch } from "@/lib/importMatching";
 import { isLocalMode } from "@/lib/mode";
 import { daysAgoISO, fingerprint } from "@/lib/statementImport";
+import { pdfToStatementCsv } from "@/lib/pdfStatement";
 import type { Transaction, TransactionInput } from "@/types/finnos";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -73,8 +74,8 @@ export function StatementImportDialog({ open, onOpenChange, initialTarget }: { o
     if (!files?.length || (!targetCard && !targetAccount)) return;
     const parsed: ImportRow[] = [];
     for (const file of Array.from(files)) {
-      if (!/\.(csv|ofx|qfx|txt)$/i.test(file.name)) { toast.info(`${file.name}: use OFX, QFX, CSV ou TXT. PDF ainda não é lido.`); continue; }
-      const text = await file.text();
+      if (!/\.(csv|ofx|qfx|txt|pdf)$/i.test(file.name)) { toast.info(`${file.name}: use PDF, OFX, QFX, CSV ou TXT.`); continue; }
+      const text = /\.pdf$/i.test(file.name) ? await pdfToStatementCsv(file).catch(() => "") : await file.text();
       const digest = await fingerprint(text);
       const lines = parseFinancialFile(text, targetCard ? "invoice" : "statement");
       if (lines.length === 0) toast.error(`${file.name}: não encontrei movimentações.`);
@@ -147,7 +148,7 @@ export function StatementImportDialog({ open, onOpenChange, initialTarget }: { o
       <DialogContent className="max-h-[92svh] overflow-y-auto sm:max-w-lg" data-testid="statement-import-dialog">
         <DialogHeader>
           <DialogTitle className="font-heading">Importar extrato ou fatura</DialogTitle>
-          <DialogDescription>Exporte o OFX ou CSV no app do banco. O FINNOS compara com o que você já registrou antes de salvar.</DialogDescription>
+          <DialogDescription>PDF, OFX ou CSV do app do banco. O FINNOS compara com o que você já registrou antes de salvar.</DialogDescription>
         </DialogHeader>
 
         <label className="block text-sm font-medium">
@@ -159,7 +160,7 @@ export function StatementImportDialog({ open, onOpenChange, initialTarget }: { o
           </select>
         </label>
 
-        <input ref={fileInput} type="file" multiple accept=".ofx,.qfx,.csv,.txt,text/csv" className="hidden" onChange={(e) => { void readFiles(e.target.files); e.target.value = ""; }} data-testid="statement-import-file" />
+        <input ref={fileInput} type="file" multiple accept=".pdf,.ofx,.qfx,.csv,.txt,application/pdf,text/csv" className="hidden" onChange={(e) => { void readFiles(e.target.files); e.target.value = ""; }} data-testid="statement-import-file" />
         <button type="button" disabled={!target} onClick={() => fileInput.current?.click()} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border px-4 py-6 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50">
           <FileUp className="h-5 w-5 text-primary" aria-hidden="true" />
           <span className="truncate">{fileNames.length ? fileNames.join(", ") : "Escolher arquivos"}</span>
