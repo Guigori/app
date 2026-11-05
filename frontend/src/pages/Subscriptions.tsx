@@ -172,7 +172,7 @@ export default function Subscriptions() {
                   </span>
                   <span className="shrink-0 text-right">
                     <span className="block font-heading text-base font-bold tabular-nums text-foreground" data-testid={`subscription-value-${item.id}`}>{money(item.value)}</span>
-                    <Badge variant="secondary" className="mt-0.5 text-[10px] capitalize">{item.active ? item.recurrence : "Pausada"}</Badge>
+                    <Badge variant="secondary" className="mt-0.5 text-xs capitalize">{item.active ? item.recurrence : "Pausada"}</Badge>
                   </span>
                 </button>
                 {selectedId === item.id && (

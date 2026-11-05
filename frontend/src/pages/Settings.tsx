@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { DataBackupCard } from "@/components/settings/DataBackupCard";
+import { RegisterDefaultCard } from "@/components/settings/RegisterDefaultCard";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Check, ChevronDown, ChevronUp, GitCommitHorizontal, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
@@ -128,7 +130,7 @@ export default function Settings() {
   return (
     <div className="mx-auto max-w-2xl space-y-5 pb-44 sm:pb-32 animate-fade-up">
       <div>
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">{({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", painel: "Painel da Home", navegacao: "Barra de navegação", dados: "Dados e sincronização", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"}</h1>
+        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">{({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", registro: "Novo registro", painel: "Painel da Home", navegacao: "Barra de navegação", dados: "Dados e backup", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"}</h1>
         <p className="mt-1 text-sm text-muted-foreground">Gerencie suas preferências e informações com segurança.</p>
       </div>
 
@@ -300,7 +302,7 @@ export default function Settings() {
                     <h4 className="text-sm font-semibold">Prévia · {target === "mobile" ? "iPhone" : "Web"}</h4>
                     <p className="text-xs text-muted-foreground">Atualiza imediatamente ao adicionar, remover ou reordenar.</p>
                   </div>
-                  <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">Ao vivo</span>
+                  <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">Ao vivo</span>
                 </div>
                 {target === "mobile" ? (
                   <div className="flex items-center gap-2 rounded-2xl bg-background p-2" data-testid="settings-mobile-dock-preview">
@@ -310,7 +312,7 @@ export default function Settings() {
                         const item = MAIN_NAV.find((entry) => entry.slug === slug);
                         return item ? <div key={slug} className={cn("flex h-[3.75rem] min-w-0 items-center justify-center overflow-hidden rounded-full px-1", index === 0 ? "bg-white text-[#080808] shadow-[0_1px_4px_rgba(0,0,0,.035)] dark:bg-white dark:text-black" : "text-[#626262] dark:text-white/70")}>
                           <item.icon className="h-[1.55rem] w-[1.55rem] shrink-0" />
-                          {index === 0 ? <span className="ml-1 truncate text-[11px] font-semibold">{item.label}</span> : null}
+                          {index === 0 ? <span className="ml-1 truncate text-xs font-semibold">{item.label}</span> : null}
                         </div> : null;
                       })}
                     </div>
@@ -331,7 +333,7 @@ export default function Settings() {
                     </div>
                   </div>
                 )}
-                <p className="mt-2 text-[11px] text-muted-foreground">Prévia ilustrativa do estado inicial; no app, o item ativo acompanha a página aberta.</p>
+                <p className="mt-2 text-xs text-muted-foreground">Prévia ilustrativa do estado inicial; no app, o item ativo acompanha a página aberta.</p>
               </div>
               <label className="flex items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5 shadow-[0_10px_32px_rgba(0,0,0,.10),inset_0_1px_0_rgba(255,255,255,.22)] backdrop-blur-[24px] supports-[backdrop-filter]:bg-background/45">
                 <Sparkles className="h-4 w-4 text-primary" />
@@ -407,7 +409,9 @@ export default function Settings() {
       </Card>
 
       </>)}
+      {visible("registro") && <RegisterDefaultCard />}
       {visible("dados") && (<>
+      <DataBackupCard />
       <Card data-testid="settings-mode-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">

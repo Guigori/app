@@ -37,7 +37,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: null,
     items: [
       { to: "/", label: "Início", icon: Home, slug: "inicio" },
-      { to: "/transacoes", label: "Lançamentos", icon: GitCompareArrows, slug: "transacoes" },
+      { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
       { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
       { to: "/configuracoes#ia", label: "FINNOS IA", icon: Sparkles, slug: "ia" },
     ],
@@ -46,7 +46,6 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Planejar",
     dot: "#10B981",
     items: [
-      { to: "/fluxo", label: "Fluxo", icon: ArrowUpDown, slug: "fluxo" },
       { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
       { to: "/radar", label: "Radar", icon: Radar, slug: "radar" },
       { to: "/patrimonio", label: "Patrimônio", icon: Landmark, slug: "patrimonio" },
@@ -75,7 +74,7 @@ export const MAIN_NAV: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 export const TOP_TABS: NavItem[] = [
   { to: "/", label: "Início", icon: Home, slug: "inicio" },
   { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
-  { to: "/fluxo", label: "Fluxo", icon: ArrowUpDown, slug: "fluxo" },
+  { to: "/analise", label: "Análise", icon: ChartNoAxesCombined, slug: "analise" },
   { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
   { to: "/categorias", label: "Categorias", icon: Tags, slug: "categorias" },
   { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
@@ -88,7 +87,7 @@ export const BOTTOM_LEFT: NavItem[] = [
 ];
 
 export const BOTTOM_RIGHT: NavItem[] = [
-  { to: "/fluxo", label: "Fluxo", icon: ArrowUpDown, slug: "fluxo" },
+  { to: "/analise", label: "Análise", icon: ChartNoAxesCombined, slug: "analise" },
   { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
 ];
 
@@ -98,7 +97,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/contas": "Carteira",
   "/analise": "Análise",
   "/categorias": "Categorias",
-  "/fluxo": "Fluxo",
+  "/fluxo": "Fluxo de caixa", "/analise/evolucao": "Evolução", "/analise/categorias": "Categorias", "/analise/ritmo": "Ritmo do mês", "/analise/compromissos": "Compromissos",
   "/orcamento": "Orçamento",
   "/radar": "Radar",
   "/cartoes": "Cartões",

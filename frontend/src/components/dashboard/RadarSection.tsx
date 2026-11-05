@@ -5,10 +5,10 @@ import { cn } from "@/lib/utils";
 import type { RadarSignal, RadarSignalType } from "@/types/finnos";
 
 const SIGNAL_COLORS: Record<RadarSignalType, string> = {
-  risk: "#FB4A6B",
-  deviation: "#FF9F2F",
-  information: "#8C5BFF",
-  opportunity: "#34D399",
+  risk: "var(--signal-risk)",
+  deviation: "var(--signal-deviation)",
+  information: "var(--signal-information)",
+  opportunity: "var(--signal-opportunity)",
 };
 
 const SIGNAL_LABELS: Record<RadarSignalType, string> = {
@@ -76,9 +76,16 @@ function RadarSignalItem({ signal }: { signal: RadarSignal }) {
 export function RadarSection({
   signals,
   totalCount,
+  loading = false,
+  error = false,
+  onRetry,
 }: {
   signals: RadarSignal[];
   totalCount?: number;
+  /** Loading and failure are never shown as an empty, "all clear" Radar. */
+  loading?: boolean;
+  error?: boolean;
+  onRetry?: () => void;
 }) {
   const navigate = useNavigate();
   const visibleSignals = signals.slice(0, 5);
@@ -95,7 +102,7 @@ export function RadarSection({
             Radar
           </h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {totalCount ?? signals.length} {(totalCount ?? signals.length) === 1 ? "sinal para você" : "sinais para você"}
+            {loading ? "Analisando seus dados…" : error ? "Não foi possível analisar agora" : `${totalCount ?? signals.length} ${(totalCount ?? signals.length) === 1 ? "sinal para você" : "sinais para você"}`}
           </p>
         </div>
         <button
@@ -113,7 +120,22 @@ export function RadarSection({
       </div>
 
       <div className="px-4 pb-2 sm:px-5 sm:pb-3">
-        {visibleSignals.length === 0 ? (
+        {loading ? (
+          <div className="space-y-3 py-3" aria-hidden="true" data-testid="radar-loading">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="h-2.5 w-2.5 rounded-full bg-muted motion-safe:animate-pulse" />
+                <div className="h-3.5 flex-1 rounded bg-muted motion-safe:animate-pulse" />
+                <div className="h-3.5 w-16 rounded bg-muted motion-safe:animate-pulse" />
+              </div>
+            ))}
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-between gap-3 py-5" role="alert">
+            <p className="text-sm text-muted-foreground">Os alertas não carregaram. Seus dados não foram alterados.</p>
+            {onRetry ? <button type="button" onClick={onRetry} className="min-h-10 shrink-0 rounded-full px-3 text-sm font-semibold text-primary hover:bg-primary/8">Tentar de novo</button> : null}
+          </div>
+        ) : visibleSignals.length === 0 ? (
           <p className="py-5 text-sm text-muted-foreground">Tudo tranquilo no seu Radar por enquanto.</p>
         ) : null}
         {visibleSignals.map((signal) => (

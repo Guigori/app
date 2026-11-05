@@ -14,7 +14,7 @@ export default function SettingsIntegrations() {
       {integrations.map((item,index)=><div key={item.name} className={`flex items-start gap-3 p-4 ${index?"border-t border-border":""}`}>
         <span className="rounded-xl bg-primary/10 p-2 text-primary"><item.icon className="h-5 w-5"/></span>
         <div className="min-w-0 flex-1"><p className="font-medium">{item.name}</p><p className="mt-1 text-xs text-muted-foreground">{item.description}</p></div>
-        <span className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-1 text-[10px] text-muted-foreground"><LockKeyhole className="h-3 w-3"/>Em breve</span>
+        <span className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground"><LockKeyhole className="h-3 w-3"/>Em breve</span>
       </div>)}
     </div>
     <p className="text-xs text-muted-foreground">As integrações não estão disponíveis no Beta 1. Nenhuma autorização ou sincronização será iniciada nesta tela.</p>

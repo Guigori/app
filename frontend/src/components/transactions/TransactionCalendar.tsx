@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { addMonth, monthLabel, todayISO } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useBalanceHidden } from "@/lib/balance";
 import { Button } from "@/components/ui/button";
 import type { DayFlow } from "@/types/finnos";
 
@@ -33,6 +34,9 @@ interface TransactionCalendarProps {
   onToggleExpanded: () => void;
   onMonthChange: (month: string) => void;
   onSelectDate: (date: string) => void;
+  /** Home widget: whole month in small tiles, without legend text or drag handle. */
+  compact?: boolean;
+  className?: string;
 }
 
 /** Fluid month calendar. The bottom handle is the only expansion control: drag upward
@@ -45,7 +49,10 @@ export function TransactionCalendar({
   onToggleExpanded,
   onMonthChange,
   onSelectDate,
+  compact = false,
+  className,
 }: TransactionCalendarProps) {
+  const { hidden } = useBalanceHidden();
   const byDate = new Map(days.map((d) => [d.date, d]));
   const today = todayISO();
   const maxMovement = Math.max(
@@ -65,11 +72,9 @@ export function TransactionCalendar({
   };
   const heatBackground = (level: number) => {
     if (level === 0) return undefined;
-    if (level === 1) return "color-mix(in srgb, var(--finnos-purple) 18%, var(--card))";
-    if (level === 2) return "color-mix(in srgb, var(--finnos-purple) 34%, var(--card))";
-    if (level === 3) return "color-mix(in srgb, var(--finnos-purple-live) 54%, var(--card))";
-    if (level === 4) return "color-mix(in srgb, var(--finnos-violet) 76%, var(--finnos-purple))";
-    return "var(--finnos-purple-live)";
+    // Softer, single-hue scale: the calendar reads as a quiet heatmap, not a mosaic.
+    const mix = [0, 10, 20, 32, 46, 62][level] ?? 62;
+    return `color-mix(in srgb, var(--finnos-purple-live) ${mix}%, var(--card))`;
   };
   const cells = buildCells(month);
   const weeks: Cell[][] = [];
@@ -79,10 +84,10 @@ export function TransactionCalendar({
   const [weekCount, setWeekCount] = useState<1 | 2 | 3>(1);
   const selectedWeekIndex = Math.max(0, trimmed.findIndex((week) => week.some((cell) => cell.date === selectedDate)));
   const compactStart = Math.min(Math.max(0, selectedWeekIndex - Math.floor((weekCount - 1) / 2)), Math.max(0, trimmed.length - weekCount));
-  const visibleWeeks = expanded ? trimmed : trimmed.slice(compactStart, compactStart + weekCount);
+  const visibleWeeks = expanded || compact ? trimmed : trimmed.slice(compactStart, compactStart + weekCount);
 
   return (
-    <section className="rounded-3xl border border-border bg-card px-3 pb-2 pt-4" data-testid="transaction-calendar">
+    <section className={cn("rounded-3xl border border-border bg-card px-3 pb-2 pt-4", compact && "flex flex-col rounded-2xl pb-4", className)} data-testid="transaction-calendar">
       <div className="flex items-center justify-center gap-2">
         <Button
           size="icon-sm"
@@ -93,7 +98,7 @@ export function TransactionCalendar({
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </Button>
-        <h2 className="min-w-44 text-center font-heading text-lg font-bold capitalize text-foreground" data-testid="calendar-month-label">
+        <h2 className="min-w-44 text-center font-heading text-lg font-bold text-foreground" data-testid="calendar-month-label">
           {monthLabel(month)}
         </h2>
         <Button
@@ -107,7 +112,7 @@ export function TransactionCalendar({
         </Button>
       </div>
 
-      <div className="mt-3 grid grid-cols-7 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="mt-3 grid grid-cols-7 text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {WEEKDAYS.map((label) => (
           <span key={label}>{label}</span>
         ))}
@@ -120,9 +125,9 @@ export function TransactionCalendar({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-1"
+          className={cn("mt-1", compact && "flex flex-1 flex-col")}
         >
-          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+          <div className={cn("grid grid-cols-7", compact ? "flex-1 auto-rows-fr gap-1" : "gap-1.5 sm:gap-2")}>
           {visibleWeeks.flat().map((cell) => {
             const flow = byDate.get(cell.date);
             const selected = cell.date === selectedDate;
@@ -134,22 +139,27 @@ export function TransactionCalendar({
                 type="button"
                 onClick={() => onSelectDate(cell.date)}
                 aria-label={`Ver lançamentos de ${cell.date}`}
+                title={!hidden && flow && (flow.income || flow.expense) ? `Entrou ${flow.income.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · Saiu ${flow.expense.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}` : undefined}
                 aria-current={selected ? "date" : undefined}
                 className={cn(
-                  "relative flex aspect-square min-h-11 items-center justify-center rounded-xl border text-sm font-semibold tabular-nums transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  // Fixed heights per breakpoint: a square of width/7 filled the whole
+                  // phone screen and became huge, almost empty tiles on desktop. The colour
+                  // carries the intensity; exact amounts live in the day list (and the tooltip).
+                  "relative flex flex-col items-center justify-center rounded-xl border text-sm font-semibold tabular-nums transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                  compact ? "h-full min-h-9 rounded-lg text-xs" : "h-11 sm:h-12",
                   selected
-                    ? "border-white/80 ring-2 ring-white/90 ring-offset-2 ring-offset-card text-white shadow-sm"
+                    ? "border-foreground bg-foreground text-background shadow-md"
                     : cell.outside
-                      ? "border-transparent bg-transparent text-muted-foreground/35"
-                      : level >= 3
-                        ? "border-border/20 text-white hover:brightness-110"
-                        : "border-border/20 text-foreground hover:brightness-110",
-                  !selected && cell.date === today ? "ring-1 ring-primary/70" : undefined,
+                      ? "border-transparent bg-transparent text-muted-foreground/40"
+                      : level >= 5
+                        ? "border-transparent text-white hover:brightness-110"
+                        : "border-transparent text-foreground hover:brightness-95",
+                  !selected && cell.date === today ? "font-extrabold ring-2 ring-primary ring-offset-1 ring-offset-card" : undefined,
                 )}
-                style={!cell.outside ? { backgroundColor: level > 0 ? heatBackground(level) : "color-mix(in srgb, var(--finnos-app) 14%, var(--card))" } : undefined}
+                style={!cell.outside && !selected ? { backgroundColor: level > 0 ? heatBackground(level) : "color-mix(in srgb, var(--finnos-app) 6%, var(--card))" } : undefined}
                 data-testid={`calendar-day-${cell.date}`}
               >
-                {Number(cell.date.slice(8, 10))}
+                <span>{Number(cell.date.slice(8, 10))}</span>
               </button>
             );
           })}
@@ -157,7 +167,7 @@ export function TransactionCalendar({
         </motion.div>
       </AnimatePresence>
 
-      <div className="mt-3 flex items-center justify-end gap-1.5 px-2 text-[10px] text-muted-foreground" data-testid="calendar-heatmap-legend">
+      <div className={cn("mt-3 flex items-center justify-end gap-1.5 px-2 text-xs text-muted-foreground", compact && "mt-3")} data-testid="calendar-heatmap-legend">
         <span>Menos</span>
         {[1, 2, 3, 4, 5].map((level) => (
           <span
@@ -170,10 +180,10 @@ export function TransactionCalendar({
         <span>Mais</span>
       </div>
 
-      <p className="mt-2 px-2 text-[11px] leading-relaxed text-muted-foreground">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>
+      {compact ? null : <p className="mt-2 hidden px-2 text-xs leading-relaxed text-muted-foreground sm:block">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>}
 
       {/* Drag the handle up to collapse to the week, down to show the whole month. */}
-      <motion.button
+      {compact ? null : <motion.button
         type="button"
         drag="y"
         dragConstraints={{ top: 0, bottom: 0 }}
@@ -200,7 +210,7 @@ export function TransactionCalendar({
         data-testid="calendar-toggle-expanded"
       >
         <span className="h-1.5 w-12 rounded-full bg-border" aria-hidden="true" />
-      </motion.button>
+      </motion.button>}
     </section>
   );
 }

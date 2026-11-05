@@ -1,6 +1,8 @@
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { isLocalMode } from "@/lib/mode";
 import { cachedFetch } from "@/lib/offline/accountCache";
+import { fetchDashboard } from "@/lib/data";
+import { addMonth, currentMonth } from "@/lib/format";
 export type FinnosGoal = {
   id: string;
   name: string;
@@ -39,8 +41,25 @@ export async function listGoals(userId: string): Promise<FinnosGoal[]> {
   return isLocalMode() ? localGoals(userId) : cachedFetch("goals", () => apiGet<FinnosGoal[]>("/goals"));
 }
 export type GoalSuggestion = { income:number; expense:number; reserved:number; capacity:number; months_observed:number; strategies:{id:string;label:string;amount:number}[] };
-export function fetchGoalSuggestion(): Promise<GoalSuggestion> {
-  return apiGet<GoalSuggestion>("/goals/suggestion");
+const monthlyEquivalent = (goal: FinnosGoal) => goal.contribution * (goal.frequency === "Semanal" ? 52 : goal.frequency === "Quinzenal" ? 26 : 12) / 12;
+const strategiesFor = (capacity: number) => [
+  { id: "acelerado", label: "Acelerado", amount: capacity },
+  { id: "equilibrado", label: "Equilibrado", amount: Math.floor(capacity * 75) / 100 },
+  { id: "seguro", label: "Seguro", amount: Math.floor(capacity * 50) / 100 },
+];
+/** Same method as the server (/goals/suggestion): average realised income minus expenses of the
+ *  last 3 months with movement, minus the contributions already planned for open goals. */
+export async function fetchGoalSuggestion(userId?: string): Promise<GoalSuggestion> {
+  if (!isLocalMode()) return apiGet<GoalSuggestion>("/goals/suggestion");
+  const months = [0, -1, -2].map((offset) => addMonth(currentMonth(), offset));
+  const summaries = await Promise.all(months.map((month) => fetchDashboard(month)));
+  const observed = summaries.filter((d) => d.income > 0 || d.expense > 0);
+  const n = Math.max(observed.length, 1);
+  const income = Math.round(observed.reduce((s, d) => s + d.income, 0) / n * 100) / 100;
+  const expense = Math.round(observed.reduce((s, d) => s + d.expense, 0) / n * 100) / 100;
+  const reserved = Math.round((userId ? localGoals(userId) : []).filter((g) => g.saved < g.target).reduce((s, g) => s + monthlyEquivalent(g), 0) * 100) / 100;
+  const capacity = Math.max(Math.round((income - expense - reserved) * 100) / 100, 0);
+  return { income, expense, reserved, capacity, months_observed: observed.length, strategies: strategiesFor(capacity) };
 }
 
 /** Editing a plan changes only the goal document, never its linked bank balance. */

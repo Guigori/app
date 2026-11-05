@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { offerStatementImport } from "@/lib/importOffer";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -85,8 +86,13 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
       const payload = { ...input, ...resolved };
       return card ? updateCard(card.id, payload) : createCard(payload);
     },
-    onSuccess: async () => {
-      toast.success(card ? "Cartão atualizado." : "Cartão cadastrado.");
+    onSuccess: async (saved) => {
+      if (card) toast.success("Cartão atualizado.");
+      else toast.success("Cartão cadastrado.", {
+        description: "Quer trazer as faturas dos últimos 90 dias?",
+        duration: 12000,
+        action: saved?.id ? { label: "Importar fatura", onClick: () => offerStatementImport(`card:${saved.id}`) } : undefined,
+      });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["cards"] }),
         queryClient.invalidateQueries({ queryKey: ["institutions"] }),

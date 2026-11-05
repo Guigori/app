@@ -12,6 +12,8 @@ export type ImportRow = {
   review_reason?: string | null;
   /** Rows whose meaning cannot be imported as a purchase/movement (e.g. invoice credits). */
   blocked?: boolean;
+  /** "HH:MM" when the file has it (OFX DTPOSTED); used to tell apart same-day twins. */
+  time?: string | null;
 };
 
 const parseMoney=(raw:string)=>{
@@ -73,10 +75,13 @@ export function parseFinancialFile(text:string,kind:ImportKind):ImportRow[]{
   const rows:ImportRow[]=[];
   if(/<OFX/i.test(text)||/<STMTTRN/i.test(text)){
     for(const block of text.split(/<STMTTRN>/i).slice(1)){
-      const date=(block.match(/<DTPOSTED>(\d{8})/i)?.[1]??"");
+      const posted=block.match(/<DTPOSTED>(\d{8})(\d{4})?/i);
+      const date=posted?.[1]??"";
+      // Banks without a real time send 000000 or 120000: not a usable time.
+      const time=posted?.[2]&&!["0000","1200"].includes(posted[2])?`${posted[2].slice(0,2)}:${posted[2].slice(2)}`:null;
       const amount=parseMoney(block.match(/<TRNAMT>([^<\r\n]+)/i)?.[1]??"");
       const description=(block.match(/<(?:NAME|MEMO)>([^<\r\n]+)/i)?.[1]??"Lançamento").trim();
-      if(date&&amount!==null)rows.push(row(`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`,description,amount,kind,true));
+      if(date&&amount!==null)rows.push({...row(`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`,description,amount,kind,true),time});
     }
   }else{
     let columns:Columns|null=null;

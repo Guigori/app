@@ -197,7 +197,7 @@ export default function Login() {
                 Modo local
               </Button>
             </div>
-            <p className="mt-2 text-center text-[11px] leading-snug text-slate-400">
+            <p className="mt-2 text-center text-xs leading-snug text-slate-400">
               No modo local, seus dados ficam somente neste dispositivo.
             </p>
           </CardContent>

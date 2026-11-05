@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchMe } from "@/lib/data";
@@ -6,17 +5,10 @@ import { isLocalMode } from "@/lib/mode";
 
 import { FinnosLoading } from "@/components/brand/FinnosLoading";
 
-/** Keep the brand intro brief and independent of video playback. Authentication
- * proceeds in parallel. This guard stays mounted across app navigation. */
+/** Shows the themed loading screen only while the session is resolved; no fixed
+ * intro delay. This guard stays mounted across app navigation. */
 export function RequireAuth() {
   const local = isLocalMode();
-  const [showIntro, setShowIntro] = useState(true);
-  useEffect(() => {
-    const introTimer = setTimeout(() => setShowIntro(false), 800);
-    return () => {
-      clearTimeout(introTimer);
-    };
-  }, []);
   const { isPending, isError } = useQuery({
     queryKey: ["me"],
     queryFn: fetchMe,
@@ -25,7 +17,7 @@ export function RequireAuth() {
   });
 
   if (isError) return <Navigate to="/login" replace />;
-  if (showIntro || isPending) {
+  if (isPending) {
     return (
       <FinnosLoading
         fullscreen

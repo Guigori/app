@@ -1,7 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useIsRestoring, useRouteState } from "@/lib/routeState";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
-import { ArrowDown, ArrowUp, BellOff, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, Search, Trash2, X } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { ArrowDown, ArrowUp, BellOff, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, ChevronRight, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions, fetchTransactionsPage, isTransactionListComplete } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -53,17 +54,20 @@ export default function Transactions() {
   const linkedCategoryId = searchParams.get("category_id");
   const highlightedTransactionId = searchParams.get("highlight");
   const { hidden } = useBalanceHidden();
+  // Coming back to this entry: keep what the user had, instead of re-applying the link.
+  const restoring = useIsRestoring();
 
-  const [month, setMonth] = useState(currentMonth());
-  const [periodMode, setPeriodMode] = useState<"rolling30" | "month">("rolling30");
-  const [flowView, setFlowView] = useState<"calendario" | "categorias" | "lista">("calendario");
-  const [selectedDate, setSelectedDate] = useState(todayISO());
-  const [scope, setScope] = useState<"dia" | "mes">("mes");
-  const [calendarExpanded, setCalendarExpanded] = useState(true);
+  const [month, setMonth] = useRouteState("fluxo:month", currentMonth);
+  const [periodMode, setPeriodMode] = useState<"rolling30" | "month">("month");
+  const [flowView, setFlowView] = useRouteState<"calendario" | "categorias" | "lista">("fluxo:view", "calendario");
+  const [selectedDate, setSelectedDate] = useRouteState("fluxo:date", todayISO);
+  const [scope, setScope] = useRouteState<"dia" | "mes">("fluxo:scope", "mes");
+  // Planned behaviour: compact week on phones (drag the handle for more), full month from tablet up.
+  const [calendarExpanded, setCalendarExpanded] = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 640px)").matches);
   const [search, setSearch] = useState("");
-  const [type, setType] = useState<"todos" | TxType>("todos");
+  const [type, setType] = useRouteState<"todos" | TxType>("fluxo:type", "todos");
   const [status, setStatus] = useState<"todos" | TxStatus>("todos");
-  const [categoryId, setCategoryId] = useState("todas");
+  const [categoryId, setCategoryId] = useRouteState("fluxo:category", "todas");
   const [selectedDonutCategory, setSelectedDonutCategory] = useState<string | null>(null);
   const [accountId, setAccountId] = useState("todas");
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
@@ -102,7 +106,7 @@ export default function Transactions() {
   const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
-    if (!linkedDate || !/^\d{4}-\d{2}-\d{2}$/.test(linkedDate)) return;
+    if (restoring || !linkedDate || !/^\d{4}-\d{2}-\d{2}$/.test(linkedDate)) return;
     setPeriodMode("month");
     setMonth(linkedDate.slice(0, 7));
     setSelectedDate(linkedDate);
@@ -111,7 +115,7 @@ export default function Transactions() {
   }, [linkedDate]);
 
   useEffect(() => {
-    if (linkedDate) return;
+    if (restoring || linkedDate) return;
     if (linkedMonth && /^\d{4}-\d{2}$/.test(linkedMonth)) {
       setPeriodMode("month");
       setMonth(linkedMonth);
@@ -333,14 +337,15 @@ export default function Transactions() {
 
   return (
     <div className="relative flex flex-col gap-4 animate-fade-up">
-      <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-start gap-x-3 gap-y-3" data-testid="flow-header-grid">
+      <div className="grid grid-cols-1 items-start gap-x-3 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto]" data-testid="flow-header-grid">
         <div className="min-w-0 pt-1">
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Acompanhe o que entrou, saiu e o que vem pela frente.</p>
+          <p className="mt-1 text-sm text-muted-foreground">O que entrou, saiu e o que vem pela frente.</p>
         </div>
 
-        <div className="flex justify-end self-start sm:row-span-2" data-testid="flow-view-rail">
-          <div className="flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-sm backdrop-blur">
+        {/* Always a horizontal, labelled segmented control: no vertical rail eating a column. */}
+        <div className="flex self-start sm:justify-end" data-testid="flow-view-rail">
+          <div className="grid w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-card p-1 sm:flex sm:w-auto sm:rounded-full">
             {([
               { key: "calendario" as const, label: "Calendário", icon: CalendarDays },
               { key: "categorias" as const, label: "Análise", icon: ChartPie },
@@ -349,9 +354,9 @@ export default function Transactions() {
               <Button
                 key={item.key}
                 type="button"
-                size="icon"
+                size="sm"
                 variant={flowView === item.key ? "default" : "ghost"}
-                className="rounded-full"
+                className="h-10 gap-1.5 rounded-xl px-2 sm:h-9 sm:rounded-full sm:px-3"
                 onClick={() => setFlowView(item.key)}
                 aria-label={`Visualizar ${item.label}`}
                 aria-pressed={flowView === item.key}
@@ -359,26 +364,31 @@ export default function Transactions() {
                 data-testid={`flow-view-${item.key}`}
               >
                 <item.icon className="h-4 w-4" aria-hidden="true" />
+                <span className="text-xs font-semibold">{item.label}</span>
               </Button>
             ))}
           </div>
         </div>
 
-        <div className="col-span-2 min-w-0 rounded-3xl border border-border bg-background/95 px-5 py-5 shadow-sm backdrop-blur sm:col-span-1 supports-[backdrop-filter]:bg-background/85">
+        <div className="min-w-0 rounded-2xl border border-border bg-card px-5 py-4 sm:col-span-2">
+          {/* Same period as Início and Fluxo de caixa, so the numbers always match. */}
+          <p className="mb-2 text-xs text-muted-foreground" data-testid="flow-strip-period">
+            {scope === "dia" ? formatDate(selectedDate) : periodMode === "rolling30" ? "Últimos 30 dias" : monthLabel(month)}
+          </p>
           <div className="grid grid-cols-3 items-center gap-3">
             <div className="contents" data-testid="flow-strip-real">
-              <div className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Entrada</p>
+              <Link to={`/fluxo?metric=receitas&month=${month}`} className="group -m-2 min-w-0 rounded-xl p-2 transition-colors hover:bg-muted/60" aria-label={`Ver fluxo de caixa: entrada`} data-testid="flow-strip-receitas">
+                <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">Entrada<ChevronRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" /></p>
                 <p className="mt-1 break-words font-heading text-[12px] font-bold tabular-nums text-income sm:text-base">{money(strip.income)}</p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saída</p>
+              </Link>
+              <Link to={`/fluxo?metric=despesas&month=${month}`} className="group -m-2 min-w-0 rounded-xl p-2 transition-colors hover:bg-muted/60" aria-label={`Ver fluxo de caixa: saída`} data-testid="flow-strip-despesas">
+                <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">Saída<ChevronRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" /></p>
                 <p className="mt-1 break-words font-heading text-[12px] font-bold tabular-nums text-expense sm:text-base">{money(strip.expense)}</p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground sm:text-[10px]">Saldo</p>
+              </Link>
+              <Link to={`/fluxo?metric=caixa&month=${month}`} className="group -m-2 min-w-0 rounded-xl p-2 transition-colors hover:bg-muted/60" aria-label={`Ver fluxo de caixa: saldo`} data-testid="flow-strip-caixa">
+                <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">Saldo<ChevronRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" /></p>
                 <p className="mt-1 break-words font-heading text-[12px] font-bold tabular-nums text-foreground sm:text-base">{money(strip.income - strip.expense)}</p>
-              </div>
+              </Link>
             </div>
           </div>
         </div>
@@ -407,7 +417,7 @@ export default function Transactions() {
           aria-label="Filtros" aria-expanded={showFilters} data-testid="toolbar-filter-toggle"><Filter className="h-4 w-4" /></Button>
       </div>
 
-      <p className="-mt-4 text-xs text-muted-foreground" data-testid="scope-label">
+      <p className="-mt-4 hidden text-xs text-muted-foreground sm:block" data-testid="scope-label">
         {scope === "dia" ? formatDate(selectedDate) : periodMode === "rolling30" ? "Últimos 30 dias" : monthLabel(month)} · {sortDir === "desc" ? "mais recentes primeiro" : "mais antigas primeiro"}
       </p>
 
@@ -432,7 +442,10 @@ export default function Transactions() {
         </div>
       ) : null}
 
+      {/* Desktop: compact calendar on the left (sticky) and the day list beside it. */}
+      <div className={flowView === "calendario" ? "flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,23rem)_minmax(0,1fr)] lg:items-start lg:gap-6" : "contents"}>
       {flowView === "calendario" ? (
+        <div className="lg:sticky lg:top-6">
         <TransactionCalendar
           month={month}
           days={calendar?.days ?? []}
@@ -442,6 +455,7 @@ export default function Transactions() {
           onMonthChange={changeMonth}
           onSelectDate={pickDate}
         />
+        </div>
       ) : null}
 
       {flowView === "categorias" ? (() => {
@@ -515,6 +529,7 @@ export default function Transactions() {
         </p>
       )}
       {flowView !== "categorias" || selectedDonutCategory ? (
+      <div className="min-w-0">{
       listPending ? (
         <FinnosPageLoading title="Carregando transações" description="Buscando seus lançamentos do período." />
       ) : listError ? (
@@ -572,15 +587,15 @@ export default function Transactions() {
                       <p className="font-medium text-foreground">{t.name}</p>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {t.fixed ? (
-                          <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Fixa · {t.recurrence}</Badge>
+                          <Badge variant="secondary" className="px-1.5 py-0 text-xs">Fixa · {t.recurrence}</Badge>
                         ) : null}
                         {t.status !== "pago" && t.notify_enabled === false ? (
-                          <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px]">
+                          <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-xs">
                             <BellOff className="h-3 w-3" aria-hidden="true" /> Sem aviso
                           </Badge>
                         ) : null}
                         {t.installment && t.total_installments ? (
-                          <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                          <Badge variant="secondary" className="px-1.5 py-0 text-xs">
                             {t.current_installment}/{t.total_installments} · {t.total_installments}x de {formatBRLShort(t)}
                           </Badge>
                         ) : null}
@@ -696,14 +711,14 @@ export default function Transactions() {
                           <div className="mt-2.5 flex items-center justify-between gap-2">
                             <div className="flex min-w-0 flex-wrap gap-1">
                               <StatusBadge status={t.status} />
-                              {t.fixed ? <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Fixa</Badge> : null}
+                              {t.fixed ? <Badge variant="secondary" className="px-1.5 py-0 text-xs">Fixa</Badge> : null}
                               {t.status !== "pago" && t.notify_enabled === false ? (
-                                <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px]">
+                                <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-xs">
                                   <BellOff className="h-3 w-3" aria-hidden="true" /> Sem aviso
                                 </Badge>
                               ) : null}
                               {t.installment && t.total_installments ? (
-                                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                                <Badge variant="secondary" className="px-1.5 py-0 text-xs">
                                   {t.current_installment}/{t.total_installments}
                                 </Badge>
                               ) : null}
@@ -742,7 +757,9 @@ export default function Transactions() {
           ) : null}
         </>
       )
+      }</div>
       ) : null}
+      </div>
 
       <ConfirmDialog
         open={pendingDelete !== null}

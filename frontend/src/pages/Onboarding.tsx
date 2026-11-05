@@ -9,6 +9,7 @@ import { isLocalMode } from "@/lib/mode";
 import { fetchOnboarding, saveOnboarding, type OnboardingPercentages } from "@/lib/onboarding";
 import type { TransactionInput } from "@/types/finnos";
 import { parseFinancialFile, type ImportRow } from "@/lib/importFinancial";
+import { daysAgoISO, fingerprint } from "@/lib/statementImport";
 import { ImportReview } from "@/components/onboarding/ImportReview";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { CardDialog } from "@/components/cards/CardDialog";
@@ -35,11 +36,6 @@ function parseIncome(value: string): number | null {
   const result = Math.round(numeric * 100);
   return Number.isSafeInteger(result) && result >= 0 && result <= 100000000000 ? result : null;
 }
-async function fingerprint(text: string): Promise<string> {
-  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(hash)).map((n) => n.toString(16).padStart(2, "0")).join("");
-}
-
 export default function Onboarding() {
   const navigate = useNavigate();
   const dialogs = useDialogs();
@@ -173,7 +169,10 @@ export default function Onboarding() {
       const rows = parseFinancialFile(text, method === "invoice" ? "invoice" : "statement");
       const digest = await fingerprint(text);
       // Stable across devices/re-uploads. Server receipts are additionally scoped by verified UID.
-      setImportRows(rows.map((row, index) => ({ ...row, id: digest + "-" + index })));
+      const since = daysAgoISO(90);
+      setImportRows(rows.map((row, index) => row.date < since
+        ? { ...row, id: digest + "-" + index, selected: false, review_reason: row.review_reason ?? "Mais de 90 dias" }
+        : { ...row, id: digest + "-" + index }));
       if (!rows.length) setImportError("Nenhum lançamento reconhecido. Revise o formato do arquivo.");
     } catch (e) {
       setImportRows([]);
@@ -238,7 +237,7 @@ export default function Onboarding() {
         {STEPS.map((item, index) => <span key={item[0]} className={"h-1.5 flex-1 rounded-full " + (index <= step ? "bg-primary" : "bg-primary/15")} />)}
       </div>
       <h1 className="mt-6 font-heading text-2xl font-bold sm:text-3xl">{STEPS[step][0]}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{STEPS[step][1]}</p>
+      <p data-keep className="mt-2 text-sm text-muted-foreground">{STEPS[step][1]}</p>
       {step === 0 && <p className="mt-4 text-xs leading-5 text-muted-foreground"><ShieldCheck className="mr-1 inline h-4 w-4 text-primary"/> Seus dados financeiros ficam vinculados à sua conta e não serão compartilhados com outros usuários. Você decide o que registrar.</p>}
     </div>
 
@@ -287,7 +286,7 @@ export default function Onboarding() {
         {(accounts.length > 0 || cards.length > 0) && <div className="rounded-xl bg-muted/50 p-3 text-sm">{accounts.map(a => <p key={a.id} className="py-1"><Wallet className="mr-2 inline h-4 w-4 text-primary"/>{a.institution || "Instituição"} · {a.name}</p>)}{cards.map(c => <p key={c.id} className="py-1"><CreditCard className="mr-2 inline h-4 w-4 text-primary"/>{c.institution || "Instituição"} · {c.name}</p>)}</div>}
         <div className="border-t border-border pt-5">
           <h3 className="font-semibold">Como deseja começar?</h3>
-          <p className="mt-1 text-xs text-muted-foreground">O cadastro manual não exige extrato. Você poderá importar dados depois.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Traga os últimos 90 dias com o extrato (OFX ou CSV) e a fatura do cartão, ou comece do zero. Dá para importar depois em Configurações → Dados.</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
             {([["manual","Manual"],["statement","Extrato"],["invoice","Fatura"]] as const).map(([key,label]) => <button key={key} type="button" onClick={() => { setMethod(key); setImportRows([]); setImportError(""); }} className={"rounded-xl border px-3 py-3 text-sm font-medium " + (method === key ? "border-primary bg-primary/10" : "border-border")}>{label}</button>)}
           </div>
@@ -314,8 +313,8 @@ export default function Onboarding() {
       </div>}
       {step === 5 && <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
-          {([["Home","Resumo do seu dinheiro","/"],["Fluxo","Movimentações no tempo","/fluxo"],["Análises","Gráficos e descobertas","/analise"],["Metas e patrimônio","Seus objetivos","/patrimonio"],["Assinaturas","Serviços recorrentes","/assinaturas"],["Radar","Alertas importantes","/radar"]] as const).map(([title,desc,path]) =>
-            <div key={title} className="rounded-2xl border border-border p-4"><p className="font-semibold">{title}</p><p className="mt-1 text-xs text-muted-foreground">{desc}</p><p className="mt-2 text-[11px] text-primary">{path}</p></div>)}
+          {([["Home","Resumo do seu dinheiro","/"],["Fluxo","Entradas, saídas e o que vem pela frente","/transacoes"],["Análises","Gráficos e descobertas","/analise"],["Metas e patrimônio","Seus objetivos","/patrimonio"],["Assinaturas","Serviços recorrentes","/assinaturas"],["Radar","Alertas importantes","/radar"]] as const).map(([title,desc,path]) =>
+            <div key={title} className="rounded-2xl border border-border p-4"><p className="font-semibold">{title}</p><p className="mt-1 text-xs text-muted-foreground">{desc}</p><p className="mt-2 text-xs text-primary">{path}</p></div>)}
         </div>
         <p className="text-xs text-muted-foreground"><ShieldCheck className="mr-1 inline h-4 w-4 text-primary" />As operações financeiras permanecem privadas na sua conta. Você pode ajustar as configurações a qualquer momento.</p>
       </div>}

@@ -189,7 +189,7 @@ export default function CardInvoice() {
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl" data-testid="invoice-card-name">
             Fatura · {invoice.card_name}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground" data-testid="invoice-cycle">
+          <p data-keep className="mt-1 text-sm text-muted-foreground" data-testid="invoice-cycle">
             Ciclo de {formatDate(invoice.cycle_start)} a {formatDate(invoice.cycle_end)} · vence{" "}
             {formatDate(invoice.due_date)}
           </p>

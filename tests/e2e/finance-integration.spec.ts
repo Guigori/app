@@ -78,9 +78,10 @@ test("FIINT displays twelve audited months and never fabricates a score on HTTP 
   const fiint = page.getByTestId("fiint-maturity");
   await expect(fiint).toBeVisible();
   await expect(fiint).toContainText("60");
-  await expect(fiint).toContainText("revisão financeira 14");
+  // The audited revision stays available for support, but is no longer shown as jargon.
+  await expect(fiint).toHaveAttribute("data-finance-revision", "14");
   await expect(fiint.locator('[role="list"][aria-label="Movimentações por mês"] [role="listitem"]')).toHaveCount(12);
-  await expect(fiint).toContainText("não sua saúde financeira");
+  await expect(fiint).toContainText("não é uma nota da sua saúde financeira");
 });
 
 test("recurrence editor sends scoped changes with a durable operation ID", async ({ page }) => {

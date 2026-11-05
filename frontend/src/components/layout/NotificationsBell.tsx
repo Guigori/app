@@ -87,7 +87,7 @@ export function NotificationsBell() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="relative inline-flex h-11 w-11 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         aria-label={`Notificações (${totalItems})`}
         data-testid="notifications-bell"
       >
@@ -95,7 +95,7 @@ export function NotificationsBell() {
         {totalItems > 0 ? (
           <span
               className={cn(
-                "absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white",
+                "absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-xs font-bold text-white",
                 overdue ? "bg-destructive" : "bg-primary",
               )}
               data-testid="notifications-badge"

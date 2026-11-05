@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart as RechartsLineChart, Pie, PieChart,
@@ -27,6 +28,8 @@ interface HomeFinancialChartProps {
   menuView: FinnosView;
   menuInterval: string;
   menuSeries: FinnosSeries[];
+  /** Inside a card that already has its own title (desktop Home). */
+  bare?: boolean;
 }
 
 const METRIC_UI = {
@@ -43,10 +46,11 @@ function addMonth(value: string, direction: -1 | 1): string {
 
 function monthLabel(value: string): string {
   const [year, month] = value.split("-").map(Number);
-  return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
+  const label = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-export function HomeFinancialChart({ month, total, income, expense, result, onOpenMetric, menuView, menuInterval, menuSeries }: HomeFinancialChartProps) {
+export function HomeFinancialChart({ month, total, income, expense, result, onOpenMetric, menuView, menuInterval, menuSeries, bare = false }: HomeFinancialChartProps) {
   const { hidden } = useBalanceHidden();
   const view = VIEW_TO_CHART[menuView];
   const period = PERIOD_TO_CHART[menuInterval] ?? "1m";
@@ -177,8 +181,8 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
   const shiftProjectionMonth = (direction: -1 | 1) => setProjectionMonth((current) => addMonth(current, direction));
 
   return (
-    <div className="border-t border-border/70 pt-5" data-testid="home-financial-chart">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className={bare ? "" : "border-t border-border/70 pt-5"} data-testid="home-financial-chart">
+      <div className={cn("mb-4 flex items-center justify-between gap-3", bare && "sr-only")}>
         <div>
           <h2 className="font-heading text-base font-semibold text-foreground">Saldo ao longo do tempo</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -218,7 +222,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
         >
           <div className="mb-1 flex items-center justify-between">
             <button type="button" onClick={() => shiftProjectionMonth(-1)} className="rounded-full px-2 py-1 text-lg text-muted-foreground" aria-label="Mês anterior">‹</button>
-            <span className="text-xs font-medium capitalize text-muted-foreground">{monthLabel(projectionMonth)}</span>
+            <span className="text-xs font-medium text-muted-foreground">{monthLabel(projectionMonth)}</span>
             <button type="button" onClick={() => shiftProjectionMonth(1)} className="rounded-full px-2 py-1 text-lg text-muted-foreground" aria-label="Próximo mês">›</button>
           </div>
           <div className="h-[300px] w-full sm:h-[330px]">
@@ -249,7 +253,7 @@ export function HomeFinancialChart({ month, total, income, expense, result, onOp
             ))}
             <span className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-muted-foreground"><span className="h-0 w-5 border-t-2 border-dashed" style={{ borderColor: projectionColor }} />Estimativa</span>
           </div>
-          <p className="mt-2 text-center text-[11px] text-muted-foreground">Arraste para os lados para mudar de mês.</p>
+          <p className="mt-2 hidden text-center text-xs text-muted-foreground sm:block">Arraste para os lados para mudar de mês.</p>
         </div>
       ) : view === "pie" ? (
         <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 py-1 sm:min-h-[270px] sm:flex-row sm:gap-10 sm:py-2">

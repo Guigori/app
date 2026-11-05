@@ -1,10 +1,12 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
-import { ChevronRight, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS } from "@/components/layout/nav";
 
 interface NavMenuProps {
+  /** Icon rail: labels become tooltips and group titles become dividers. */
+  collapsed?: boolean;
   /** Called after a link is followed — the drawer uses it to close itself. */
   onNavigate?: () => void;
   /** Staggered entrance; on the always-visible sidebar it runs once on mount. */
@@ -15,15 +17,17 @@ interface NavMenuProps {
 
 /** The Calen-style grouped navigation, shared by the desktop sidebar and the drawer:
  *  soft icon tiles, section captions and a left bar marking the active route. */
-export function NavMenu({ onNavigate, animate = true, testidPrefix = "nav" }: NavMenuProps) {
+export function NavMenu({ onNavigate, animate = true, testidPrefix = "nav", collapsed = false }: NavMenuProps) {
   let index = -1;
+  const location = useLocation();
   return (
-    <nav className="flex flex-col gap-5 max-dashboard:gap-3" data-testid={`${testidPrefix}-menu`}>
+    <nav className="flex flex-col gap-4" data-testid={`${testidPrefix}-menu`}>
       {NAV_GROUPS.map((group) => (
         <div key={group.label ?? "principal"}>
-          {group.label ? (
-            <p className="mb-1.5 flex items-center gap-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: group.dot }} aria-hidden="true" />
+          {group.label && collapsed ? (
+            <div className="mx-auto mb-2 h-px w-6 bg-border" aria-hidden="true" />
+          ) : group.label ? (
+            <p className="mb-1.5 flex items-center gap-2 px-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               {group.label}
             </p>
           ) : null}
@@ -37,22 +41,32 @@ export function NavMenu({ onNavigate, animate = true, testidPrefix = "nav" }: Na
                   initial={animate ? { opacity: 0, x: -10 } : false}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  whileHover={{ x: 2 }}
-                  whileTap={{ scale: 0.98 }}
                 >
                   <NavLink
                     to={item.to}
                     end={item.to === "/"}
-                    onClick={onNavigate}
-                    className={({ isActive }) =>
-                      cn(
-                        "group relative flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition-all duration-200 max-dashboard:rounded-[1.4rem] max-dashboard:border max-dashboard:border-white/5 max-dashboard:bg-muted/35 max-dashboard:shadow-sm max-dashboard:backdrop-blur-xl",
-                        isActive ? "bg-primary/8 text-foreground max-dashboard:bg-foreground/[0.09] max-dashboard:border-foreground/10" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                      )
-                    }
+                    onClick={(event) => {
+                      // FINNOS IA is a panel, not a page: open it in place (and never mark
+                      // Configurações as the active section).
+                      if (item.slug === "ia") {
+                        event.preventDefault();
+                        window.dispatchEvent(new CustomEvent("finnos-ai-open"));
+                      }
+                      onNavigate?.();
+                    }}
+                    title={collapsed ? item.label : undefined}
+                    aria-label={collapsed ? item.label : undefined}
+                    className={({ isActive: routeActive }) => {
+                      const isActive = (routeActive || (item.to === "/transacoes" && location.pathname.startsWith("/fluxo"))) && item.slug !== "ia";
+                      return cn(
+                        "group relative flex min-h-10 items-center gap-3 rounded-xl px-2.5 py-1 text-sm font-medium transition-colors duration-150",
+                        collapsed && "justify-center px-0",
+                        isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      );
+                    }}
                     data-testid={`${testidPrefix}-${item.slug}`}
                   >
-                    {({ isActive }) => (
+                    {({ isActive: routeActive }) => { const isActive = (routeActive || (item.to === "/transacoes" && location.pathname.startsWith("/fluxo"))) && item.slug !== "ia"; return (
                       <>
                         {isActive ? (
                           <motion.span
@@ -64,29 +78,24 @@ export function NavMenu({ onNavigate, animate = true, testidPrefix = "nav" }: Na
                         ) : null}
                         <span
                           className={cn(
-                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors duration-200 max-dashboard:bg-transparent",
+                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-150",
                             isActive
                               ? "bg-primary text-primary-foreground"
-                              : "bg-primary/10 text-primary group-hover:bg-primary/15",
+                              : "text-muted-foreground group-hover:text-foreground",
                           )}
                           aria-hidden="true"
                         >
-                          <item.icon className="h-4.5 w-4.5" />
+                          <item.icon className="h-[1.1rem] w-[1.1rem]" />
                         </span>
-                        <span className={cn("flex-1 truncate", isActive && "font-semibold text-primary")}>{item.label}</span>
+                        {collapsed ? null : <span className={cn("flex-1 truncate", isActive && "font-semibold text-primary")}>{item.label}</span>}
                         {item.soon ? (
-                          <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          <span className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             <Lock className="h-3 w-3" aria-hidden="true" />
                             Em breve
                           </span>
-                        ) : (
-                          <ChevronRight
-                            className="h-4 w-4 shrink-0 text-muted-foreground/60 transition-transform duration-200 group-hover:translate-x-0.5"
-                            aria-hidden="true"
-                          />
-                        )}
+                        ) : null}
                       </>
-                    )}
+                    ); }}
                   </NavLink>
                 </motion.div>
               );

@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
+import { Outlet, useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { DialogsProvider } from "@/components/dialogs/DialogsProvider";
@@ -12,31 +13,70 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LocalNotificationPulse, NotificationPermissionPrompt } from "@/components/notifications/NotificationPermissionPrompt";
 import { useEdgeSwipe } from "@/lib/useEdgeSwipe";
 import { ConnectivityStatus } from "@/components/sync/ConnectivityStatus";
+import { StatementImportHost } from "@/components/import/StatementImportHost";
 
 export function AppShell() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   // Dragging in from the left edge opens the menu, like Calen.
   useEdgeSwipe(useCallback(() => setMenuOpen(true), []), !menuOpen);
+  // Like a native app: a new screen (and a reload) opens at the top; going back returns
+  // to the exact scroll position the user left. Positions are kept per history entry.
+  const navigationType = useNavigationType();
+  const navigate = useNavigate();
+  // The entry the app opened on has no history key ("default"). Give it one, so coming
+  // back to it (or reloading) restores the screen like any other entry.
+  useEffect(() => {
+    if (location.key === "default") navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: location.state });
+  }, [location.key, location.pathname, location.search, location.hash, location.state, navigate]);
+  const positions = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+  }, []);
+  useEffect(() => {
+    const key = location.key;
+    const save = () => positions.current.set(key, window.scrollY);
+    window.addEventListener("scroll", save, { passive: true });
+    return () => window.removeEventListener("scroll", save);
+  }, [location.key]);
+  useLayoutEffect(() => {
+    const saved = navigationType === "POP" ? positions.current.get(location.key) : undefined;
+    if (!saved) {
+      if (!location.hash) window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+      return;
+    }
+    // The page may still be loading its data: retry until it is tall enough (up to ~1.5 s).
+    let tries = 0;
+    let frame = 0;
+    const restore = () => {
+      window.scrollTo({ top: saved, left: 0, behavior: "instant" as ScrollBehavior });
+      if (Math.abs(window.scrollY - saved) > 2 && tries++ < 90) frame = requestAnimationFrame(restore);
+    };
+    restore();
+    return () => cancelAnimationFrame(frame);
+  }, [location.key, location.hash, navigationType]);
 
   return (
     <DialogsProvider>
       <div className="min-h-svh bg-background">
         <Sidebar />
-        <div className="lg:pl-72">
+        <div className="transition-[padding] duration-200 ease-out lg:pl-[var(--sidebar-w,16rem)]">
           <div className="lg:hidden"><Header onOpenMenu={() => setMenuOpen(true)} /></div>
           <main className="mx-auto w-full max-w-[1600px] px-4 py-5 pb-32 sm:px-6 lg:px-8 dashboard:pb-28">
             {/^\/radar\/[^/]+$/.test(location.pathname) || location.pathname === "/configuracoes" ? null : <BackButton />}
             {/* Each route fades/slides in, so navigation feels continuous instead of a jump. */}
-            <AnimatePresence mode="wait" initial={false}>
+            <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
                 key={location.pathname}
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
               >
-                <Outlet />
+                {/* Suspense inside the shell keeps sidebar and header in place while a page chunk loads. */}
+                <Suspense fallback={<FinnosPageLoading title="Abrindo" />}>
+                  <Outlet />
+                </Suspense>
               </motion.div>
             </AnimatePresence>
           </main>
@@ -46,6 +86,7 @@ export function AppShell() {
         <QuickActionFAB />
         <AiPanel />
         <ConnectivityStatus />
+        <StatementImportHost />
         <NotificationPermissionPrompt />
         <LocalNotificationPulse />
       </div>

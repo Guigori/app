@@ -20,6 +20,7 @@ from finnos.routers import (
     simulation,
     finance_validation,
     onboarding,
+    backup,
 )
 
 
@@ -46,6 +47,7 @@ def mount(app, firebase_app, verified_claims, same_origin):
         simulation,
         finance_validation,
         onboarding,
+        backup,
     ]:
         router.include_router(module.router)
     app.include_router(router)

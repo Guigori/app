@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import type { RadarSignal } from "@/types/finnos";
 
 const LABEL = { risk: "Risco", deviation: "Desvio", information: "Informação", opportunity: "Oportunidade" } as const;
-const COLOR = { risk: "#FB4A6B", deviation: "#FF9F2F", information: "#8C5BFF", opportunity: "#34D399" } as const;
+const COLOR = { risk: "var(--signal-risk)", deviation: "var(--signal-deviation)", information: "var(--signal-information)", opportunity: "var(--signal-opportunity)" } as const;
 
 function target(signal: RadarSignal) {
   if (signal.related_entity_type === "card" && signal.related_entity_id) return `/cartoes/${signal.related_entity_id}`;
@@ -56,7 +56,7 @@ export default function RadarDetail() {
       <section className="rounded-3xl border border-border bg-card p-6 sm:p-8">
         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: COLOR[signal.type] }}>{LABEL[signal.type]}{signal.severity === "critical" ? " crítico" : ""}</p>
         <h1 className="mt-2 font-heading text-2xl font-bold tracking-tight">{signal.title}</h1>
-        <p className="mt-3 text-muted-foreground">{signal.description}</p>
+        <p data-keep className="mt-3 text-muted-foreground">{signal.description}</p>
         {signal.metric ? <p className="mt-6 font-heading text-4xl font-bold" style={{ color: COLOR[signal.type] }}>{signal.metric}</p> : null}
         <div className="mt-7 border-t border-border pt-5">
           <p className="text-sm font-semibold">Por que apareceu no Radar?</p>

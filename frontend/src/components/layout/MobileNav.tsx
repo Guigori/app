@@ -9,7 +9,13 @@ import { navItemsFor, useNavigationPreferences } from "@/lib/navigationPreferenc
 
 
 
+/** Cash flow (/fluxo) is a detail screen of Fluxo (/transacoes). */
+function isSubPage(to: string, pathname: string) {
+  return to === "/transacoes" && pathname.startsWith("/fluxo");
+}
+
 function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: string) => void }) {
+  const location = useLocation();
   return (
     <NavLink
       to={item.to}
@@ -18,17 +24,18 @@ function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: strin
         event.preventDefault();
         onNavigate(item.to);
       }}
-      className={({ isActive }) =>
-        cn(
+      className={({ isActive: routeActive }) => {
+        const isActive = routeActive || isSubPage(item.to, location.pathname);
+        return cn(
           "relative flex h-[3.75rem] min-w-0 items-center justify-center overflow-hidden rounded-full px-1 transition-colors duration-200",
           isActive
-            ? "bg-white text-[#080808] shadow-[0_1px_4px_rgba(0,0,0,.035)] dark:bg-white dark:text-black"
+            ? "bg-white text-primary shadow-[0_1px_4px_rgba(0,0,0,.035)] dark:bg-white/10 dark:text-[#A996FF] dark:shadow-none"
             : "text-[#626262] dark:text-white/70"
-        )
-      }
+        );
+      }}
       data-testid={`mobile-nav-${item.slug}`}
     >
-      {({ isActive }) => (
+      {({ isActive: routeActive }) => { const isActive = routeActive || isSubPage(item.to, location.pathname); return (
         <motion.span
           layout
           className="flex min-w-0 items-center justify-center gap-2"
@@ -47,7 +54,7 @@ function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: strin
             <span className="sr-only">{item.label}</span>
           )}
         </motion.span>
-      )}
+      ); }}
     </NavLink>
   );
 }
@@ -58,7 +65,7 @@ export function MobileNav() {
   const mobileItems = navItemsFor(navigationPreferences.mobile);
   const navigate = useNavigate();
   const location = useLocation();
-  const activeIndex = mobileItems.findIndex((item) => item.to === location.pathname || (item.to === "/" && location.pathname === "/"));
+  const activeIndex = mobileItems.findIndex((item) => item.to === location.pathname || isSubPage(item.to, location.pathname) || (item.to === "/" && location.pathname === "/"));
 
   const [registerOpen, setRegisterOpen] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
@@ -154,13 +161,13 @@ export function MobileNav() {
               className="fixed inset-0 z-[39] bg-black/40 backdrop-blur-[12px] dashboard:hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} />
             <motion.section role="dialog" aria-modal="true" aria-label="Novo registro"
-              className="fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[40] mx-auto flex max-w-[28rem] flex-col overflow-hidden rounded-[30px] border border-violet-500/25 bg-[#090911] shadow-2xl dashboard:hidden"
+              className="fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] bottom-[calc(5.6rem+env(safe-area-inset-bottom))] z-[40] mx-auto flex max-w-[28rem] flex-col overflow-hidden rounded-[30px] border border-border bg-background shadow-2xl dashboard:hidden"
               initial={{ y: "110%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "110%", opacity: 0 }}
               transition={{ type: "spring", stiffness: 330, damping: 34 }}>
-              <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/25" aria-hidden="true" />
+              <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden="true" />
               <div className="min-h-0 flex-1 overflow-hidden">
-                <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-white/70">Preparando o registro...</div>}>
-                  <SmartRegister embedded />
+                <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">Preparando o registro...</div>}>
+                  <SmartRegister embedded onClose={() => setRegisterOpen(false)} />
                 </Suspense>
               </div>
             </motion.section>

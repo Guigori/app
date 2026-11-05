@@ -46,7 +46,7 @@ export function MonthSelector({ month, onChange }: MonthSelectorProps) {
             ))}
           </div>
           <div className="mt-3 flex gap-1 overflow-x-auto border-t border-border/60 pt-2 [scrollbar-width:none]">
-            {years.map((item) => <button key={item} type="button" onClick={() => setPickerYear(item)} className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px]", item === shownYear ? "bg-muted font-semibold" : "text-muted-foreground")}>{item}</button>)}
+            {years.map((item) => <button key={item} type="button" onClick={() => setPickerYear(item)} className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs", item === shownYear ? "bg-muted font-semibold" : "text-muted-foreground")}>{item}</button>)}
           </div>
         </PopoverContent>
       </Popover>

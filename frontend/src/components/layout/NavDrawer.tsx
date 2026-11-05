@@ -17,9 +17,12 @@ export function NavDrawer({ open, onOpenChange }: NavDrawerProps) {
           <SheetTitle className="sr-only">Navegação</SheetTitle>
           <FinnosLogo />
           <SheetDescription className="sr-only">Navegação do FINNOS</SheetDescription>
-          <AccountBlock compact />
         </SheetHeader>
         <NavMenu onNavigate={() => onOpenChange(false)} testidPrefix="drawer-nav" />
+        {/* Account and "Sair" at the end, away from the navigation items. */}
+        <div className="mt-auto border-t border-border pt-3">
+          <AccountBlock compact />
+        </div>
       </SheetContent>
     </Sheet>
   );
