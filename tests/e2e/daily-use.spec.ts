@@ -107,6 +107,19 @@ test("a sentence becomes several lançamentos to review, correct and register", 
   await expect(page.locator("text=-R$ 9,50 >> visible=true").first()).toBeVisible();
 });
 
+test("a transfer shows what each account will have, and warns when the source goes negative", async ({ page }) => {
+  await createAccount(page);
+  await page.goto("/registro-inteligente");
+  await expect(page.getByTestId("quick-entry")).toBeVisible();
+  await page.getByRole("radio", { name: "Transferência" }).click();
+  for (const key of ["2", "0", "0"]) await page.keyboard.press(key);
+  const preview = page.getByTestId("transfer-preview");
+  await expect(preview.getByTestId("transfer-from-after")).toHaveText("R$ 800,00");
+  await expect(preview.getByTestId("transfer-to")).toContainText("Escolha uma conta");
+  for (const key of ["0"]) await page.keyboard.press(key);
+  await expect(page.getByTestId("transfer-negative")).toContainText("fica negativa em R$ 1.000,00");
+});
+
 test("statement import flags what is already registered", async ({ page }) => {
   await createAccount(page);
   const csv = Buffer.from(`Data;Descrição;Valor\n${isoDaysAgo(2)};Padaria Teste;-12,50\n${isoDaysAgo(4)};Pix recebido;200,00`);
