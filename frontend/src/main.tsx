@@ -7,8 +7,10 @@ import './index.css'
 import App from './App.tsx'
 import { queryClient } from './lib/queryClient'
 import { initializeLocalPersistence } from './lib/local/store'
+import { initMonitoring } from './lib/monitoring'
 
 async function bootstrap() {
+  initMonitoring()
   await initializeLocalPersistence()
 
   createRoot(document.getElementById('root')!).render(

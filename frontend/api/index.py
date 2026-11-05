@@ -12,6 +12,11 @@ from datetime import timedelta, datetime, timezone
 from urllib.parse import urlparse
 
 import firebase_admin
+
+from finnos.lib.monitoring import init_sentry
+
+# Error monitoring is off unless SENTRY_DSN is set; it never sends financial data.
+init_sentry()
 from firebase_admin import auth, credentials, exceptions
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
