@@ -80,7 +80,6 @@ export function TransactionCalendar({
   const weeks: Cell[][] = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   const trimmed = weeks.filter((week) => week.some((cell) => !cell.outside));
-  const selectedWeek = trimmed.find((week) => week.some((cell) => cell.date === selectedDate)) ?? trimmed[0];
   const [weekCount, setWeekCount] = useState<1 | 2 | 3>(1);
   const selectedWeekIndex = Math.max(0, trimmed.findIndex((week) => week.some((cell) => cell.date === selectedDate)));
   const compactStart = Math.min(Math.max(0, selectedWeekIndex - Math.floor((weekCount - 1) / 2)), Math.max(0, trimmed.length - weekCount));

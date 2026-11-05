@@ -4,8 +4,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { FinnosLoading } from "@/components/brand/FinnosLoading";
 import { AppShell } from "@/components/layout/AppShell";
-import Login from "@/pages/Login";
-import Register from "@/pages/Register";
 
 
 
@@ -50,6 +48,8 @@ const Analysis = lazy(() => import("@/pages/Analysis"));
 const Patrimonio = lazy(() => import("@/pages/Patrimonio"));
 const PreviewValidation = lazy(() => import("@/pages/PreviewValidation"));
 const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
+const Login = lazy(() => import("@/pages/Login"));
+const Register = lazy(() => import("@/pages/Register"));
 const AnalysisEvolution = lazy(() => import("@/pages/analysis/AnalysisEvolution"));
 const AnalysisCategories = lazy(() => import("@/pages/analysis/AnalysisCategories"));
 const AnalysisRhythm = lazy(() => import("@/pages/analysis/AnalysisRhythm"));

@@ -63,7 +63,7 @@ export default function CardInvoice() {
   });
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, staleTime: 60_000 });
   const invoice = invoiceQuery.data;
-  const accounts = accountsQuery.data ?? [];
+  const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
 
   // Defaults the user can change: the invoice due date and the first account.

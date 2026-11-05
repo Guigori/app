@@ -57,6 +57,8 @@ const ICONS: Record<string, LucideIcon> = {
   "more-horizontal": MoreHorizontal,
 };
 
+// Shared with other components on purpose (tiny helper next to its only user).
+// oxlint-disable-next-line react/only-export-components
 export const CATEGORY_ICONS = Object.keys(ICONS);
 
 interface CategoryIconProps {
