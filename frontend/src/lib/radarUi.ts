@@ -39,8 +39,8 @@ export function isRecurringCandidate(signal: RadarSignal): boolean {
 /** Where a signal leads; `short` fits the chip on a list card, `label` the full button. */
 export function radarTarget(signal: RadarSignal): { to: string; label: string; short: string } {
   if (signal.related_entity_type === "card" && signal.related_entity_id) return { to: `/cartoes/${signal.related_entity_id}`, label: "Abrir fatura", short: "Abrir fatura" };
-  if (signal.related_entity_type === "category" && signal.related_entity_id) return { to: `/fluxo?month=${currentMonth()}&metric=despesas&category_id=${encodeURIComponent(signal.related_entity_id)}`, label: "Ver no fluxo de caixa", short: "Ver gastos" };
+  if (signal.related_entity_type === "category" && signal.related_entity_id) return { to: `/transacoes?aba=caixa&month=${currentMonth()}&metric=despesas&category_id=${encodeURIComponent(signal.related_entity_id)}`, label: "Ver no Caixa", short: "Ver gastos" };
   if (isRecurringCandidate(signal)) return { to: "/assinaturas", label: "Ver assinaturas", short: "Ver assinaturas" };
-  if (signal.related_entity_type === "cashflow") return { to: `/fluxo?month=${currentMonth()}&metric=projecao`, label: "Ver no fluxo de caixa", short: "Ver projeção" };
-  return { to: `/fluxo?month=${currentMonth()}`, label: "Ver no fluxo de caixa", short: "Ver no fluxo" };
+  if (signal.related_entity_type === "cashflow") return { to: `/transacoes?aba=caixa&month=${currentMonth()}&metric=projecao`, label: "Ver no Caixa", short: "Ver projeção" };
+  return { to: `/transacoes?aba=caixa&month=${currentMonth()}`, label: "Ver no Caixa", short: "Ver no fluxo" };
 }

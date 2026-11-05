@@ -81,8 +81,8 @@ export function AllocationRow({ allocation: a, start, end }: { allocation: Budge
                   Mais {money(split.other)} de parcelas de compras anteriores, despesas fixas e assinaturas previstas.
                 </p>
               ) : null}
-              <Link to={`/fluxo?month=${start.slice(0, 7)}&metric=despesas&category_id=${encodeURIComponent(a.category_id)}`} className="inline-flex items-center gap-1.5 px-1 text-sm font-semibold text-primary">
-                <ChartNoAxesCombined className="h-4 w-4" aria-hidden="true" />Ver no fluxo de caixa
+              <Link to={`/transacoes?aba=caixa&month=${start.slice(0, 7)}&metric=despesas&category_id=${encodeURIComponent(a.category_id)}`} className="inline-flex items-center gap-1.5 px-1 text-sm font-semibold text-primary">
+                <ChartNoAxesCombined className="h-4 w-4" aria-hidden="true" />Ver no Caixa
               </Link>
             </>
           )}

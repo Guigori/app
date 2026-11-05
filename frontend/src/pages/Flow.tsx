@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { useRouteState } from "@/lib/routeState";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { canGoBack } from "@/lib/navigation";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ArrowDownLeft, ArrowLeft, ArrowUpRight, ChartColumn, ChartLine, ChevronRight, Eye, EyeOff, Wallet, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChartColumn, ChartLine, ChevronRight, Eye, EyeOff, Wallet, X } from "lucide-react";
 import { fetchAccounts, fetchCalendar, fetchCategories, fetchDashboard, fetchFlow, fetchTransactions } from "@/lib/data";
 import { balanceTimeline, incomeSources, monthClose, upcoming, weeklyFlow } from "@/lib/cashFlow";
 import { axisMoney } from "@/lib/analysisFormat";
@@ -14,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { MonthSelector } from "@/components/dashboard/MonthSelector";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,7 +22,7 @@ import type { FlowPeriod, FlowTab, UpcomingItem, UpcomingKind } from "@/types/fi
 const TABS: Array<{ key: FlowTab; label: string }> = [
   { key: "receitas", label: "Receitas" },
   { key: "despesas", label: "Despesas" },
-  { key: "caixa", label: "Caixa" },
+  { key: "caixa", label: "Saldo" },
   { key: "projecao", label: "Projeção" },
 ];
 
@@ -43,13 +42,15 @@ const TAB_HINT: Record<FlowTab, string> = {
 
 type ChartKind = "barras" | "linhas";
 
-export default function Flow() {
+/** The Caixa tab of Fluxo. Fluxo owns the month, so both views stay on the same one. */
+export default function Flow({ month: sharedMonth, onMonthChange }: { month?: string; onMonthChange?: (month: string) => void } = {}) {
   const [params] = useSearchParams();
-  const navigate = useNavigate();
   const initialTab = (params.get("metric") ?? "caixa") as FlowTab;
   const { hidden, toggle: toggleHidden } = useBalanceHidden();
 
-  const [month, setMonth] = useRouteState("caixa:month", () => params.get("month") ?? currentMonth());
+  const [ownMonth, setOwnMonth] = useRouteState("caixa:month", () => params.get("month") ?? currentMonth());
+  const month = sharedMonth ?? ownMonth;
+  const setMonth = (next: string) => (onMonthChange ? onMonthChange(next) : setOwnMonth(next));
   const [tab, setTab] = useRouteState<FlowTab>("caixa:tab", () => (TABS.some((t) => t.key === initialTab) ? initialTab : "caixa"));
   const [period, setPeriod] = useRouteState<FlowPeriod>("caixa:period", "12");
   const [chartKind, setChartKind] = useRouteState<ChartKind>("caixa:chart", "barras");
@@ -140,27 +141,9 @@ export default function Flow() {
 
   return (
     <div className="flex flex-col gap-5 animate-fade-up" data-testid="flow-page">
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-2">
-          {/* Cash flow is a detail of Fluxo, reached from its Entrada / Saída / Saldo. */}
-          {/* Back to wherever the user came from (Início, Fluxo, Análise…); Fluxo when opened directly. */}
-          <Link
-            to={`/transacoes?month=${month}`}
-            onClick={(event) => { if (canGoBack()) { event.preventDefault(); navigate(-1); } }}
-            className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "mt-0.5 size-10 shrink-0 rounded-full border border-border bg-card")}
-            aria-label="Voltar"
-            title="Voltar"
-            data-testid="flow-breadcrumb-back"
-          >
-            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
-          </Link>
-          <div className="min-w-0">
-            <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo de caixa</h1>
-            <p data-keep className="mt-1 text-sm text-muted-foreground" data-testid="flow-subtitle">
-              {monthLabel(month)}
-            </p>
-          </div>
-        </div>
+      {/* Caixa is a tab of Fluxo: Fluxo's header carries the title and the way back. */}
+      <header className="flex items-center justify-between gap-3">
+        <p data-keep className="text-sm font-medium text-muted-foreground" data-testid="flow-subtitle">{monthLabel(month)}</p>
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"

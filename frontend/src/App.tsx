@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { FinnosLoading } from "@/components/brand/FinnosLoading";
@@ -37,7 +37,6 @@ const ChartSettings = lazy(() => import("@/pages/ChartSettings"));
 const Budget = lazy(() => import("@/pages/Budget"));
 const BudgetSettings = lazy(() => import("@/pages/BudgetSettings"));
 const FinanceHistory = lazy(() => import("@/pages/FinanceHistory"));
-const Flow = lazy(() => import("@/pages/Flow"));
 const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
 const CardInvoice = lazy(() => import("@/pages/CardInvoice"));
 const Radar = lazy(() => import("@/pages/Radar"));
@@ -59,6 +58,14 @@ const SettingsHub = lazy(() => import("@/pages/SettingsHub").then(module => ({ d
 /** Only for the very first chunk; inside the app shell pages use their own skeleton. */
 function RouteFallback() {
   return <FinnosLoading fullscreen title="Abrindo o FINNOS" description="Carregando o módulo." />;
+}
+
+/** The old cash-flow address now opens the Caixa tab of Fluxo, with the same month and filters. */
+function CaixaRedirect() {
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  params.set("aba", "caixa");
+  return <Navigate to={`/transacoes?${params.toString()}`} replace />;
 }
 
 export default function App() {
@@ -87,7 +94,7 @@ export default function App() {
             <Route path="/orcamento" element={<Budget />} />
             <Route path="/orcamento/configuracoes" element={<BudgetSettings />} />
             <Route path="/historico" element={<FinanceHistory />} />
-            <Route path="/fluxo" element={<Flow />} />
+            <Route path="/fluxo" element={<CaixaRedirect />} />
             <Route path="/radar" element={<Radar />} />
             <Route path="/radar/:signalId" element={<RadarDetail />} />
             <Route path="/assinaturas" element={<Subscriptions />} />

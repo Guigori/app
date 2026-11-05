@@ -78,8 +78,8 @@ export function AppShell() {
             {/* Each route fades/slides in, so navigation feels continuous instead of a jump. */}
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
-                // A redirect (/cartoes → /contas) is the same screen: no exit/enter between them.
-                key={location.pathname === "/cartoes" ? "/contas" : location.pathname}
+                // A redirect (/cartoes → /contas, /fluxo → Caixa in Fluxo) is the same screen: no exit/enter between them.
+                key={location.pathname === "/cartoes" ? "/contas" : location.pathname === "/fluxo" ? "/transacoes" : location.pathname}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}

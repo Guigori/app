@@ -57,7 +57,7 @@ test("tapping a lançamento explains it, and editing is one action inside", asyn
   await expect(detail.getByTestId("transaction-detail-value")).toHaveText("-R$ 42,00");
   await expect(detail.getByTestId("transaction-detail-path")).toContainText("Conta Teste");
   await expect(detail.getByTestId("transaction-detail-rhythm")).toContainText("avulso");
-  await expect(detail.getByTestId("transaction-detail-cashflow")).toHaveAttribute("href", /\/fluxo\?month=\d{4}-\d{2}&metric=despesas/);
+  await expect(detail.getByTestId("transaction-detail-cashflow")).toHaveAttribute("href", /\/transacoes\?aba=caixa&month=\d{4}-\d{2}&metric=despesas/);
   await detail.getByTestId("transaction-detail-edit").click();
   await expect(detail).toBeHidden();
   await expect(page.getByRole("dialog")).toBeVisible();
@@ -82,12 +82,19 @@ test("statement import flags what is already registered", async ({ page }) => {
   await expect(page.getByTestId("statement-import-submit")).toBeDisabled();
 });
 
-test("cash flow leads with how the month closes, and Voltar keeps the chosen tab", async ({ page }) => {
-  await page.goto("/fluxo?metric=caixa");
+test("Caixa is a tab of Fluxo: Saldo opens it, the old address too, and coming back keeps the chosen tab", async ({ page }) => {
+  await page.goto("/transacoes");
+  await page.getByTestId("flow-strip-caixa").click();
+  await expect(page.getByTestId("flow-view-caixa")).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText(/Deve (sobrar|faltar) no fim do mês|(Sobrou|Faltou) no mês/)).toBeVisible();
   await page.getByTestId("flow-tab-despesas").click();
-  await page.getByTestId("flow-breadcrumb-back").click();
-  await expect(page).toHaveURL(/\/transacoes/);
+  await page.goto("/contas");
   await page.goBack();
   await expect(page.getByTestId("flow-tab-despesas")).toHaveAttribute("aria-selected", "true");
+  await page.getByTestId("flow-view-lista").click();
+  await expect(page.getByTestId("flow-strip-caixa")).toBeVisible();
+
+  await page.goto("/fluxo?metric=receitas");
+  await expect(page).toHaveURL(/\/transacoes\?.*aba=caixa/);
+  await expect(page.getByTestId("flow-tab-receitas")).toHaveAttribute("aria-selected", "true");
 });
