@@ -6,6 +6,7 @@ import { registerProposal, type Proposal, type ProposalState, type ProposedEntry
 import { applyProposal, undoProposal } from "@/lib/finnApply";
 import { readMemory } from "@/lib/finnMemory";
 import { ProposalCard } from "@/components/ai/ProposalCard";
+import { TransferPreview } from "@/components/transactions/TransferPreview";
 import { getRegisterDefault } from "@/lib/registerPreferences";
 import { evaluateExpression, KEYS, OPS, pressKey, typedDisplay } from "@/lib/registerKeypad";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -239,8 +240,9 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
   // Quick entry: amount, account, date, note, category and a calculator keypad on one screen.
   if (page === "entry") {
     return <div className={embedded ? "relative flex h-full min-h-0 w-full flex-col bg-background text-foreground" : "relative mx-auto flex h-[min(860px,calc(100dvh-8rem))] w-full max-w-md flex-col overflow-hidden rounded-[30px] border border-border bg-background text-foreground shadow-2xl"} data-testid="quick-entry">
-      <header className="flex shrink-0 items-center justify-between gap-2 px-4 pt-3">
-        {embedded ? <span className="size-11 shrink-0" aria-hidden="true" /> : <button type="button" onClick={close} aria-label="Fechar" className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card"><X size={20} /></button>}
+      {/* In the sheet the X sits on the floating button, so the header keeps the full width for the type. */}
+      <header className="flex shrink-0 items-center justify-between gap-2 px-5 pt-4">
+        {embedded ? null : <button type="button" onClick={close} aria-label="Fechar" className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card"><X size={20} /></button>}
         <div className="flex items-center gap-0.5 rounded-full border border-border bg-card p-1" role="radiogroup" aria-label="Tipo">
           {(["Receita", "Despesa", "Transferência"] as Kind[]).map((k) => {
             const Icon = KIND_UI[k].icon;
@@ -270,28 +272,30 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
           </motion.div>
         ) : null}
       </AnimatePresence>
-      <div className="flex min-h-20 flex-1 flex-col items-center justify-center px-4">
+      <div className="flex min-h-14 flex-1 flex-col items-center justify-center px-4">
         <p className="h-5 text-sm tabular-nums text-muted-foreground" aria-hidden="true">{/[+−×÷]/.test(expr) ? expr : ""}</p>
         <p className={cn("font-heading text-[clamp(2.75rem,15vw,4.5rem)] font-bold leading-none tracking-tight tabular-nums", amountValue ? KIND_UI[kind].amount : "text-muted-foreground/50")} data-testid="quick-entry-amount" aria-live="polite">
           {typedAmount ?? formatBRL(amountValue).replace(/,00$/, "")}
         </p>
       </div>
 
-      <div className="shrink-0 space-y-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => go("pay")} className="flex min-w-0 items-center gap-2 rounded-full bg-muted py-1.5 pl-1.5 pr-4 text-left" data-testid="quick-entry-account">
+      <div className="shrink-0 space-y-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        {kind === "Transferência" ? (
+          <TransferPreview from={selectedAccount} to={accounts.find((a) => a.id === destination)} amount={amountValue} hidden={hidden}
+            onPickFrom={() => go("pay")}
+            onPickTo={() => { setDestinationPicker(true); setInstitutionId(null); go("accounts"); }}
+            onSwap={destination ? () => { const from = account; setAccount(destination); setDestination(from); } : undefined} />
+        ) : null}
+        {/* In a transfer the De / Para cards hold the accounts, and the date goes next to the note. */}
+        <div className={cn("flex items-center gap-2", kind === "Transferência" && "h-0")}>
+          {kind !== "Transferência" ? <button type="button" onClick={() => go("pay")} className="flex min-w-0 items-center gap-2 rounded-full bg-muted py-1.5 pl-1.5 pr-4 text-left" data-testid="quick-entry-account">
             <span className={cn("grid size-9 shrink-0 place-items-center rounded-full", selectedCard ? "bg-primary/15 text-primary" : "bg-income/15 text-income")}>{selectedCard ? <CreditCard size={18} /> : <Wallet size={18} />}</span>
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">{selectedCard ? selectedCard.name : selectedAccount?.name ?? "Escolher conta"}</span>
               {selectedCard ? <span className="block text-xs text-muted-foreground">Crédito · {hidden ? "••••" : `disp. ${formatBRL(selectedCard.available)}`}</span> : selectedAccount ? <span className="block text-xs tabular-nums text-muted-foreground">{hidden ? "••••" : formatBRL(selectedAccount.balance)}</span> : null}
             </span>
-          </button>
-          {kind === "Transferência" ? (
-            <button type="button" onClick={() => { setDestinationPicker(true); setInstitutionId(null); go("accounts"); }} className="flex min-w-0 items-center gap-1.5 rounded-full bg-muted px-4 py-3 text-sm font-semibold">
-              <ArrowLeftRight size={16} className="shrink-0 text-primary" /><span className="truncate">{accounts.find((a) => a.id === destination)?.name ?? "Para qual conta?"}</span>
-            </button>
-          ) : null}
-          <button type="button" onClick={() => { const el = dateInput.current; if (!el) return; try { el.showPicker(); } catch { el.focus(); } }} className="ml-auto shrink-0 rounded-full bg-muted px-4 py-3 text-sm font-semibold" data-testid="quick-entry-date">{dateLabel}</button>
+          </button> : null}
+          {kind !== "Transferência" ? <button type="button" onClick={() => { const el = dateInput.current; if (!el) return; try { el.showPicker(); } catch { el.focus(); } }} className="ml-auto shrink-0 rounded-full bg-muted px-4 py-3 text-sm font-semibold" data-testid="quick-entry-date">{dateLabel}</button> : null}
           <input ref={dateInput} type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="sr-only" tabIndex={-1} aria-label="Data" />
         </div>
 
@@ -306,11 +310,15 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
           </div>
         ) : null}
 
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nota (opcional)" aria-label="Nota" className="h-12 w-full rounded-2xl bg-muted px-4 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
+        <div className="flex items-center gap-2">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nota (opcional)" aria-label="Nota" className="h-12 min-w-0 flex-1 rounded-2xl bg-muted px-4 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
+          {kind === "Transferência" ? <button type="button" onClick={() => { const el = dateInput.current; if (!el) return; try { el.showPicker(); } catch { el.focus(); } }} className="h-12 shrink-0 rounded-2xl bg-muted px-4 text-sm font-semibold">{dateLabel}</button> : null}
+        </div>
 
         {kind !== "Transferência" ? (
           <div className="rounded-2xl bg-muted/60 py-2">
-            <div className="flex items-center gap-2 overflow-x-auto px-3 py-1 [scrollbar-width:none]" role="radiogroup" aria-label="Categoria">
+            {/* Fading edges say the row scrolls instead of cutting a category in half. */}
+            <div className="flex items-center gap-2.5 overflow-x-auto px-3 py-1.5 [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,black_12px,black_calc(100%-28px),transparent)]" role="radiogroup" aria-label="Categoria">
               <button type="button" onClick={() => go("categories")} aria-label="Buscar categoria" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"><Search size={18} /></button>
               <button type="button" role="radio" aria-checked={!category} aria-label="Sem categoria" onClick={() => setCategory("")} className={cn("grid shrink-0 place-items-center rounded-2xl bg-muted text-muted-foreground transition-all", !category ? "size-14" : "size-12")}><Ban size={20} /></button>
               {kindCategories.map((c) => {
@@ -326,12 +334,12 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
           </div>
         ) : null}
 
-        <div className="grid grid-cols-4 gap-2" data-testid="quick-entry-keypad">
+        <div className="grid grid-cols-4 gap-2.5" data-testid="quick-entry-keypad">
           {KEYS.map((key) => (
             <button key={key} type="button" onClick={() => press(key)} aria-label={key === "⌫" ? "Apagar (segure para limpar)" : key}
               onPointerDown={key === "⌫" ? () => { clearTimer.current = window.setTimeout(() => { setExpr(""); clearTimer.current = null; }, 550); } : undefined}
               onPointerUp={key === "⌫" ? () => { if (clearTimer.current) window.clearTimeout(clearTimer.current); } : undefined}
-              onPointerLeave={key === "⌫" ? () => { if (clearTimer.current) window.clearTimeout(clearTimer.current); } : undefined} className={cn("h-12 rounded-2xl text-2xl font-medium transition-transform active:scale-95", OPS.includes(key) ? "bg-primary/10 text-primary" : "bg-muted")}>
+              onPointerLeave={key === "⌫" ? () => { if (clearTimer.current) window.clearTimeout(clearTimer.current); } : undefined} className={cn("h-[clamp(2.6rem,6dvh,3.75rem)] rounded-2xl text-2xl font-medium transition-transform active:scale-95", OPS.includes(key) ? "bg-primary/10 text-primary" : "bg-muted")}>
               {key === "⌫" ? <Delete className="mx-auto" size={24} aria-hidden="true" /> : key}
             </button>
           ))}

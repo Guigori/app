@@ -9,6 +9,7 @@ import { createTransaction, fetchAccounts, fetchCards, fetchCategories, updateTr
 import { getApiErrorMessage } from "@/lib/errors";
 import { updateQueuedTransaction, flushSyncQueue, queueTransaction, getSyncOperation, discardConflictedOperation } from "@/lib/sync/queue";
 import { formatBRL, parseAmount, todayISO, TX_STATUS_LABEL, TX_TYPE_LABEL } from "@/lib/format";
+import { TransferPreview } from "@/components/transactions/TransferPreview";
 import { cn } from "@/lib/utils";
 import type { Transaction, TransactionInput, TxStatus, TxType } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
@@ -398,6 +399,16 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
                 <Input id="tx-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} data-testid="tx-date-input" />
               </div>
             </div>
+
+            {type === "transferencia" ? (
+              <TransferPreview
+                from={accounts.find((a) => a.id === accountId)}
+                to={accounts.find((a) => a.id === toAccountId)}
+                amount={parseAmount(valueRaw) ?? 0}
+                editing={transaction?.type === "transferencia" ? { fromId: transaction.account_id, toId: transaction.to_account_id, value: transaction.value } : null}
+                onSwap={toAccountId ? () => { const from = accountId; setAccountId(toAccountId); setToAccountId(from); } : undefined}
+              />
+            ) : null}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
