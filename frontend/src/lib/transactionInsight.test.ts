@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocationBreakdown, budgetImpact, cashFlowLink, cycleImpact, flowPath, monthImpact, monthlyHistory, rhythm } from "./transactionInsight";
+import { allocationBreakdown, budgetImpact, cashFlowLink, cycleImpact, focusFacts, flowPath, monthImpact, monthlyHistory, rhythm } from "./transactionInsight";
 import type { BudgetCycleProgress, BudgetSummary, CalendarMonth, SubscriptionItem, Transaction } from "@/types/finnos";
 
 const tx = (over: Partial<Transaction>): Transaction => ({
@@ -53,8 +53,8 @@ describe("lançamento detail", () => {
   });
 
   it("opens the cash flow on its month, tab and category", () => {
-    expect(cashFlowLink(tx({}))).toBe("/transacoes?aba=caixa&month=2026-11&metric=despesas&category_id=rest");
-    expect(cashFlowLink(tx({ type: "transferencia" }))).toBe("/transacoes?aba=caixa&month=2026-11&metric=caixa");
+    expect(cashFlowLink(tx({}))).toBe("/transacoes?aba=caixa&month=2026-11&metric=despesas&foco=t");
+    expect(cashFlowLink(tx({ type: "transferencia" }))).toBe("/transacoes?aba=caixa&month=2026-11&metric=caixa&foco=t");
   });
 });
 
@@ -76,5 +76,36 @@ describe("budget cycle", () => {
     expect(split.paid.map((r) => r.id)).toEqual(["1"]);
     expect(split.committed.map((r) => r.id)).toEqual(["2"]);
     expect(split.other).toBe(50);
+  });
+});
+
+describe("lançamento in focus", () => {
+  const month = [tx({ id: "rent", name: "Aluguel", value: 1450, fixed: true, recurrence: "mensal", status: "agendado", category_id: "home", category_name: "Moradia" }),
+    tx({ id: "food", value: 300 }), tx({ id: "bus", value: 50 }), tx({ id: "pay", type: "receita", value: 5000 })];
+  const history = [...month, tx({ id: "r9", name: "Aluguel", value: 1450, date: "2026-10-05", fixed: true }), tx({ id: "r8", name: "Aluguel", value: 1400, date: "2026-09-05", fixed: true })];
+  const calendar = { month: "2026-11", income: 0, projected_income: 5000, projected_balance: 1734.53 } as CalendarMonth;
+  const budget = { rows: [{ category_id: "home", name: "Moradia", budget: 1600, spent: 0 }] } as BudgetSummary;
+
+  it("weighs it against the month, its rhythm and its budget", () => {
+    const f = focusFacts(month[0], { today: "2026-11-05", monthRows: month, history, subscriptions: [], calendar, budget, cycle: null });
+    expect(f.rank).toBe(1);
+    expect(f.count).toBe(3);
+    expect(f.share).toBeCloseTo(1450 / 1800);
+    expect(f.impact?.without).toBeCloseTo(3184.53);
+    expect(f.ofIncome).toBeCloseTo(0.29);
+    expect(f.yearly).toBe(17400);
+    expect(f.nextSixMonths).toBe(8700);
+    expect(f.average).toBe(1425);
+    expect(f.vsAverage).toBe(2);
+    expect(f.budget).toMatchObject({ remaining: 150, counted: true });
+    expect(f.perDay).toBe(5.77);
+    expect(f.tenPercentYear).toBe(1740);
+  });
+
+  it("says when the installments end", () => {
+    const tv = tx({ id: "tv", name: "TV", value: 98, installment: true, total_installments: 10, current_installment: 3 });
+    const f = focusFacts(tv, { today: "2026-11-05", monthRows: [tv], history: [tv], subscriptions: [], calendar, budget: null, cycle: null });
+    expect(f.remaining).toEqual({ total: 686, lastMonth: "2027-06" });
+    expect(f.yearly).toBeNull();
   });
 });

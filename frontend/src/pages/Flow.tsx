@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { MonthSelector } from "@/components/dashboard/MonthSelector";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
+import { FocusedTransaction } from "@/components/cashflow/FocusedTransaction";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -57,6 +58,10 @@ export default function Flow({ month: sharedMonth, onMonthChange }: { month?: st
   const [fromMonth, setFromMonth] = useState(addMonth(currentMonth(), -5));
   const [toMonth, setToMonth] = useState(currentMonth());
   const [categoryId, setCategoryId] = useState(params.get("category_id") || "todas");
+  // ?foco=<id>: a lançamento read against its whole month (from its detail, "Ver no Caixa").
+  const [dismissedFocus, setDismissedFocus] = useState<string | null>(null);
+  const focusParam = params.get("foco");
+  const focusId = focusParam && focusParam !== dismissedFocus ? focusParam : null;
   // Opened from a wallet account (or a lançamento's account): the whole screen follows it.
   const [accountId, setAccountId] = useState(params.get("account_id") || "todas");
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, staleTime: 60_000 });
@@ -206,6 +211,7 @@ export default function Flow({ month: sharedMonth, onMonthChange }: { month?: st
         </Card>
       ) : (
         <>
+          {focusId ? <FocusedTransaction id={focusId} monthRows={monthTxQuery.data ?? []} hidden={hidden} onClose={() => setDismissedFocus(focusId)} /> : null}
           {/* The answer of a cash flow first: how the month closes. Then what happened and what is still
               expected; each number selects its tab. */}
           <section className="rounded-2xl border border-border bg-card p-4 sm:p-5" aria-label={`Resumo de ${monthLabel(flow.month)}`}>
