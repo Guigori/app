@@ -1,5 +1,6 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { browserLocalPersistence, getAuth, GoogleAuthProvider, indexedDBLocalPersistence, initializeAuth, type Auth } from "firebase/auth";
+import { isNative } from "./platform";
 import { readFirebaseConfig } from "./firebaseConfig";
 
 const { config, error } = readFirebaseConfig({
@@ -18,7 +19,21 @@ export const firebaseApp = firebaseConfigured
   ? (getApps().length ? getApp() : initializeApp(config))
   : null;
 
-export const firebaseAuth = firebaseApp ? getAuth(firebaseApp) : null;
+// No app nativo (WKWebView em capacitor://localhost) o getAuth() padrão carrega um iframe de
+// popup/redirect no authDomain e pode nunca terminar de iniciar, deixando authStateReady()
+// pendente. Lá iniciamos só com a persistência local, sem o resolvedor de popup: o login por
+// e-mail e senha não precisa dele (o Google nativo entra em outra etapa).
+function createAuth(app: NonNullable<typeof firebaseApp>): Auth {
+  if (!isNative()) return getAuth(app);
+  try {
+    return initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] });
+  } catch {
+    // Já inicializado (recarga em desenvolvimento): reaproveita a instância existente.
+    return getAuth(app);
+  }
+}
+
+export const firebaseAuth = firebaseApp ? createAuth(firebaseApp) : null;
 // The browser never talks to Firestore directly: every read and write goes through the
 // FastAPI server (Admin SDK). Not loading the client SDK keeps ~1 MB out of the app.
 
