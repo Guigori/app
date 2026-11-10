@@ -1,8 +1,10 @@
 import { lazy, Suspense, useDeferredValue, useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useIsRestoring, useRouteState } from "@/lib/routeState";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
-import { ArrowDown, ArrowUp, BellOff, Wallet, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, ChevronRight, Search, Trash2, X } from "lucide-react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { canGoBack } from "@/lib/navigation";
+import { CategoryInsight } from "@/components/transactions/CategoryInsight";
+import { ArrowDown, ArrowLeft, ArrowUp, BellOff, Wallet, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, ChevronRight, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions, fetchTransactionsPage, isTransactionListComplete } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -70,6 +72,11 @@ export default function Transactions() {
   const dialogs = useDialogs();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  // Opened from another screen through a link (a category, a total, a day): offer the way back.
+  const location = useLocation();
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- recomputed per history entry
+  const cameFromLink = useMemo(() => canGoBack() && ["category_id", "metric", "date", "month", "origem", "highlight"].some((k) => searchParams.has(k)), [location.key]);
   const linkedDate = searchParams.get("date");
   const linkedMonth = searchParams.get("month");
   const linkedMetric = searchParams.get("metric");
@@ -396,6 +403,11 @@ export default function Transactions() {
     <div className="relative flex flex-col gap-4 animate-fade-up">
       <div className="grid grid-cols-1 items-start gap-x-3 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto]" data-testid="flow-header-grid">
         <div className="min-w-0 pt-1">
+          {cameFromLink ? (
+            <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="mb-3 size-10 rounded-full border border-border bg-card text-foreground hover:bg-muted" aria-label="Voltar para a tela anterior" title="Voltar" data-testid="flow-back-button">
+              <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+            </Button>
+          ) : null}
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo</h1>
           <p className="mt-1 text-sm text-muted-foreground">O que entrou, saiu e o que vem pela frente.</p>
         </div>
@@ -570,7 +582,15 @@ export default function Transactions() {
         );
       })() : null}
 
-      {categoryId !== "todas" && (flowView === "lista" || (flowView === "categorias" && selectedDonutCategory)) ? (() => {
+      {flowView === "categorias" && selectedDonutCategory && categoryId !== "todas" && periodMode === "month" ? (
+        <CategoryInsight
+          categoryId={categoryId}
+          month={month}
+          monthExpense={scope === "mes" ? calendar?.expense : undefined}
+          onPickMonth={changeMonth}
+          onPickName={(name) => { setSearch(name); setShowSearch(true); }}
+        />
+      ) : categoryId !== "todas" && (flowView === "lista" || (flowView === "categorias" && selectedDonutCategory)) ? (() => {
         const selectedCategory = categories.find((category) => category.id === categoryId);
         const categoryTotal = transactions
           .filter((transaction) => transaction.type === "despesa")
