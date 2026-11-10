@@ -6,7 +6,9 @@ import { applyProposal, undoProposal } from "@/lib/finnApply";
 import { readMemory } from "@/lib/finnMemory";
 import { ProposalCard } from "@/components/ai/ProposalCard";
 import { getRegisterCalc, getRegisterDefault, setRegisterCalc } from "@/lib/registerPreferences";
+import { isLocalMode } from "@/lib/mode";
 import { openRegisterSheet } from "@/lib/registerSheet";
+import { SeriesScopeSheet } from "@/components/transactions/SeriesScopeSheet";
 import { RecordInsight } from "@/components/transactions/RecordInsight";
 import { DatePickerSheet } from "@/components/shared/DatePickerSheet";
 import { KIND_THEME, RegisterSuccess } from "@/components/transactions/RegisterSuccess";
@@ -16,7 +18,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { PendingCapture, Transaction, TransactionInput } from "@/types/finnos";
 import { confirmBody, type CaptureChoice } from "@/lib/pendingCaptures";
-import { confirmPendingCapture, createTransaction, fetchTransactionById, updateTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
+import { editRecurrence, type RecurrenceEditScope, confirmPendingCapture, createTransaction, fetchTransactionById, updateTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getAccountPaymentMethods } from "@/lib/accountPaymentPreferences";
 import { addMonth, formatBRL, isISODate, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
@@ -40,6 +42,8 @@ const MORE_CARD = "rounded-[20px] border border-border/70 bg-card";
 const WALLET_TONES = ["bg-income/15 text-income dark:bg-[#0d2a22] dark:text-[#10b981]", "bg-amber-500/15 text-amber-500 dark:bg-[#2a1a0c] dark:text-[#fb923c]", "bg-sky-500/15 text-sky-500 dark:bg-[#0c2330] dark:text-[#38bdf8]", "bg-pink-500/15 text-pink-500 dark:bg-[#2a1020] dark:text-[#ec4899]"];
 const addDays = (iso: string, n: number) => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
+/** Same day next month (clamped), the next occurrence of a monthly series. */
+const nextMonthlyDate = (iso: string) => { const today = todayISO(); const ref = iso > today ? iso : today; const [y, m] = ref.slice(0, 7).split("-").map(Number); const day = Number(iso.slice(8, 10)); const max = new Date(Date.UTC(y, m + 1, 0)).getUTCDate(); const next = new Date(Date.UTC(y, m, 1)); return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(day, max)).padStart(2, "0")}`; };
 const KIND_OF = (t: Transaction["type"]): Kind => (t === "receita" ? "Receita" : t === "transferencia" ? "Transferência" : "Despesa");
 /** Prototype colours per type: chosen chip, amount and caret (dark values from the prototype). */
 const PROTO_TONE: Record<Kind, { chip: string; text: string; caret: string }> = {
@@ -111,6 +115,9 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [note, setNote] = useState(() => existing?.notes ?? "");
   const [origin, setOrigin] = useState(() => existing?.origin ?? "");
   const [dateOpen, setDateOpen] = useState(false);
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const scopeRef = useRef<RecurrenceEditScope | null>(null);
+  const isSeries = Boolean(existing?.fixed && existing.recurrence_id && !existing.installment && !isLocalMode());
   const [originOpen, setOriginOpen] = useState(false);
   const origins = useQuery({ queryKey: ["origins"], queryFn: fetchOrigins, staleTime: 60_000 });
   const [recurring, setRecurring] = useState(() => Boolean(existing?.fixed));
@@ -121,7 +128,21 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [saveStatus, setSaveStatus] = useState<"synced" | "pending" | null>(null);
   const refreshFinancialData = async () => { await Promise.all(["transactions", "accounts", "dashboard", "cards", "categories", "flow", "calendar"].map(key => queryClient.invalidateQueries({ queryKey: [key] }))); };
   const saveMutation = useMutation({ mutationFn: async (input: TransactionInput): Promise<Transaction> => {
-    if (existing) return updateTransaction(existing.id, { ...input, status: existing.status, installment: existing.installment, total_installments: existing.total_installments, current_installment: existing.current_installment, adjusted_value: existing.adjusted_value, attachment: existing.attachment }, "manual", existing.version);
+    if (existing) {
+      const full: TransactionInput = { ...input, status: existing.status, installment: existing.installment, total_installments: existing.total_installments, current_installment: existing.current_installment, adjusted_value: existing.adjusted_value, attachment: existing.attachment };
+      const scope = scopeRef.current;
+      if (!scope || scope === "esta") return updateTransaction(existing.id, full, "manual", existing.version);
+      // A monthly series: name and value go to the chosen occurrences; anything else stays on this one.
+      const changes: { name?: string; value?: number } = {};
+      if (full.name !== existing.name) changes.name = full.name;
+      if (Math.round(full.value * 100) !== Math.round(existing.value * 100)) changes.value = full.value;
+      const others = full.category_id !== existing.category_id || full.account_id !== existing.account_id || full.date !== existing.date || (full.notes ?? "") !== (existing.notes ?? "") || (full.origin ?? "") !== (existing.origin ?? "") || full.card_id !== existing.card_id;
+      let current = existing;
+      if (others) current = await updateTransaction(existing.id, { ...full, name: existing.name, value: existing.value }, "manual", existing.version);
+      if (!Object.keys(changes).length) return current;
+      const effective = scope === "todas" ? current.date : current.date >= todayISO() ? current.date : nextMonthlyDate(current.date);
+      return editRecurrence(current.id, current.version ?? 1, scope, effective, changes, crypto.randomUUID());
+    }
     if (!capture) return createTransaction(input, "manual");
     // Reviewing an Apple Pay purchase: confirm it with the chosen wallet, then apply any edit to value, name, date or origin.
     const credit = Boolean(input.card_id);
@@ -129,9 +150,11 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     const edited = input.name !== capture.item.name || input.value !== capture.item.value || input.date !== capture.item.date || Boolean(input.origin);
     await queryClient.invalidateQueries({ queryKey: ["pending-captures"] });
     return edited ? updateTransaction(id, { ...input, installment: false, total_installments: null, current_installment: null }, "manual") : fetchTransactionById(id);
-  }, onSuccess: async (transaction) => { setSaveStatus("synced"); await refreshFinancialData(); finishSave(transaction); }, onError: async (error: Error) => { if (error.message.includes("FINNOS_OFFLINE_QUEUED")) { setSaveStatus("pending"); await refreshFinancialData(); finishSave(null); toast.info("Registro salvo neste dispositivo. Sincronização pendente."); return; } toast.error("Não foi possível salvar. O registro não foi confirmado; tente novamente."); } });
+  }, onSettled: () => { scopeRef.current = null; }, onSuccess: async (transaction) => { setSaveStatus("synced"); await refreshFinancialData(); finishSave(transaction); }, onError: async (error: Error) => { if (error.message.includes("FINNOS_OFFLINE_QUEUED")) { setSaveStatus("pending"); await refreshFinancialData(); finishSave(null); toast.info("Registro salvo neste dispositivo. Sincronização pendente."); return; } toast.error("Não foi possível salvar. O registro não foi confirmado; tente novamente."); } });
   const save = () => {
     if (!canSave) return;
+    // Saving an edit to a monthly series asks which months it applies to first.
+    if (isSeries && !scopeRef.current) { setScopeOpen(true); return; }
     const amount = Number(value);
     if (!Number.isFinite(amount) || amount <= 0 || !account || !isISODate(date) || (kind !== "Transferência" && !category) || (kind === "Transferência" && (!destination || destination === account))) return;
     const input: TransactionInput = { name: displayName, value: amount, type: kind === "Despesa" ? "despesa" : kind === "Receita" ? "receita" : "transferencia", status: "pago", date, account_id: account, card_id: kind === "Despesa" ? selectedCardId : null, to_account_id: kind === "Transferência" ? destination : null, category_id: kind === "Transferência" ? null : category, fixed: recurring, recurrence: recurring ? "mensal" : null, installment: kind === "Despesa" && !!selectedCardId && installments > 1, total_installments: kind === "Despesa" && !!selectedCardId && installments > 1 ? installments : null, current_installment: kind === "Despesa" && !!selectedCardId && installments > 1 ? 1 : null, adjusted_value: null, attachment: null, notes: [note.trim(), payment && kind !== "Transferência" ? `Forma de pagamento: ${payment}` : "", project.trim() ? `Projeto: ${project.trim()}` : "", tags.trim() ? `Tags: ${tags.trim()}` : ""].filter(Boolean).join("\n") || null, origin: origin.trim() || null, notify_enabled: reminder };
@@ -306,6 +329,8 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     if (!next && /[+−×÷]/.test(expr)) { const result = evaluateExpression(expr); setExpr(result > 0 ? String(result).replace(".", ",") : ""); }
     setCalc(next); setRegisterCalc(next);
   };
+  const scopeSheet = existing && isSeries ? <SeriesScopeSheet open={scopeOpen} canEditAll={existing.status !== "pago" && existing.date >= todayISO()} otherFields={category !== (existing.category_id ?? "") || account !== existing.account_id || date !== existing.date}
+    accent={kind === "Despesa" ? "#fb7185" : kind === "Receita" ? "#34d399" : "#c4b5fd"} onClose={() => setScopeOpen(false)} onPick={(scope) => { setScopeOpen(false); scopeRef.current = scope; save(); }} /> : null;
   const datePicker = <DatePickerSheet open={dateOpen} value={date} onChange={setDate} onClose={() => setDateOpen(false)} accent={kind === "Despesa" ? "#e11d48" : kind === "Receita" ? "#047857" : "#7c3aed"} />;
   if (done) {
     return <div className={embedded ? "h-full min-h-0 w-full" : "mx-auto h-[min(860px,calc(100dvh-8rem))] w-full max-w-md overflow-hidden rounded-[30px] border border-border bg-background shadow-2xl"}>
@@ -335,7 +360,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
             const Icon = KIND_UI[k].icon;
             const active = kind === k;
             return (
-              <button key={k} type="button" role="radio" aria-checked={active} aria-label={k} disabled={Boolean(capture) && k !== "Despesa"} onClick={() => setKind(k)}
+              <button key={k} type="button" role="radio" aria-checked={active} aria-label={k} disabled={(Boolean(capture) && k !== "Despesa") || Boolean(existing && (existing.invoice_payment || existing.invoice_refund || existing.installment) && KIND_OF(existing.type) !== k)} onClick={() => setKind(k)}
                 className={cn("flex h-[34px] shrink-0 items-center justify-center gap-1.5 rounded-full text-sm font-bold transition-all", active ? cn("px-3", PROTO_TONE[k].chip) : "w-9 text-muted-foreground")}>
                 <Icon size={16} aria-hidden="true" />{active ? <span>{k}</span> : null}
               </button>
@@ -381,6 +406,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           <button type="button" onClick={() => { setKeypadOpen(false); setOriginOpen(true); }} aria-label="Editar origem" data-testid="quick-entry-origin" className="flex h-7 items-center gap-1.5 rounded-full bg-primary/10 px-3 font-medium text-primary dark:bg-[#1d1640] dark:text-[#c4b5fd]"><Tag size={13} aria-hidden="true" />{origin.trim() || (capture || existing?.capture ? "Apple Pay" : "Registro")}</button>
         )}
         {existing && !originOpen ? <span className={cn("flex h-7 items-center gap-1.5 rounded-full px-3 font-medium", existing.status === "pago" ? "bg-income/12 text-income dark:bg-[#0d2a22] dark:text-[#34d399]" : "bg-amber-500/12 text-amber-500")} data-testid="record-status"><Check size={13} aria-hidden="true" />{existing.status === "pago" ? (existing.type === "receita" ? "Recebido" : "Pago") : "Pendente"}</span> : null}
+        {existing && !originOpen && (existing.installment || existing.fixed || existing.invoice_payment || existing.invoice_refund) ? <span className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-sky-500/12 px-3 font-medium text-sky-500 dark:bg-[#0c2330] dark:text-[#38bdf8]" data-testid="record-kind">{existing.installment ? `Parcela ${existing.current_installment ?? 1}/${existing.total_installments ?? "?"}` : existing.invoice_payment ? "Fatura" : existing.invoice_refund ? "Estorno" : "Mensal"}</span> : null}
         {existing && dirty && !originOpen ? <span className="flex h-7 items-center gap-1.5 rounded-full bg-amber-500/12 px-3 font-medium text-amber-500 dark:bg-[#2a1a0c] dark:text-[#fb923c]" data-testid="record-changed"><Pencil size={12} aria-hidden="true" />Alterado</span> : null}
         {originOpen ? (origins.data ?? []).filter((o) => o.label.toLowerCase().includes(origin.trim().toLowerCase()) && o.label !== origin).slice(0, 3).map((o) => (
           <button key={o.label} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setOrigin(o.label); setOriginOpen(false); }} className="shrink-0 rounded-full border border-border px-2.5 py-1 text-muted-foreground">{o.label}</button>
@@ -436,7 +462,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         <button type="button" onClick={() => { setKeypadOpen(false); setDateOpen(true); }} className={cn("h-12 shrink-0 rounded-full bg-muted px-5 text-[15px] font-bold", kind === "Transferência" && "flex-1")} data-testid="quick-entry-date">{dateLabel}</button>
       </div>
 
-      {selectedCard && kind === "Despesa" ? (
+      {selectedCard && kind === "Despesa" && !existing ? (
         <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto [scrollbar-width:none]" role="radiogroup" aria-label="Parcelas" data-testid="quick-entry-installments">
           {[1, 2, 3, 4, 5, 6, 10, 12].map((n) => (
             <button key={n} type="button" role="radio" aria-checked={installments === n} onClick={() => setInstallments(n)} className={cn("h-8 shrink-0 rounded-full px-3 text-[13px] font-semibold tabular-nums transition-colors", installments === n ? "bg-primary text-primary-foreground" : "bg-muted")}>
@@ -462,6 +488,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         {saveMutation.isPending ? "Salvando…" : hint ?? "Salvar"}
       </button>}
       {datePicker}
+      {scopeSheet}
     </div>;
   }
   const pickRow = ({ key, selected, onClick, icon, iconClass, iconStyle, title, sub, testId }: { key: string; selected: boolean; onClick: () => void; icon: React.ReactNode; iconClass?: string; iconStyle?: React.CSSProperties; title: string; sub?: string; testId?: string }) => (

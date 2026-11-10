@@ -57,7 +57,7 @@ jobs:
           exit 1
       - name: Run onboarding and wallet end-to-end tests
         working-directory: tests
-        run: npx playwright test e2e/onboarding.spec.ts e2e/wallet.spec.ts e2e/finance-integration.spec.ts e2e/visual-smoke.spec.ts --project=desktop --project=mobile
+        run: npx playwright test --project=desktop --project=mobile
       - name: Upload browser screenshots and traces
         if: always()
         uses: actions/upload-artifact@v4

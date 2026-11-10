@@ -31,7 +31,7 @@ const progress = {
 };
 
 async function session(page: Page) {
-  await page.addInitScript(() => window.localStorage.removeItem("finnos:mode"));
+  await page.addInitScript(() => { window.localStorage.removeItem("finnos:mode"); window.localStorage.setItem("finnos:notifications-prompt-dismissed-at", String(Date.now())); });
   await page.route("**/api/auth/me", (route) => route.fulfill(json(me)));
   await page.route("**/api/budgets/current", (route) => route.fulfill(json(cycle)));
   await page.route("**/api/budgets/next", (route) => route.fulfill(json(null)));
@@ -54,7 +54,7 @@ test("a budget category lists the lançamentos that used its limit, each opening
   // 80 + 70 in the cycle, 80 + 50 listed: R$ 20 come from fixed series, installments or subscriptions.
   await expect(detail.getByTestId("budget-allocation-other")).toContainText("20,00");
   await detail.getByTestId("allocation-transaction").first().click();
-  const sheet = page.getByTestId("transaction-detail");
+  const sheet = page.getByTestId("record-insight").filter({ visible: true });
   await expect(sheet).toBeVisible();
   await expect(sheet.getByTestId("transaction-detail-budget")).toContainText("ciclo");
   await expect(sheet.getByTestId("transaction-detail-budget")).toContainText("150,00 de R$ 500,00");

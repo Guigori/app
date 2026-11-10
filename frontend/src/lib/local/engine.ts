@@ -51,14 +51,15 @@ import { localCreditEvents, creditsForMonth } from "@/lib/local/competency";
 import { localSubscriptionProjections, subscriptionsInCategory } from "@/lib/local/subscriptionProjection";
 
 /** Sanitized, append-only history. Mirrors the server record_event contract. */
-function localAudit(db: LocalDb, entity: string, action: "created" | "updated" | "deleted",
-  before: { id: string; name?: string; value?: number; monthly_budget?: number; date?: string } | null,
-  after: { id: string; name?: string; value?: number; monthly_budget?: number; date?: string } | null): void {
-  const summary = (item: typeof before) => item ? {
+type AuditItem = { id: string; name?: string; value?: number; monthly_budget?: number; date?: string };
+const AUDIT_FIELDS = ["status", "type", "category_id", "card_id", "account_id", "to_account_id", "origin"] as const;
+function localAudit(db: LocalDb, entity: string, action: "created" | "updated" | "deleted", before: AuditItem | null, after: AuditItem | null): void {
+  const summary = (item: AuditItem | null) => item ? {
     ...(item.name ? { name: item.name } : {}),
     ...(item.date ? { date: item.date } : {}),
     ...(item.value != null ? { value_cents: Math.round(item.value * 100) } : {}),
     ...(item.monthly_budget != null ? { monthly_budget_cents: Math.round(item.monthly_budget * 100) } : {}),
+    ...Object.fromEntries(AUDIT_FIELDS.map((k) => [k, (item as unknown as Record<string, unknown>)[k]]).filter(([, v]) => v != null && v !== "").map(([k, v]) => [k, String(v)])),
   } : null;
   db.audit_events ??= [];
   db.audit_events.push({
@@ -66,6 +67,11 @@ function localAudit(db: LocalDb, entity: string, action: "created" | "updated" |
     summary: `${action}: ${entity}`, created_at: new Date().toISOString(),
     before: summary(before), after: summary(after),
   });
+}
+
+/** One lançamento's recorded changes, newest first. */
+export function localTransactionHistory(id: string) {
+  return { items: [...(readDb().audit_events ?? [])].filter((e) => e.entity === "transactions" && e.entity_id === id).sort((a, b) => b.created_at.localeCompare(a.created_at)) };
 }
 
 export function localFinanceHistory(limit = 50, before?: string) {
@@ -480,6 +486,7 @@ export function localDeleteTransaction(id: string): void {
   const existing = db.transactions.find(t => t.id === id);
   if (existing) assertPurchaseNotSettled(db, existing);
   db.transactions = db.transactions.filter((t) => t.id !== id);
+  if (existing) localAudit(db, "transactions", "deleted", existing, null);
   writeDb(db);
 }
 

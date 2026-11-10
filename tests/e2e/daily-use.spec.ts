@@ -2,7 +2,11 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Local mode with an empty device: nothing here touches a server or real data.
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => window.localStorage.setItem("finnos:mode", "local"));
+  await page.addInitScript(() => {
+    window.localStorage.setItem("finnos:mode", "local");
+    // The notifications invitation is covered by its own test; here it would sit over the screens.
+    window.localStorage.setItem("finnos:notifications-prompt-dismissed-at", String(Date.now()));
+  });
   await page.route("**/api/auth/me", (route) => route.fulfill({
     status: 401, contentType: "application/json",
     body: JSON.stringify({ detail: "Não autenticado." }),
@@ -32,7 +36,7 @@ test("quick entry: typed on the keyboard, saved and listed in Fluxo", async ({ p
   await expect(page.getByTestId("quick-entry")).toBeVisible();
   for (const key of ["1", "2", ",", "5", "+", "7"]) await page.keyboard.press(key);
   await expect(page.getByTestId("quick-entry-amount")).toHaveText("R$ 19,50");
-  await page.getByRole("textbox", { name: "Nota" }).fill("Café teste");
+  await page.getByRole("textbox", { name: "Nome" }).fill("Café teste");
   await page.getByRole("radiogroup", { name: "Categoria" }).getByRole("radio").nth(1).click();
   await page.getByTestId("quick-entry-save").click();
   await expect(page.getByRole("status").filter({ hasText: "Salvo" })).toBeVisible();
@@ -46,21 +50,32 @@ test("tapping a lançamento explains it, and editing is one action inside", asyn
   await expect(page.getByTestId("quick-entry")).toBeVisible();
   for (const key of ["4", "2"]) await page.keyboard.press(key);
   await expect(page.getByTestId("quick-entry-amount")).toHaveText("R$ 42");
-  await page.getByRole("textbox", { name: "Nota" }).fill("Detalhe teste");
+  await page.getByRole("textbox", { name: "Nome" }).fill("Detalhe teste");
   await page.getByRole("radiogroup", { name: "Categoria" }).getByRole("radio").nth(1).click();
   await page.getByTestId("quick-entry-save").click();
   await expect(page.getByRole("status").filter({ hasText: "Salvo" })).toBeVisible();
   await page.goto("/transacoes");
   await page.locator("text=Detalhe teste >> visible=true").first().click();
-  const detail = page.getByTestId("transaction-detail");
-  await expect(detail).toBeVisible();
-  await expect(detail.getByTestId("transaction-detail-value")).toHaveText("-R$ 42,00");
-  await expect(detail.getByTestId("transaction-detail-path")).toContainText("Conta Teste");
-  await expect(detail.getByTestId("transaction-detail-rhythm")).toContainText("avulso");
-  await expect(detail.getByTestId("transaction-detail-cashflow")).toHaveAttribute("href", /\/transacoes\?aba=caixa&month=\d{4}-\d{2}&metric=despesas&foco=/);
-  await detail.getByTestId("transaction-detail-edit").click();
-  await expect(detail).toBeHidden();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  // The saved lançamento opens in the register screen, with its impact and receipt below.
+  const record = page.getByTestId("record-insight").filter({ visible: true });
+  await expect(record).toBeVisible();
+  await expect(page.getByTestId("quick-entry-amount").filter({ visible: true })).toHaveText("R$ 42");
+  await expect(record.getByTestId("transaction-detail-receipt")).toContainText("Conta Teste");
+  await expect(record).toContainText("Avulso");
+  await expect(record.getByTestId("transaction-detail-cashflow")).toHaveAttribute("href", /\/transacoes\?aba=caixa&month=\d{4}-\d{2}&metric=despesas&foco=/);
+  // Editing is the same screen: a change is marked, the ✓ saves it and the history keeps it.
+  await page.getByRole("textbox", { name: "Nome" }).filter({ visible: true }).fill("Detalhe editado");
+  await expect(page.getByTestId("record-changed").filter({ visible: true })).toBeVisible();
+  await page.getByRole("button", { name: "Salvar registro" }).filter({ visible: true }).click();
+  await expect(page.getByTestId("register-success").filter({ visible: true })).toBeVisible();
+  await page.getByTestId("register-view").filter({ visible: true }).click();
+  const again = page.getByTestId("record-insight").filter({ visible: true });
+  await again.getByTestId("record-history-open").click();
+  const history = page.getByTestId("record-history");
+  await expect(history.getByTestId("record-history-item")).toHaveCount(2);
+  await expect(history).toContainText("Nome alterado");
+  await expect(history).toContainText("Detalhe editado");
+  await expect(history).toContainText("Lançamento criado");
 });
 
 test("Ver no Caixa opens the month with the lançamento in focus", async ({ page }) => {
@@ -69,13 +84,13 @@ test("Ver no Caixa opens the month with the lançamento in focus", async ({ page
   await expect(page.getByTestId("quick-entry")).toBeVisible();
   for (const key of ["4", "2"]) await page.keyboard.press(key);
   await expect(page.getByTestId("quick-entry-amount")).toHaveText("R$ 42");
-  await page.getByRole("textbox", { name: "Nota" }).fill("Foco teste");
+  await page.getByRole("textbox", { name: "Nome" }).fill("Foco teste");
   await page.getByRole("radiogroup", { name: "Categoria" }).getByRole("radio").nth(1).click();
   await page.getByTestId("quick-entry-save").click();
   await expect(page.getByRole("status").filter({ hasText: "Salvo" })).toBeVisible();
   await page.goto("/transacoes");
   await page.locator("text=Foco teste >> visible=true").first().click();
-  await page.getByTestId("transaction-detail").getByTestId("transaction-detail-cashflow").click();
+  await page.getByTestId("record-insight").filter({ visible: true }).getByTestId("transaction-detail-cashflow").click();
   const focus = page.getByTestId("focus-card");
   await expect(focus).toContainText("Em foco: Foco teste");
   await expect(focus.getByTestId("focus-weight")).toContainText("100%");
