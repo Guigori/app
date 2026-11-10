@@ -1,9 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, Plus, X } from "lucide-react";
+import { RegisterFab } from "@/components/layout/RegisterFab";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { cn } from "@/lib/utils";
 import type { RegisterController } from "@/pages/SmartRegister";
 const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
 
@@ -16,7 +15,6 @@ export function QuickActionFAB() {
   const setOpen = (next: boolean) => { setOpenRaw(next); if (!next) { setController(null); setDiscardOpen(false); } };
   const dirty = open && controller?.view === "entry" && controller.dirty;
   const requestClose = () => { if (dirty) setDiscardOpen(true); else setOpen(false); };
-  const kindBg = controller?.kind === "Despesa" ? "bg-expense" : controller?.kind === "Receita" ? "bg-income" : "bg-primary";
 
   useEffect(() => {
     if (!open) return;
@@ -54,18 +52,9 @@ export function QuickActionFAB() {
           </>
         ) : null}
       </AnimatePresence>
-      <div className={cn("fixed bottom-4 right-4 z-[41] hidden dashboard:md:bottom-8 dashboard:md:right-6 dashboard:block", open && controller?.view === "success" && "invisible pointer-events-none")}>
-        {dirty ? (
-          <button type="button" onClick={() => setDiscardOpen(true)} aria-label="Descartar registro" data-testid="quick-action-discard"
-            className="absolute -left-1.5 -top-1.5 z-10 grid size-6 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-md">
-            <X className="size-3.5" aria-hidden="true" />
-          </button>
-        ) : null}
-        <button type="button" onClick={onClick}
-          className={cn("flex h-12 w-12 items-center justify-center rounded-full text-primary-foreground shadow-lg shadow-primary/30 transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-0.5 hover:shadow-xl active:scale-95", dirty ? kindBg : "bg-primary")}
-          aria-label={dirty ? "Salvar registro" : open ? "Fechar Registro Inteligente" : "Abrir Registro Inteligente"} data-testid="quick-action-fab">
-          {dirty ? <Check className="h-6 w-6" aria-hidden="true" /> : open ? <X className="h-6 w-6" aria-hidden="true" /> : <Plus className="h-6 w-6" aria-hidden="true" />}
-        </button>
+      <div className="fixed bottom-4 right-4 z-[41] hidden dashboard:md:bottom-8 dashboard:md:right-6 dashboard:block">
+        <RegisterFab size="md" open={open} dirty={Boolean(dirty)} kind={controller?.kind ?? "Despesa"} success={open && controller?.view === "success"}
+          testId="quick-action-fab" discardTestId="quick-action-discard" onMain={onClick} onDiscard={() => setDiscardOpen(true)} />
       </div>
       <ConfirmDialog open={discardOpen} onOpenChange={setDiscardOpen} title="Descartar este registro?" description="O que você preencheu será perdido." confirmLabel="Descartar e fechar" destructive onConfirm={() => setOpen(false)} />
     </>
