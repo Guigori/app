@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readyShortcutUrl, AUTOMATION_FIELDS, bearerValue, codeFromConnection, pendingEndpoint } from "@/lib/shortcutLinks";
+import { connectShortcutUrl, readyShortcutUrl, SHORTCUT_NAME, AUTOMATION_FIELDS, bearerValue, codeFromConnection, pendingEndpoint } from "@/lib/shortcutLinks";
 
 describe("the ready-made shortcut", () => {
   it("is offered only for a real iCloud shortcut link", () => {
@@ -7,6 +7,13 @@ describe("the ready-made shortcut", () => {
     for (const bad of [undefined, "", "https://evil.example/shortcuts/abc", "http://www.icloud.com/shortcuts/abc", "https://www.icloud.com/shortcuts/abc?x=1"]) {
       expect(readyShortcutUrl(bad)).toBeNull();
     }
+  });
+});
+
+describe("connecting this iPhone", () => {
+  it("runs the installed shortcut by name with the code as text input", () => {
+    expect(SHORTCUT_NAME).toBe("FINNOS Apple Pay");
+    expect(connectShortcutUrl("fns_ab+c/d")).toBe("shortcuts://run-shortcut?name=FINNOS%20Apple%20Pay&input=text&text=fns_ab%2Bc%2Fd");
   });
 });
 

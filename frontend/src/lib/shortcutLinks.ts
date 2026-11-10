@@ -7,12 +7,24 @@ const ICLOUD_SHORTCUT = /^https:\/\/www\.icloud\.com\/shortcuts\/[A-Za-z0-9]+$/;
  * through iCloud and set in VITE_SHORTCUT_ICLOUD_URL. Null when not set, or when the value is not
  * an icloud.com shortcut link, so a typo never sends people somewhere else.
  *
- * The shortcut must ASK for the connection code on import: a link with someone's code inside
- * would send everyone's purchases to that account.
+ * The shortcut is the same for everyone and carries NO code: each person's code reaches their
+ * own iPhone through connectShortcutUrl, never through the shared link.
  */
 export function readyShortcutUrl(value?: string): string | null {
   const link = (value ?? "").trim();
   return ICLOUD_SHORTCUT.test(link) ? link : null;
+}
+
+/** The official shortcut's exact name: Shortcuts runs it by name. */
+export const SHORTCUT_NAME = "FINNOS Apple Pay";
+
+/**
+ * Runs the person's installed FINNOS shortcut with their fresh code as input. The shortcut sees
+ * a text starting with "fns_", saves it on the iPhone and answers "iPhone conectado". The code
+ * never shows on screen and is never copied.
+ */
+export function connectShortcutUrl(code: string, name: string = SHORTCUT_NAME): string {
+  return `shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${encodeURIComponent(code)}`;
 }
 
 /** Opens the Shortcuts app itself. */
