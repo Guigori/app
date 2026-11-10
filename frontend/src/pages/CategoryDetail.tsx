@@ -134,19 +134,7 @@ export default function CategoryDetail() {
           </ul>
         )}
       </section>
-      {/* The other screens about this category, one tap away. */}
-      <nav className="grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label="Mais sobre esta categoria">
-        {[
-          [`/transacoes?month=${month}&category_id=${encodeURIComponent(categoryId)}`, "Todos os lançamentos", "Fluxo filtrado"],
-          ["/orcamento", "Orçamento", "Limites do ciclo"],
-          [`/analise/categorias?month=${month}`, "Análise de categorias", "Comparar com as outras"],
-        ].map(([to, title, hint]) => (
-          <Link key={to} to={to} className="flex h-14 items-center justify-between rounded-full border border-border bg-card px-5">
-            <span className="min-w-0"><span className="block text-[15px] font-semibold">{title}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
-            <ChevronRight size={17} className="shrink-0 text-muted-foreground" />
-          </Link>
-        ))}
-      </nav>
+      <Link to={`/transacoes?category_id=${encodeURIComponent(categoryId)}`} className="flex h-12 items-center justify-between rounded-full border border-border bg-card px-5 text-[15px] font-semibold">Ver tudo em Fluxo<ChevronRight size={17} className="text-muted-foreground" /></Link>
     </div>
   );
 }
