@@ -6,11 +6,13 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { ArrowDownLeft, ArrowUpRight, Equal } from "lucide-react";
-import { fetchCalendar, fetchTrends } from "@/lib/data";
+import { fetchBalanceHistory, fetchCalendar, fetchTrends } from "@/lib/data";
 import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatHiddenBRL, todayISO } from "@/lib/format";
 import { buildMonthlyCumulativeRows, defaultDailyTooltipIndex, selectVisibleDailyRows } from "@/lib/homeChart";
 import { isThisMonth, pinIndex } from "@/lib/chartPin";
+import { buildProjectionRows, PROJECTION_KEYS, type ProjectionKey } from "@/lib/homeProjection";
+import { pickMany, useChartPreference } from "@/lib/chartPreferences";
 import type { MetricKind } from "@/types/finnos";
 import type { FinnosView, FinnosSeries } from "@/components/shared/FinnosVerticalMenu";
 
@@ -39,8 +41,6 @@ const METRIC_UI = {
   Resultado: { icon: Equal, color: "var(--finnos-purple)", soft: "bg-violet-500/10 text-violet-400" },
 } as const;
 
-type ProjectionKey = "balance" | "income" | "expense";
-const PROJECTION_KEYS: ProjectionKey[] = ["balance", "income", "expense"];
 const PROJECTION_UI: Record<ProjectionKey, { label: string; color: string }> = {
   balance: { label: "Saldo", color: "var(--finnos-purple-live)" },
   income: { label: "Receitas", color: "var(--income)" },
@@ -67,23 +67,34 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
   const showExpense = menuSeries.includes("Despesas");
   const showResult = menuSeries.includes("Resultado");
   // Several series can be on at once; none selected means all of them.
-  const [selectedMetrics, setSelectedMetrics] = useState<Array<"Receitas" | "Despesas" | "Resultado">>([]);
+  // Kept with the chart preferences, so the series stay as the person left them.
+  const [selectedMetrics, setSelectedMetricsValue] = useChartPreference<Array<"Receitas" | "Despesas" | "Resultado">>(
+    "metrics", (v) => pickMany(v, ["Receitas", "Despesas", "Resultado"] as const, [], true));
   const selectedMetric = selectedMetrics.length === 1 ? selectedMetrics[0] : null;
-  const [projectionSeries, setProjectionSeries] = useState<ProjectionKey[]>(["balance"]);
+  const [projectionSeries, setProjectionSeriesValue] = useChartPreference<ProjectionKey[]>(
+    "projection", (v) => pickMany(v, PROJECTION_KEYS, ["balance"]));
   const [projectionMonth, setProjectionMonth] = useState(month);
   const [projectionDragX, setProjectionDragX] = useState<number | null>(null);
   const chartScrollerRef = useRef<HTMLDivElement | null>(null);
 
   const daily = period === "7d" || period === "1m";
   const calendarQuery = useQuery({
-    queryKey: ["home-financial-calendar", view === "projection" ? projectionMonth : month],
+    // Under "calendar": refreshed with every new or edited lançamento, like the other screens.
+    queryKey: ["calendar", "home", view === "projection" ? projectionMonth : month],
     queryFn: () => fetchCalendar(view === "projection" ? projectionMonth : month),
     enabled: daily,
   });
   const trendsQuery = useQuery({
-    queryKey: ["home-financial-trends", period, month],
+    queryKey: ["trends", "home", period, month],
     queryFn: () => fetchTrends(period === "1y" ? 12 : period === "3m" ? 3 : 6, month),
     enabled: !daily,
+  });
+
+  // The real money in the accounts day by day (same rule as Saldo total), for the Saldo line.
+  const historyQuery = useQuery({
+    queryKey: ["dashboard", "balance-history", projectionMonth],
+    queryFn: () => fetchBalanceHistory(projectionMonth),
+    enabled: view === "projection",
   });
 
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
@@ -107,52 +118,17 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
     [chartData, daily, month, trendsQuery.data],
   );
 
-  const projectionData = useMemo(() => {
-    const days = calendarQuery.data?.days ?? [];
-    const activeMonth = projectionMonth;
-    const [year, monthNumber] = activeMonth.split("-").map(Number);
-    const daysInMonth = new Date(year, monthNumber, 0).getDate();
-    const today = todayISO();
-    const currentMonth = today.slice(0, 7);
-    const cutoffDay = activeMonth === currentMonth ? Math.min(Number(today.slice(8, 10)), daysInMonth) : activeMonth < currentMonth ? daysInMonth : 0;
-    const byDate = new Map(days.map((day) => [day.date, day]));
-    let realisedIncome = 0;
-    let realisedExpense = 0;
-    for (let n = 1; n <= cutoffDay; n += 1) {
-      const day = byDate.get(`${activeMonth}-${String(n).padStart(2, "0")}`);
-      realisedIncome += day?.income ?? 0;
-      realisedExpense += day?.expense ?? 0;
-    }
-    const openingBalance = total - (realisedIncome - realisedExpense);
-    let actualIncome = 0;
-    let actualExpense = 0;
-    let forecastIncome = realisedIncome;
-    let forecastExpense = realisedExpense;
-    return Array.from({ length: daysInMonth }, (_, index) => {
-      const n = index + 1;
-      const day = byDate.get(`${activeMonth}-${String(n).padStart(2, "0")}`);
-      if (n <= cutoffDay) {
-        actualIncome += day?.income ?? 0;
-        actualExpense += day?.expense ?? 0;
-      }
-      if (n > cutoffDay) {
-        forecastIncome += day?.projected_income ?? 0;
-        forecastExpense += day?.projected_expense ?? 0;
-      }
-      const row: Record<string, number | string | null> = { label: String(n).padStart(2, "0"), estimate: n > cutoffDay ? 1 : 0 };
-      const values: Record<ProjectionKey, [number, number]> = {
-        balance: [openingBalance + actualIncome - actualExpense, total + (forecastIncome - realisedIncome) - (forecastExpense - realisedExpense)],
-        income: [actualIncome, forecastIncome],
-        expense: [actualExpense, forecastExpense],
-      };
-      for (const key of PROJECTION_KEYS) {
-        const [actualValue, forecastValue] = values[key];
-        row[`${key}Actual`] = n <= cutoffDay ? Math.round(actualValue * 100) / 100 : null;
-        row[`${key}Forecast`] = n >= cutoffDay && cutoffDay > 0 ? Math.round((n === cutoffDay ? actualValue : forecastValue) * 100) / 100 : null;
-      }
-      return row;
-    });
-  }, [calendarQuery.data?.days, projectionMonth, total]);
+  const projectionData = useMemo(
+    () => buildProjectionRows({
+      month: projectionMonth,
+      days: calendarQuery.data?.days ?? [],
+      // An older server without the history falls back to today's total.
+      history: historyQuery.isError ? undefined : historyQuery.data,
+      total,
+      today: todayISO(),
+    }),
+    [calendarQuery.data?.days, historyQuery.data, historyQuery.isError, projectionMonth, total],
+  );
 
   useEffect(() => {
     if (view !== "bars" || !daily || !chartScrollerRef.current) return;
@@ -183,17 +159,17 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
   ].filter((item) => item.value > 0);
   const selectedPieItem = selectedMetric ? pieData.find((item) => item.name === selectedMetric) ?? null : null;
   const metricVisible = (name: "Receitas" | "Despesas" | "Resultado") => selectedMetrics.length === 0 || selectedMetrics.includes(name);
-  const toggleMetric = (name: "Receitas" | "Despesas" | "Resultado") => setSelectedMetrics((current) => current.includes(name) ? current.filter((x) => x !== name) : [...current, name]);
+  const toggleMetric = (name: "Receitas" | "Despesas" | "Resultado") => setSelectedMetricsValue(selectedMetrics.includes(name) ? selectedMetrics.filter((x) => x !== name) : [...selectedMetrics, name]);
 
   const tooltipStyle = {
     background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 16,
     color: "var(--popover-foreground)", boxShadow: "0 16px 40px rgba(0,0,0,.18)", fontSize: 12,
   };
-  const isLoading = daily ? calendarQuery.isPending : trendsQuery.isPending;
+  const isLoading = daily ? calendarQuery.isPending || (view === "projection" && historyQuery.isPending) : trendsQuery.isPending;
   const periodLabel = menuInterval;
 
   const projectionColor = PROJECTION_UI[projectionSeries[0] ?? "balance"].color;
-  const toggleProjection = (key: ProjectionKey) => setProjectionSeries((current) => current.includes(key) ? (current.length > 1 ? current.filter((x) => x !== key) : current) : [...current, key]);
+  const toggleProjection = (key: ProjectionKey) => setProjectionSeriesValue(projectionSeries.includes(key) ? (projectionSeries.length > 1 ? projectionSeries.filter((x) => x !== key) : projectionSeries) : [...projectionSeries, key]);
   // The tooltip starts on today (the last day of a past month, the first of a future one).
   const todayLabel = projectionMonth === todayISO().slice(0, 7) ? todayISO().slice(8, 10) : projectionMonth < todayISO().slice(0, 7) ? String(projectionData.at(-1)?.label) : "01";
   const projectionTooltipIndex = pinIndex(projectionData, (row) => row.label === todayLabel);
@@ -297,7 +273,7 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
         </div>
       ) : view === "pie" ? (
         <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 py-1 sm:min-h-[270px] sm:flex-row sm:gap-10 sm:py-2">
-          <div className="relative h-44 w-44 shrink-0 sm:h-48 sm:w-48" onClick={(event) => { if (event.target === event.currentTarget) setSelectedMetrics([]); }}>
+          <div className="relative h-44 w-44 shrink-0 sm:h-48 sm:w-48" onClick={(event) => { if (event.target === event.currentTarget) setSelectedMetricsValue([]); }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => money(value)} />
@@ -375,7 +351,7 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs" role="group" aria-label="Filtrar série do gráfico">
             <button
               type="button"
-              onClick={() => setSelectedMetrics([])}
+              onClick={() => setSelectedMetricsValue([])}
               className={`rounded-full border px-3 py-1.5 font-medium transition-colors ${selectedMetrics.length === 0 ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"}`}
             >
               Todos

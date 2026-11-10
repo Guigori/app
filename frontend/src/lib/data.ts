@@ -51,6 +51,7 @@ import {
   localUpdateSubscription,
   localDeleteSubscription,
   localCalendar,
+  localBalanceHistory,
   type LocalTxFilters,
 } from "@/lib/local/engine";
 import type {
@@ -70,6 +71,7 @@ import type {
   BudgetSuggestion,
   BudgetCycle,
   BudgetCycleProgress,
+  BalanceHistory,
   CalendarMonth,
   CardInput,
   CreditCard,
@@ -261,6 +263,12 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
     total_income: base.total_income + series.reduce((sum,p,i)=>sum + (p.income-base.series[i].income),0),
     total_expense: base.total_expense + series.reduce((sum,p,i)=>sum + (p.expense-base.series[i].expense),0),
     total_net: base.total_net + series.reduce((sum,p,i)=>sum + (p.net-base.series[i].net),0) };
+}
+
+/** Saldo das contas dia a dia no mês (a linha "Saldo" do gráfico do Início). */
+export async function fetchBalanceHistory(month: string): Promise<BalanceHistory> {
+  if (isLocalMode()) return localBalanceHistory(month);
+  return cachedFetch(`balance-history:${month}`, () => apiGet<BalanceHistory>(`/analytics/balance-history?month=${month}`));
 }
 
 export async function fetchCalendar(month: string, categoryId?: string): Promise<CalendarMonth> {

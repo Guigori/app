@@ -14,6 +14,7 @@ import type {
   CategoryGroup,
   CategoryInput,
   CategorySlice,
+  BalanceHistory,
   CalendarMonth,
   DayFlow,
   PlannedCharge,
@@ -957,6 +958,30 @@ export function localFlow(params: FlowParams): Flow {
     categories,
     upcoming,
   };
+}
+
+/** Account balance at the end of each real day of a month — mirrors backend cash_history. */
+export function localBalanceHistory(month: string): BalanceHistory {
+  const db = readDb();
+  const [year, monthNumber] = month.split("-").map(Number);
+  const last = `${month}-${String(new Date(year, monthNumber, 0).getDate()).padStart(2, "0")}`;
+  const today = todayISO();
+  const cap = today < last ? today : last;
+  const opening = db.accounts.reduce((sum, a) => sum + a.initial_balance, 0);
+  const balanceOn = (day: string) => round2(db.transactions.reduce(
+    (sum, tx) => sum + balanceEffects(tx, day).reduce((s, [, amount]) => s + amount, 0), opening));
+  const first = `${month}-01`;
+  if (cap < first) {
+    const now = balanceOn(today);
+    return { month, opening_balance: now, days: [], balance: now };
+  }
+  const before = new Date(year, monthNumber - 1, 0);
+  const days: BalanceHistory["days"] = [];
+  for (let n = 1; `${month}-${String(n).padStart(2, "0")}` <= cap; n += 1) {
+    const date = `${month}-${String(n).padStart(2, "0")}`;
+    days.push({ date, balance: balanceOn(date) });
+  }
+  return { month, opening_balance: balanceOn(toLocalISO(before)), days, balance: days.at(-1)?.balance ?? 0 };
 }
 
 /** Per-day entradas/saídas of a month — mirrors backend calendar_month(). */

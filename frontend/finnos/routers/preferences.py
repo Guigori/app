@@ -14,7 +14,9 @@ from finnos.routers.auth import require_user
 
 router = APIRouter(prefix="/preferences", tags=["preferences"])
 
-ALLOWED = {"navigation", "home", "register_default", "finn_memory"}
+# chart: how the Home chart was left (view, period, series); theme: light/dark/system.
+ALLOWED = {"navigation", "home", "register_default", "finn_memory", "chart", "theme"}
+THEMES = {"light", "dark", "system"}
 MAX_VALUE = 4000
 # FINNOS IA memory (aliases, notes, topics) is capped on the client; it needs more room than a layout.
 MAX_BY_KEY = {"finn_memory": 12000}
@@ -42,6 +44,8 @@ async def save_preferences(payload: PreferencesIn, user=Depends(require_user)):
         raise HTTPException(422, "Preferência desconhecida.")
     if any(len(v) > MAX_BY_KEY.get(k, MAX_VALUE) for k, v in payload.values.items()):
         raise HTTPException(422, "Preferência grande demais.")
+    if "theme" in payload.values and payload.values["theme"] not in THEMES:
+        raise HTTPException(422, "Tema inválido.")
     data = {"values": payload.values, "updated_at": datetime.now(timezone.utc).isoformat()}
     await run_in_threadpool(lambda: _doc(user["id"]).set(data, merge=True))
     return data

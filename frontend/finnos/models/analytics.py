@@ -135,6 +135,19 @@ class PlannedCharge(BaseModel):
     category_id: Optional[str] = None
 
 
+class BalanceDay(BaseModel):
+    date: str
+    balance: Money
+
+
+class BalanceHistoryOut(BaseModel):
+    """Money in the accounts at the end of each real day of the month (same rule as Saldo total)."""
+    month: str
+    opening_balance: Money
+    days: List[BalanceDay]
+    balance: Money
+
+
 class CalendarOut(BaseModel):
     month: str
     days: List[DayFlow]

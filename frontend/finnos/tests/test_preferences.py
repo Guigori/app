@@ -52,3 +52,23 @@ def test_finn_memory_has_room_but_is_still_bounded(monkeypatch):
     with pytest.raises(HTTPException) as error:
         asyncio.run(preferences.save_preferences(preferences.PreferencesIn(values={"finn_memory": "x" * 13000}), user=me))
     assert error.value.status_code == 422
+
+
+def test_chart_and_theme_are_kept_and_an_unknown_theme_is_refused(monkeypatch):
+    docs = {}
+
+    class Doc:
+        def get(self):
+            return SimpleNamespace(exists="u1" in docs, to_dict=lambda: docs.get("u1"))
+
+        def set(self, data, merge=False):
+            docs["u1"] = {**docs.get("u1", {}), **data}
+
+    monkeypatch.setattr(preferences, "_doc", lambda uid: Doc())
+    monkeypatch.setattr(preferences, "run_in_threadpool", lambda fn: asyncio.sleep(0, result=fn()))
+    me = {"id": "u1"}
+    values = {"chart": '{"view":"Projeção","projection":["balance","income"]}', "theme": "dark"}
+    asyncio.run(preferences.save_preferences(preferences.PreferencesIn(values=values), user=me))
+    assert asyncio.run(preferences.read_preferences(user=me))["values"] == values
+    with pytest.raises(HTTPException):
+        asyncio.run(preferences.save_preferences(preferences.PreferencesIn(values={"theme": "roxo"}), user=me))

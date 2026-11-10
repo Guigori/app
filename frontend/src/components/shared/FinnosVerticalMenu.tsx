@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { CHART_RANGES } from "@/lib/chartPreferences";
 import { createPortal } from "react-dom";
 import { CalendarDays, Eye, EyeOff, SlidersHorizontal, LayoutGrid, ChartLine, ChartPie, ChartColumn, ChartNoAxesCombined, ChevronLeft, ChevronRight, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,7 +26,7 @@ const YEARS = Array.from({length: 61},(_,i)=>2000+i);
 const VIEWS: {name:FinnosView; Icon: typeof LayoutGrid}[] = [
   {name:"Cards",Icon:LayoutGrid},{name:"Projeção",Icon:ChartNoAxesCombined},{name:"Linhas",Icon:ChartLine},{name:"Pizza",Icon:ChartPie},{name:"Barras",Icon:ChartColumn}
 ];
-const RANGES = ["7 dias","1 mês","3 meses","6 meses","1 ano"];
+const RANGES = CHART_RANGES;
 const ALL_SERIES: FinnosSeries[] = ["Receitas","Despesas","Resultado"];
 export function FinnosVerticalMenu({month,onMonthChange,hidden,onToggleHidden,view="Cards",onViewChange,interval="1 mês",onIntervalChange,series=ALL_SERIES,onSeriesChange,showPeriod=true,showVisualization=true,className}:FinnosVerticalMenuProps) {
   const [expanded,setExpanded]=useState(false);

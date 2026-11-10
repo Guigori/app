@@ -4,7 +4,7 @@ from finnos.lib.money import D, installment_portion, installment_schedule, quant
 from typing import Annotated, List, Optional
 from fastapi import APIRouter, Depends, Query
 from finnos.lib.db import db
-from finnos.lib.account_balances import finance_revision
+from finnos.lib.account_balances import finance_revision, stream_cash_history
 from finnos.lib.financial_summaries import stream_financial_window
 from finnos.lib.projection_reads import read_projection_history
 from finnos.lib.dates import today_iso
@@ -15,6 +15,7 @@ from finnos.lib.category_pace import monthly_pace
 from finnos.lib.competency import monthly_competency, credit_events, positive_category_slices
 from finnos.lib.transaction_amount import occurrence_amount as _amount
 from finnos.models.analytics import (
+    BalanceHistoryOut,
     BudgetRow,
     BudgetSummary,
     CalendarOut,
@@ -339,6 +340,23 @@ async def flow(
         categories=breakdown,
         upcoming=upcoming,
     )
+
+
+@router.get("/balance-history", response_model=BalanceHistoryOut)
+async def balance_history(
+    month: Optional[str] = Query(default=None, pattern="^\\d{4}-\\d{2}$"),
+    user: dict = Depends(require_user),
+) -> BalanceHistoryOut:
+    """Saldo das contas dia a dia no mês: a linha "Saldo" do gráfico do Início.
+
+    Same rule as "Saldo total" (balance_effects): card purchases count when the invoice
+    is paid, transfers between own accounts cancel out, pending entries never count.
+    """
+    today = today_iso()
+    m = month or today[:7]
+    revision = await finance_revision(user["id"])
+    accounts = await db.accounts.find({"user_id": user["id"]}).to_list(500)
+    return BalanceHistoryOut(**await stream_cash_history(user["id"], accounts, m, today, revision))
 
 
 @router.get("/calendar", response_model=CalendarOut)
