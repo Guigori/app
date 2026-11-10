@@ -48,6 +48,13 @@ async def _cards_by_id(user_id: str) -> dict:
     return {c["id"]: c for c in cards}
 
 
+def capture_origin(doc: dict):
+    """"apple_pay" / "apple_pay_auto" for lançamentos that came from the Apple Pay queue."""
+    if doc.get("source") != "ios_shortcut" or not str(doc.get("operation_id") or "").startswith("pending:"):
+        return None
+    return "apple_pay_auto" if doc.get("capture_auto") else "apple_pay"
+
+
 def enrich_transaction(
     doc: dict,
     accounts_by_id: dict,
@@ -89,6 +96,8 @@ def enrich_transaction(
         attachment=doc.get("attachment"),
         notes=doc.get("notes"),
         notify_enabled=doc.get("notify_enabled", True),
+        capture=capture_origin(doc),
+        capture_unusual=bool(doc.get("capture_unusual")),
         created_at=aware(doc.get("created_at")) or datetime.now(timezone.utc),
     )
 

@@ -112,6 +112,11 @@ class TransactionOut(BaseModel):
     attachment: Optional[str] = None
     notes: Optional[str] = None
     notify_enabled: bool = True
+    # Where it came from when it was not typed in the app: "apple_pay" (a purchase reviewed from
+    # the Apple Pay queue) or "apple_pay_auto" (registered automatically).
+    capture: Optional[Literal["apple_pay", "apple_pay_auto"]] = None
+    # Registered automatically although far above the merchant's usual value.
+    capture_unusual: bool = False
     created_at: datetime
 
 

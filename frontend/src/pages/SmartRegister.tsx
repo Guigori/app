@@ -5,7 +5,6 @@ import { parseReceiptText, parseRegisterText } from "@/lib/registerParsing";
 import { registerProposal, type Proposal, type ProposalState, type ProposedEntry } from "@/lib/finnActions";
 import { applyProposal, undoProposal } from "@/lib/finnApply";
 import { readMemory } from "@/lib/finnMemory";
-import { readRegisterLink } from "@/lib/registerLink";
 import { ProposalCard } from "@/components/ai/ProposalCard";
 import { TransferPreview } from "@/components/transactions/TransferPreview";
 import { getRegisterDefault } from "@/lib/registerPreferences";
@@ -152,28 +151,6 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
     }
     applyParsed(parseRegisterText(source, { accounts, categories, today: todayISO() }));
   };
-  // Opened from Apple Shortcuts or the Wallet automation: understand the sentence once the wallet
-  // has loaded, then clear the address so a reload does not register it again.
-  // A Shortcut may reuse the open tab, changing only the "#": listen for that too (page only, not the sheet).
-  const [linkHash, setLinkHash] = useState(() => (embedded ? "" : window.location.hash));
-  useEffect(() => {
-    if (embedded) return;
-    const onHash = () => setLinkHash(window.location.hash);
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, [embedded]);
-  useEffect(() => {
-    if (!linkHash || !accountsQuery.isSuccess || !categoriesQuery.isSuccess) return;
-    const link = readRegisterLink(linkHash);
-    setLinkHash("");
-    if (!link) return;
-    window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
-    setText(link.sentence);
-    setRecognized(null);
-    setHistory([]);
-    interpret(link.sentence);
-  // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [linkHash, accountsQuery.isSuccess, categoriesQuery.isSuccess]);
   const openInForm = (entry: ProposedEntry) => applyParsed({
     value: entry.value, kind: entry.type === "receita" ? "Receita" : "Despesa", date: entry.date,
     accountId: entry.accountId, categoryId: entry.categoryId, name: entry.name,

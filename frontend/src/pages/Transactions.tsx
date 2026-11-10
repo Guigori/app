@@ -31,6 +31,8 @@ import { CategoryIcon } from "@/components/shared/CategoryIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PlannedCharges } from "@/components/subscriptions/PlannedCharges";
+import { PendingCaptures } from "@/components/pending/PendingCaptures";
+import { captureBadge, matchesCaptureFilter, type CaptureFilter } from "@/lib/pendingCaptures";
 import { plannedInView } from "@/lib/subscriptionsView";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { StatusBadge } from "@/components/shared/Badges";
@@ -47,6 +49,21 @@ const Flow = lazy(() => import("@/pages/Flow"));
 
 function signedValue(t: Transaction): number {
   return t.type === "receita" ? t.value : -t.value;
+}
+
+const CAPTURE_FILTER_LABEL: Record<CaptureFilter, string> = {
+  todas: "Todas as origens",
+  apple_pay: "Origem: Apple Pay",
+  apple_pay_auto: "Origem: Apple Pay automático",
+};
+
+/** "Apple Pay", "Apple Pay · automático" (and "valor alto"): so these lançamentos are easy to spot. */
+function CaptureMark({ t }: { t: Transaction }) {
+  return (
+    <Badge variant="secondary" className={cn("px-1.5 py-0 text-xs", t.capture_unusual && "bg-amber-500/15 text-amber-800 dark:text-amber-300")} data-testid="transaction-capture">
+      {captureBadge(t)}
+    </Badge>
+  );
 }
 
 export default function Transactions() {
@@ -74,6 +91,8 @@ export default function Transactions() {
   const [search, setSearch] = useState("");
   const [type, setType] = useRouteState<"todos" | TxType>("fluxo:type", "todos");
   const [status, setStatus] = useState<"todos" | TxStatus>("todos");
+  // "?origem=apple-pay" / "apple-pay-auto" (from the Apple Pay card in Início) opens filtered.
+  const [captureFilter, setCaptureFilter] = useState<CaptureFilter>(() => ({ "apple-pay": "apple_pay", "apple-pay-auto": "apple_pay_auto" } as Record<string, CaptureFilter>)[searchParams.get("origem") ?? ""] ?? "todas");
   const [categoryId, setCategoryId] = useRouteState("fluxo:category", "todas");
   const [selectedDonutCategory, setSelectedDonutCategory] = useState<string | null>(null);
   const [accountId, setAccountId] = useState("todas");
@@ -237,10 +256,10 @@ export default function Transactions() {
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [pagedList, pagesQuery.data, pagesQuery.hasNextPage, pagesQuery.isFetching, pagesQuery.fetchNextPage]);
   const monthTransactions = useMemo(() => transactionsQuery.data ?? [], [transactionsQuery.data]);
-  const transactions = useMemo(() => pagedList
+  const transactions = useMemo(() => (pagedList
     ? pagesQuery.data?.pages.flatMap(page => page.items) ?? []
     : monthTransactions.slice().sort((a, b) => (sortDir === "desc"
-      ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date))), [pagedList, pagesQuery.data, monthTransactions, sortDir]);
+      ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date)))).filter((t) => matchesCaptureFilter(t, captureFilter)), [pagedList, pagesQuery.data, monthTransactions, sortDir, captureFilter]);
   // AUD-07: offline, say when only the pages loaded online are available.
   const completenessQuery = useQuery({
     queryKey: ["transactions", "complete", filters, online],
@@ -361,12 +380,13 @@ export default function Transactions() {
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
 
-  const hasFilters = type !== "todos" || status !== "todos" || categoryId !== "todas" || accountId !== "todas" || deferredSearch.trim() !== "";
+  const hasFilters = captureFilter !== "todas" || type !== "todos" || status !== "todos" || categoryId !== "todas" || accountId !== "todas" || deferredSearch.trim() !== "";
 
   const clearFilters = () => {
     setSearch("");
     setType("todos");
     setStatus("todos");
+    setCaptureFilter("todas");
     setCategoryId("todas");
     setSelectedDonutCategory(null);
     setAccountId("todas");
@@ -432,6 +452,8 @@ export default function Transactions() {
         </div> : null}
       </div>
 
+      <PendingCaptures />
+
       {flowView === "caixa" ? (
         <Suspense fallback={<FinnosPageLoading title="Abrindo o Caixa" />}>
           <Flow month={month} onMonthChange={changeMonth} />
@@ -481,6 +503,7 @@ export default function Transactions() {
             <Select value={status} onValueChange={(v) => setStatus(v as TxStatus | "todos")}><SelectTrigger size="sm"><SelectValue>{status === "todos" ? "Todos os status" : TX_STATUS_LABEL[status]}</SelectValue></SelectTrigger><SelectContent><SelectItem value="todos">Todos os status</SelectItem><SelectItem value="pago">Pago</SelectItem><SelectItem value="pendente">Pendente</SelectItem><SelectItem value="agendado">Agendado</SelectItem></SelectContent></Select>
             <Select value={categoryId} onValueChange={setCategoryId}><SelectTrigger size="sm"><SelectValue>{categoryId === "todas" ? "Todas as categorias" : categories.find((x) => x.id === categoryId)?.name}</SelectValue></SelectTrigger><SelectContent><SelectItem value="todas">Todas as categorias</SelectItem>{categories.map((x) => <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>)}</SelectContent></Select>
             <Select value={accountId} onValueChange={setAccountId}><SelectTrigger size="sm"><SelectValue>{accountId === "todas" ? "Todas as contas" : accounts.find((x) => x.id === accountId)?.name}</SelectValue></SelectTrigger><SelectContent><SelectItem value="todas">Todas as contas</SelectItem>{accounts.map((x) => <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>)}</SelectContent></Select>
+            <Select value={captureFilter} onValueChange={(v) => setCaptureFilter(v as CaptureFilter)}><SelectTrigger size="sm" className="col-span-2" data-testid="filter-capture"><SelectValue>{CAPTURE_FILTER_LABEL[captureFilter]}</SelectValue></SelectTrigger><SelectContent>{(Object.keys(CAPTURE_FILTER_LABEL) as CaptureFilter[]).map((k) => <SelectItem key={k} value={k}>{CAPTURE_FILTER_LABEL[k]}</SelectItem>)}</SelectContent></Select>
           </div>
           {hasFilters ? <Button variant="ghost" size="sm" className="mt-2 w-full" onClick={clearFilters}>Limpar filtros</Button> : null}
         </div>
@@ -644,6 +667,7 @@ export default function Transactions() {
                             {t.current_installment}/{t.total_installments} · {t.total_installments}x de {formatBRLShort(t)}
                           </Badge>
                         ) : null}
+                        {captureBadge(t) ? <CaptureMark t={t} /> : null}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -767,6 +791,7 @@ export default function Transactions() {
                                   {t.current_installment}/{t.total_installments}
                                 </Badge>
                               ) : null}
+                              {captureBadge(t) ? <CaptureMark t={t} /> : null}
                             </div>
                             <div className="flex shrink-0 gap-1">
                               <Button size="icon-sm" variant="ghost" onClick={() => dialogs.openTransaction({ transaction: t })} aria-label={`Editar ${t.name}`} data-testid={`edit-transaction-${t.id}`}>

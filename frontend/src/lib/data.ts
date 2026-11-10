@@ -54,6 +54,10 @@ import {
   type LocalTxFilters,
 } from "@/lib/local/engine";
 import type {
+  ConfirmAllResult,
+  PendingCaptureConfirm,
+  PendingCaptures,
+  PendingSettings,
   Account,
   AccountDetail,
   AccountInput,
@@ -666,6 +670,47 @@ export async function fetchNotifications(): Promise<Notifications> {
     return { items, count: items.length };
   }
   return cachedFetch("notifications", () => apiGet<Notifications>("/notifications"));
+}
+
+/** Purchases the Apple Pay Shortcut left waiting. They live on the server, so only full accounts have them. */
+export async function fetchPendingCaptures(): Promise<PendingCaptures> {
+  if (isLocalMode()) return { items: [], count: 0 };
+  return apiGet<PendingCaptures>("/pending-captures");
+}
+
+export async function confirmPendingCapture(id: string, input: PendingCaptureConfirm): Promise<{ ok: boolean; transaction_id: string }> {
+  return apiPost<{ ok: boolean; transaction_id: string }>(`/pending-captures/${encodeURIComponent(id)}/confirm`, input);
+}
+
+export async function confirmAllPendingCaptures(): Promise<ConfirmAllResult> {
+  return apiPost<ConfirmAllResult>("/pending-captures/confirm-all", {});
+}
+
+/** A fake purchase: shows the Shortcut-to-FINNOS path works without paying anything. */
+export async function createTestCapture(): Promise<{ ok: boolean; id: string }> {
+  return apiPost<{ ok: boolean; id: string }>("/pending-captures/test", {});
+}
+
+export async function fetchPendingSettings(): Promise<PendingSettings> {
+  return apiGet<PendingSettings>("/pending-captures/settings");
+}
+
+export async function savePendingSettings(input: Partial<PendingSettings>): Promise<PendingSettings> {
+  return apiPut<PendingSettings>("/pending-captures/settings", input);
+}
+
+/** Takes back a purchase registered on its own: it is pending again and FINNOS forgets that combination. */
+export async function undoAutoCapture(id: string): Promise<{ ok: boolean }> {
+  return apiPost<{ ok: boolean }>(`/pending-captures/auto/${encodeURIComponent(id)}/undo`, {});
+}
+
+/** "Está certo": keeps the purchase registered on its own and takes it off the list. */
+export async function keepAutoCapture(id: string): Promise<void> {
+  await apiDelete<void>(`/pending-captures/auto/${encodeURIComponent(id)}`);
+}
+
+export async function discardPendingCapture(id: string): Promise<void> {
+  await apiDelete<void>(`/pending-captures/${encodeURIComponent(id)}`);
 }
 
 export async function dismissNotification(id: string): Promise<void> {

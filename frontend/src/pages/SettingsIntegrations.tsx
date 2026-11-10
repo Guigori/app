@@ -1,71 +1,27 @@
 import { useState, type ReactNode } from "react";
-import { Bell, BrainCircuit, ChevronDown, Copy, KeyRound, Play, Send, ShieldCheck, Smartphone, WalletCards, Zap } from "lucide-react";
+import { Bell, BrainCircuit, ChevronDown, KeyRound, ShieldCheck, WalletCards } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
-import { toast } from "sonner";
 import { isLocalMode } from "@/lib/mode";
-import { registerLinkBase } from "@/lib/registerLink";
 import { AiKeysCard } from "@/components/ai/AiKeysCard";
-import { ShortcutConnect } from "@/components/settings/ShortcutConnect";
+import { ApplePaySetup } from "@/components/settings/ApplePaySetup";
 import { cn } from "@/lib/utils";
 
 type Status = "pronto" | "indisponivel" | "conta";
 
-/** How to connect FINNOS to the iPhone without an App Store app: Shortcuts register directly, or open the register filled in. */
+/** Apple Pay purchases straight into FINNOS, and connecting an AI. Other Shortcuts flows are off for now. */
 export default function SettingsIntegrations() {
-  const base = registerLinkBase(window.location.origin);
   const local = isLocalMode();
   // "#sua-ia" (from the FINNOS IA panel) opens straight on connecting an AI.
   const { hash } = useLocation();
-  const [open, setOpen] = useState<string | null>(hash === "#sua-ia" ? "sua-ia" : local ? "atalhos" : "sem-abrir");
-  const copy = async (value: string) => {
-    try { await navigator.clipboard.writeText(value); toast.success("Copiado. Cole no app Atalhos."); } catch { toast.error("Não consegui copiar. Selecione e copie o texto."); }
-  };
-  const code = (value: string) => (
-    <span className="mt-1 flex items-center gap-2 rounded-xl bg-muted px-3 py-2">
-      <code className="min-w-0 flex-1 break-all text-xs">{value}</code>
-      <button type="button" onClick={() => void copy(value)} aria-label="Copiar" className="grid size-8 shrink-0 place-items-center rounded-lg hover:bg-background"><Copy className="h-4 w-4" aria-hidden="true" /></button>
-    </span>
-  );
-
+  const fromHash = ({ "#sua-ia": "sua-ia", "#apple-pay": "applepay-pendente", "#sem-abrir": "applepay-pendente" } as Record<string, string>)[hash];
+  const [open, setOpen] = useState<string | null>(fromHash ?? (local ? null : "applepay-pendente"));
   const needsAccount = <p className="text-sm">No modo local não há servidor para o atalho falar. <Link to="/cadastro" className="font-semibold text-primary">Crie sua conta preservando seus dados</Link> para usar.</p>;
 
-  const items: Array<{ id: string; name: string; description: string; icon: typeof Zap; status: Status; body: ReactNode }> = [
+  const items: Array<{ id: string; name: string; description: string; icon: typeof WalletCards; status: Status; body: ReactNode }> = [
     {
-      id: "sem-abrir", name: "Atalhos: registrar sem abrir o app", icon: Send, status: local ? "conta" : "pronto",
-      description: "Valor, tipo, forma de pagamento, conta ou cartão, categoria e parcelas, direto no iPhone. Também a cada compra com Apple Pay.",
-      body: local ? needsAccount : <ShortcutConnect />,
-    },
-    {
-      id: "atalhos", name: "Atalhos: abrir já preenchido", icon: Zap, status: "pronto",
-      description: "Fale ou digite \"café 3,80 e uber 14\" pela Siri ou por um botão na tela de início.",
-      body: (
-        <ol className="list-decimal space-y-2 pl-5 text-sm">
-          <li>Abra o app <strong>Atalhos</strong> e toque em <strong>+</strong>.</li>
-          <li>Adicione a ação <strong>Pedir Entrada</strong> (tipo Texto, pergunta "Como foi?"). Para falar em vez de digitar, use <strong>Ditar Texto</strong>.</li>
-          <li>Adicione <strong>Codificar URL</strong> com a entrada do passo anterior.</li>
-          <li>Adicione <strong>Abrir URLs</strong> com este endereço seguido da entrada codificada:{code(`${base}texto=`)}</li>
-          <li>Dê o nome <strong>Registrar no FINNOS</strong>. Diga "E aí Siri, Registrar no FINNOS" ou adicione o atalho à tela de início.</li>
-          <li>O FINNOS abre em "Entendi", e nada é gravado antes de você confirmar.</li>
-        </ol>
-      ),
-    },
-    {
-      id: "applepay", name: "Apple Pay: abrir já preenchido", icon: WalletCards, status: "pronto",
-      description: "Cada compra por aproximação com a Carteira abre o FINNOS já preenchido para você confirmar.",
-      body: (
-        <ol className="list-decimal space-y-2 pl-5 text-sm">
-          <li>No app <strong>Atalhos</strong>, vá em <strong>Automação</strong> → <strong>Nova Automação</strong> → <strong>Transação</strong> (iOS 17 ou mais novo).</li>
-          <li>Escolha os cartões da Carteira e marque <strong>Executar Imediatamente</strong>.</li>
-          <li>Adicione <strong>Codificar URL</strong> para <em>Valor</em>, <em>Comerciante</em> e <em>Cartão ou Passe</em>, que vêm da transação.</li>
-          <li>Adicione <strong>Abrir URLs</strong> com este endereço e os três valores no lugar indicado:{code(`${base}valor=[Valor]&nome=[Comerciante]&cartao=[Cartão]`)}</li>
-          <li>Ao pagar, o FINNOS abre com a compra em "Entendi". Confira a categoria e registre.</li>
-        </ol>
-      ),
-    },
-    {
-      id: "notificacoes", name: "Notificações da Carteira", icon: Bell, status: "indisponivel",
-      description: "O iPhone não deixa nenhum app ou site ler as notificações de outros apps.",
-      body: <p className="text-sm">As compras feitas com a Carteira chegam pela automação <strong>Transação</strong> do iPhone: veja "A cada compra com Apple Pay" em <strong>Registrar sem abrir o app</strong>, acima.</p>,
+      id: "applepay-pendente", name: "Apple Pay", icon: WalletCards, status: local ? "conta" : "pronto",
+      description: "Cada compra com a Carteira chega ao FINNOS sem abrir o app e espera você revisar no Início.",
+      body: local ? needsAccount : <ApplePaySetup />,
     },
     {
       id: "sua-ia", name: "Conectar sua IA", icon: KeyRound, status: local ? "conta" : "pronto",
@@ -82,7 +38,7 @@ export default function SettingsIntegrations() {
   ];
 
   return <main className="mx-auto max-w-2xl space-y-5 pb-28 text-foreground animate-fade-up" data-testid="settings-integrations">
-    <div><h1 className="font-heading text-2xl font-bold">Integrações e automações</h1><p className="mt-1 text-sm text-muted-foreground">Registre sem abrir o app, pela Siri, por um atalho ou a cada compra com Apple Pay.</p></div>
+    <div><h1 className="font-heading text-2xl font-bold">Integrações e automações</h1><p className="mt-1 text-sm text-muted-foreground">Compras do Apple Pay direto no FINNOS e a sua IA conectada.</p></div>
 
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
       {items.map((item, index) => (
@@ -98,14 +54,9 @@ export default function SettingsIntegrations() {
       ))}
     </div>
 
-    <div className="space-y-2 rounded-2xl border border-border bg-card p-4 text-sm">
-      <p className="flex items-center gap-2 font-medium"><Play className="h-4 w-4 text-primary" aria-hidden="true" />Teste antes de criar o atalho</p>
-      <a href={`${base}texto=${encodeURIComponent("café 3,80 e uber 14")}`} className="inline-flex rounded-full border border-border px-3 py-1.5 text-xs font-semibold" data-testid="integration-test-link">Abrir "café 3,80 e uber 14"</a>
-    </div>
-
     <ul className="space-y-2 text-xs text-muted-foreground">
-      <li className="flex gap-2"><ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />Registrar sem abrir: o código só lista nomes e cria lançamentos, cada uso aparece em Atividade recente e você desconecta quando quiser. Abrir já preenchido: os dados vão depois do "#" do endereço, não passam pelo servidor e nada é gravado sem a sua confirmação.</li>
-      <li className="flex gap-2"><Smartphone className="h-4 w-4 shrink-0" aria-hidden="true" />No iPhone, os links dos Atalhos abrem no Safari. Mantenha o FINNOS conectado no Safari para o registro abrir direto.</li>
+      <li className="flex gap-2"><ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />O código do iPhone só cria compras para revisar e lista nomes de contas, cartões e categorias. Cada uso aparece na tela do Apple Pay, e você desconecta quando quiser.</li>
+      <li className="flex gap-2"><Bell className="h-4 w-4 shrink-0" aria-hidden="true" />O iPhone não deixa nenhum app ou site ler as notificações da Carteira. As compras chegam pela automação Transação do app Atalhos.</li>
     </ul>
   </main>;
 }

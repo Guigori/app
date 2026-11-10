@@ -31,9 +31,11 @@ interface AccountDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   account?: Account;
+  /** Name to start a new one with (the card name Apple Pay sent). */
+  initialName?: string;
 }
 
-export function AccountDialog({ open, onOpenChange, account }: AccountDialogProps) {
+export function AccountDialog({ open, onOpenChange, account, initialName }: AccountDialogProps) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [institution, setInstitution] = useState("");
@@ -58,7 +60,7 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
       setInitialRaw(String(account.initial_balance));
       setActive(account.active);
     } else {
-      setName("");
+      setName(initialName ?? "");
       setInstitution("");
       setInstitutionChoice("new");
       setType("corrente");
@@ -66,7 +68,7 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
       setInitialRaw("0");
       setActive(true);
     }
-  }, [open, account]);
+  }, [open, account, initialName]);
 
   const mutation = useMutation({
     mutationFn: async (input: AccountInput) => {

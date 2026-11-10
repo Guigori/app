@@ -1,17 +1,15 @@
-"""Apple Shortcuts: register a lançamento from the iPhone without opening FINNOS.
+"""Apple Pay → FINNOS through the iPhone Shortcuts app.
 
 Two parts:
 - /integrations/shortcut-tokens (signed-in FINNOS session): create, list and revoke
-  the personal code a Shortcut carries, and see its recent activity.
-- /shortcuts/* (the code as `Authorization: Bearer fns_…`): the names to choose from
-  and the register itself. Answers are always {"ok", "mensagem"} so the Shortcut can
-  show them, errors included.
+  the personal code the Wallet automation carries, and see its recent activity.
+- POST /shortcuts/pendentes (the code as `Authorization: Bearer fns_…`): leaves the
+  purchase waiting for review. Answers are always {"ok", "mensagem"} so the Shortcut
+  can show them, errors included.
 
-The register goes through the same validation and storage as the app (accounts,
-cards, invoices, installments), is saved once even if sent twice, and is marked
-as coming from "ios_shortcut".
+The older flows (a ready-made shortcut registering directly, /shortcuts/opcoes and
+/shortcuts/lancamentos) were removed: every Apple Pay purchase now goes through review.
 """
-import uuid
 from datetime import datetime
 from typing import Optional, Union
 
@@ -23,15 +21,13 @@ from starlette.concurrency import run_in_threadpool
 
 from finnos.lib import db as store
 from finnos.lib import integration_tokens as tokens
+from finnos.lib import pending_captures as pending
 from finnos.lib.dates import today_iso
 from finnos.lib.db import active_uid, db
-from finnos.models.finnos import TransactionIn
-from finnos.routers import transactions as tx
 from finnos.routers.auth import require_user
 
 router = APIRouter(tags=["shortcuts"])
 
-FORMAS = {"pix": "Pix", "debito": "Débito", "dinheiro": "Dinheiro", "vale": "Vale", "credito": "Crédito"}
 
 
 def brl(value) -> str:
@@ -106,37 +102,6 @@ async def _wallets(uid: str):
     return accounts, cards, categories
 
 
-@router.get("/shortcuts/opcoes")
-async def shortcut_options(request: Request):
-    try:
-        user = await shortcut_user(request)
-    except HTTPException as exc:
-        return answer(exc.status_code, False, exc.detail)
-    accounts, cards, categories = await _wallets(user["id"])
-    return answer(
-        200, True, "Pronto.",
-        tipos=["Despesa", "Receita"],
-        formas=list(FORMAS.values()),
-        contas=[a["name"] for a in accounts],
-        cartoes=[c["name"] for c in cards],
-        # One list for "Escolher da Lista": accounts first, then cards.
-        carteiras=[a["name"] for a in accounts] + [c["name"] for c in cards],
-        categorias=sorted(c["name"] for c in categories),
-    )
-
-
-class LancamentoIn(BaseModel):
-    valor: Union[str, float]
-    tipo: str = "despesa"
-    forma: Optional[str] = None
-    carteira: Optional[str] = Field(default=None, max_length=80)
-    categoria: Optional[str] = Field(default=None, max_length=60)
-    parcelas: Optional[Union[int, str]] = None
-    descricao: Optional[str] = Field(default=None, max_length=80)
-    data: Optional[str] = Field(default=None, max_length=20)
-    id: Optional[str] = Field(default=None, max_length=80)
-
-
 def _date(text: Optional[str]) -> str:
     if not text or not text.strip():
         return today_iso()
@@ -149,18 +114,6 @@ def _date(text: Optional[str]) -> str:
     raise HTTPException(422, "Data inválida. Use dd/mm/aaaa.")
 
 
-def _installments(value) -> int:
-    if value in (None, "", 0, "0", 1, "1"):
-        return 1
-    try:
-        n = int(str(value).strip().lower().rstrip("x"))
-    except ValueError:
-        raise HTTPException(422, "Parcelas inválidas. Use um número, como 3.")
-    if not 1 <= n <= 120:
-        raise HTTPException(422, "Parcelas inválidas: de 1 a 120.")
-    return n
-
-
 async def _category_from_history(uid: str, name: str, kind: str) -> Optional[str]:
     """No category sent (Apple Pay): reuse the one used last time for the same name."""
     rows = await db.transactions.find({"user_id": uid, "name": name}).to_list(50)
@@ -169,91 +122,61 @@ async def _category_from_history(uid: str, name: str, kind: str) -> Optional[str
     return rows[0]["category_id"] if rows else None
 
 
-async def build(uid: str, body: LancamentoIn) -> tuple[TransactionIn, dict]:
-    """Turns what the Shortcut sent into the app's own TransactionIn."""
-    value = tokens.parse_amount(body.valor)
-    kind = tokens.normalize(body.tipo)
-    if kind not in {"despesa", "receita"}:
-        raise HTTPException(422, "Tipo inválido: use Despesa ou Receita.")
-    forma = tokens.normalize(body.forma or "") or None
-    if forma and forma not in FORMAS:
-        raise HTTPException(422, f"Forma de pagamento inválida. Opções: {', '.join(FORMAS.values())}.")
-    accounts, cards, categories = await _wallets(uid)
-
-    card = None
-    if forma == "credito" or (not forma and body.carteira and kind == "despesa"):
-        try:
-            card = tokens.resolve(body.carteira, cards, "o cartão") if body.carteira else None
-        except HTTPException:
-            if forma == "credito":
-                raise
-        if forma == "credito" and not card:
-            if len(cards) == 1:
-                card = cards[0]
-            else:
-                raise HTTPException(422, "Escolha o cartão. Opções: " + (", ".join(c["name"] for c in cards) or "nenhum cadastrado") + ".")
-    if card and kind == "receita":
-        raise HTTPException(422, "Receita não pode ser no cartão de crédito.")
-
-    if card:
-        account = next((a for a in accounts if a["id"] == card.get("payment_account_id")), None)
-        if not account:
-            raise HTTPException(422, f"O cartão {card['name']} está sem conta de pagamento. Defina em Carteira → Cartões.")
-    else:
-        account = tokens.resolve(body.carteira, accounts, "a conta") if body.carteira else (accounts[0] if len(accounts) == 1 else None)
-        if not account:
-            raise HTTPException(422, "Escolha a conta. Opções: " + (", ".join(a["name"] for a in accounts) or "nenhuma cadastrada") + ".")
-
-    installments = _installments(body.parcelas)
-    if installments > 1 and not card:
-        raise HTTPException(422, "Parcelamento só no cartão de crédito.")
-
-    category = tokens.resolve(body.categoria, categories, "a categoria")
-    name = (body.descricao or "").strip() or (category["name"] if category else ("Receita" if kind == "receita" else "Gasto"))
-    category_id = category["id"] if category else await _category_from_history(uid, name, kind)
-    when = _date(body.data)
-    status = "agendado" if when > today_iso() else "pago"
-    via = FORMAS.get(forma or "", "Crédito" if card else None)
-
-    payload = TransactionIn(
-        name=name[:80], value=value, type=kind, status=status, date=when,
-        account_id=account["id"], card_id=card["id"] if card else None, category_id=category_id,
-        installment=installments > 1, total_installments=installments if installments > 1 else None,
-        current_installment=1 if installments > 1 else None,
-        notes=f"Registrado pelo Atalhos{f' · {via}' if via else ''}",
-    )
-    summary = {
-        "nome": name, "valor": brl(value), "carteira": card["name"] if card else account["name"],
-        "categoria": next((c["name"] for c in categories if c["id"] == category_id), None),
-        "parcelas": installments,
-    }
-    return payload, summary
+class PendenteIn(BaseModel):
+    """What the Wallet "Transação" automation knows: amount, merchant and the card's name."""
+    valor: Union[str, float]
+    descricao: Optional[str] = Field(default=None, max_length=80)
+    carteira: Optional[str] = Field(default=None, max_length=80)
+    data: Optional[str] = Field(default=None, max_length=20)
+    id: Optional[str] = Field(default=None, max_length=80)
 
 
-@router.post("/shortcuts/lancamentos")
-async def shortcut_register(request: Request, body: LancamentoIn):
+@router.post("/shortcuts/pendentes")
+async def shortcut_pending(request: Request, body: PendenteIn):
+    """Saves the purchase as *pendente*: it only becomes a lançamento when confirmed in the app.
+
+    Deliberately forgiving: a purchase is kept even when the card is not registered (it is shown
+    as "não cadastrado"), because losing it is worse than asking the person to review it.
+    With "registrar sozinho" on, a combination confirmed several times in débito is registered right away.
+    """
+    # Imported here: that router needs this module's helpers, so a top-level import would loop.
+    from finnos.routers.pending_captures import try_auto_register
+
     try:
         user = await shortcut_user(request)
     except HTTPException as exc:
         return answer(exc.status_code, False, exc.detail)
     uid = user["id"]
     try:
-        payload, summary = await build(uid, body)
-        await tx._validate(uid, payload)
-        doc = tx._document(uid, payload)
-        doc["operation_id"] = body.id.strip() if body.id and body.id.strip() else tokens.operation_id(uid, body.model_dump())
-        doc["source"] = "ios_shortcut"
-        target = str(uuid.uuid5(uuid.NAMESPACE_URL, uid + ":" + doc["operation_id"]))
-        repeated = await db.transactions.find_one({"id": target, "user_id": uid}) is not None
-        await db.transactions.insert_one(doc)
+        value = tokens.parse_amount(body.valor)
+        when = _date(body.data)
+        name = ((body.descricao or "").strip() or "Compra")[:80]
+        accounts, cards, _ = await _wallets(uid)
+        source = pending.identify_source(body.carteira, accounts, cards)
+        operation_id = body.id.strip() if body.id and body.id.strip() else tokens.operation_id(uid, body.model_dump())
+        if await run_in_threadpool(pending.count, uid) >= pending.MAX_PENDING:
+            raise HTTPException(429, "Você tem compras pendentes demais. Confirme ou exclua algumas no FINNOS.")
+        doc = pending.new_document(uid, operation_id, name=name, value=value, date=when, source=source, token=user["token"])
+        saved, created = await run_in_threadpool(pending.save, uid, doc)
     except HTTPException as exc:
-        await run_in_threadpool(tokens.audit, uid, {"action": "registro", "ok": False, "token": user["token"], "mensagem": str(exc.detail)})
+        await run_in_threadpool(tokens.audit, uid, {"action": "pendente", "ok": False, "token": user["token"], "mensagem": str(exc.detail)})
         return answer(exc.status_code, False, str(exc.detail))
 
-    parts = [summary["nome"], summary["valor"] + (f" em {summary['parcelas']}x" if summary["parcelas"] > 1 else ""), summary["carteira"]]
-    if summary["categoria"] and summary["categoria"] != summary["nome"]:
-        parts.append(summary["categoria"])
-    mensagem = ("Já estava registrado: " if repeated else "Registrado no FINNOS: ") + " · ".join(parts)
-    await run_in_threadpool(tokens.audit, uid, {"action": "registro", "ok": True, "token": user["token"], "mensagem": mensagem, "transaction_id": doc["id"], "repetido": repeated})
-    return answer(200 if repeated else 201, True, mensagem, id=doc["id"], repetido=repeated, **summary)
-
+    origin = pending.origin_label(source)
+    extra = dict(nome=name, valor=brl(value), origem=origin, cadastrado=source["registered"])
+    if created:
+        auto = await try_auto_register(uid, saved)
+        # No sound if the person turned push off in Configurações → Notificações.
+        prefs = await db.notification_preferences.find_one({"user_id": uid, "id": "prefs"})
+        push_on = (prefs or {}).get("push_enabled", True)
+        if auto:
+            mensagem = f"Registrado no FINNOS (débito): {name} · {brl(value)} · {auto['account_name']}. Para desfazer, toque em Desfazer no Início."
+            await run_in_threadpool(tokens.audit, uid, {"action": "registro", "ok": True, "token": user["token"], "mensagem": mensagem, "transaction_id": auto["id"], "automatico": True})
+            if push_on:
+                await run_in_threadpool(pending.alert, uid, "Registrado automaticamente: " + name, f"Débito em {auto['account_name']}. Toque para conferir ou desfazer.", "/")
+            return answer(201, True, mensagem, id=auto["id"], repetido=False, automatico=True, **extra)
+        if push_on:
+            await run_in_threadpool(pending.alert, uid, "Compra pendente: " + name, origin + ". Toque para registrar ou excluir.", "/")
+    mensagem = ("Já estava pendente: " if not created else "Pendente no FINNOS: ") + f"{name} · {brl(value)} · {origin}"
+    await run_in_threadpool(tokens.audit, uid, {"action": "pendente", "ok": True, "token": user["token"], "mensagem": mensagem, "pending_id": saved["id"], "repetido": not created})
+    return answer(201 if created else 200, True, mensagem, id=saved["id"], repetido=not created, automatico=False, **extra)
