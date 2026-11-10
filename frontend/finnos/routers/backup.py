@@ -74,7 +74,7 @@ async def build_backup(uid: str) -> dict:
         "checksum_sha256": checksum(collections),
         "collections": collections,
         "onboarding": onboarding,
-        "excluded": ["ai_keys", "sync_receipts", "finance_history"],
+        "excluded": ["ai_keys", "sync_receipts", "finance_history", "attachments"],
     }
 
 

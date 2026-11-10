@@ -19,7 +19,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { PendingCapture, Transaction, TransactionInput } from "@/types/finnos";
 import { confirmBody, type CaptureChoice } from "@/lib/pendingCaptures";
-import { editRecurrence, settleTransaction, type RecurrenceEditScope, confirmPendingCapture, createTransaction, fetchTransactionById, updateTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
+import { addTransactionPhoto, editRecurrence, settleTransaction, type RecurrenceEditScope, confirmPendingCapture, createTransaction, fetchTransactionById, updateTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getAccountPaymentMethods } from "@/lib/accountPaymentPreferences";
 import { addMonth, formatBRL, isISODate, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
@@ -64,11 +64,11 @@ export interface RegisterController {
   expanded?: boolean;
   save: () => void;
 }
-export default function SmartRegister({ embedded = false, desktop = false, capture, existing, initialKind, onClose, onController }: { initialKind?: Kind; embedded?: boolean; desktop?: boolean; /** A saved lançamento: opens in the same screen, with its impact and receipt below; ✓ saves changes. */ existing?: Transaction; /** An Apple Pay purchase being reviewed: same screens, prefilled; saving confirms it. */ capture?: { item: PendingCapture; choice: CaptureChoice }; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
+export default function SmartRegister({ embedded = false, desktop = false, capture, existing, initialKind, template, onClose, onController }: { initialKind?: Kind; /** "Lançar de novo": a new entry with the fields of this one, dated today. */ template?: Transaction; embedded?: boolean; desktop?: boolean; /** A saved lançamento: opens in the same screen, with its impact and receipt below; ✓ saves changes. */ existing?: Transaction; /** An Apple Pay purchase being reviewed: same screens, prefilled; saving confirms it. */ capture?: { item: PendingCapture; choice: CaptureChoice }; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
   const dialogs = useDialogs();
   const navigate = useNavigate();
   const { hidden, toggle: toggleHidden } = useBalanceHidden();
-  const [expr, setExpr] = useState(() => (existing ? (Number.isInteger(existing.value) ? String(existing.value) : existing.value.toFixed(2).replace(".", ",")) : capture ? String(capture.item.value).replace(".", ",") : ""));
+  const [expr, setExpr] = useState(() => ((existing ?? template) ? (Number.isInteger((existing ?? template)!.value) ? String((existing ?? template)!.value) : (existing ?? template)!.value.toFixed(2).replace(".", ",")) : capture ? String(capture.item.value).replace(".", ",") : ""));
   const [done, setDone] = useState<{ kind: Kind; amount: string; name: string; chips: string[]; transaction: Transaction } | null>(null);
   const [calc, setCalc] = useState(getRegisterCalc);
   const [keypadOpen, setKeypadOpen] = useState(!existing);
@@ -91,7 +91,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [paymentsLoading, setPaymentsLoading] = useState(false);
   const [paymentsError, setPaymentsError] = useState(false);
   useEffect(() => { const listener = () => setPaymentPreferencesVersion(v => v + 1); window.addEventListener("finnos:payment-methods-changed", listener); return () => window.removeEventListener("finnos:payment-methods-changed", listener); }, []);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(() => existing ? existing.card_id : (capture?.choice.method === "credito" && capture.choice.cardId ? capture.choice.cardId : null));
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(() => (existing ?? template) ? (existing ?? template)!.card_id : (capture?.choice.method === "credito" && capture.choice.cardId ? capture.choice.cardId : null));
   const [institutionId, setInstitutionId] = useState<string | null>(null);
   useEffect(() => {
     const selected = accounts.find(a => a.id === institutionId);
@@ -106,21 +106,29 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [page, setPage] = useState<Page>(() => (!existing && !capture && getRegisterDefault() === "inteligente" ? "start" : "entry"));
   const [history, setHistory] = useState<Page[]>([]);
   const [text, setText] = useState("");
-  const [value, setValue] = useState(() => (existing ? String(existing.value) : capture ? String(capture.item.value) : ""));
-  const [name, setName] = useState(() => existing?.name ?? capture?.item.name ?? "");
-  const [kind, setKind] = useState<Kind>(() => (existing ? KIND_OF(existing.type) : initialKind ?? "Despesa"));
-  const [category, setCategory] = useState(() => existing?.category_id ?? capture?.choice.categoryId ?? "");
-  const [account, setAccount] = useState(() => existing?.account_id ?? capture?.choice.accountId ?? "");
+  const [value, setValue] = useState(() => ((existing ?? template) ? String((existing ?? template)!.value) : capture ? String(capture.item.value) : ""));
+  const [name, setName] = useState(() => (existing ?? template)?.name ?? capture?.item.name ?? "");
+  const [kind, setKind] = useState<Kind>(() => (existing ? KIND_OF(existing.type) : template ? KIND_OF(template.type) : initialKind ?? "Despesa"));
+  const [category, setCategory] = useState(() => (existing ?? template)?.category_id ?? capture?.choice.categoryId ?? "");
+  const [account, setAccount] = useState(() => (existing ?? template)?.account_id ?? capture?.choice.accountId ?? "");
   const selectedAccount = accounts.find(a => a.id === account);
-  const [destination, setDestination] = useState(() => existing?.to_account_id ?? "");
+  const [destination, setDestination] = useState(() => (existing ?? template)?.to_account_id ?? "");
   const [installments, setInstallments] = useState(1);
   const [date, setDate] = useState(() => existing?.date ?? capture?.item.date ?? todayISO());
   const [note, setNote] = useState(() => existing?.notes ?? "");
-  const [origin, setOrigin] = useState(() => existing?.origin ?? "");
+  const [origin, setOrigin] = useState(() => (existing ?? template)?.origin ?? "");
   const [dateOpen, setDateOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const recordScroll = useRef<HTMLDivElement>(null);
   const collapsing = useRef(false);
+  // The chosen category sits in the middle of its strip, so it is always visible with its name below.
+  const categoryStrip = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const strip = categoryStrip.current; if (!strip || !category) return;
+    const chip = strip.querySelector<HTMLElement>('[aria-checked="true"]'); if (!chip) return;
+    const left = chip.offsetLeft - (strip.clientWidth - chip.offsetWidth) / 2;
+    strip.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+  }, [category, kind, page, keypadOpen, categoriesQuery.isSuccess]);
   // "Marcar como pago": settles it now and reopens the lançamento with its new state.
   const [settling, setSettling] = useState(false);
   const settle = async () => {
@@ -144,6 +152,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const origins = useQuery({ queryKey: ["origins"], queryFn: fetchOrigins, staleTime: 60_000 });
   const [recurring, setRecurring] = useState(() => Boolean(existing?.fixed));
   const [attachment, setAttachment] = useState("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [destinationPicker, setDestinationPicker] = useState(false);
   const [payment, setPayment] = useState("");
   const [categorySearch, setCategorySearch] = useState("");
@@ -204,6 +213,8 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     setHistory([]); setPage("entry");
   };
   const finishSave = (transaction: Transaction | null) => {
+    // The photo chosen in Mais opções goes with the new lançamento once it exists.
+    if (transaction && photoFile && !existing) { const f = photoFile; setPhotoFile(null); void addTransactionPhoto(transaction, f).catch(() => toast.error("O lançamento foi salvo, mas a foto não. Adicione de novo no comprovante.")); }
     const chips = [kind === "Transferência" ? [selectedAccount?.name, accounts.find(a => a.id === destination)?.name].filter(Boolean).join(" → ") : selectedCategory?.name, selectedCard ? selectedCard.name : kind === "Transferência" ? "" : selectedAccount?.name, dateLabel, origin.trim() || (capture ? "Apple Pay" : "Registro")].filter((c): c is string => !!c);
     setDone({ kind, amount: formatBRL(Number(value)).replace(/,00$/, ""), name: displayName, chips, transaction: transaction as Transaction });
   };
@@ -449,7 +460,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
 
       {kind !== "Transferência" ? (
         <div className="shrink-0 rounded-[22px] bg-card px-3 pb-2 pt-[7px]">
-          <div className="-mx-1 flex items-center gap-2.5 overflow-x-auto px-1 py-[3px] [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]" role="radiogroup" aria-label="Categoria">
+          <div ref={categoryStrip} className="relative -mx-1 flex items-center gap-2.5 overflow-x-auto scroll-smooth px-1 py-[3px] [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)]" role="radiogroup" aria-label="Categoria">
             <button type="button" onClick={() => go("categories")} aria-label="Buscar categoria" className="grid size-11 shrink-0 place-items-center rounded-full border-[1.5px] border-dashed border-[#3a3b6a] text-muted-foreground"><Search size={18} /></button>
             {kindCategories.map((c) => {
               const active = category === c.id;
@@ -460,7 +471,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
               );
             })}
           </div>
-          <p className="mt-1.5 text-center text-[13px] font-medium" style={{ color: selectedCategory?.color }}>{selectedCategory?.name ?? <span className="text-muted-foreground">Sem categoria</span>}</p>
+          <p className={cn("mt-1.5 text-center", selectedCategory ? "text-[15px] font-bold" : "text-[13px] font-medium")} style={{ color: selectedCategory?.color }} data-testid="quick-entry-category-name">{selectedCategory?.name ?? <span className="text-muted-foreground">Sem categoria</span>}</p>
         </div>
       ) : null}
 
@@ -472,7 +483,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       })()}
       {existing && !keypadOpen ? (
         <div ref={recordScroll} onScroll={(e) => { const top = e.currentTarget.scrollTop; if (collapsing.current) { if (top <= 4) collapsing.current = false; return; } if (!expanded && top > 24) setExpanded(true); }} className={cn("-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1", expanded && "pb-24")} data-testid="record-scroll">
-          <RecordInsight tx={existing} onDeleted={() => onClose?.()} onLeave={() => onClose?.()} onSettle={settle} settling={settling} />
+          <RecordInsight tx={existing} onDeleted={() => onClose?.()} onLeave={() => onClose?.()} onSettle={settle} settling={settling} onChanged={(u) => openRegisterSheet({ existing: u })} onRepeat={() => openRegisterSheet({ template: existing })} />
         </div>
       ) : null}
 
@@ -610,7 +621,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           <label className="flex h-24 min-w-0 flex-1 cursor-pointer flex-col items-start justify-between rounded-[20px] border-[1.5px] border-dashed border-[#3a3b6a] bg-card px-3.5 py-3">
             <span className="flex items-center gap-2 text-[15px] font-bold"><Paperclip size={16} aria-hidden="true" />Anexos</span>
             <span className="max-w-full truncate text-sm font-medium text-primary dark:text-[#c4b5fd]">{attachment || "+ Foto ou arquivo"}</span>
-            <input type="file" accept="image/*,.pdf" onChange={e => setAttachment(e.target.files?.[0]?.name || "")} className="sr-only" />
+            <input type="file" accept="image/*" onChange={e => { const f = e.target.files?.[0] ?? null; e.target.value = ""; if (!f) return; setAttachment(f.name); if (existing) { void addTransactionPhoto(existing, f).then((u) => { toast.success("Foto do comprovante salva."); openRegisterSheet({ existing: u }); }).catch((err: Error) => toast.error(err.message || "Não foi possível salvar a foto.")); } else setPhotoFile(f); }} className="sr-only" />
           </label>
         </div>
         <section className={MORE_CARD + " flex flex-col px-4"}>

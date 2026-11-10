@@ -1,13 +1,17 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion, useReducedMotion } from "motion/react";
-import { ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Camera, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronRight, Copy, Repeat, Share2, Trash2, TriangleAlert, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { createTransaction, deleteTransaction, fetchTransactionHistory, transactionInput, fetchBudget, fetchBudgetCycleProgress, fetchCalendar, fetchCurrentBudgetCycle, fetchSubscriptions, fetchTransactions } from "@/lib/data";
+import { addTransactionPhoto, createTransaction, deleteTransaction, fetchTransactionHistory, removeTransactionPhoto, transactionInput, updateTransaction, fetchBudget, fetchBudgetCycleProgress, fetchCalendar, fetchCurrentBudgetCycle, fetchSubscriptions, fetchTransactions } from "@/lib/data";
 import { addMonth, formatBRL, formatHiddenBRL, monthLabel, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { budgetImpact, cashFlowLink, cycleImpact, monthImpact, monthlyHistory, rhythm, signedAmount } from "@/lib/transactionInsight";
+import { ATTACHMENT_MARKER, fetchAttachment } from "@/lib/attachments";
+import { receiptImage, shareImage } from "@/lib/receiptImage";
+import { ChoiceSheet } from "@/components/shared/ChoiceSheet";
 import { HistorySheet } from "@/components/transactions/HistorySheet";
 import { DiscardRegisterDialog } from "@/components/layout/DiscardRegisterDialog";
 import type { Transaction } from "@/types/finnos";
@@ -35,15 +39,63 @@ function Row({ label, value, tone, i, last }: { label: string; value: ReactNode;
   );
 }
 
+/** A detail line that can be changed from here ("Tornar fixa", "Parcelar"). */
+function ActionRow({ label, value, action, onClick, testId }: { label: string; value: string; action?: string; onClick: () => void; testId: string }) {
+  return (
+    <div className="flex min-h-[38px] items-center justify-between gap-4 border-b border-dashed border-border text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      {action ? <button type="button" onClick={onClick} data-testid={testId} className="flex items-center gap-1 font-semibold"><span>{value}</span><span className="text-[#a78bfa]">· {action}</span><ChevronRight size={14} className="text-[#a78bfa]" aria-hidden="true" /></button> : <span className="font-semibold">{value}</span>}
+    </div>
+  );
+}
+
+/** The receipt photo over the whole screen, with replace and remove. */
+function PhotoViewer({ open, src, onClose, onReplace, onRemove }: { open: boolean; src: string | null; onClose: () => void; onReplace: () => void; onRemove: () => void }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <AnimatePresence>
+      {open ? (
+        <motion.div key="photo" className="fixed inset-0 z-[86] flex flex-col bg-black/95 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="dialog" aria-modal="true" aria-label="Foto do comprovante" data-testid="record-photo-viewer">
+          <div className="flex items-center justify-between px-4">
+            <span className="text-[17px] font-bold text-white">Foto do comprovante</span>
+            <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-11 place-items-center rounded-full border border-white/20 text-white"><X size={20} /></button>
+          </div>
+          <div className="flex min-h-0 flex-1 items-center justify-center p-4">{src ? <motion.img src={src} alt="Foto do comprovante" className="max-h-full max-w-full rounded-2xl object-contain" initial={{ scale: 0.94 }} animate={{ scale: 1 }} /> : <span className="text-white/60">Carregando…</span>}</div>
+          <div className="flex gap-2 px-4">
+            <button type="button" onClick={onReplace} className="h-12 flex-1 rounded-full bg-white/10 text-[15px] font-semibold text-white">Trocar foto</button>
+            <button type="button" onClick={onRemove} className="h-12 flex-1 rounded-full border border-[#5b1a2e] text-[15px] font-semibold text-[#fb7185]">Remover</button>
+          </div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
 /** A saved lançamento, under the register's fields: what it changed, then the full receipt as it scrolls. */
 const HINT_KEY = "finnos:record-scroll-hint";
 const shortDate = (iso: string) => iso.split("-").reverse().slice(0, 2).join("/");
 
-export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling }: { tx: Transaction; onDeleted: () => void; /** Leaving for another screen (the Caixa). */ onLeave: () => void; /** Marks it paid (or received) now. */ onSettle?: () => void; settling?: boolean }) {
+export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onChanged, onRepeat }: { tx: Transaction; onDeleted: () => void; /** Leaving for another screen (the Caixa). */ onLeave: () => void; /** Marks it paid (or received) now. */ onSettle?: () => void; settling?: boolean; /** The lançamento was changed here (photo, series, history): show it again as it is now. */ onChanged?: (tx: Transaction) => void; /** "Lançar de novo": a new register with the same fields, dated today. */ onRepeat?: () => void }) {
   const { hidden } = useBalanceHidden();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [working, setWorking] = useState<string | null>(null);
+  const [fixOpen, setFixOpen] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const hasPhoto = tx.attachment === ATTACHMENT_MARKER;
+  const photo = useQuery({ queryKey: ["attachment", tx.id, tx.version], queryFn: () => fetchAttachment(tx.id), enabled: hasPhoto && !tx.id.startsWith("offline:"), staleTime: 300_000 });
+  // One place for the changes made from this screen: run, refresh everything, show the lançamento as it is now.
+  const change = async (key: string, run: () => Promise<Transaction>, ok: string) => {
+    if (working) return;
+    setWorking(key);
+    try { const updated = await run(); await refresh(); toast.success(ok); onChanged?.(updated); }
+    catch (error) { toast.error(error instanceof Error && error.message ? error.message : "Não foi possível salvar agora."); }
+    finally { setWorking(null); }
+  };
   // "Role para ver o comprovante" only for the first few openings.
   const [showHint] = useState(() => { try { const n = Number(localStorage.getItem(HINT_KEY) || 0); localStorage.setItem(HINT_KEY, String(n + 1)); return n < 3; } catch { return true; } });
   const money = (v: number) => (hidden ? formatHiddenBRL() : formatBRL(v));
@@ -72,6 +124,8 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling }: { 
   const position = same.filter((r) => r.date < tx.date || (r.date === tx.date && r.created_at <= tx.created_at)).length || 1;
   const total = same.reduce((s, r) => s + r.value, 0);
   const repeats = rhythm(tx, history.data ?? [], subscriptions.data?.items ?? []);
+  const canSplit = tx.type === "despesa" && Boolean(tx.card_id) && !tx.installment && !tx.fixed && !tx.invoice_payment;
+  const suggestFixed = !tx.fixed && !tx.installment && !tx.invoice_payment && tx.type !== "transferencia" && repeats.kind === "repete" && repeats.times >= 3;
   const signed = signedAmount(tx);
   const created = tx.created_at ? new Date(tx.created_at) : null;
   const when = created && !Number.isNaN(created.getTime()) ? `${created.toLocaleDateString("pt-BR")} · ${created.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : tx.date.split("-").reverse().join("/");
@@ -103,8 +157,10 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling }: { 
   const recent = previous.slice(-3);
   const average = recent.length ? recent.reduce((t, b) => t + b.total, 0) / recent.length : 0;
   const thisMonth = bars[bars.length - 1]?.total || tx.value;
-  const change = average > 0 ? (thisMonth - average) / average : 0;
+  const trend = average > 0 ? (thisMonth - average) / average : 0;
   const peak = Math.max(...bars.map((b) => b.total), tx.value, 1);
+  // Clearly off the usual: 30% (and R$ 10) above the average for expenses, below it for income.
+  const unusual = average > 0 && tx.type !== "transferencia" && Math.abs(thisMonth - average) >= 10 && (tx.type === "receita" ? trend <= -0.3 : trend >= 0.3);
 
   const refresh = () => Promise.all(["transactions", "accounts", "dashboard", "cards", "categories", "flow", "calendar", "budget"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
   // A plain lançamento goes at once with "Desfazer"; series, installments and invoice entries ask first.
@@ -120,6 +176,17 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling }: { 
     } catch { toast.error("Não foi possível excluir agora."); }
   };
 
+  const share = async () => {
+    try {
+      const rows: [string, string][] = [["Quando", when], [tx.type === "transferencia" ? "Sai de" : "Como pagou", tx.card_name ? `Crédito · ${tx.card_name}` : tx.account_name],
+        ...(tx.to_account_name ? [["Vai para", tx.to_account_name] as [string, string]] : []), ...(tx.category_name ? [["Categoria", tx.category_name] as [string, string]] : []),
+        ["Data", tx.date.split("-").reverse().join("/")], ["Status", statusLabel], ["Origem", origin]];
+      const blob = await receiptImage({ title: tx.name, amount: `${tx.type === "receita" ? "+" : tx.type === "despesa" ? "−" : ""}${formatBRL(tx.value)}`, tone: tx.type === "receita" ? "#34d399" : tx.type === "despesa" ? "#fb7185" : "#c4b5fd", rows });
+      const how = await shareImage(blob, `comprovante-${tx.date}.png`, `${tx.name} · ${formatBRL(tx.value)}`);
+      if (how === "downloaded") toast.success("Imagem do comprovante baixada.");
+    } catch (error) { if (!(error instanceof DOMException && error.name === "AbortError")) toast.error("Não foi possível compartilhar agora."); }
+  };
+
   let i = 0;
   return (
     <div className="flex flex-col gap-2.5 pb-2" data-testid="record-insight">
@@ -128,6 +195,26 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling }: { 
           className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-[#047857] text-[15px] font-bold text-white shadow-[0_6px_20px_rgba(4,120,87,.3)] disabled:opacity-60">
           <CheckCircle2 size={18} aria-hidden="true" />{settling ? "Salvando…" : tx.type === "receita" ? "Marcar como recebido" : `Marcar como pago${tx.date > todayISO() ? " hoje" : ""}`}
         </motion.button>
+      ) : null}
+      {/* Quick actions on a saved lançamento. */}
+      <div className="flex shrink-0 gap-2">
+        {onRepeat ? <button type="button" onClick={onRepeat} data-testid="record-repeat" className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card px-2.5 text-[13px] font-semibold"><Copy size={15} className="text-[#a78bfa]" aria-hidden="true" />Lançar de novo</button> : null}
+        <button type="button" onClick={() => void share()} data-testid="record-share" className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card px-2.5 text-[13px] font-semibold"><Share2 size={15} className="text-[#a78bfa]" aria-hidden="true" />Compartilhar</button>
+        <button type="button" onClick={() => (hasPhoto ? setPhotoOpen(true) : photoInput.current?.click())} data-testid="record-photo-action" className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card px-2.5 text-[13px] font-semibold"><Camera size={15} className="text-[#a78bfa]" aria-hidden="true" />{hasPhoto ? "Ver foto" : "Foto"}</button>
+      </div>
+      <input ref={photoInput} type="file" accept="image/*" className="hidden" data-testid="record-photo-input" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void change("photo", () => addTransactionPhoto(tx, f), "Foto do comprovante salva."); }} />
+      {unusual ? (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex shrink-0 items-start gap-3 rounded-[20px] border border-amber-500/30 bg-amber-500/10 px-4 py-3" data-testid="record-unusual">
+          <TriangleAlert size={18} className="mt-0.5 shrink-0 text-amber-400" aria-hidden="true" />
+          <p className="text-sm"><span className="font-bold text-amber-300">{tx.type === "receita" ? "Veio menos que o normal." : "Veio mais alto que o normal."}</span> {money(Math.abs(thisMonth - average))} {thisMonth > average ? "acima" : "abaixo"} da média de {money(average)}.</p>
+        </motion.div>
+      ) : null}
+      {suggestFixed ? (
+        <div className="flex shrink-0 items-center gap-3 rounded-[20px] border border-primary/30 bg-primary/10 px-4 py-3 dark:bg-[#17132e]" data-testid="record-suggest-fixed">
+          <Repeat size={18} className="shrink-0 text-[#a78bfa]" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-sm">Isso aparece todo mês. <span className="text-muted-foreground">Quer que o FINNOS já preveja os próximos?</span></p>
+          <button type="button" onClick={() => setFixOpen(true)} className="h-9 shrink-0 rounded-full bg-[#7c3aed] px-3.5 text-sm font-bold text-white">Tornar fixa</button>
+        </div>
       ) : null}
       <Card title="IMPACTO">
         {impactRows.map(([l, v, t], k) => <Row key={l} label={l} value={v} tone={t} i={k} last={k === impactRows.length - 1} />)}
@@ -150,9 +237,9 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling }: { 
             ))}
           </div>
           <p className="py-2 text-sm" data-testid="record-trend">
-            {average <= 0 ? "Primeira vez nos últimos meses." : Math.abs(change) < 0.05
+            {average <= 0 ? "Primeira vez nos últimos meses." : Math.abs(trend) < 0.05
               ? <>Parecido com a média de {money(average)}.</>
-              : <><span className="font-semibold" style={{ color: (change > 0) === (tx.type !== "receita") ? "#fb7185" : "#34d399" }}>{Math.round(Math.abs(change) * 100)}% {change > 0 ? "acima" : "abaixo"}</span> da média dos últimos {recent.length === 1 ? "mês" : `${recent.length} meses`} ({money(average)}).</>}
+              : <><span className="font-semibold" style={{ color: (trend > 0) === (tx.type !== "receita") ? "#fb7185" : "#34d399" }}>{Math.round(Math.abs(trend) * 100)}% {trend > 0 ? "acima" : "abaixo"}</span> da média dos últimos {recent.length === 1 ? "mês" : `${recent.length} meses`} ({money(average)}).</>}
           </p>
         </Card>
       ) : null}
@@ -165,7 +252,16 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling }: { 
           <Row label="Origem" value={origin} tone="#c4b5fd" i={i++} />
           {tx.category_name ? <Row label="Categoria" value={tx.category_name} tone={tx.category_color ?? undefined} i={i++} /> : null}
           {tx.notes ? <Row label="Nota" value={tx.notes} i={i++} /> : null}
-          <Row label="Status" value={statusLabel} tone={tx.status === "pago" ? "#34d399" : "#fbbf24"} i={i++} last />
+          <Row label="Status" value={statusLabel} tone={tx.status === "pago" ? "#34d399" : "#fbbf24"} i={i++} last={!hasPhoto} />
+          {hasPhoto ? (
+            <button type="button" onClick={() => setPhotoOpen(true)} className="my-2 block w-full overflow-hidden rounded-2xl border border-border bg-muted" data-testid="record-photo" aria-label="Abrir foto do comprovante">
+              {photo.data ? <img src={photo.data} alt="Foto do comprovante" className="max-h-56 w-full object-cover" /> : <span className="flex h-24 items-center justify-center text-sm text-muted-foreground">{photo.isPending ? "Carregando foto…" : "Foto indisponível"}</span>}
+            </button>
+          ) : (
+            <button type="button" onClick={() => photoInput.current?.click()} disabled={working === "photo"} data-testid="record-photo-add" className="my-2 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border-[1.5px] border-dashed border-[#3a3b6a] text-sm font-medium text-primary dark:text-[#c4b5fd]">
+              <Camera size={16} aria-hidden="true" />{working === "photo" ? "Salvando foto…" : "+ Foto do comprovante"}
+            </button>
+          )}
         </div>
       </Card>
       {same.length >= 2 && tx.type !== "transferencia" ? (
@@ -176,15 +272,24 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling }: { 
         </Card>
       ) : null}
       <Card title="DETALHES">
-        <Row label={tx.type === "receita" ? "Receita fixa" : "Despesa fixa"} value={tx.fixed ? "Sim" : "Não"} i={0} />
-        <Row label="Parcelado" value={tx.installment && tx.total_installments ? `${tx.current_installment ?? 1} de ${tx.total_installments}` : "Não"} i={1} />
+        <ActionRow label={tx.type === "receita" ? "Receita fixa" : "Despesa fixa"} value={tx.fixed ? "Sim · mensal" : "Não"} action={!tx.fixed && !tx.installment && tx.type !== "transferencia" && !tx.invoice_payment ? "Tornar fixa" : undefined} onClick={() => setFixOpen(true)} testId="record-make-fixed" />
+        <ActionRow label="Parcelado" value={tx.installment && tx.total_installments ? `${tx.current_installment ?? 1} de ${tx.total_installments}` : "Não"} action={canSplit ? "Parcelar" : undefined} onClick={() => setSplitOpen(true)} testId="record-split" />
         <Row label="Repetição" value={repeats.kind === "unica" ? "Avulso" : repeats.kind === "repete" ? `${repeats.times}× em 6 meses` : repeats.kind === "assinatura" ? "Assinatura" : repeats.kind === "fixa" ? "Fixa" : "Avulso"} i={2} />
         <button type="button" onClick={() => setHistoryOpen(true)} data-testid="record-history-open" className="flex min-h-[38px] w-full items-center justify-between gap-4 text-sm">
           <span className="text-muted-foreground">Histórico de alterações</span>
           <span className="flex items-center gap-1 font-semibold">{historyQuery.isPending ? "…" : events.length}<ChevronRight size={15} className="text-[#a78bfa]" aria-hidden="true" /></span>
         </button>
       </Card>
-      <HistorySheet open={historyOpen} events={events} onClose={() => setHistoryOpen(false)} />
+      <HistorySheet open={historyOpen} events={events} onClose={() => setHistoryOpen(false)}
+        onRestore={(patch) => { setHistoryOpen(false); void change("restore", () => updateTransaction(tx.id, transactionInput(tx, patch), "manual", tx.version), "Alteração desfeita."); }} />
+      <ChoiceSheet open={fixOpen} title="Tornar fixa (mensal)?" text={`O FINNOS passa a prever "${tx.name}" todo mês, no dia ${Number(tx.date.slice(8, 10))}, com ${money(tx.value)}. Dá para mudar ou encerrar depois.`} testId="record-fixed-sheet"
+        choices={[{ key: "yes", label: "Sim, se repete todo mês", hint: "Os próximos meses aparecem como previstos.", icon: <Repeat size={18} /> }]}
+        onClose={() => setFixOpen(false)} onPick={() => { setFixOpen(false); void change("fixed", () => updateTransaction(tx.id, transactionInput(tx, { fixed: true, recurrence: "mensal" }), "manual", tx.version), "Agora é uma despesa fixa."); }} />
+      <ChoiceSheet open={splitOpen} title="Parcelar no cartão" text={`${money(tx.value)} em quantas vezes?`} testId="record-split-sheet"
+        choices={[2, 3, 4, 5, 6, 8, 10, 12].map((n) => ({ key: String(n), label: `${n}x de ${money(tx.value / n)}`, hint: n === 2 ? "A primeira parcela é a deste mês." : undefined }))}
+        onClose={() => setSplitOpen(false)} onPick={(k) => { setSplitOpen(false); const n = Number(k); void change("split", () => updateTransaction(tx.id, transactionInput(tx, { installment: true, total_installments: n, current_installment: 1 }), "manual", tx.version), `Parcelado em ${n}x.`); }} />
+      <PhotoViewer open={photoOpen} src={photo.data ?? null} onClose={() => setPhotoOpen(false)} onReplace={() => { setPhotoOpen(false); photoInput.current?.click(); }}
+        onRemove={() => { setPhotoOpen(false); void change("photo", () => removeTransactionPhoto(tx), "Foto removida."); }} />
       {enabled ? <Link to={cashFlowLink(tx)} onClick={onLeave} data-testid="transaction-detail-cashflow" className="flex h-[46px] shrink-0 items-center justify-between rounded-full border border-border bg-card px-5 text-[15px] font-semibold">
         <span className="flex items-center gap-2"><ChartNoAxesCombined size={17} className="text-[#a78bfa]" aria-hidden="true" />Ver no Caixa</span><ChevronRight size={17} className="text-muted-foreground" aria-hidden="true" />
       </Link> : null}

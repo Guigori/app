@@ -1,7 +1,7 @@
 import type { Transaction } from "@/types/finnos";
 
 /** Opens the register (the + sheet on the phone, the drawer on wide screens) from anywhere. */
-export interface RegisterSheetRequest { existing?: Transaction; kind?: "Despesa" | "Receita" | "Transferência" }
+export interface RegisterSheetRequest { existing?: Transaction; template?: Transaction; kind?: "Despesa" | "Receita" | "Transferência" }
 const EVENT = "finnos:open-register";
 export const DASHBOARD_QUERY = "(min-width: 768px), (orientation: landscape)";
 

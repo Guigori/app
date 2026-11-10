@@ -2,13 +2,14 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { History, PencilLine, Plus, Trash2, X } from "lucide-react";
+import { History, PencilLine, Plus, Trash2, Undo2, X } from "lucide-react";
 import { fetchAccounts, fetchCards, fetchCategories, type HistoryEvent } from "@/lib/data";
 import { formatBRL } from "@/lib/format";
+import type { TransactionInput } from "@/types/finnos";
 
 const FIELD: Record<string, string> = {
   name: "Nome", value_cents: "Valor", date: "Data", status: "Status", type: "Tipo", category_id: "Categoria",
-  account_id: "Conta", card_id: "Cartão", to_account_id: "Destino", origin: "Origem",
+  account_id: "Conta", card_id: "Cartão", to_account_id: "Destino", origin: "Origem", attachment: "Foto",
 };
 const TYPE: Record<string, string> = { despesa: "Despesa", receita: "Receita", transferencia: "Transferência" };
 const STATUS: Record<string, string> = { pago: "Pago", pendente: "Pendente", agendado: "Agendado", atrasado: "Atrasado" };
@@ -22,7 +23,24 @@ export function historyChanges(event: HistoryEvent, label: (field: string, v: st
 }
 
 /** Everything that happened to one lançamento: when it was created, each edit with before → after. */
-export function HistorySheet({ open, events, onClose }: { open: boolean; events: HistoryEvent[]; onClose: () => void }) {
+/** What to send to put back the values from before an edit (only fields that changed and can be edited). */
+export function restorePatch(event: HistoryEvent): Partial<TransactionInput> {
+  const before = event.before ?? {}; const after = event.after ?? {};
+  const patch: Partial<TransactionInput> = {};
+  const differs = (k: string) => k in before && String(before[k] ?? "") !== String(after[k] ?? "");
+  if (differs("name")) patch.name = String(before.name);
+  if (differs("value_cents")) patch.value = Number(before.value_cents) / 100;
+  if (differs("date")) patch.date = String(before.date);
+  if (differs("category_id")) patch.category_id = String(before.category_id);
+  if (differs("account_id")) patch.account_id = String(before.account_id);
+  if (differs("card_id")) patch.card_id = String(before.card_id);
+  if (differs("to_account_id")) patch.to_account_id = String(before.to_account_id);
+  if (differs("origin")) patch.origin = String(before.origin);
+  if (differs("status")) patch.status = before.status as TransactionInput["status"];
+  return patch;
+}
+
+export function HistorySheet({ open, events, onClose, onRestore }: { open: boolean; events: HistoryEvent[]; onClose: () => void; /** Put back the values from before one edit. */ onRestore?: (patch: Partial<TransactionInput>) => void }) {
   const categories = useQuery({ queryKey: ["categories"], queryFn: fetchCategories, enabled: open });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, enabled: open });
   const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards, enabled: open });
@@ -33,6 +51,7 @@ export function HistorySheet({ open, events, onClose }: { open: boolean; events:
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
   const label = (field: string, v: string | number | undefined): string => {
+    if (field === "attachment") return v ? "Com foto" : "Sem foto";
     if (v === undefined || v === null || v === "") return "—";
     if (field === "value_cents") return formatBRL(Number(v) / 100);
     if (field === "date") return String(v).split("-").reverse().join("/");
@@ -80,6 +99,9 @@ export function HistorySheet({ open, events, onClose }: { open: boolean; events:
                             <li key={c.field} className="text-sm"><span className="text-muted-foreground">{c.field}: </span><span className="line-through decoration-expense/60 opacity-70">{c.before}</span><span className="mx-1.5 text-muted-foreground">→</span><span className="font-semibold">{c.after}</span></li>
                           ))}
                         </ul>
+                      ) : null}
+                      {onRestore && changes.length && i === 0 && Object.keys(restorePatch(event)).length ? (
+                        <button type="button" onClick={() => onRestore(restorePatch(event))} data-testid="record-history-restore" className="mt-2 flex h-9 items-center gap-1.5 rounded-full border border-border px-3.5 text-sm font-semibold"><Undo2 size={15} className="text-[#a78bfa]" aria-hidden="true" />Desfazer esta alteração</button>
                       ) : null}
                     </div>
                   </motion.li>
