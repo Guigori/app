@@ -27,7 +27,7 @@ function Receipt({ tx }: { tx: Transaction }) {
     ...(tx.type === "transferencia" && tx.to_account_name ? [["Vai para", tx.to_account_name] as [string, string]] : []),
     ...(tx.category_name ? [["Categoria", tx.category_name] as [string, string]] : []),
     ["Data", formatDate(tx.date)],
-    ["Origem", origin],
+    ["Origem", tx.origin ? `${tx.origin} · ${origin}` : origin],
     ...(tx.installment && tx.total_installments ? [["Parcela", `${tx.current_installment ?? 1} de ${tx.total_installments}`] as [string, string]] : []),
     ...(created && !Number.isNaN(created.getTime()) ? [["Registrado em", created.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })] as [string, string]] : []),
   ];

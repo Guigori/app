@@ -5,7 +5,7 @@ import { RecurrenceScopeDialog } from "@/components/transactions/RecurrenceScope
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { createTransaction, fetchAccounts, fetchCards, fetchCategories, updateTransaction } from "@/lib/data";
+import { createTransaction, fetchAccounts, fetchCards, fetchCategories, fetchOrigins, updateTransaction } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { updateQueuedTransaction, flushSyncQueue, queueTransaction, getSyncOperation, discardConflictedOperation } from "@/lib/sync/queue";
 import { formatBRL, parseAmount, todayISO, TX_STATUS_LABEL, TX_TYPE_LABEL } from "@/lib/format";
@@ -60,6 +60,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   const [adjustedRaw, setAdjustedRaw] = useState("");
   const [attachment, setAttachment] = useState("");
   const [notes, setNotes] = useState("");
+  const [origin, setOrigin] = useState("");
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -77,6 +78,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     enabled: open,
     staleTime: 60_000,
   });
+  const origins = useQuery({ queryKey: ["origins"], queryFn: fetchOrigins, enabled: open, staleTime: 60_000 });
   const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: fetchCards, enabled: open, staleTime: 60_000 });
   const cards = useMemo(() => (cardsQuery.data ?? []).filter((c) => c.active), [cardsQuery.data]);
   const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
@@ -112,6 +114,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       setAdjustedRaw(source.adjusted_value != null ? String(source.adjusted_value) : "");
       setAttachment(source.attachment ?? "");
       setNotes(source.notes ?? "");
+      setOrigin(source.origin ?? "");
       setNotifyEnabled(source.notify_enabled ?? true);
     } else {
       setType(initialType ?? "despesa");
@@ -247,6 +250,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       adjusted_value: adjusted && adjusted > 0 ? adjusted : null,
       attachment: attachment.trim() || null,
       notes: notes.trim() || null,
+      origin: origin.trim() || null,
       notify_enabled: notifyEnabled,
     };
 
@@ -616,6 +620,12 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
                   data-testid="tx-attachment-input"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="tx-origin">Origem</Label>
+              <Input id="tx-origin" value={origin} onChange={(e) => setOrigin(e.target.value)} maxLength={40} list="tx-origin-options" placeholder="Ex.: Mercado Pago, iFood" data-testid="tx-origin-input" />
+              <datalist id="tx-origin-options">{(origins.data ?? []).map((o) => <option key={o.label} value={o.label} />)}</datalist>
             </div>
 
             <div className="space-y-2">

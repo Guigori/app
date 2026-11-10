@@ -766,6 +766,12 @@ export async function creditInvoice(cardId: string, input: CreditInvoiceInput, o
   return apiPost<Invoice>(`/cards/${encodeURIComponent(cardId)}/credits`, input, { "X-FINNOS-Operation-ID": operationId });
 }
 
+/** Origin labels used before ("Mercado Pago", "iFood"), most recent first. */
+export async function fetchOrigins(): Promise<{ label: string; count: number }[]> {
+  if (isLocalMode() || !navigator.onLine) return [];
+  try { return (await apiGet<{ items: { label: string; count: number }[] }>("/transactions/origins")).items; } catch { return []; }
+}
+
 export async function fetchSubscriptions(): Promise<Subscriptions> {
   if (isLocalMode()) return localSubscriptions();
   return cachedFetch("subscriptions:v2", () => apiGet<Subscriptions>("/subscriptions"));

@@ -13,7 +13,7 @@ import { evaluateExpression, KEYS, OPS, pressKey, typedDisplay } from "@/lib/reg
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Transaction, TransactionInput } from "@/types/finnos";
-import { createTransaction, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
+import { createTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getAccountPaymentMethods } from "@/lib/accountPaymentPreferences";
 import { addMonth, formatBRL, isISODate, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
@@ -42,7 +42,7 @@ export interface RegisterController {
   hint: string | null;
   save: () => void;
 }
-export default function SmartRegister({ embedded = false, onClose, onController }: { embedded?: boolean; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
+export default function SmartRegister({ embedded = false, desktop = false, onClose, onController }: { embedded?: boolean; desktop?: boolean; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
   const dialogs = useDialogs();
   const navigate = useNavigate();
   const { hidden } = useBalanceHidden();
@@ -95,6 +95,9 @@ export default function SmartRegister({ embedded = false, onClose, onController 
   const [installments, setInstallments] = useState(1);
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [originOpen, setOriginOpen] = useState(false);
+  const origins = useQuery({ queryKey: ["origins"], queryFn: fetchOrigins, staleTime: 60_000 });
   const [recurring, setRecurring] = useState(false);
   const [attachment, setAttachment] = useState("");
   const [destinationPicker, setDestinationPicker] = useState(false);
@@ -107,7 +110,7 @@ export default function SmartRegister({ embedded = false, onClose, onController 
     if (!canSave) return;
     const amount = Number(value);
     if (!Number.isFinite(amount) || amount <= 0 || !account || !isISODate(date) || (kind !== "Transferência" && !category) || (kind === "Transferência" && (!destination || destination === account))) return;
-    const input: TransactionInput = { name: displayName, value: amount, type: kind === "Despesa" ? "despesa" : kind === "Receita" ? "receita" : "transferencia", status: "pago", date, account_id: account, card_id: kind === "Despesa" ? selectedCardId : null, to_account_id: kind === "Transferência" ? destination : null, category_id: kind === "Transferência" ? null : category, fixed: recurring, recurrence: recurring ? "mensal" : null, installment: kind === "Despesa" && !!selectedCardId && installments > 1, total_installments: kind === "Despesa" && !!selectedCardId && installments > 1 ? installments : null, current_installment: kind === "Despesa" && !!selectedCardId && installments > 1 ? 1 : null, adjusted_value: null, attachment: null, notes: [note.trim(), payment && kind !== "Transferência" ? `Forma de pagamento: ${payment}` : "", project.trim() ? `Projeto: ${project.trim()}` : "", tags.trim() ? `Tags: ${tags.trim()}` : ""].filter(Boolean).join("\n") || null, notify_enabled: reminder };
+    const input: TransactionInput = { name: displayName, value: amount, type: kind === "Despesa" ? "despesa" : kind === "Receita" ? "receita" : "transferencia", status: "pago", date, account_id: account, card_id: kind === "Despesa" ? selectedCardId : null, to_account_id: kind === "Transferência" ? destination : null, category_id: kind === "Transferência" ? null : category, fixed: recurring, recurrence: recurring ? "mensal" : null, installment: kind === "Despesa" && !!selectedCardId && installments > 1, total_installments: kind === "Despesa" && !!selectedCardId && installments > 1 ? installments : null, current_installment: kind === "Despesa" && !!selectedCardId && installments > 1 ? 1 : null, adjusted_value: null, attachment: null, notes: [note.trim(), payment && kind !== "Transferência" ? `Forma de pagamento: ${payment}` : "", project.trim() ? `Projeto: ${project.trim()}` : "", tags.trim() ? `Tags: ${tags.trim()}` : ""].filter(Boolean).join("\n") || null, origin: origin.trim() || null, notify_enabled: reminder };
     saveMutation.mutate(input);
   };
   
@@ -127,12 +130,12 @@ export default function SmartRegister({ embedded = false, onClose, onController 
   const back = () => { setPage(history.at(-1) || "entry"); setHistory(h => h.slice(0, -1)); };
   // Saved: the success screen shows what was recorded; from there the person starts another entry or opens it.
   const resetForm = () => {
-    setExpr(""); setValue(""); setName(""); setNote(""); setCategory(""); setAttachment(""); setText(""); setProject(""); setTags("");
+    setExpr(""); setValue(""); setName(""); setNote(""); setOrigin(""); setOriginOpen(false); setCategory(""); setAttachment(""); setText(""); setProject(""); setTags("");
     setRecurring(false); setReminder(false); setInstallments(1); setDestination(""); setKeypadOpen(true);
     setHistory([]); setPage("entry");
   };
   const finishSave = (transaction: Transaction | null) => {
-    const chips = [kind === "Transferência" ? [selectedAccount?.name, accounts.find(a => a.id === destination)?.name].filter(Boolean).join(" → ") : selectedCategory?.name, selectedCard ? selectedCard.name : kind === "Transferência" ? "" : selectedAccount?.name, dateLabel, "Registro"].filter((c): c is string => !!c);
+    const chips = [kind === "Transferência" ? [selectedAccount?.name, accounts.find(a => a.id === destination)?.name].filter(Boolean).join(" → ") : selectedCategory?.name, selectedCard ? selectedCard.name : kind === "Transferência" ? "" : selectedAccount?.name, dateLabel, origin.trim() || "Registro"].filter((c): c is string => !!c);
     setDone({ kind, amount: formatBRL(Number(value)).replace(/,00$/, ""), name: displayName, chips, transaction: transaction as Transaction });
   };
   const applyParsed = (parsed: { value?: number | null; kind?: Kind; date?: string | null; accountId?: string | null; destinationId?: string | null; categoryId?: string | null; name?: string }) => {
@@ -346,7 +349,16 @@ export default function SmartRegister({ embedded = false, onClose, onController 
         </div>
 
         <div className="flex h-7 items-center gap-2 text-[0.8125rem]">
-          <span className="flex items-center gap-1.5 rounded-full bg-primary/12 px-3 py-1 font-medium text-primary"><Tag size={14} aria-hidden="true" />Registro</span>
+          {originOpen ? (
+            <input autoFocus value={origin} maxLength={40} onChange={(e) => setOrigin(e.target.value)} onBlur={() => window.setTimeout(() => setOriginOpen(false), 150)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setOriginOpen(false); } }} onFocus={() => setKeypadOpen(false)} aria-label="Origem" placeholder="Origem (ex.: Mercado Pago)" data-testid="quick-entry-origin-input"
+              className="h-7 min-w-0 flex-1 rounded-full bg-primary/12 px-3 font-medium text-primary outline-none placeholder:text-primary/50" />
+          ) : (
+            <button type="button" onClick={() => setOriginOpen(true)} aria-label="Editar origem" data-testid="quick-entry-origin" className="flex items-center gap-1.5 rounded-full bg-primary/12 px-3 py-1 font-medium text-primary"><Tag size={14} aria-hidden="true" />{origin.trim() || "Registro"}</button>
+          )}
+          {originOpen ? (origins.data ?? []).filter((o) => o.label.toLowerCase().includes(origin.trim().toLowerCase()) && o.label !== origin).slice(0, 3).map((o) => (
+            <button key={o.label} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setOrigin(o.label); setOriginOpen(false); }} className="shrink-0 rounded-full border border-border px-2.5 py-1 text-muted-foreground">{o.label}</button>
+          )) : null}
         </div>
 
         {kind !== "Transferência" ? (
@@ -368,7 +380,7 @@ export default function SmartRegister({ embedded = false, onClose, onController 
           </div>
         ) : null}
 
-        {keypadOpen ? <div className={cn("grid gap-2.5", calc ? "grid-cols-4" : "grid-cols-3")} data-testid="quick-entry-keypad">
+        {keypadOpen && !desktop ? <div className={cn("grid gap-2.5", calc ? "grid-cols-4" : "grid-cols-3")} data-testid="quick-entry-keypad">
           {(calc ? KEYS : KEYS.filter((key) => !OPS.includes(key))).map((key) => (
             <button key={key} type="button" onClick={() => press(key)} aria-label={key === "⌫" ? "Apagar (segure para limpar)" : key}
               onPointerDown={key === "⌫" ? () => { clearTimer.current = window.setTimeout(() => { setExpr(""); clearTimer.current = null; }, 550); } : undefined}

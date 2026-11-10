@@ -112,6 +112,8 @@ class TransactionOut(BaseModel):
     attachment: Optional[str] = None
     notes: Optional[str] = None
     notify_enabled: bool = True
+    # Free label of where the money moved ("Mercado Pago", "iFood"...), chosen by the person.
+    origin: Optional[str] = None
     # Where it came from when it was not typed in the app: "apple_pay" (a purchase reviewed from
     # the Apple Pay queue) or "apple_pay_auto" (registered automatically).
     capture: Optional[Literal["apple_pay", "apple_pay_auto"]] = None
@@ -138,6 +140,7 @@ class TransactionIn(BaseModel):
     adjusted_value: Optional[Money] = Field(default=None, gt=0)
     attachment: Optional[str] = Field(default=None, max_length=300)
     notes: Optional[str] = Field(default=None, max_length=500)
+    origin: Optional[str] = Field(default=None, max_length=40)
     notify_enabled: bool = True
 
 
