@@ -6,6 +6,7 @@ import { applyProposal, undoProposal } from "@/lib/finnApply";
 import { readMemory } from "@/lib/finnMemory";
 import { ProposalCard } from "@/components/ai/ProposalCard";
 import { getRegisterCalc, getRegisterDefault, setRegisterCalc } from "@/lib/registerPreferences";
+import { motion } from "motion/react";
 import { isLocalMode } from "@/lib/mode";
 import { openRegisterSheet } from "@/lib/registerSheet";
 import { SeriesScopeSheet } from "@/components/transactions/SeriesScopeSheet";
@@ -65,7 +66,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const dialogs = useDialogs();
   const navigate = useNavigate();
   const { hidden, toggle: toggleHidden } = useBalanceHidden();
-  const [expr, setExpr] = useState(() => (existing ? String(existing.value).replace(".", ",") : capture ? String(capture.item.value).replace(".", ",") : ""));
+  const [expr, setExpr] = useState(() => (existing ? (Number.isInteger(existing.value) ? String(existing.value) : existing.value.toFixed(2).replace(".", ",")) : capture ? String(capture.item.value).replace(".", ",") : ""));
   const [done, setDone] = useState<{ kind: Kind; amount: string; name: string; chips: string[]; transaction: Transaction } | null>(null);
   const [calc, setCalc] = useState(getRegisterCalc);
   const [keypadOpen, setKeypadOpen] = useState(!existing);
@@ -115,6 +116,11 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [note, setNote] = useState(() => existing?.notes ?? "");
   const [origin, setOrigin] = useState(() => existing?.origin ?? "");
   const [dateOpen, setDateOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const recordScroll = useRef<HTMLDivElement>(null);
+  const collapsing = useRef(false);
+  // Back to the register as it opened: fields shown, receipt at the top.
+  const collapseRecord = () => { collapsing.current = true; setExpanded(false); recordScroll.current?.scrollTo({ top: 0, behavior: "smooth" }); window.setTimeout(() => { collapsing.current = false; }, 900); };
   const [scopeOpen, setScopeOpen] = useState(false);
   const scopeRef = useRef<RecurrenceEditScope | null>(null);
   const isSeries = Boolean(existing?.fixed && existing.recurrence_id && !existing.installment && !isLocalMode());
@@ -352,7 +358,10 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       {/* Header: calculator · type (icons, the chosen one named) · AI. */}
       <header className="flex h-10 shrink-0 items-center gap-2">
         {embedded ? null : <button type="button" onClick={close} aria-label="Fechar" className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card"><X size={18} /></button>}
-        {desktop || !keypadOpen ? <div className="size-10 shrink-0" aria-hidden="true" /> : (
+        {existing && expanded ? (
+          <motion.button type="button" onClick={collapseRecord} aria-label="Voltar ao registro" data-testid="record-collapse"
+            initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card"><ArrowLeft size={18} /></motion.button>
+        ) : desktop || !keypadOpen ? <div className="size-10 shrink-0" aria-hidden="true" /> : (
           <button type="button" onClick={toggleCalc} aria-pressed={calc} aria-label="Modo calculadora" data-testid="quick-entry-calc" className={cn("grid size-10 shrink-0 place-items-center rounded-full border border-[#a78bfa] transition-colors", calc ? "bg-[#7c3aed] text-white" : "bg-primary/10 text-[#a78bfa] dark:bg-[#17132e]")}><Calculator size={19} strokeWidth={1.8} aria-hidden="true" /></button>
         )}
         <div className="flex h-10 min-w-0 flex-1 items-center justify-between rounded-full border border-border bg-card px-[3px]" role="radiogroup" aria-label="Tipo">
@@ -370,6 +379,15 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         <button type="button" onClick={() => go("start")} aria-label={MEDIA_INPUTS ? "Registro inteligente: escrever, falar ou fotografar" : "Registro inteligente: escrever como foi"} title="Registro inteligente" className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card text-[#a78bfa]"><Sparkles size={18} /></button>
       </header>
 
+      {existing && expanded ? (
+        <motion.button type="button" onClick={collapseRecord} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+          className="flex h-11 shrink-0 items-center justify-between gap-3 rounded-full bg-muted px-4 text-left" data-testid="record-summary">
+          <span className="min-w-0 truncate text-[15px] font-bold">{name || "Sem nome"}</span>
+          <span className={cn("shrink-0 text-[17px] font-bold tabular-nums", tone.text)}>{formatBRL(amountValue)}</span>
+        </motion.button>
+      ) : null}
+      {(() => {
+        const top = <>
       {/* Amount: big, in the type's colour, with a caret while typing; the sum above it in calculator mode. */}
       <button type="button" onClick={() => setKeypadOpen(true)} aria-label="Valor: toque para digitar" className={cn("flex min-h-[60px] flex-col", existing && !keypadOpen ? "h-[88px] shrink-0" : "flex-1", " items-center justify-center gap-1", amountValue || ops ? tone.text : "text-[#5d5d75]")}>
         {ops && keypadOpen ? <span className="text-[17px] font-medium tabular-nums" aria-hidden="true">{expr.replace(/\./g, ",").replace(/\s*([+−×÷])\s*/g, " $1 ")}</span> : null}
@@ -405,7 +423,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         ) : (
           <button type="button" onClick={() => { setKeypadOpen(false); setOriginOpen(true); }} aria-label="Editar origem" data-testid="quick-entry-origin" className="flex h-7 items-center gap-1.5 rounded-full bg-primary/10 px-3 font-medium text-primary dark:bg-[#1d1640] dark:text-[#c4b5fd]"><Tag size={13} aria-hidden="true" />{origin.trim() || (capture || existing?.capture ? "Apple Pay" : "Registro")}</button>
         )}
-        {existing && !originOpen ? <span className={cn("flex h-7 items-center gap-1.5 rounded-full px-3 font-medium", existing.status === "pago" ? "bg-income/12 text-income dark:bg-[#0d2a22] dark:text-[#34d399]" : "bg-amber-500/12 text-amber-500")} data-testid="record-status"><Check size={13} aria-hidden="true" />{existing.status === "pago" ? (existing.type === "receita" ? "Recebido" : "Pago") : "Pendente"}</span> : null}
+        {existing && !originOpen ? <span className={cn("flex h-7 items-center gap-1.5 rounded-full px-3 font-medium", existing.status === "pago" ? "bg-income/12 text-income dark:bg-[#0d2a22] dark:text-[#34d399]" : "bg-amber-500/12 text-amber-500")} data-testid="record-status"><Check size={13} aria-hidden="true" />{existing.status === "pago" ? (existing.type === "receita" ? "Recebido" : "Pago") : existing.status === "agendado" ? "Agendado" : "Pendente"}</span> : null}
         {existing && !originOpen && (existing.installment || existing.fixed || existing.invoice_payment || existing.invoice_refund) ? <span className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-sky-500/12 px-3 font-medium text-sky-500 dark:bg-[#0c2330] dark:text-[#38bdf8]" data-testid="record-kind">{existing.installment ? `Parcela ${existing.current_installment ?? 1}/${existing.total_installments ?? "?"}` : existing.invoice_payment ? "Fatura" : existing.invoice_refund ? "Estorno" : "Mensal"}</span> : null}
         {existing && dirty && !originOpen ? <span className="flex h-7 items-center gap-1.5 rounded-full bg-amber-500/12 px-3 font-medium text-amber-500 dark:bg-[#2a1a0c] dark:text-[#fb923c]" data-testid="record-changed"><Pencil size={12} aria-hidden="true" />Alterado</span> : null}
         {originOpen ? (origins.data ?? []).filter((o) => o.label.toLowerCase().includes(origin.trim().toLowerCase()) && o.label !== origin).slice(0, 3).map((o) => (
@@ -430,8 +448,14 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         </div>
       ) : null}
 
+        </>;
+        if (!existing) return top;
+        // A saved lançamento: scrolling the receipt folds the fields away so it gets the whole screen.
+        return <motion.div className="-mx-1 -my-1 flex shrink-0 flex-col gap-2.5 overflow-hidden px-1 py-1" initial={false}
+          animate={expanded ? { height: 0, opacity: 0, marginBottom: -10 } : { height: "auto", opacity: 1, marginBottom: 0 }} transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }} aria-hidden={expanded}>{top}</motion.div>;
+      })()}
       {existing && !keypadOpen ? (
-        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1" data-testid="record-scroll">
+        <div ref={recordScroll} onScroll={(e) => { const top = e.currentTarget.scrollTop; if (collapsing.current) { if (top <= 4) collapsing.current = false; return; } if (!expanded && top > 24) setExpanded(true); }} className="-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1" data-testid="record-scroll">
           <RecordInsight tx={existing} onDeleted={() => onClose?.()} onLeave={() => onClose?.()} />
         </div>
       ) : null}

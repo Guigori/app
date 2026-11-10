@@ -59,6 +59,9 @@ export function RecordInsight({ tx, onDeleted, onLeave }: { tx: Transaction; onD
   const subscriptions = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions, enabled });
 
   const fromCycle = cycleImpact(tx, cycleProgress.data);
+  // Older lançamentos (imported, restored, or created before the history existed) still show when they were made.
+  const events = historyQuery.data?.length ? historyQuery.data : historyQuery.isSuccess || historyQuery.isError
+    ? [{ id: "created", action: "created" as const, created_at: tx.created_at, before: null, after: { name: tx.name, value_cents: Math.round(tx.value * 100), date: tx.date } }] : [];
   const impact = fromCycle ?? budgetImpact(tx, budget.data);
   const month_ = monthImpact(tx, calendar.data);
   const same = (history.data ?? []).filter((r) => r.type === tx.type && norm(r.name) === norm(tx.name) && r.date.slice(0, 7) === month);
@@ -69,7 +72,7 @@ export function RecordInsight({ tx, onDeleted, onLeave }: { tx: Transaction; onD
   const created = tx.created_at ? new Date(tx.created_at) : null;
   const when = created && !Number.isNaN(created.getTime()) ? `${created.toLocaleDateString("pt-BR")} · ${created.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : tx.date.split("-").reverse().join("/");
   const origin = tx.origin || (tx.capture ? "Apple Pay" : "Registro manual");
-  const statusLabel = tx.status === "pago" ? (tx.type === "receita" ? "Recebido" : "Pago") : tx.status === "pendente" ? "Pendente" : tx.status;
+  const statusLabel = tx.status === "pago" ? (tx.type === "receita" ? "Recebido" : "Pago") : tx.status === "pendente" ? "Pendente" : tx.status === "agendado" ? "Agendado" : tx.status;
 
   const impactRows: [string, string, string | undefined][] = [
     tx.type === "transferencia"
@@ -127,10 +130,10 @@ export function RecordInsight({ tx, onDeleted, onLeave }: { tx: Transaction; onD
         <Row label="Repetição" value={repeats.kind === "unica" ? "Avulso" : repeats.kind === "repete" ? `${repeats.times}× em 6 meses` : repeats.kind === "assinatura" ? "Assinatura" : repeats.kind === "fixa" ? "Fixa" : "Avulso"} i={2} />
         <button type="button" onClick={() => setHistoryOpen(true)} data-testid="record-history-open" className="flex min-h-[38px] w-full items-center justify-between gap-4 text-sm">
           <span className="text-muted-foreground">Histórico de alterações</span>
-          <span className="flex items-center gap-1 font-semibold">{historyQuery.isPending ? "…" : historyQuery.data?.length ?? 0}<ChevronRight size={15} className="text-[#a78bfa]" aria-hidden="true" /></span>
+          <span className="flex items-center gap-1 font-semibold">{historyQuery.isPending ? "…" : events.length}<ChevronRight size={15} className="text-[#a78bfa]" aria-hidden="true" /></span>
         </button>
       </Card>
-      <HistorySheet open={historyOpen} events={historyQuery.data ?? []} onClose={() => setHistoryOpen(false)} />
+      <HistorySheet open={historyOpen} events={events} onClose={() => setHistoryOpen(false)} />
       {enabled ? <Link to={cashFlowLink(tx)} onClick={onLeave} data-testid="transaction-detail-cashflow" className="flex h-[46px] shrink-0 items-center justify-between rounded-full border border-border bg-card px-5 text-[15px] font-semibold">
         <span className="flex items-center gap-2"><ChartNoAxesCombined size={17} className="text-[#a78bfa]" aria-hidden="true" />Ver no Caixa</span><ChevronRight size={17} className="text-muted-foreground" aria-hidden="true" />
       </Link> : null}
