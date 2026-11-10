@@ -22,13 +22,21 @@ export function useRouteState<T>(name: string, initial: T | (() => T)): [T, Disp
   // fresh visit (the link's own parameters win), never as a history entry to restore.
   const persistent = key !== "default";
   const storageKey = `${PREFIX}${key}:${name}`;
-  const [value, setValue] = useState<T>(() => {
+  const load = (): T => {
     const fallback = typeof initial === "function" ? (initial as () => T)() : initial;
     const saved = persistent ? read<T>(storageKey) : { found: false as const };
     // A value of another shape (older version, other screen) is ignored, never trusted.
     const sameShape = fallback === null || fallback === undefined || typeof saved.value === typeof fallback;
     return saved.found && sameShape && saved.value !== null ? (saved.value as T) : fallback;
-  });
+  };
+  const [value, setValue] = useState<T>(load);
+  // The same screen can stay mounted while the history entry changes (a link to itself, Voltar):
+  // a saved entry brings its own value back; a new one keeps what is on screen until its link applies.
+  const [seenKey, setSeenKey] = useState(key);
+  if (seenKey !== key) {
+    setSeenKey(key);
+    if (persistent && read<T>(storageKey).found) setValue(load());
+  }
   useEffect(() => {
     if (!persistent) return;
     try { sessionStorage.setItem(storageKey, JSON.stringify(value)); } catch { /* private mode: nothing to restore */ }
@@ -39,14 +47,15 @@ export function useRouteState<T>(name: string, initial: T | (() => T)): [T, Disp
 /** True when this screen was saved before for this history entry (coming back to it). */
 export function useIsRestoring(): boolean {
   const { key } = useLocation();
-  const restoring = useRef<boolean | null>(null);
-  if (restoring.current === null) {
-    if (key === "default") { restoring.current = false; return false; }
-    try {
-      restoring.current = Object.keys(sessionStorage).some((k) => k.startsWith(`${PREFIX}${key}:`));
-    } catch {
-      restoring.current = false;
+  // Decided once per history entry, not once per mount: a screen that stays mounted while a
+  // link opens a new entry of it must apply that link's parameters.
+  const restoring = useRef<{ key: string; value: boolean } | null>(null);
+  if (restoring.current?.key !== key) {
+    let value = false;
+    if (key !== "default") {
+      try { value = Object.keys(sessionStorage).some((k) => k.startsWith(`${PREFIX}${key}:`)); } catch { value = false; }
     }
+    restoring.current = { key, value };
   }
-  return restoring.current;
+  return restoring.current.value;
 }

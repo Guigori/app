@@ -145,7 +145,8 @@ export default function Transactions() {
     setSelectedDate(linkedDate);
     setScope("dia");
     setFlowView("calendario");
-  }, [linkedDate, restoring, setMonth, setSelectedDate, setScope, setFlowView]);
+    // location.key: the same link tapped again (same address, new entry) applies again.
+  }, [linkedDate, restoring, setMonth, setSelectedDate, setScope, setFlowView, location.key]);
 
   useEffect(() => {
     if (restoring || linkedDate) return;
@@ -175,7 +176,7 @@ export default function Transactions() {
       setType("todos");
       setFlowView("lista");
     }
-  }, [linkedCategoryId, linkedDate, linkedMetric, linkedMonth, linkedTab, restoring, setMonth, setSelectedDate, setScope, setCategoryId, setType, setFlowView]);
+  }, [linkedCategoryId, linkedDate, linkedMetric, linkedMonth, linkedTab, restoring, setMonth, setSelectedDate, setScope, setCategoryId, setType, setFlowView, location.key]);
 
 
   // The global "+" reads this, so a new entry lands on the day being viewed.
