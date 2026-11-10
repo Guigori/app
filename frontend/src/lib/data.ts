@@ -711,6 +711,22 @@ export async function settleTransaction(tx: Transaction): Promise<Transaction> {
   return updateTransaction(tx.id, transactionInput(tx, { status: "pago", date: tx.date > iso ? iso : tx.date }), "manual", tx.version);
 }
 
+/** Adds the receipt photo to a saved lançamento and returns it as stored now. */
+export async function addTransactionPhoto(tx: Transaction, file: File): Promise<Transaction> {
+  const { attachPhoto, ATTACHMENT_MARKER } = await import("@/lib/attachments");
+  await attachPhoto(tx, file);
+  if (isLocalMode()) return updateTransaction(tx.id, transactionInput(tx, { attachment: ATTACHMENT_MARKER }), "manual", tx.version);
+  return fetchTransactionById(tx.id);
+}
+
+/** Removes the receipt photo. */
+export async function removeTransactionPhoto(tx: Transaction): Promise<Transaction> {
+  const { removeAttachment } = await import("@/lib/attachments");
+  await removeAttachment(tx.id);
+  if (isLocalMode()) return updateTransaction(tx.id, transactionInput(tx, { attachment: null }), "manual", tx.version);
+  return fetchTransactionById(tx.id);
+}
+
 export interface HistoryEvent { id: string; action: "created" | "updated" | "deleted"; created_at: string; before: Record<string, string | number> | null; after: Record<string, string | number> | null }
 /** Every recorded change of one lançamento, newest first. */
 export async function fetchTransactionHistory(id: string): Promise<HistoryEvent[]> {

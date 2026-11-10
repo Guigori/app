@@ -524,6 +524,71 @@ async def delete_transaction(
         raise HTTPException(status_code=404, detail="Transação não encontrada.")
 
 
+ATTACHMENT_MARKER = "finnos:attachment"
+ATTACHMENT_MAX = 900_000  # characters of the data URL; a Firestore document holds up to 1 MiB
+ATTACHMENT_TYPES = ("data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,")
+
+
+class AttachmentIn(FinanceModel):
+    data_url: str = Field(min_length=32, max_length=ATTACHMENT_MAX)
+    name: str = Field(default="comprovante.jpg", max_length=120)
+
+
+async def _owned_transaction(uid: str, tx_id: str) -> dict:
+    doc = await db.transactions.find_one({"id": tx_id, "user_id": uid})
+    if not doc:
+        raise HTTPException(404, "Transação não encontrada.")
+    return doc
+
+
+@router.put("/{tx_id}/attachment")
+async def put_attachment(tx_id: str, payload: AttachmentIn, user: dict = Depends(require_user)) -> dict:
+    """Stores the receipt photo (already compressed by the app) next to the lançamento."""
+    if not payload.data_url.startswith(ATTACHMENT_TYPES):
+        raise HTTPException(422, "Envie uma imagem JPG, PNG ou WebP.")
+    await _owned_transaction(user["id"], tx_id)
+    uid = store.scoped({"user_id": user["id"]})
+    now = datetime.now(timezone.utc).isoformat()
+
+    def write():
+        ref = store.root(store.client(), uid).collection("attachments").document(store.resource_id(tx_id))
+        ref.set({"transaction_id": tx_id, "data_url": payload.data_url, "name": payload.name, "updated_at": now})
+
+    await run_in_threadpool(write)
+    existing = await db.transactions.find_one({"id": tx_id, "user_id": user["id"]})
+    if existing and existing.get("attachment") != ATTACHMENT_MARKER:
+        await db.transactions.update_one({"id": tx_id, "user_id": user["id"]}, {"$set": {"attachment": ATTACHMENT_MARKER}})
+    return {"ok": True, "attachment": ATTACHMENT_MARKER, "updated_at": now}
+
+
+@router.get("/{tx_id}/attachment")
+async def get_attachment(tx_id: str, user: dict = Depends(require_user)) -> dict:
+    await _owned_transaction(user["id"], tx_id)
+    uid = store.scoped({"user_id": user["id"]})
+
+    def read():
+        snap = store.root(store.client(), uid).collection("attachments").document(store.resource_id(tx_id)).get()
+        return snap.to_dict() if snap.exists else None
+
+    data = await run_in_threadpool(read)
+    if not data:
+        raise HTTPException(404, "Sem anexo.")
+    return {"data_url": data.get("data_url"), "name": data.get("name"), "updated_at": data.get("updated_at")}
+
+
+@router.delete("/{tx_id}/attachment", status_code=204)
+async def delete_attachment(tx_id: str, user: dict = Depends(require_user)) -> Response:
+    await _owned_transaction(user["id"], tx_id)
+    uid = store.scoped({"user_id": user["id"]})
+
+    def remove():
+        store.root(store.client(), uid).collection("attachments").document(store.resource_id(tx_id)).delete()
+
+    await run_in_threadpool(remove)
+    await db.transactions.update_one({"id": tx_id, "user_id": user["id"]}, {"$set": {"attachment": None}})
+    return Response(status_code=204)
+
+
 @router.get("/{tx_id}/history")
 async def transaction_history(tx_id: str, user: dict = Depends(require_user)) -> dict:
     """Every recorded change of one lançamento (created, edited, deleted), newest first.

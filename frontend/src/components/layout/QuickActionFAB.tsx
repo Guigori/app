@@ -50,7 +50,7 @@ export function QuickActionFAB() {
               initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 330, damping: 34 }}>
               <div className="min-h-0 flex-1 overflow-hidden pb-24">
                 <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">Preparando o registro...</div>}>
-                  <SmartRegister key={requestKey} existing={request.existing} initialKind={request.kind} embedded desktop onClose={() => setOpen(false)} onController={setController} />
+                  <SmartRegister key={requestKey} existing={request.existing} template={request.template} initialKind={request.kind} embedded desktop onClose={() => setOpen(false)} onController={setController} />
                 </Suspense>
               </div>
             </motion.aside>
