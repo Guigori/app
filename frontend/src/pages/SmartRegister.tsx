@@ -297,7 +297,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           {embedded ? null : <button type="button" onClick={close} aria-label="Fechar" className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card"><X size={20} /></button>}
           <button type="button" onClick={toggleCalc} aria-pressed={calc} aria-label="Modo calculadora" data-testid="quick-entry-calc" className={cn("grid size-11 shrink-0 place-items-center rounded-full border transition-colors", calc ? "border-primary bg-primary text-primary-foreground" : "border-primary/50 bg-primary/10 text-primary")}><Calculator size={19} aria-hidden="true" /></button>
         </div>
-        <div className="flex items-center gap-0.5 rounded-full border border-border bg-card p-1" role="radiogroup" aria-label="Tipo">
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-0.5 rounded-full border border-border bg-card p-1" role="radiogroup" aria-label="Tipo">
           {(["Receita", "Despesa", "Transferência"] as Kind[]).map((k) => {
             const Icon = KIND_UI[k].icon;
             const active = kind === k;
@@ -310,50 +310,19 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         </div>
         <div className="flex shrink-0 items-center">
           <button type="button" onClick={() => go("start")} aria-label={MEDIA_INPUTS ? "Registro inteligente: escrever, falar ou fotografar" : "Registro inteligente: escrever como foi"} title="Registro inteligente" className="grid size-11 place-items-center rounded-full text-primary hover:bg-muted"><WandSparkles size={20} /></button>
-          <button type="button" onClick={() => go("more")} aria-label="Mais opções" className="grid size-11 place-items-center rounded-full border border-border bg-card"><MoreVertical size={20} /></button>
         </div>
       </header>
 
-      <div className="flex min-h-14 flex-1 flex-col items-center justify-center px-4">
+      <div className="flex min-h-[4.5rem] flex-1 flex-col items-center justify-center px-4">
         <p className={cn("h-5 text-sm tabular-nums", /[+−×÷]/.test(expr) ? KIND_UI[kind].amount : "text-muted-foreground")} aria-hidden={!hint}>{/[+−×÷]/.test(expr) ? expr : embedded ? hint ?? "" : ""}</p>
         <button type="button" onClick={() => setKeypadOpen(true)} aria-label="Valor: toque para digitar" className={cn("font-heading text-[clamp(2.75rem,15vw,4.5rem)] font-bold leading-none tracking-tight tabular-nums", amountValue ? KIND_UI[kind].amount : "text-muted-foreground/50")} data-testid="quick-entry-amount" aria-live="polite">
           {typedAmount ?? formatBRL(amountValue).replace(/,00$/, "")}
         </button>
       </div>
 
-      <div className="shrink-0 space-y-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        {kind === "Transferência" ? (
-          <TransferPreview from={selectedAccount} to={accounts.find((a) => a.id === destination)} amount={amountValue} hidden={hidden}
-            onPickFrom={() => go("pay")}
-            onPickTo={() => { setDestinationPicker(true); setInstitutionId(null); go("accounts"); }}
-            onSwap={destination ? () => { const from = account; setAccount(destination); setDestination(from); } : undefined} />
-        ) : null}
-        {/* In a transfer the De / Para cards hold the accounts, and the date goes next to the note. */}
-        <div className={cn("flex items-center gap-2", kind === "Transferência" && "h-0")}>
-          {kind !== "Transferência" ? <button type="button" onClick={() => go("pay")} className="flex min-w-0 items-center gap-2 rounded-full bg-muted py-1.5 pl-1.5 pr-4 text-left" data-testid="quick-entry-account">
-            <span className={cn("grid size-9 shrink-0 place-items-center rounded-full", selectedCard ? "bg-primary/15 text-primary" : "bg-income/15 text-income")}>{selectedCard ? <CreditCard size={18} /> : <Wallet size={18} />}</span>
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold">{selectedCard ? selectedCard.name : selectedAccount?.name ?? "Escolher conta"}</span>
-              {selectedCard ? <span className="block text-xs text-muted-foreground">Crédito · {hidden ? "••••" : `disp. ${formatBRL(selectedCard.available)}`}</span> : selectedAccount ? <span className="block text-xs tabular-nums text-muted-foreground">{hidden ? "••••" : formatBRL(selectedAccount.balance)}</span> : null}
-            </span>
-          </button> : null}
-          {kind !== "Transferência" ? <button type="button" onClick={() => { const el = dateInput.current; if (!el) return; try { el.showPicker(); } catch { el.focus(); } }} className="ml-auto shrink-0 rounded-full bg-muted px-4 py-3 text-sm font-semibold" data-testid="quick-entry-date">{dateLabel}</button> : null}
-          <input ref={dateInput} type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="sr-only" tabIndex={-1} aria-label="Data" />
-        </div>
-
-        {selectedCard && kind === "Despesa" ? (
-          <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none]" role="radiogroup" aria-label="Parcelas" data-testid="quick-entry-installments">
-            {[1, 2, 3, 4, 5, 6, 10, 12].map((n) => (
-              <button key={n} type="button" role="radio" aria-checked={installments === n} onClick={() => setInstallments(n)} className={cn("h-9 shrink-0 rounded-full px-3 text-sm font-semibold tabular-nums transition-colors", installments === n ? "bg-primary text-primary-foreground" : "bg-muted")}>
-                {n === 1 ? "À vista" : `${n}x`}
-              </button>
-            ))}
-            {installments > 1 && amountValue > 0 ? <span className="shrink-0 pl-1 text-xs tabular-nums text-muted-foreground">{installments}x de {hidden ? "••••" : formatBRL(Math.round((amountValue / installments) * 100) / 100)}</span> : null}
-          </div>
-        ) : null}
-
+      <div className="shrink-0 space-y-2.5 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="flex items-center gap-2">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Uber, mercado)" aria-label="Nome" onFocus={() => setKeypadOpen(false)} className="h-12 min-w-0 flex-1 rounded-2xl bg-muted px-4 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Uber, mercado)" aria-label="Nome" onFocus={() => setKeypadOpen(false)} onBlur={() => setKeypadOpen(true)} className="h-12 min-w-0 flex-1 rounded-2xl bg-muted px-4 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
           {kind === "Transferência" ? <button type="button" onClick={() => { const el = dateInput.current; if (!el) return; try { el.showPicker(); } catch { el.focus(); } }} className="h-12 shrink-0 rounded-2xl bg-muted px-4 text-sm font-semibold">{dateLabel}</button> : null}
         </div>
 
@@ -368,8 +337,15 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           {originOpen ? (origins.data ?? []).filter((o) => o.label.toLowerCase().includes(origin.trim().toLowerCase()) && o.label !== origin).slice(0, 3).map((o) => (
             <button key={o.label} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setOrigin(o.label); setOriginOpen(false); }} className="shrink-0 rounded-full border border-border px-2.5 py-1 text-muted-foreground">{o.label}</button>
           )) : null}
+          {!originOpen ? <button type="button" onClick={() => go("more")} className="text-muted-foreground" data-testid="quick-entry-add-tag">+ Adicionar tag</button> : null}
         </div>
 
+        {kind === "Transferência" ? (
+          <TransferPreview from={selectedAccount} to={accounts.find((a) => a.id === destination)} amount={amountValue} hidden={hidden}
+            onPickFrom={() => go("pay")}
+            onPickTo={() => { setDestinationPicker(true); setInstitutionId(null); go("accounts"); }}
+            onSwap={destination ? () => { const from = account; setAccount(destination); setDestination(from); } : undefined} />
+        ) : null}
         {kind !== "Transferência" ? (
           <div className="rounded-2xl bg-muted/60 py-2">
             {/* Fading edges say the row scrolls instead of cutting a category in half. */}
@@ -389,12 +365,37 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           </div>
         ) : null}
 
+        {/* In a transfer the De / Para cards hold the accounts, and the date goes next to the note. */}
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => go("more")} aria-label="Mais opções" data-testid="quick-entry-more" className="grid size-12 shrink-0 place-items-center rounded-full border border-border bg-card"><MoreVertical size={20} /></button>
+          {kind !== "Transferência" ? <button type="button" onClick={() => go("pay")} className="flex h-12 min-w-0 flex-1 items-center gap-2 rounded-full bg-muted py-1.5 pl-1.5 pr-4 text-left" data-testid="quick-entry-account">
+            <span className={cn("grid size-9 shrink-0 place-items-center rounded-full", selectedCard ? "bg-primary/15 text-primary" : "bg-income/15 text-income")}>{selectedCard ? <CreditCard size={18} /> : <Wallet size={18} />}</span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">{selectedCard ? selectedCard.name : selectedAccount?.name ?? "Escolher conta"}</span>
+              {selectedCard ? <span className="block text-xs text-muted-foreground">Crédito · {hidden ? "••••" : `disp. ${formatBRL(selectedCard.available)}`}</span> : selectedAccount ? <span className="block text-xs tabular-nums text-muted-foreground">{hidden ? "••••" : formatBRL(selectedAccount.balance)}</span> : null}
+            </span>
+          </button> : null}
+          {kind !== "Transferência" ? <button type="button" onClick={() => { const el = dateInput.current; if (!el) return; try { el.showPicker(); } catch { el.focus(); } }} className="ml-auto h-12 shrink-0 rounded-full bg-muted px-4 text-sm font-semibold" data-testid="quick-entry-date">{dateLabel}</button> : null}
+          <input ref={dateInput} type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="sr-only" tabIndex={-1} aria-label="Data" />
+        </div>
+
+        {selectedCard && kind === "Despesa" ? (
+          <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none]" role="radiogroup" aria-label="Parcelas" data-testid="quick-entry-installments">
+            {[1, 2, 3, 4, 5, 6, 10, 12].map((n) => (
+              <button key={n} type="button" role="radio" aria-checked={installments === n} onClick={() => setInstallments(n)} className={cn("h-9 shrink-0 rounded-full px-3 text-sm font-semibold tabular-nums transition-colors", installments === n ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                {n === 1 ? "À vista" : `${n}x`}
+              </button>
+            ))}
+            {installments > 1 && amountValue > 0 ? <span className="shrink-0 pl-1 text-xs tabular-nums text-muted-foreground">{installments}x de {hidden ? "••••" : formatBRL(Math.round((amountValue / installments) * 100) / 100)}</span> : null}
+          </div>
+        ) : null}
+
         {keypadOpen && !desktop ? <div className={cn("grid gap-2.5", calc ? "grid-cols-4" : "grid-cols-3")} data-testid="quick-entry-keypad">
           {(calc ? KEYS : KEYS.filter((key) => !OPS.includes(key))).map((key) => (
             <button key={key} type="button" onClick={() => press(key)} aria-label={key === "⌫" ? "Apagar (segure para limpar)" : key}
               onPointerDown={key === "⌫" ? () => { clearTimer.current = window.setTimeout(() => { setExpr(""); clearTimer.current = null; }, 550); } : undefined}
               onPointerUp={key === "⌫" ? () => { if (clearTimer.current) window.clearTimeout(clearTimer.current); } : undefined}
-              onPointerLeave={key === "⌫" ? () => { if (clearTimer.current) window.clearTimeout(clearTimer.current); } : undefined} className={cn("h-[clamp(2.6rem,6dvh,3.75rem)] rounded-2xl text-2xl font-medium transition-transform active:scale-95", OPS.includes(key) ? "bg-primary/10 text-primary" : "bg-muted")}>
+              onPointerLeave={key === "⌫" ? () => { if (clearTimer.current) window.clearTimeout(clearTimer.current); } : undefined} className={cn("h-[clamp(2.5rem,5.6dvh,3.25rem)] rounded-2xl text-2xl font-medium transition-transform active:scale-95", OPS.includes(key) ? "bg-primary/10 text-primary" : "bg-muted")}>
               {key === "⌫" ? <Delete className="mx-auto" size={24} aria-hidden="true" /> : key}
             </button>
           ))}

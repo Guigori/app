@@ -54,7 +54,7 @@ export function QuickActionFAB() {
           </>
         ) : null}
       </AnimatePresence>
-      <div className="fixed bottom-4 right-4 z-[41] hidden dashboard:md:bottom-8 dashboard:md:right-6 dashboard:block">
+      <div className={cn("fixed bottom-4 right-4 z-[41] hidden dashboard:md:bottom-8 dashboard:md:right-6 dashboard:block", open && controller?.view === "success" && "invisible pointer-events-none")}>
         {dirty ? (
           <button type="button" onClick={() => setDiscardOpen(true)} aria-label="Descartar registro" data-testid="quick-action-discard"
             className="absolute -left-1.5 -top-1.5 z-10 grid size-6 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-md">
