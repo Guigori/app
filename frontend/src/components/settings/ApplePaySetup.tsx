@@ -1,13 +1,13 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertCircle, CheckCircle2, ChevronDown, CircleDashed, Copy, CreditCard, ExternalLink, Landmark, Loader2, Plus, ReceiptText, Smartphone, Sparkles, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, ChevronDown, CircleDashed, Copy, CreditCard, ExternalLink, Landmark, Loader2, Plus, ReceiptText, Smartphone, Sparkles, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { apiDelete, apiGet, apiPost } from "@/lib/api";
 import { createTestCapture, fetchPendingSettings, savePendingSettings } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
-import { AUTOMATION_FIELDS, bearerValue, codeFromConnection, pendingEndpoint, SHORTCUTS_APP } from "@/lib/shortcutLinks";
+import { AUTOMATION_FIELDS, bearerValue, codeFromConnection, pendingEndpoint, readyShortcutUrl, SHORTCUTS_APP } from "@/lib/shortcutLinks";
 import { cn } from "@/lib/utils";
 import {
   ApplePayFlow, MockAutomationTab, MockBody, MockNotification, MockTrigger, MockUrlAction, StepPicture,
@@ -100,6 +100,11 @@ export function ApplePaySetup() {
   const received = (activity.data ?? []).filter((a) => a.action === "pendente" && a.ok);
   const header = bearerValue(code);
   const working = received.length > 0;
+  // With the ready-made shortcut (iCloud link), setup is 4 steps; the manual way stays one tap away.
+  const ready = readyShortcutUrl((import.meta.env as Record<string, string | undefined>).VITE_SHORTCUT_ICLOUD_URL);
+  const [manual, setManual] = useState(false);
+  // Copy the code in the same tap that opens Shortcuts: iPhone only allows copying during a tap.
+  const addReady = () => { if (code) void copy(code, "Código copiado. Cole quando o Atalhos pedir."); };
   // The guide is what a new user needs; once purchases arrive it only gets in the way.
   const [guideOpen, setGuideOpen] = useState<boolean | null>(null);
   const showGuide = guideOpen ?? !working;
@@ -156,7 +161,7 @@ export function ApplePaySetup() {
 
       <section className="rounded-2xl border border-border" data-testid="applepay-guide">
         <button type="button" onClick={() => setGuideOpen(!showGuide)} aria-expanded={showGuide} className="flex w-full items-center justify-between gap-2 p-3 text-left" data-testid="applepay-guide-toggle">
-          <span className="min-w-0"><span className="block font-semibold">{working ? "Configuração no iPhone" : "Configurar no iPhone"}</span><span className="block text-xs text-muted-foreground">{working ? "Passo a passo, para outro iPhone ou para refazer." : "7 passos no app Atalhos, com o desenho de cada tela."}</span></span>
+          <span className="min-w-0"><span className="block font-semibold">{working ? "Configuração no iPhone" : "Configurar no iPhone"}</span><span className="block text-xs text-muted-foreground">{working ? "Passo a passo, para outro iPhone ou para refazer." : (ready ? "Atalho pronto: 4 passos, sem montar nada." : "7 passos no app Atalhos, com o desenho de cada tela.")}</span></span>
           <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", showGuide && "rotate-180")} aria-hidden="true" />
         </button>
         {showGuide ? (
@@ -182,6 +187,35 @@ export function ApplePaySetup() {
           )}
         </Step>
 
+        {ready && !manual ? (
+          <>
+        <Step n={2} title="Adicione o atalho pronto">
+          <p className="text-muted-foreground">Ele já vem com a automação do Apple Pay. Ao tocar, o código é copiado e o app Atalhos abre no “Adicionar Atalho”. Quando ele pedir o código, cole.</p>
+          <a href={ready ?? "#"} onClick={addReady} aria-disabled={!code}
+            className={cn("inline-flex h-11 items-center gap-2 rounded-2xl px-4 font-semibold", code ? "bg-primary text-primary-foreground" : "pointer-events-none bg-muted text-muted-foreground")} data-testid="applepay-ready-link">
+            <Download className="h-5 w-5" aria-hidden="true" />Adicionar atalho pronto
+          </a>
+          {!code ? <p className="text-xs text-muted-foreground">Gere o código no passo 1 primeiro: ele só aparece uma vez e é copiado neste toque.</p> : null}
+        </Step>
+
+        <Step n={3} title="Ligue a automação">
+          <p className="text-muted-foreground">No app Atalhos, abra o atalho que acabou de adicionar (<strong>Apple Pay Finnos</strong>). No topo, em “Quando … for aproximado”, escolha os cartões e ligue <strong>Automação</strong>.</p>
+        </Step>
+
+        <Step n={4} done={received.length > 0} title="Confira que funcionou">
+          {received.length > 0 ? (
+            <p className="text-income" data-testid="applepay-received">Já recebemos {received.length === 1 ? "1 compra" : `${received.length} compras`} do seu Atalho. A última foi em {formatDate(String(received[0].at).slice(0, 10))}.</p>
+          ) : (
+            <p className="text-muted-foreground" data-testid="applepay-not-received">Ainda não recebemos nenhuma compra do Atalho. Pague algo com o cartão escolhido, ou rode a automação à mão no app Atalhos. Esta linha muda sozinha quando a primeira chegar.</p>
+          )}
+          <button type="button" onClick={() => test.mutate()} disabled={test.isPending} className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border px-3 font-semibold disabled:opacity-60" data-testid="applepay-test">
+            {test.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ReceiptText className="h-4 w-4" aria-hidden="true" />}Ver uma compra de teste
+          </button>
+          <p className="text-xs text-muted-foreground">O teste mostra como as compras aparecem no Início e pode ser excluído. Ele não prova que o Atalho está configurado: quem prova isso é a linha acima.</p>
+        </Step>
+          </>
+        ) : (
+          <>
         <Step n={2} title="Abra o app Atalhos e crie a automação">
           <p className="text-muted-foreground">Automação → <strong>+</strong> → <strong>Transação</strong> (no iOS 26 aparece como <strong>Carteira</strong>).</p>
           <StepPicture n={2} alt="App Atalhos, aba Automação"><MockAutomationTab /></StepPicture>
@@ -227,7 +261,14 @@ export function ApplePaySetup() {
           </button>
           <p className="text-xs text-muted-foreground">O teste mostra como as compras aparecem no Início e pode ser excluído. Ele não prova que o Atalho está configurado: quem prova isso é a linha acima.</p>
         </Step>
+          </>
+        )}
       </ol>
+      {ready ? (
+        <button type="button" onClick={() => setManual((v) => !v)} className="text-xs font-semibold text-primary" data-testid="applepay-manual-toggle">
+          {manual ? "Usar o atalho pronto" : "Prefere montar à mão? Ver os 7 passos"}
+        </button>
+      ) : null}
 
           </div>
         ) : null}
