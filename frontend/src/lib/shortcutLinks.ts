@@ -1,5 +1,20 @@
 /** Links and texts for setting up the Apple Pay automation. */
 
+const ICLOUD_SHORTCUT = /^https:\/\/www\.icloud\.com\/shortcuts\/[A-Za-z0-9]+$/;
+
+/**
+ * The ready-made "Enviar ao FINNOS" shortcut, with the Wallet automation inside (iOS 26), shared
+ * through iCloud and set in VITE_SHORTCUT_ICLOUD_URL. Null when not set, or when the value is not
+ * an icloud.com shortcut link, so a typo never sends people somewhere else.
+ *
+ * The shortcut must ASK for the connection code on import: a link with someone's code inside
+ * would send everyone's purchases to that account.
+ */
+export function readyShortcutUrl(value?: string): string | null {
+  const link = (value ?? "").trim();
+  return ICLOUD_SHORTCUT.test(link) ? link : null;
+}
+
 /** Opens the Shortcuts app itself. */
 export const SHORTCUTS_APP = "shortcuts://";
 

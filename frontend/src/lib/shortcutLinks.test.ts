@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { AUTOMATION_FIELDS, bearerValue, codeFromConnection, pendingEndpoint } from "@/lib/shortcutLinks";
+import { readyShortcutUrl, AUTOMATION_FIELDS, bearerValue, codeFromConnection, pendingEndpoint } from "@/lib/shortcutLinks";
+
+describe("the ready-made shortcut", () => {
+  it("is offered only for a real iCloud shortcut link", () => {
+    expect(readyShortcutUrl(" https://www.icloud.com/shortcuts/cc143c7eec4a46cf999d08c5bbd16a2d ")).toBe("https://www.icloud.com/shortcuts/cc143c7eec4a46cf999d08c5bbd16a2d");
+    for (const bad of [undefined, "", "https://evil.example/shortcuts/abc", "http://www.icloud.com/shortcuts/abc", "https://www.icloud.com/shortcuts/abc?x=1"]) {
+      expect(readyShortcutUrl(bad)).toBeNull();
+    }
+  });
+});
 
 describe("what the Wallet automation needs", () => {
   it("points at the pending endpoint of this address", () => {
