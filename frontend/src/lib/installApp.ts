@@ -5,7 +5,10 @@ export type InstallPlatform = "ios-safari" | "ios-other" | "android" | "other";
 const DISMISSED_KEY = "finnos:install-dismissed-at";
 const QUIET_DAYS = 14;
 
-export function installPlatform(ua: string = navigator.userAgent, touchPoints = navigator.maxTouchPoints ?? 0): InstallPlatform {
+// Read lazily and only when there is a browser: tests (and any non-browser run) may have no navigator.
+const nav = (): Partial<Navigator> => (typeof navigator === "undefined" ? {} : navigator);
+
+export function installPlatform(ua: string = nav().userAgent ?? "", touchPoints = nav().maxTouchPoints ?? 0): InstallPlatform {
   // iPadOS reports a Mac user agent; touch support tells them apart.
   const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && touchPoints > 1);
   if (ios) return /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(ua) ? "ios-other" : "ios-safari";

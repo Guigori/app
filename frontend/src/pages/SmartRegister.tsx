@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { parseReceiptText, parseRegisterText } from "@/lib/registerParsing";
 import { registerProposal, type Proposal, type ProposalState, type ProposedEntry } from "@/lib/finnActions";
