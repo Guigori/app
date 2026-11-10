@@ -30,9 +30,11 @@ interface CardDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   card?: CreditCard;
+  /** Name to start a new one with (the card name Apple Pay sent). */
+  initialName?: string;
 }
 
-export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
+export function CardDialog({ open, onOpenChange, card, initialName }: CardDialogProps) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [institution, setInstitution] = useState("");
@@ -64,7 +66,7 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
       setAccountId(card.payment_account_id ?? "none");
       setActive(card.active);
     } else {
-      setName("");
+      setName(initialName ?? "");
       setInstitution("");
       setInstitutionChoice("new");
       setColor(COLORS[0]);
@@ -74,7 +76,7 @@ export function CardDialog({ open, onOpenChange, card }: CardDialogProps) {
       setAccountId("none");
       setActive(true);
     }
-  }, [open, card]);
+  }, [open, card, initialName]);
 
   const mutation = useMutation({
     mutationFn: async (input: CardInput) => {

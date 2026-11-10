@@ -55,7 +55,7 @@ class CardOut(BaseModel):
     created_at: datetime
 
 
-NotificationKind = Literal["vencimento", "atrasado", "fatura"]
+NotificationKind = Literal["vencimento", "atrasado", "fatura", "captura"]
 
 
 class NotificationItem(BaseModel):

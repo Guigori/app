@@ -17,20 +17,17 @@ async function createAccount(page: Page) {
   await expect(page.getByTestId("wallet-institutions")).toBeVisible();
 }
 
-test("a Shortcuts link opens the register already understood, and nothing is saved before confirming", async ({ page }) => {
+test("Integrações shows only Apple Pay and the AI", async ({ page }) => {
   await createAccount(page);
   await page.goto("/configuracoes/integracoes");
-  await expect(page.getByTestId("integration-atalhos")).toContainText("Disponível");
-  await expect(page.getByTestId("integration-notificacoes")).toContainText("Indisponível no iPhone");
-  await page.getByTestId("integration-test-link").click();
-  const recognized = page.getByTestId("register-recognized");
-  await expect(recognized.getByTestId("ai-proposal-entry")).toHaveCount(2);
-  // The data travelled after "#" and is cleared once read.
-  await expect(page).toHaveURL(/\/registro-inteligente$/);
+  // Without an account there is no server for the iPhone to talk to.
+  await expect(page.getByTestId("integration-applepay-pendente")).toContainText("Precisa de conta");
+  // The other Shortcuts flows are off for now.
+  for (const id of ["integration-atalhos", "integration-applepay", "integration-sem-abrir", "integration-test-link"]) {
+    await expect(page.getByTestId(id)).toHaveCount(0);
+  }
+  await expect(page.getByText("O iPhone não deixa nenhum app ou site ler as notificações da Carteira.")).toBeVisible();
 
-  await page.goto("/registro-inteligente#valor=R%24%2012%2C50&nome=Padaria&cartao=Conta%20Teste");
-  await expect(recognized.getByTestId("ai-proposal-entry")).toHaveCount(1);
-  await expect(recognized.getByLabel("Valor de Padaria")).toHaveValue("12,50");
 });
 
 test("the register has no voice, photo or attachment for now, and the install guide opens from Settings", async ({ page }) => {
@@ -90,21 +87,15 @@ test("an account connects a shortcut: the code shows once, then only its last di
     if (url.includes("/integrations/shortcut-tokens")) return route.fulfill(json(tokens));
     return route.fulfill(json([]));
   });
+  // Apple Pay is open by default.
   await page.goto("/configuracoes/integracoes");
-  const box = page.getByTestId("shortcut-connect");
-  await expect(box).toContainText("/api/shortcuts/lancamentos");
-  await box.getByTestId("shortcut-create-token").click();
-  // The connection code carries the address, so the ready-made shortcut works on any domain.
-  await expect(box.getByTestId("shortcut-fresh-token")).toContainText(/https?:\/\/[^|]+\|fns_TESTE_codigo_de_exemplo_que_nao_vale_WXYZ/);
-  const ready = box.getByTestId("shortcut-ready");
-  await expect(ready).toHaveAttribute("href", "/atalhos/registrar-no-finnos.shortcut");
-  await expect(ready).not.toHaveAttribute("aria-disabled", "true");
+  const box = page.getByTestId("applepay-setup");
+  await expect(box.getByTestId("applepay-status")).toContainText("Ainda não configurado");
+  await box.getByTestId("applepay-create-code").click();
+  await expect(box.getByTestId("applepay-fresh-code")).toContainText("fns_TESTE_codigo_de_exemplo_que_nao_vale_WXYZ");
   await expect(box.getByTestId("shortcut-tokens")).toContainText("•••• WXYZ");
-  // The signed file is served as itself, not as the app page.
-  const file = await page.request.get("/atalhos/registrar-no-finnos.shortcut");
-  expect((await file.body()).subarray(0, 4).toString()).toBe("AEA1");
   await page.reload();
-  await expect(page.getByTestId("shortcut-connect")).not.toContainText("fns_TESTE");
-  await page.getByTestId("shortcut-connect").getByRole("button", { name: "Desconectar" }).click();
+  await expect(page.getByTestId("applepay-setup")).not.toContainText("fns_TESTE");
+  await page.getByTestId("applepay-devices").getByRole("button", { name: "Desconectar" }).click();
   await expect(page.getByTestId("shortcut-tokens")).toHaveCount(0);
 });

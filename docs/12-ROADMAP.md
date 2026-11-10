@@ -28,7 +28,7 @@
 - restauração testada.
 
 ## Fase 4 — integrações
-- Apple/Atalhos após validação técnica;
+- Apple/Atalhos após validação técnica: fila de compras pendentes do Apple Pay implementada (ver 08); falta validar em iPhone real, configurar push (VAPID) e o link iCloud do atalho pronto;
 - FINNOS IA no backend;
 - futuras integrações financeiras/Open Finance somente com revisão de segurança.
 

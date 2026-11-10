@@ -1,4 +1,4 @@
-"""Apple Shortcuts register: code required, app rules kept, saved once, every use logged."""
+"""Shortcut connection codes: helpers, hourly limit, and only the pending flow left."""
 import uuid
 from copy import deepcopy
 
@@ -73,81 +73,13 @@ def api(monkeypatch):
     return TestClient(app), data, log
 
 
-def post(client, body, token=TOKEN):
-    return client.post("/api/shortcuts/lancamentos", json=body, headers={"Authorization": f"Bearer {token}"} if token else {})
-
-
-def test_needs_a_valid_code_and_always_answers_with_a_message(api):
+def test_the_old_direct_flow_is_gone_and_only_pending_remains(api):
+    """The ready-made shortcut and "registrar sem abrir" were removed: purchases go through review."""
     client, data, log = api
-    missing = post(client, {"valor": "10"}, token=None)
-    assert missing.status_code == 401 and missing.json()["ok"] is False and "código" in missing.json()["mensagem"]
-    revoked = post(client, {"valor": "10"}, token="fns_" + "b" * 43)
-    assert revoked.status_code == 401 and "desconectado" in revoked.json()["mensagem"]
+    auth = {"Authorization": f"Bearer {TOKEN}"}
+    assert client.get("/api/shortcuts/opcoes", headers=auth).status_code in (404, 405)
+    assert client.post("/api/shortcuts/lancamentos", json={"valor": "10", "tipo": "Despesa"}, headers=auth).status_code in (404, 405)
     assert len(data["transactions"].docs) == 1 and log == []
-
-
-def test_registers_through_the_app_rules_and_logs_it(api):
-    client, data, log = api
-    r = post(client, {"valor": "35,90", "tipo": "Despesa", "forma": "Pix", "carteira": "nubank", "categoria": "alimentacao", "descricao": "Almoço"})
-    assert r.status_code == 201, r.text
-    body = r.json()
-    assert body["ok"] and body["mensagem"] == "Registrado no FINNOS: Almoço · R$ 35,90 · Nubank · Alimentação"
-    doc = data["transactions"].docs[-1]
-    assert (doc["user_id"], doc["account_id"], doc["category_id"], doc["card_id"]) == ("alice", "acc-nu", "cat-food", None)
-    assert (doc["type"], doc["status"], doc["date"], doc["source"]) == ("despesa", "pago", today_iso(), "ios_shortcut")
-    assert str(doc["value"]) == "35.90" and doc["notes"] == "Registrado pelo Atalhos · Pix"
-    assert log[-1][0] == "alice" and log[-1][1]["ok"] and log[-1][1]["transaction_id"] == doc["id"]
-
-
-def test_the_same_send_twice_is_saved_once(api):
-    client, data, _ = api
-    body = {"valor": "12", "tipo": "despesa", "carteira": "Itaú", "descricao": "Café"}
-    first, second = post(client, body), post(client, body)
-    assert first.status_code == 201 and second.status_code == 200
-    assert second.json()["repetido"] is True and second.json()["mensagem"].startswith("Já estava registrado")
-    assert len([d for d in data["transactions"].docs if d["name"] == "Café"]) == 1
-
-
-def test_credit_card_installments_use_the_card_payment_account(api):
-    client, data, _ = api
-    r = post(client, {"valor": "300", "forma": "Crédito", "carteira": "Nubank Roxinho", "parcelas": "3x", "descricao": "Tênis"})
-    assert r.status_code == 201, r.text
-    doc = data["transactions"].docs[-1]
-    assert (doc["card_id"], doc["account_id"], doc["installment"], doc["total_installments"]) == ("card-nu", "acc-nu", True, 3)
-    assert "em 3x" in r.json()["mensagem"]
-
-
-def test_apple_pay_values_match_wallet_names_and_learn_the_category(api):
-    client, data, _ = api
-    # Wallet sends its own card name and the amount with currency.
-    r = post(client, {"valor": "R$ 1.234,56", "carteira": "Nubank Roxinho Ultravioleta", "descricao": "Padaria Pão Quente"})
-    assert r.status_code == 201, r.text
-    doc = data["transactions"].docs[-1]
-    assert doc["card_id"] == "card-nu" and doc["category_id"] == "cat-food" and str(doc["value"]) == "1234.56"
-
-
-@pytest.mark.parametrize("body, words", [
-    ({"valor": "50", "carteira": "Itaú", "parcelas": 2}, "só no cartão"),
-    ({"valor": "50", "tipo": "receita", "forma": "credito"}, "Receita não pode"),
-    ({"valor": "50", "carteira": "Conta do Bob"}, "Não encontrei a conta"),
-    ({"valor": "50"}, "Escolha a conta"),
-    ({"valor": "abc", "carteira": "Itaú"}, "Valor inválido"),
-    ({"valor": "50", "carteira": "Itaú", "forma": "boleto"}, "Forma de pagamento inválida"),
-])
-def test_refusals_explain_what_to_fix_and_save_nothing(api, body, words):
-    client, data, log = api
-    r = post(client, body)
-    assert r.status_code == 422 and r.json()["ok"] is False and words in r.json()["mensagem"]
-    assert len(data["transactions"].docs) == 1
-    assert log[-1][1]["ok"] is False
-
-
-def test_options_list_only_the_users_own_names(api):
-    client, _, _ = api
-    body = client.get("/api/shortcuts/opcoes", headers={"Authorization": f"Bearer {TOKEN}"}).json()
-    assert body["contas"] == ["Nubank", "Itaú"] and body["cartoes"] == ["Nubank Roxinho"]
-    assert body["carteiras"] == ["Nubank", "Itaú", "Nubank Roxinho"]
-    assert body["categorias"] == ["Alimentação", "Transporte"] and "Pix" in body["formas"]
 
 
 def test_helpers():
@@ -171,23 +103,3 @@ def test_hourly_limit():
         tokens.next_window(start, count, 20)
     assert exc.value.status_code == 429
     assert tokens.next_window(start, count, 10 + tokens.RATE_WINDOW) == (10 + tokens.RATE_WINDOW, 1)
-
-
-def test_ready_made_shortcut_speaks_the_api():
-    """The shortcut Integrações hands out reads the /opcoes lists and sends the /lancamentos fields."""
-    import importlib.util
-    from pathlib import Path
-    spec = importlib.util.spec_from_file_location("build_shortcut", Path(__file__).parents[2] / "scripts" / "build_shortcut.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    workflow = module.build()
-    params = [a["WFWorkflowActionParameters"] for a in workflow["WFWorkflowActions"]]
-    read = {p["WFDictionaryKey"] for p in params if "WFDictionaryKey" in p}
-    assert set(module.OPTION_KEYS) | {"mensagem"} <= read
-    body = next(p["WFJSONValues"] for p in params if "WFJSONValues" in p)
-    sent = [item["WFKey"]["Value"]["string"] for item in body["Value"]["WFDictionaryFieldValueItems"]]
-    assert sent == module.BODY_KEYS and set(sent) <= set(shortcuts.LancamentoIn.model_fields)
-    urls = [p["WFURL"]["Value"]["string"] for p in params if "WFURL" in p]
-    assert urls == ["\ufffc/api/shortcuts/opcoes", "\ufffc/api/shortcuts/lancamentos"]
-    question = workflow["WFWorkflowImportQuestions"][0]
-    assert question["ActionIndex"] == 0 and "WFTextActionText" in params[0]

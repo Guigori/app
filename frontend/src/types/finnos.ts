@@ -150,6 +150,10 @@ export interface CategoryInput {
 }
 
 export interface Transaction {
+  /** Came from the Apple Pay queue: reviewed by the person, or registered automatically. */
+  capture?: "apple_pay" | "apple_pay_auto" | null;
+  /** Registered automatically although far above the merchant's usual value. */
+  capture_unusual?: boolean;
   recurrence_id?: string | null;
   invoice_payment?: boolean;
   invoice_refund?: boolean;
@@ -511,7 +515,7 @@ export interface CreditCard {
 
 // --- Notificações (mirror: backend/models/cards.py NotificationItem) ---
 
-export type NotificationKind = "vencimento" | "atrasado" | "fatura";
+export type NotificationKind = "vencimento" | "atrasado" | "fatura" | "captura";
 
 export interface NotificationItem {
   id: string;
@@ -693,4 +697,92 @@ export interface RadarSignal {
 export interface Radar {
   items: RadarSignal[];
   count: number;
+}
+
+// --- Compras pendentes do Apple Pay (mirror: finnos/routers/pending_captures.py) ---
+
+/** A purchase the Shortcut left on the server. Nothing counts in the balance until it is registered. */
+export interface PendingCapture {
+  id: string;
+  name: string;
+  value: number;
+  date: string;
+  created_at?: string | null;
+  /** A fake purchase that shows the Shortcut works: it can only be deleted. */
+  is_test: boolean;
+  waiting_days: number;
+  /** Waiting for days: shown as "pendente há N dias" so it is not forgotten. */
+  stale: boolean;
+  /** Where the money comes out, checked against today's cards and accounts. */
+  source_kind: "cartao" | "conta" | "desconhecido";
+  source_registered: boolean;
+  source_id: string | null;
+  source_name: string | null;
+  /** The card name exactly as Apple Pay sent it ("" when it sent none). */
+  source_sent: string;
+  /** For a card, the account that pays its invoice. */
+  pays_from: string | null;
+  /** One plain-Portuguese line for the screen. */
+  origin: string;
+  /** Always "debito": the person switches to crédito when that is how they paid. */
+  suggested_method: PaymentMethod;
+  /** Débito: learned account for this Apple Pay card name, else the one with that name or that pays that card. */
+  suggested_account_id: string | null;
+  /** Crédito: learned card, else the card with that name. */
+  suggested_card_id: string | null;
+  /** Learned for this merchant, else the category of the last lançamento with the same name. */
+  suggested_category_id: string | null;
+  /** Apple Pay's name is both an account and a card ("Nubank"): débito or crédito is picked every time. */
+  ambiguous?: boolean;
+  learned_wallet: boolean;
+  learned_category: boolean;
+}
+
+export type PaymentMethod = "debito" | "credito";
+
+/** A purchase FINNOS registered on its own (débito, learned combination), to confirm or undo. */
+export interface AutoRegisteredCapture {
+  id: string;
+  transaction_id: string;
+  name: string;
+  value: number;
+  date: string | null;
+  account_name: string | null;
+  category_id: string | null;
+  /** Registered although far above the merchant's usual (the hold was off). */
+  unusual?: boolean;
+}
+
+export interface PendingCaptures {
+  items: PendingCapture[];
+  count: number;
+  /** Registered on their own in the last days. */
+  auto?: AutoRegisteredCapture[];
+}
+
+/** What the person fixed before registering; every field is optional. */
+export interface PendingCaptureConfirm {
+  method?: PaymentMethod;
+  account_id?: string | null;
+  card_id?: string | null;
+  category_id?: string | null;
+  name?: string;
+  value?: number;
+  date?: string;
+  installments?: number;
+}
+
+export interface PendingSettings {
+  /** Register automatically a débito combination confirmed several times in a row. */
+  auto_register: boolean;
+  /** A value far above the merchant's usual waits for review even with auto on (default on). */
+  hold_unusual?: boolean;
+}
+
+export interface ConfirmAllResult {
+  ok: boolean;
+  registered: number;
+  /** Still waiting: the wallet is unknown, or it is a test purchase. */
+  skipped: number;
+  failed: { id: string; name: string; detail: string }[];
 }

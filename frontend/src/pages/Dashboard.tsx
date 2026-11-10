@@ -21,6 +21,8 @@ import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 
 import { FinnosVerticalMenu, type FinnosView, type FinnosSeries } from "@/components/shared/FinnosVerticalMenu";
 import { RadarSection } from "@/components/dashboard/RadarSection";
+import { PendingCaptures } from "@/components/pending/PendingCaptures";
+import { HOME_LIMIT } from "@/lib/pendingCaptures";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -139,6 +141,9 @@ export default function Dashboard() {
         </div>
       ) : null}
       </section>
+
+      {/* Apple Pay purchases waiting for "registrar" or "excluir": nothing here when there are none. */}
+      <PendingCaptures limit={HOME_LIMIT} />
 
       {error && !data ? (
         <Card className="border-destructive/30">
