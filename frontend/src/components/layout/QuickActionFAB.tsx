@@ -13,7 +13,7 @@ export function QuickActionFAB() {
   const [controller, setController] = useState<RegisterController | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
   const setOpen = (next: boolean) => { setOpenRaw(next); if (!next) { setController(null); setDiscardOpen(false); } };
-  const dirty = open && controller?.view === "entry" && controller.dirty;
+  const dirty = open && controller?.view !== "success" && controller?.dirty;
   const requestClose = () => { if (dirty) setDiscardOpen(true); else setOpen(false); };
 
   useEffect(() => {

@@ -74,7 +74,7 @@ export function MobileNav() {
   const [controller, setController] = useState<RegisterController | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
   const setRegisterOpen = (open: boolean) => { setRegisterOpenRaw(open); if (!open) { setController(null); setDiscardOpen(false); } };
-  const entryDirty = registerOpen && controller?.view === "entry" && controller.dirty;
+  const entryDirty = registerOpen && controller?.view !== "success" && controller?.dirty;
   // Closing with something typed asks first; otherwise it just closes.
   const requestClose = () => { if (entryDirty) setDiscardOpen(true); else setRegisterOpen(false); };
   const [transitioning, setTransitioning] = useState(false);
@@ -211,7 +211,7 @@ export function MobileNav() {
             testId="mobile-quick-action-button" discardTestId="mobile-quick-action-discard" onDiscard={() => setDiscardOpen(true)}
             onMain={() => {
               if (!registerOpen) { setRegisterOpen(true); return; }
-              if (controller?.view === "entry" && controller.dirty) {
+              if (controller?.view !== "success" && controller?.dirty) {
                 if (controller.canSave && !controller.saving) controller.save();
                 else toast(controller.hint ?? "Informe o valor para salvar");
                 return;
