@@ -204,7 +204,7 @@ export function MobileNav() {
             ))}
           </div>
 
-          <div className="relative shrink-0">
+          <div className={cn("relative shrink-0", registerOpen && controller?.view === "success" && "invisible pointer-events-none")}>
             {entryDirty ? (
               <button type="button" onClick={() => setDiscardOpen(true)} aria-label="Descartar registro" data-testid="mobile-quick-action-discard"
                 className="absolute -left-1.5 -top-1.5 z-10 grid size-7 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-md active:scale-95">

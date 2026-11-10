@@ -39,9 +39,9 @@ export function RegisterSuccess({ kind, amount, name, chips, pending = false, on
   const rise = (delay: number) => reduce ? {} : ({ initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { delay, duration: 0.32, ease: "easeOut" } } as const);
 
   return (
-    <div role="status" aria-live="polite" className="relative flex h-full min-h-0 w-full flex-col items-center overflow-hidden bg-background px-5 pb-6 pt-10 text-foreground" data-testid="register-success">
+    <div role="status" aria-live="polite" className="relative flex h-full min-h-0 w-full flex-col items-center overflow-hidden bg-background px-5 pb-4 pt-6 text-foreground" data-testid="register-success">
       <span className="sr-only">{pending ? "Salvo no aparelho. Sincronização pendente." : "Salvo"}</span>
-      <div className="relative mt-[clamp(1.5rem,9dvh,5.5rem)] size-[140px] shrink-0">
+      <div className="relative mt-[clamp(0.5rem,5dvh,3rem)] size-[112px] shrink-0">
         {reduce ? null : [0, 0.2].map((delay) => (
           <motion.span key={delay} aria-hidden="true" className={cn("absolute inset-0 rounded-full border-2", kind === "Despesa" ? "border-expense" : kind === "Receita" ? "border-income" : "border-primary")}
             initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1.9, opacity: [0, 0.7, 0] }} transition={{ delay: 0.45 + delay, duration: 1.2, ease: "easeOut" }} />
@@ -56,10 +56,10 @@ export function RegisterSuccess({ kind, amount, name, chips, pending = false, on
         </svg>
       </div>
 
-      <motion.p className="mt-8 text-2xl font-bold" {...rise(0.5)}>{theme.title}</motion.p>
-      <motion.p className={cn("mt-1.5 font-heading text-5xl font-bold leading-tight tracking-tight tabular-nums", theme.amount)} {...rise(0.6)}>{amount}</motion.p>
+      <motion.p className="mt-5 text-2xl font-bold" {...rise(0.5)}>{theme.title}</motion.p>
+      <motion.p className={cn("mt-1.5 font-heading text-[2.75rem] font-bold leading-tight tracking-tight tabular-nums", theme.amount)} {...rise(0.6)}>{amount}</motion.p>
 
-      <motion.div className="mt-7 w-full rounded-3xl border border-border bg-card p-4" {...rise(0.7)}>
+      <motion.div className="mt-5 w-full rounded-3xl border border-border bg-card p-4" {...rise(0.7)}>
         <p className="truncate text-[1.0625rem] font-bold">{name}</p>
         <ul className="mt-3 flex flex-wrap gap-2">
           {chips.map((chip) => <li key={chip} className="rounded-full bg-muted px-3 py-1 text-sm">{chip}</li>)}
