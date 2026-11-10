@@ -470,6 +470,17 @@ export interface CalendarMonth {
   planned?: PlannedCharge[];
 }
 
+/** Money in the accounts at the end of each real day of a month (mirror: BalanceHistoryOut).
+ *  Same rule as "Saldo total": card purchases count when the invoice is paid. */
+export interface BalanceHistory {
+  month: string;
+  opening_balance: number;
+  /** Only days that already happened: up to today, or the whole of a past month. */
+  days: { date: string; balance: number }[];
+  /** Balance on the last real day; for this month it equals Saldo total. */
+  balance: number;
+}
+
 // --- Cartões (mirror: backend/models/cards.py CardIn/CardOut) ---
 
 export interface CardInput {

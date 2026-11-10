@@ -9,6 +9,7 @@ import { useBalanceHidden } from "@/lib/balance";
 import { Sparkline } from "@/components/dashboard/Sparkline";
 import { TransactionCalendar } from "@/components/transactions/TransactionCalendar";
 import { HomeFinancialChart } from "@/components/dashboard/HomeFinancialChart";
+import { CHART_RANGES, pickOne, useChartPreference } from "@/lib/chartPreferences";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 import { RadarSection } from "@/components/dashboard/RadarSection";
 import { fetchRadar } from "@/lib/data";
@@ -24,8 +25,9 @@ const metric: Record<MetricKind, string> = { income: "receitas", expense: "despe
 
 export default function DashboardWeb() {
   const [month, setMonth] = useRouteState("inicio-web:month", currentMonth);
-  const [chartView, setChartView] = useRouteState<"Projeção" | "Linhas" | "Barras" | "Pizza">("inicio-web:chart", "Projeção");
-  const [chartPeriod, setChartPeriod] = useRouteState("inicio-web:period", "1 mês");
+  // Same saved choice as the phone Home, so the chart opens the way it was left.
+  const [chartView, setChartView] = useChartPreference<"Projeção" | "Linhas" | "Barras" | "Pizza">("view", (v) => pickOne(v, ["Projeção", "Linhas", "Barras", "Pizza"] as const, "Projeção"));
+  const [chartPeriod, setChartPeriod] = useChartPreference<string>("interval", (v) => pickOne(v, CHART_RANGES, "1 mês"));
   const { hidden, toggle } = useBalanceHidden();
   const navigate = useNavigate();
   const dashboard = useQuery({ queryKey: ["dashboard", month], queryFn: () => fetchDashboard(month) });

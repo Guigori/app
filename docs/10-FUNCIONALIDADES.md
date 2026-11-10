@@ -18,6 +18,12 @@ Metas e Investimentos possuem rotas, mas estão marcados como Coming Soon no có
 ## Domínios
 Transações suportam evolução para receitas/despesas, categorias, contas, cartões e parcelas. Dashboard possui resumo e análises. Navegação possui preferências locais.
 
+## Gráfico do Início (Saldo ao longo do tempo)
+- **Saldo** é o dinheiro nas contas em cada dia, com a mesma regra do "Saldo total" (`GET /api/analytics/balance-history`, `finnos/lib/cash_history.py`): compra no cartão só sai da conta quando a fatura é paga, transferência entre contas próprias não muda o total, lançamento pendente nunca conta. Meses passados terminam no saldo real do fim daquele mês, não no saldo de hoje.
+- **Receitas** e **Despesas** são o que entrou e foi gasto no mês até cada dia (compra no cartão conta no dia da compra).
+- Depois de hoje, a linha tracejada é estimativa: o saldo de hoje mais o que ainda está previsto.
+- A forma como o gráfico foi deixado (tipo, período, séries ligadas) fica guardada no aparelho e na conta (`finnos:chart-preferences:v1`, sincronizada como `chart`). O tema claro/escuro também é sincronizado (`theme`).
+
 ## Compras pendentes (Apple Pay)
 O Atalho do iPhone deixa cada compra numa fila no servidor, sem abrir o app e sem mexer no saldo. Elas aparecem em **Compras pendentes** no Início e no Fluxo, e no sino de avisos.
 - Cada compra mostra de onde sai o dinheiro (cartão e conta que paga a fatura, ou conta) e se o cartão está cadastrado.

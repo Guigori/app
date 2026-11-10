@@ -16,6 +16,7 @@ import { ConnectivityStatus } from "@/components/sync/ConnectivityStatus";
 import { StatementImportHost } from "@/components/import/StatementImportHost";
 import { InstallAppPrompt } from "@/components/layout/InstallAppPrompt";
 import { startPreferencesSync } from "@/lib/preferencesSync";
+import { useTheme } from "next-themes";
 
 export function AppShell() {
   const location = useLocation();
@@ -30,6 +31,18 @@ export function AppShell() {
   const navigationType = useNavigationType();
   // Dock shortcuts, Início panel and the "+" default follow the account to every device.
   useEffect(() => startPreferencesSync(), []);
+  // Light/dark follows the account too: tell the sync when it changes here, and apply it
+  // when the account copy arrives (next-themes only reads its storage on start).
+  const { theme, setTheme } = useTheme();
+  useEffect(() => { if (theme) window.dispatchEvent(new Event("finnos-theme")); }, [theme]);
+  useEffect(() => {
+    const apply = () => {
+      const saved = localStorage.getItem("theme");
+      if (saved && saved !== theme) setTheme(saved);
+    };
+    window.addEventListener("finnos-theme", apply);
+    return () => window.removeEventListener("finnos-theme", apply);
+  }, [theme, setTheme]);
   const navigate = useNavigate();
   // The entry the app opened on has no history key ("default"). Give it one, so coming
   // back to it (or reloading) restores the screen like any other entry.

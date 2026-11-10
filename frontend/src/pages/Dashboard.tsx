@@ -11,6 +11,7 @@ import { fetchAccounts, fetchDashboard, fetchMe, fetchRadar, fetchTransactions }
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 
 import { useHomePreferences, type HomeModuleId } from "@/lib/homePreferences";
+import { CHART_RANGES, pickMany, pickOne, useChartPreference } from "@/lib/chartPreferences";
 import { cn } from "@/lib/utils";
 import type { CategorySlice, MetricKind } from "@/types/finnos";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
@@ -20,6 +21,9 @@ import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 
 import { FinnosVerticalMenu, type FinnosView, type FinnosSeries } from "@/components/shared/FinnosVerticalMenu";
+
+const CHART_VIEWS: FinnosView[] = ["Cards", "Projeção", "Linhas", "Pizza", "Barras"];
+const ALL_CHART_SERIES: FinnosSeries[] = ["Receitas", "Despesas", "Resultado"];
 import { RadarSection } from "@/components/dashboard/RadarSection";
 import { PendingCaptures } from "@/components/pending/PendingCaptures";
 import { HOME_LIMIT } from "@/lib/pendingCaptures";
@@ -47,9 +51,10 @@ export default function Dashboard() {
     staleTime: 5 * 60 * 1000,
   });
   const [month, setMonth] = useRouteState<string | null>("inicio:month", null);
-  const [menuView, setMenuView] = useRouteState<FinnosView>("inicio:view", "Projeção");
-  const [menuInterval, setMenuInterval] = useRouteState("inicio:period", "1 mês");
-  const [menuSeries, setMenuSeries] = useState<FinnosSeries[]>(["Receitas","Despesas","Resultado"]);
+  // How the chart was left: kept on the device and in the account, so it opens the same way.
+  const [menuView, setMenuView] = useChartPreference<FinnosView>("view", (v) => pickOne(v, CHART_VIEWS, "Projeção"));
+  const [menuInterval, setMenuInterval] = useChartPreference<string>("interval", (v) => pickOne(v, CHART_RANGES, "1 mês"));
+  const [menuSeries, setMenuSeries] = useChartPreference<FinnosSeries[]>("series", (v) => pickMany(v, ALL_CHART_SERIES, [...ALL_CHART_SERIES]));
   const [selectedCategory, setSelectedCategory] = useState<CategorySlice | null>(null);
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", month],
