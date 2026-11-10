@@ -322,7 +322,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
 
       <div className="shrink-0 space-y-2.5 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="flex items-center gap-2">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Uber, mercado)" aria-label="Nome" onFocus={() => setKeypadOpen(false)} onBlur={() => setKeypadOpen(true)} className="h-12 min-w-0 flex-1 rounded-2xl bg-muted px-4 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Uber, mercado)" aria-label="Nome" onFocus={() => setKeypadOpen(false)} onBlur={() => window.setTimeout(() => setKeypadOpen(true), 280)} className="h-12 min-w-0 flex-1 rounded-2xl bg-muted px-4 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
           {kind === "Transferência" ? <button type="button" onClick={() => { const el = dateInput.current; if (!el) return; try { el.showPicker(); } catch { el.focus(); } }} className="h-12 shrink-0 rounded-2xl bg-muted px-4 text-sm font-semibold">{dateLabel}</button> : null}
         </div>
 
