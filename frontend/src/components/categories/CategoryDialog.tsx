@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CategoryIcon, CATEGORY_ICONS } from "@/components/shared/CategoryIcon";
+import { CategoryIcon, CATEGORY_ICON_GROUPS, categoryIconLabel } from "@/components/shared/CategoryIcon";
+import { ColorPicker } from "@/components/shared/ColorPicker";
 
 const CATEGORY_COLORS = ["#F59E0B", "#84CC16", "#070F52", "#06B6D4", "#10B981", "#6366F1", "#8B5CF6", "#EC4899", "#F97316", "#F43F5E", "#0EA5E9", "#64748B"];
 const GROUPS: CategoryGroup[] = ["necessidades", "desejos", "metas"];
@@ -43,6 +44,7 @@ export function CategoryDialog({ open, onOpenChange, category: categoryProp, cat
   const category = categoryProp ?? (categoryId ? listQuery.data?.find((c) => c.id === categoryId) : undefined);
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("more-horizontal");
+  const [iconSearch, setIconSearch] = useState("");
   const [color, setColor] = useState(CATEGORY_COLORS[0]);
   const [group, setGroup] = useState<CategoryGroup>("necessidades");
   const [budgetRaw, setBudgetRaw] = useState("0");
@@ -132,42 +134,34 @@ export function CategoryDialog({ open, onOpenChange, category: categoryProp, cat
 
           <div className="space-y-2">
             <Label>Ícone</Label>
-            <div className="grid grid-cols-8 gap-1.5" role="group" aria-label="Ícone da categoria" data-testid="category-icon-picker">
-              {CATEGORY_ICONS.map((name_) => (
-                <button
-                  key={name_}
-                  type="button"
-                  onClick={() => setIcon(name_)}
-                  aria-label={`Ícone ${name_}`}
-                  aria-pressed={icon === name_}
-                  className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-lg border transition-colors",
-                    icon === name_ ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:bg-muted",
-                  )}
-                  data-testid="category-icon-option"
-                >
-                  <CategoryIcon name={name_} className="h-4.5 w-4.5" />
-                </button>
-              ))}
+            <Input value={iconSearch} onChange={(e) => setIconSearch(e.target.value)} placeholder="Buscar ícone (ex.: mercado, pet, academia)" aria-label="Buscar ícone" />
+            <div className="max-h-60 space-y-3 overflow-y-auto overscroll-contain rounded-2xl border border-border p-2" role="group" aria-label="Ícone da categoria" data-testid="category-icon-picker">
+              {CATEGORY_ICON_GROUPS.map((group) => {
+                const q = iconSearch.trim().toLocaleLowerCase("pt-BR");
+                const icons = q ? group.icons.filter((n) => categoryIconLabel(n).includes(q) || n.includes(q) || group.title.toLocaleLowerCase("pt-BR").includes(q)) : group.icons;
+                if (!icons.length) return null;
+                return (
+                  <div key={group.title}>
+                    <p className="mb-1.5 px-1 text-xs font-semibold text-muted-foreground">{group.title}</p>
+                    <div className="grid grid-cols-7 gap-1.5 sm:grid-cols-8">
+                      {icons.map((name_) => (
+                        <button key={name_} type="button" onClick={() => setIcon(name_)} aria-label={`Ícone ${categoryIconLabel(name_)}`} aria-pressed={icon === name_} title={categoryIconLabel(name_)}
+                          className={cn("flex aspect-square items-center justify-center rounded-xl border transition-colors", icon === name_ ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted")}
+                          style={icon === name_ ? { color, borderColor: color, backgroundColor: `color-mix(in oklab, ${color} 16%, transparent)` } : undefined}
+                          data-testid="category-icon-option">
+                          <CategoryIcon name={name_} className="h-5 w-5" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           <div className="space-y-2">
             <Label>Cor</Label>
-            <div className="flex flex-wrap gap-2">
-              {CATEGORY_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  aria-label={`Selecionar cor ${c}`}
-                  aria-pressed={color === c}
-                  className={cn("h-8 w-8 rounded-full border-2 transition-transform", color === c ? "scale-110 border-foreground" : "border-transparent hover:scale-105")}
-                  style={{ backgroundColor: c }}
-                  data-testid="category-color-swatch"
-                />
-              ))}
-            </div>
+            <ColorPicker value={color} onChange={setColor} />
           </div>
 
           <div className="space-y-2">
