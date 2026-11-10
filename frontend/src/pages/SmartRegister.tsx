@@ -25,7 +25,7 @@ import { addMonth, formatBRL, isISODate, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
-import { ArrowLeft, ArrowUp, Camera, Check, Pencil, ChevronRight, Mic, Paperclip, Plus, X, Wallet, CreditCard, Landmark, Repeat2, StickyNote, Bell, Tag, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Delete, MoreVertical, Search, WandSparkles, Sparkles, Eye, EyeOff, ReceiptText, Square, Calculator } from "lucide-react";
+import { ArrowLeft, ArrowUp, Camera, Check, ChevronLeft, Pencil, ChevronRight, Mic, Paperclip, Plus, X, Wallet, CreditCard, Landmark, Repeat2, StickyNote, Bell, Tag, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Delete, MoreVertical, Search, WandSparkles, Sparkles, Eye, EyeOff, ReceiptText, Square, Calculator } from "lucide-react";
 
 /** Voice, receipt photo and file attachment are hidden until they work reliably on every phone; the code stays. */
 const MEDIA_INPUTS = false;
@@ -64,7 +64,7 @@ export interface RegisterController {
   expanded?: boolean;
   save: () => void;
 }
-export default function SmartRegister({ embedded = false, desktop = false, capture, existing, initialKind, template, onClose, onController }: { initialKind?: Kind; /** "Lançar de novo": a new entry with the fields of this one, dated today. */ template?: Transaction; embedded?: boolean; desktop?: boolean; /** A saved lançamento: opens in the same screen, with its impact and receipt below; ✓ saves changes. */ existing?: Transaction; /** An Apple Pay purchase being reviewed: same screens, prefilled; saving confirms it. */ capture?: { item: PendingCapture; choice: CaptureChoice }; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
+export default function SmartRegister({ embedded = false, desktop = false, capture, existing, siblings, initialKind, template, onClose, onController }: { initialKind?: Kind; /** The list the lançamento came from: swipe or arrows go to the previous and next. */ siblings?: Transaction[]; /** "Lançar de novo": a new entry with the fields of this one, dated today. */ template?: Transaction; embedded?: boolean; desktop?: boolean; /** A saved lançamento: opens in the same screen, with its impact and receipt below; ✓ saves changes. */ existing?: Transaction; /** An Apple Pay purchase being reviewed: same screens, prefilled; saving confirms it. */ capture?: { item: PendingCapture; choice: CaptureChoice }; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
   const dialogs = useDialogs();
   const navigate = useNavigate();
   const { hidden, toggle: toggleHidden } = useBalanceHidden();
@@ -121,6 +121,15 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [expanded, setExpanded] = useState(false);
   const recordScroll = useRef<HTMLDivElement>(null);
   const collapsing = useRef(false);
+  const swipeStart = useRef<number | null>(null);
+  const swiped = useRef(false);
+  const position = existing && siblings ? siblings.findIndex((t) => t.id === existing.id) : -1;
+  const goSibling = (step: number) => {
+    if (position < 0 || !siblings) return;
+    const next = siblings[position + step]; if (!next) return;
+    if (dirtyRef.current) { toast("Salve ou descarte as alterações antes de ir para outro lançamento."); return; }
+    openRegisterSheet({ existing: next, siblings });
+  };
   // The chosen category sits in the middle of its strip, so it is always visible with its name below.
   const categoryStrip = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -390,7 +399,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           <button type="button" onClick={collapseRecord} aria-label="Voltar ao registro" data-testid="record-collapse" className="grid size-12 shrink-0 place-items-center rounded-full border border-border bg-card"><ArrowLeft size={20} /></button>
           <button type="button" onClick={collapseRecord} className="flex h-12 min-w-0 flex-1 items-center justify-between gap-3 rounded-full bg-muted px-4 text-left" data-testid="record-summary">
             <span className="min-w-0 truncate text-[15px] font-bold">{name || "Sem nome"}</span>
-            <span className={cn("shrink-0 text-[17px] font-bold tabular-nums", tone.text)}>{formatBRL(amountValue)}</span>
+            <span className={cn("shrink-0 text-[17px] font-bold tabular-nums", tone.text)}>{hidden ? "R$ ••••" : formatBRL(amountValue)}</span>
           </button>
         </motion.header>
       ) : <header className="flex h-10 shrink-0 items-center gap-2">
@@ -416,13 +425,19 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       {(() => {
         const top = <>
       {/* Amount: big, in the type's colour, with a caret while typing; the sum above it in calculator mode. */}
-      <button type="button" onClick={() => setKeypadOpen(true)} aria-label="Valor: toque para digitar" className={cn("flex min-h-[60px] flex-col", existing && !keypadOpen ? "h-[88px] shrink-0" : "flex-1", " items-center justify-center gap-1", amountValue || ops ? tone.text : "text-[#5d5d75]")}>
+      <button type="button" onClick={() => { if (swiped.current) { swiped.current = false; return; } setKeypadOpen(true); }} onPointerDown={(e) => { swipeStart.current = e.clientX; }} onPointerUp={(e) => { const dx = e.clientX - (swipeStart.current ?? e.clientX); swipeStart.current = null; if (existing && Math.abs(dx) > 70) { swiped.current = true; goSibling(dx < 0 ? 1 : -1); } }} aria-label="Valor: toque para digitar" className={cn("flex min-h-[60px] flex-col", existing && !keypadOpen ? "h-[88px] shrink-0" : "flex-1", " items-center justify-center gap-1", amountValue || ops ? tone.text : "text-[#5d5d75]")}>
         {ops && keypadOpen ? <span className="text-[17px] font-medium tabular-nums" aria-hidden="true">{expr.replace(/\./g, ",").replace(/\s*([+−×÷])\s*/g, " $1 ")}</span> : null}
         <span className={cn("flex items-center font-bold leading-none tracking-[-1px] tabular-nums", !keypadOpen ? (existing ? "text-[50px]" : "text-[64px]") : ops ? "text-[48px]" : "text-[56px]")}>
-          <span data-testid="quick-entry-amount" aria-live="polite">{typedAmount ?? formatBRL(amountValue).replace(/,00$/, "")}</span>
+          <span data-testid="quick-entry-amount" aria-live="polite">{existing && hidden && !keypadOpen ? "R$ ••••" : typedAmount ?? formatBRL(amountValue).replace(/,00$/, "")}</span>
           {keypadOpen && !ops && !desktop ? <span className={cn("ml-1 h-[47px] w-[3px] animate-pulse rounded-sm", tone.caret)} aria-hidden="true" /> : null}
         </span>
-        {!keypadOpen ? <span className="text-[13px] text-muted-foreground">{ops ? `${expr.replace(/\./g, ",").replace(/\s*([+−×÷])\s*/g, " $1 ")} · ` : ""}{existing ? "Toque para editar" : "toque para editar"}</span> : null}
+        {!keypadOpen && existing && position >= 0 && siblings && siblings.length > 1 ? (
+          <span className="flex items-center gap-3 text-[13px] text-muted-foreground" data-testid="record-siblings">
+            <span role="button" tabIndex={0} aria-label="Lançamento anterior" aria-disabled={position === 0} onClick={(e) => { e.stopPropagation(); goSibling(-1); }} onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); goSibling(-1); } }} className={cn("grid size-7 place-items-center rounded-full bg-muted", position === 0 && "opacity-30")}><ChevronLeft size={15} /></span>
+            <span>Toque para editar · {position + 1} de {siblings.length}</span>
+            <span role="button" tabIndex={0} aria-label="Próximo lançamento" aria-disabled={position === siblings.length - 1} onClick={(e) => { e.stopPropagation(); goSibling(1); }} onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); goSibling(1); } }} className={cn("grid size-7 place-items-center rounded-full bg-muted", position === siblings.length - 1 && "opacity-30")}><ChevronRight size={15} /></span>
+          </span>
+        ) : !keypadOpen ? <span className="text-[13px] text-muted-foreground">{ops ? `${expr.replace(/\./g, ",").replace(/\s*([+−×÷])\s*/g, " $1 ")} · ` : ""}{existing ? "Toque para editar" : "toque para editar"}</span> : null}
       </button>
 
       {kind === "Transferência" ? (
@@ -471,7 +486,12 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
               );
             })}
           </div>
-          <p className={cn("mt-1.5 text-center", selectedCategory ? "text-[15px] font-bold" : "text-[13px] font-medium")} style={{ color: selectedCategory?.color }} data-testid="quick-entry-category-name">{selectedCategory?.name ?? <span className="text-muted-foreground">Sem categoria</span>}</p>
+          {existing && selectedCategory ? (
+            // On a saved lançamento the name opens the category: its month, its history, its lançamentos.
+            <button type="button" onClick={() => { onClose?.(); navigate(`/categorias/${selectedCategory.id}`); }} className="mx-auto mt-1.5 flex items-center gap-0.5 text-[15px] font-bold" style={{ color: `color-mix(in oklab, ${selectedCategory.color} 72%, white)` }} data-testid="quick-entry-category-name">
+              {selectedCategory.name}<ChevronRight size={15} aria-hidden="true" />
+            </button>
+          ) : <p className={cn("mt-1.5 text-center", selectedCategory ? "text-[15px] font-bold" : "text-[13px] font-medium")} style={{ color: selectedCategory ? `color-mix(in oklab, ${selectedCategory.color} 72%, white)` : undefined }} data-testid="quick-entry-category-name">{selectedCategory?.name ?? <span className="text-muted-foreground">Sem categoria</span>}</p>}
         </div>
       ) : null}
 

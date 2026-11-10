@@ -112,7 +112,7 @@ export default function Categories() {
                       const used = cycleAllocation ? cycleAllocation.spent + cycleAllocation.committed : pace?.spent ?? 0;
                       const usage = cycleAllocation?.percent ?? pace?.percent ?? 0;
                       return (
-                      <Card key={category.id} className="py-0" data-testid={`category-card-${category.id}`}>
+                      <Card key={category.id} className="relative py-0" data-testid={`category-card-${category.id}`}>
                         <CardContent className="space-y-3 p-4">
                         <div className="flex items-center gap-3">
                           <span
@@ -123,7 +123,7 @@ export default function Categories() {
                             <CategoryIcon name={category.icon} className="h-5 w-5" />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium text-foreground">{category.name}</p>
+                            <Link to={`/categorias/${category.id}`} className="block truncate font-medium text-foreground after:absolute after:inset-0" data-testid={`category-open-${category.id}`}>{category.name}</Link>
                             <p className="text-xs text-muted-foreground" data-testid={`category-budget-${category.id}`}>
                               {cycleAllocation
                                 ? `Limite do ciclo atual: ${formatBRL(limit)}`
@@ -132,7 +132,7 @@ export default function Categories() {
                                   : "Sem limite definido"}
                             </p>
                           </div>
-                          <div className="flex shrink-0 gap-1">
+                          <div className="relative z-10 flex shrink-0 gap-1">
                             <Button
                               size="icon-sm"
                               variant="ghost"

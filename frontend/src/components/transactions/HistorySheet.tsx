@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -23,6 +23,18 @@ export function historyChanges(event: HistoryEvent, label: (field: string, v: st
 }
 
 /** Everything that happened to one lançamento: when it was created, each edit with before → after. */
+/** Edits made within two minutes of each other read as one change (before of the first → after of the last). */
+export function groupEdits(events: HistoryEvent[]): HistoryEvent[] {
+  const out: HistoryEvent[] = [];
+  for (const e of events) {
+    const last = out[out.length - 1];
+    if (last && last.action === "updated" && e.action === "updated" && Math.abs(Date.parse(last.created_at) - Date.parse(e.created_at)) <= 120_000) {
+      out[out.length - 1] = { ...last, before: e.before };
+    } else out.push(e);
+  }
+  return out;
+}
+
 /** What to send to put back the values from before an edit (only fields that changed and can be edited). */
 export function restorePatch(event: HistoryEvent): Partial<TransactionInput> {
   const before = event.before ?? {}; const after = event.after ?? {};
@@ -40,7 +52,8 @@ export function restorePatch(event: HistoryEvent): Partial<TransactionInput> {
   return patch;
 }
 
-export function HistorySheet({ open, events, onClose, onRestore }: { open: boolean; events: HistoryEvent[]; onClose: () => void; /** Put back the values from before one edit. */ onRestore?: (patch: Partial<TransactionInput>) => void }) {
+export function HistorySheet({ open, events: raw, onClose, onRestore }: { open: boolean; events: HistoryEvent[]; onClose: () => void; /** Put back the values from before one edit. */ onRestore?: (patch: Partial<TransactionInput>) => void }) {
+  const events = useMemo(() => groupEdits(raw), [raw]);
   const categories = useQuery({ queryKey: ["categories"], queryFn: fetchCategories, enabled: open });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, enabled: open });
   const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards, enabled: open });

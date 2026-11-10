@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { historyChanges } from "./HistorySheet";
+import { groupEdits, historyChanges } from "./HistorySheet";
 
 describe("historyChanges", () => {
   const label = (field: string, v: string | number | undefined) => (field === "value_cents" ? `R$ ${Number(v) / 100}` : String(v ?? "—"));
@@ -15,5 +15,18 @@ describe("historyChanges", () => {
   it("shows a field that appeared or was cleared", () => {
     const changes = historyChanges({ id: "e", action: "updated", created_at: "x", before: { name: "A" }, after: { name: "A", origin: "iFood" } }, label);
     expect(changes).toEqual([{ field: "Origem", before: "—", after: "iFood" }]);
+  });
+});
+
+describe("groupEdits", () => {
+  it("joins edits a minute apart into one change, from the first before to the last after", () => {
+    const g = groupEdits([
+      { id: "c", action: "updated", created_at: "2026-11-10T10:01:00Z", before: { value_cents: 5000 }, after: { value_cents: 6000 } },
+      { id: "b", action: "updated", created_at: "2026-11-10T10:00:00Z", before: { value_cents: 4500 }, after: { value_cents: 5000 } },
+      { id: "a", action: "created", created_at: "2026-11-10T09:00:00Z", before: null, after: { value_cents: 4500 } },
+    ]);
+    expect(g.map((e) => e.id)).toEqual(["c", "a"]);
+    expect(g[0].before).toEqual({ value_cents: 4500 });
+    expect(g[0].after).toEqual({ value_cents: 6000 });
   });
 });
