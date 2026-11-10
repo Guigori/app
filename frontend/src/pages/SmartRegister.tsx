@@ -12,8 +12,9 @@ import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { evaluateExpression, KEYS, OPS, pressKey, typedDisplay } from "@/lib/registerKeypad";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Transaction, TransactionInput } from "@/types/finnos";
-import { createTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
+import type { PendingCapture, Transaction, TransactionInput } from "@/types/finnos";
+import { confirmBody, type CaptureChoice } from "@/lib/pendingCaptures";
+import { confirmPendingCapture, createTransaction, fetchTransactionById, updateTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getAccountPaymentMethods } from "@/lib/accountPaymentPreferences";
 import { addMonth, formatBRL, isISODate, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
@@ -42,12 +43,12 @@ export interface RegisterController {
   hint: string | null;
   save: () => void;
 }
-export default function SmartRegister({ embedded = false, desktop = false, onClose, onController }: { embedded?: boolean; desktop?: boolean; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
+export default function SmartRegister({ embedded = false, desktop = false, capture, onClose, onController }: { embedded?: boolean; desktop?: boolean; /** An Apple Pay purchase being reviewed: same screens, prefilled; saving confirms it. */ capture?: { item: PendingCapture; choice: CaptureChoice }; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
   const dialogs = useDialogs();
   const navigate = useNavigate();
   const { hidden } = useBalanceHidden();
   const dateInput = useRef<HTMLInputElement>(null);
-  const [expr, setExpr] = useState("");
+  const [expr, setExpr] = useState(() => (capture ? String(capture.item.value).replace(".", ",") : ""));
   const [done, setDone] = useState<{ kind: Kind; amount: string; name: string; chips: string[]; transaction: Transaction } | null>(null);
   const [calc, setCalc] = useState(getRegisterCalc);
   const [keypadOpen, setKeypadOpen] = useState(true);
@@ -70,7 +71,7 @@ export default function SmartRegister({ embedded = false, desktop = false, onClo
   const [paymentsLoading, setPaymentsLoading] = useState(false);
   const [paymentsError, setPaymentsError] = useState(false);
   useEffect(() => { const listener = () => setPaymentPreferencesVersion(v => v + 1); window.addEventListener("finnos:payment-methods-changed", listener); return () => window.removeEventListener("finnos:payment-methods-changed", listener); }, []);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(() => (capture?.choice.method === "credito" && capture.choice.cardId ? capture.choice.cardId : null));
   const [institutionId, setInstitutionId] = useState<string | null>(null);
   useEffect(() => {
     const selected = accounts.find(a => a.id === institutionId);
@@ -85,15 +86,15 @@ export default function SmartRegister({ embedded = false, desktop = false, onClo
   const [page, setPage] = useState<Page>(() => (getRegisterDefault() === "inteligente" ? "start" : "entry"));
   const [history, setHistory] = useState<Page[]>([]);
   const [text, setText] = useState("");
-  const [value, setValue] = useState("");
-  const [name, setName] = useState("");
+  const [value, setValue] = useState(() => (capture ? String(capture.item.value) : ""));
+  const [name, setName] = useState(() => capture?.item.name ?? "");
   const [kind, setKind] = useState<Kind>("Despesa");
-  const [category, setCategory] = useState("");
-  const [account, setAccount] = useState("");
+  const [category, setCategory] = useState(() => capture?.choice.categoryId ?? "");
+  const [account, setAccount] = useState(() => capture?.choice.accountId ?? "");
   const selectedAccount = accounts.find(a => a.id === account);
   const [destination, setDestination] = useState("");
   const [installments, setInstallments] = useState(1);
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(() => capture?.item.date ?? todayISO());
   const [note, setNote] = useState("");
   const [origin, setOrigin] = useState("");
   const [originOpen, setOriginOpen] = useState(false);
@@ -105,7 +106,15 @@ export default function SmartRegister({ embedded = false, desktop = false, onClo
   const [categorySearch, setCategorySearch] = useState("");
   const [saveStatus, setSaveStatus] = useState<"synced" | "pending" | null>(null);
   const refreshFinancialData = async () => { await Promise.all(["transactions", "accounts", "dashboard", "cards", "categories", "flow", "calendar"].map(key => queryClient.invalidateQueries({ queryKey: [key] }))); };
-  const saveMutation = useMutation({ mutationFn: (input: TransactionInput) => createTransaction(input, "manual"), onSuccess: async (transaction) => { setSaveStatus("synced"); await refreshFinancialData(); finishSave(transaction); }, onError: async (error: Error) => { if (error.message.includes("FINNOS_OFFLINE_QUEUED")) { setSaveStatus("pending"); await refreshFinancialData(); finishSave(null); toast.info("Registro salvo neste dispositivo. Sincronização pendente."); return; } toast.error("Não foi possível salvar. O registro não foi confirmado; tente novamente."); } });
+  const saveMutation = useMutation({ mutationFn: async (input: TransactionInput): Promise<Transaction> => {
+    if (!capture) return createTransaction(input, "manual");
+    // Reviewing an Apple Pay purchase: confirm it with the chosen wallet, then apply any edit to value, name, date or origin.
+    const credit = Boolean(input.card_id);
+    const { transaction_id: id } = await confirmPendingCapture(capture.item.id, confirmBody({ method: credit ? "credito" : "debito", accountId: input.account_id, cardId: input.card_id ?? "", categoryId: input.category_id ?? "", installments: input.installment ? input.total_installments ?? 1 : 1 }));
+    const edited = input.name !== capture.item.name || input.value !== capture.item.value || input.date !== capture.item.date || Boolean(input.origin);
+    await queryClient.invalidateQueries({ queryKey: ["pending-captures"] });
+    return edited ? updateTransaction(id, { ...input, installment: false, total_installments: null, current_installment: null }, "manual") : fetchTransactionById(id);
+  }, onSuccess: async (transaction) => { setSaveStatus("synced"); await refreshFinancialData(); finishSave(transaction); }, onError: async (error: Error) => { if (error.message.includes("FINNOS_OFFLINE_QUEUED")) { setSaveStatus("pending"); await refreshFinancialData(); finishSave(null); toast.info("Registro salvo neste dispositivo. Sincronização pendente."); return; } toast.error("Não foi possível salvar. O registro não foi confirmado; tente novamente."); } });
   const save = () => {
     if (!canSave) return;
     const amount = Number(value);
@@ -114,11 +123,11 @@ export default function SmartRegister({ embedded = false, desktop = false, onClo
     saveMutation.mutate(input);
   };
   
-  useEffect(() => { if (category && !categories.some(c => c.id === category)) setCategory(""); }, [categories, category]);
-  useEffect(() => { if (account && !accounts.some(a => a.id === account)) setAccount(""); }, [accounts, account]);
+  useEffect(() => { if (categoriesQuery.isSuccess && category && !categories.some(c => c.id === category)) setCategory(""); }, [categories, category, categoriesQuery.isSuccess]);
+  useEffect(() => { if (accountsQuery.isSuccess && account && !accounts.some(a => a.id === account)) setAccount(""); }, [accounts, account, accountsQuery.isSuccess]);
   // A single wallet is the obvious default; with several, the first one (changeable in the chip).
   useEffect(() => { if (!account && accounts.length > 0) setAccount(accounts[0].id); }, [accounts, account]);
-  useEffect(() => { if (selectedCardId && !cards.some(c => c.id === selectedCardId)) setSelectedCardId(null); }, [cards, selectedCardId]);
+  useEffect(() => { if (cardsQuery.isSuccess && selectedCardId && !cards.some(c => c.id === selectedCardId)) setSelectedCardId(null); }, [cards, selectedCardId, cardsQuery.isSuccess]);
   const selectedCategory = categories.find(c => c.id === category);
   const visibleCategories = selectedCategory && !categories.slice(0, 4).some(c => c.id === selectedCategory.id) ? [...categories.slice(0, 3), selectedCategory] : categories.slice(0, 4);
   const canSave = Number(value) > 0 && !!account && (kind === "Transferência" ? !!destination && destination !== account : !!category && !(kind === "Despesa" && selectedCategory?.name.toLocaleLowerCase("pt-BR") === "renda"));
@@ -135,7 +144,7 @@ export default function SmartRegister({ embedded = false, desktop = false, onClo
     setHistory([]); setPage("entry");
   };
   const finishSave = (transaction: Transaction | null) => {
-    const chips = [kind === "Transferência" ? [selectedAccount?.name, accounts.find(a => a.id === destination)?.name].filter(Boolean).join(" → ") : selectedCategory?.name, selectedCard ? selectedCard.name : kind === "Transferência" ? "" : selectedAccount?.name, dateLabel, origin.trim() || "Registro"].filter((c): c is string => !!c);
+    const chips = [kind === "Transferência" ? [selectedAccount?.name, accounts.find(a => a.id === destination)?.name].filter(Boolean).join(" → ") : selectedCategory?.name, selectedCard ? selectedCard.name : kind === "Transferência" ? "" : selectedAccount?.name, dateLabel, origin.trim() || (capture ? "Apple Pay" : "Registro")].filter((c): c is string => !!c);
     setDone({ kind, amount: formatBRL(Number(value)).replace(/,00$/, ""), name: displayName, chips, transaction: transaction as Transaction });
   };
   const applyParsed = (parsed: { value?: number | null; kind?: Kind; date?: string | null; accountId?: string | null; destinationId?: string | null; categoryId?: string | null; name?: string }) => {
@@ -274,7 +283,7 @@ export default function SmartRegister({ embedded = false, desktop = false, onClo
   if (done) {
     return <div className={embedded ? "h-full min-h-0 w-full" : "mx-auto h-[min(860px,calc(100dvh-8rem))] w-full max-w-md overflow-hidden rounded-[30px] border border-border bg-background shadow-2xl"}>
       <RegisterSuccess kind={done.kind} amount={done.amount} name={done.name} chips={done.chips} pending={saveStatus === "pending"}
-        onAnother={(next) => { setDone(null); resetForm(); setKind(next); }}
+        onAnother={(next) => { if (capture) { onClose?.(); return; } setDone(null); resetForm(); setKind(next); }}
         onView={() => { const tx = done.transaction; setDone(null); resetForm(); if (embedded) onClose?.(); else navigate("/transacoes"); if (tx) window.setTimeout(() => dialogs.openTransactionDetail(tx), 120); }}
         onDone={() => { setDone(null); resetForm(); onClose?.(); }} />
     </div>;
@@ -293,7 +302,7 @@ export default function SmartRegister({ embedded = false, desktop = false, onClo
             const Icon = KIND_UI[k].icon;
             const active = kind === k;
             return (
-              <button key={k} type="button" role="radio" aria-checked={active} aria-label={k} onClick={() => setKind(k)} className={cn("flex h-9 items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold transition-all", active ? KIND_UI[k].tint : "text-muted-foreground")}>
+              <button key={k} type="button" role="radio" aria-checked={active} aria-label={k} disabled={Boolean(capture) && k !== "Despesa"} onClick={() => setKind(k)} className={cn("flex h-9 items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold transition-all", active ? KIND_UI[k].tint : "text-muted-foreground")}>
                 <Icon size={17} aria-hidden="true" />{active ? <span>{k === "Transferência" ? "Transferir" : k}</span> : null}
               </button>
             );
@@ -354,7 +363,7 @@ export default function SmartRegister({ embedded = false, desktop = false, onClo
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setOriginOpen(false); } }} onFocus={() => setKeypadOpen(false)} aria-label="Origem" placeholder="Origem (ex.: Mercado Pago)" data-testid="quick-entry-origin-input"
               className="h-7 min-w-0 flex-1 rounded-full bg-primary/12 px-3 font-medium text-primary outline-none placeholder:text-primary/50" />
           ) : (
-            <button type="button" onClick={() => setOriginOpen(true)} aria-label="Editar origem" data-testid="quick-entry-origin" className="flex items-center gap-1.5 rounded-full bg-primary/12 px-3 py-1 font-medium text-primary"><Tag size={14} aria-hidden="true" />{origin.trim() || "Registro"}</button>
+            <button type="button" onClick={() => setOriginOpen(true)} aria-label="Editar origem" data-testid="quick-entry-origin" className="flex items-center gap-1.5 rounded-full bg-primary/12 px-3 py-1 font-medium text-primary"><Tag size={14} aria-hidden="true" />{origin.trim() || (capture ? "Apple Pay" : "Registro")}</button>
           )}
           {originOpen ? (origins.data ?? []).filter((o) => o.label.toLowerCase().includes(origin.trim().toLowerCase()) && o.label !== origin).slice(0, 3).map((o) => (
             <button key={o.label} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setOrigin(o.label); setOriginOpen(false); }} className="shrink-0 rounded-full border border-border px-2.5 py-1 text-muted-foreground">{o.label}</button>

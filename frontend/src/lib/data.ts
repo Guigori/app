@@ -690,6 +690,10 @@ export async function confirmPendingCapture(id: string, input: PendingCaptureCon
   return apiPost<{ ok: boolean; transaction_id: string }>(`/pending-captures/${encodeURIComponent(id)}/confirm`, input);
 }
 
+export async function fetchTransactionById(id: string): Promise<Transaction> {
+  return apiGet<Transaction>(`/transactions/${encodeURIComponent(id)}`);
+}
+
 export async function confirmAllPendingCaptures(): Promise<ConfirmAllResult> {
   return apiPost<ConfirmAllResult>("/pending-captures/confirm-all", {});
 }
