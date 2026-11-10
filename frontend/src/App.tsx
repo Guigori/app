@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { categoryFlowPath } from "@/lib/categoryLinks";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { FinnosLoading } from "@/components/brand/FinnosLoading";
@@ -31,7 +32,6 @@ const DashboardEntry = lazy(() => import("@/pages/DashboardEntry"));
 const Transactions = lazy(() => import("@/pages/Transactions"));
 const Accounts = lazy(() => import("@/pages/Accounts"));
 const Categories = lazy(() => import("@/pages/Categories"));
-const CategoryDetail = lazy(() => import("@/pages/CategoryDetail"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const SettingsIntegrations = lazy(() => import("@/pages/SettingsIntegrations"));
 const ChartSettings = lazy(() => import("@/pages/ChartSettings"));
@@ -69,6 +69,12 @@ function CaixaRedirect() {
   return <Navigate to={`/transacoes?${params.toString()}`} replace />;
 }
 
+/** Old category address: a category is explored in Fluxo, filtered by it (Fluxo links on to Análise). */
+function CategoryRedirect() {
+  const { categoryId = "" } = useParams();
+  return <Navigate to={categoryFlowPath(categoryId)} replace />;
+}
+
 export default function App() {
   return (
     <>
@@ -85,7 +91,7 @@ export default function App() {
             <Route path="/transacoes" element={<Transactions />} />
             <Route path="/contas" element={<Accounts />} />
             <Route path="/categorias" element={<Categories />} />
-            <Route path="/categorias/:categoryId" element={<CategoryDetail />} />
+            <Route path="/categorias/:categoryId" element={<CategoryRedirect />} />
             <Route path="/configuracoes" element={<SettingsHub />} />
             <Route path="/configuracoes/avancado" element={<Settings />} />
             <Route path="/configuracoes/:section" element={<Settings />} />

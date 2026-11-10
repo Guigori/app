@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { categoryFlowPath } from "@/lib/categoryLinks";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, PlusCircle, Tags, Trash2, TrendingUp } from "lucide-react";
@@ -123,7 +124,7 @@ export default function Categories() {
                             <CategoryIcon name={category.icon} className="h-5 w-5" />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <Link to={`/categorias/${category.id}`} className="block truncate font-medium text-foreground after:absolute after:inset-0" data-testid={`category-open-${category.id}`}>{category.name}</Link>
+                            <Link to={categoryFlowPath(category.id)} className="block truncate font-medium text-foreground after:absolute after:inset-0" data-testid={`category-open-${category.id}`}>{category.name}</Link>
                             <p className="text-xs text-muted-foreground" data-testid={`category-budget-${category.id}`}>
                               {cycleAllocation
                                 ? `Limite do ciclo atual: ${formatBRL(limit)}`

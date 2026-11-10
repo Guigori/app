@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { categoryFlowPath } from "@/lib/categoryLinks";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -125,7 +126,7 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onCh
   const navigate = useNavigate();
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   useEffect(() => { const on = () => setOnline(true), off = () => setOnline(false); window.addEventListener("online", on); window.addEventListener("offline", off); return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); }; }, []);
-  const openCategory = () => { if (!tx.category_id) return; onLeave(); navigate(`/categorias/${tx.category_id}`); };
+  const openCategory = () => { if (!tx.category_id) return; onLeave(); navigate(categoryFlowPath(tx.category_id, month, tx.type === "receita" ? "receitas" : "despesas")); };
 
   const fromCycle = cycleImpact(tx, cycleProgress.data);
   // Older lançamentos (imported, restored, or created before the history existed) still show when they were made.

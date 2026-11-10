@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { categoryFlowPath } from "@/lib/categoryLinks";
 import { useNavigate } from "react-router-dom";
 import { parseReceiptText, parseRegisterText } from "@/lib/registerParsing";
 import { registerProposal, type Proposal, type ProposalState, type ProposedEntry } from "@/lib/finnActions";
@@ -488,7 +489,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           </div>
           {existing && selectedCategory ? (
             // On a saved lançamento the name opens the category: its month, its history, its lançamentos.
-            <button type="button" onClick={() => { onClose?.(); navigate(`/categorias/${selectedCategory.id}`); }} className="mx-auto mt-1.5 flex items-center gap-0.5 text-[15px] font-bold" style={{ color: `color-mix(in oklab, ${selectedCategory.color} 72%, white)` }} data-testid="quick-entry-category-name">
+            <button type="button" onClick={() => { onClose?.(); navigate(categoryFlowPath(selectedCategory.id, date.slice(0, 7), kind === "Receita" ? "receitas" : "despesas")); }} className="mx-auto mt-1.5 flex items-center gap-0.5 text-[15px] font-bold" style={{ color: `color-mix(in oklab, ${selectedCategory.color} 72%, white)` }} data-testid="quick-entry-category-name">
               {selectedCategory.name}<ChevronRight size={15} aria-hidden="true" />
             </button>
           ) : <p className={cn("mt-1.5 text-center", selectedCategory ? "text-[15px] font-bold" : "text-[13px] font-medium")} style={{ color: selectedCategory ? `color-mix(in oklab, ${selectedCategory.color} 72%, white)` : undefined }} data-testid="quick-entry-category-name">{selectedCategory?.name ?? <span className="text-muted-foreground">Sem categoria</span>}</p>}
