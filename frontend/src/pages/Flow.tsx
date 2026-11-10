@@ -456,9 +456,9 @@ export default function Flow({ month: sharedMonth, onMonthChange }: { month?: st
               <ul className="mt-2 divide-y divide-border/70" data-testid="flow-category-list">
                 {flow.categories.map((slice) => (
                   <li key={slice.category_id ?? slice.name}>
-                    {/* Opens Fluxo filtered by this category and month. */}
+                    {/* Opens the category: its month, its history, its lançamentos. */}
                     <Link
-                      to={`/transacoes?month=${flow.month}&metric=despesas${slice.category_id ? `&category_id=${encodeURIComponent(slice.category_id)}` : ""}`}
+                      to={slice.category_id ? `/categorias/${encodeURIComponent(slice.category_id)}` : `/transacoes?month=${flow.month}&metric=despesas`}
                       className="group flex items-center gap-3 rounded-xl px-1 py-3 transition-colors hover:bg-muted/50"
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${slice.color}1A`, color: slice.color }} aria-hidden="true">

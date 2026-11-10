@@ -78,7 +78,7 @@ export default function AnalysisCategories() {
               {spending.slice(0, 4).map((c) => {
                 const series = trendOf(c.id);
                 return (
-                  <Link key={c.id} to={`/transacoes?month=${month}&metric=despesas${c.id.startsWith("name:") ? "" : `&category_id=${encodeURIComponent(c.id)}`}`} className="rounded-xl border border-border p-3 transition-colors hover:bg-muted/40">
+                  <Link key={c.id} to={c.id.startsWith("name:") ? `/transacoes?month=${month}&metric=despesas` : `/categorias/${encodeURIComponent(c.id)}`} className="rounded-xl border border-border p-3 transition-colors hover:bg-muted/40">
                     <p className="flex items-center gap-1.5 truncate text-sm font-medium"><span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: c.color }} />{c.name}</p>
                     <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{money(c.current)}</p>
                     <div className="mt-2 h-14">
@@ -105,7 +105,7 @@ function ChangeRow({ change, money, month }: { change: ReturnType<typeof categor
   const up = change.delta > 0;
   return (
     <li>
-      <Link to={`/transacoes?month=${month}&metric=despesas${change.id.startsWith("name:") ? "" : `&category_id=${encodeURIComponent(change.id)}`}`} className="flex items-center gap-3 py-2.5">
+      <Link to={change.id.startsWith("name:") ? `/transacoes?month=${month}&metric=despesas` : `/categorias/${encodeURIComponent(change.id)}`} className="flex items-center gap-3 py-2.5">
         <span className="grid size-9 shrink-0 place-items-center rounded-xl" style={{ backgroundColor: `${change.color}1A`, color: change.color }}><CategoryIcon name={change.icon} className="h-4 w-4" /></span>
         <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{change.name}</span><span className="block text-xs tabular-nums text-muted-foreground">{money(change.previous)} → {money(change.current)}</span></span>
         <span className={"flex shrink-0 items-center gap-0.5 text-sm font-semibold tabular-nums " + (up ? "text-expense" : "text-income")}>
