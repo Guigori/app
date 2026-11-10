@@ -7,7 +7,7 @@ import { apiDelete, apiGet, apiPost } from "@/lib/api";
 import { createTestCapture, fetchPendingSettings, savePendingSettings } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
-import { AUTOMATION_FIELDS, bearerValue, codeFromConnection, pendingEndpoint, readyShortcutUrl, SHORTCUTS_APP } from "@/lib/shortcutLinks";
+import { AUTOMATION_FIELDS, bearerValue, codeFromConnection, connectShortcutUrl, pendingEndpoint, readyShortcutUrl, SHORTCUT_NAME, SHORTCUTS_APP } from "@/lib/shortcutLinks";
 import { cn } from "@/lib/utils";
 import {
   ApplePayFlow, MockAutomationTab, MockBody, MockNotification, MockTrigger, MockUrlAction, StepPicture,
@@ -103,8 +103,18 @@ export function ApplePaySetup() {
   // With the ready-made shortcut (iCloud link), setup is 4 steps; the manual way stays one tap away.
   const ready = readyShortcutUrl((import.meta.env as Record<string, string | undefined>).VITE_SHORTCUT_ICLOUD_URL);
   const [manual, setManual] = useState(false);
-  // Copy the code in the same tap that opens Shortcuts: iPhone only allows copying during a tap.
-  const addReady = () => { if (code) void copy(code, "Código copiado. Cole quando o Atalhos pedir."); };
+  // One tap: a new code for this iPhone goes straight into the installed shortcut, never on screen.
+  const connect = useMutation({
+    mutationFn: () => apiPost<ShortcutToken & { token: string }>("/integrations/shortcut-tokens", { label: "iPhone" }),
+    onSuccess: async (data) => {
+      setConnected(data.token);
+      await refreshCodes();
+      window.location.href = connectShortcutUrl(data.token);
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error, "Não foi possível conectar agora.")),
+  });
+  // Kept only in memory, to reopen Shortcuts if the first try did not open it.
+  const [connected, setConnected] = useState<string | null>(null);
   // The guide is what a new user needs; once purchases arrive it only gets in the way.
   const [guideOpen, setGuideOpen] = useState<boolean | null>(null);
   const showGuide = guideOpen ?? !working;
@@ -161,7 +171,7 @@ export function ApplePaySetup() {
 
       <section className="rounded-2xl border border-border" data-testid="applepay-guide">
         <button type="button" onClick={() => setGuideOpen(!showGuide)} aria-expanded={showGuide} className="flex w-full items-center justify-between gap-2 p-3 text-left" data-testid="applepay-guide-toggle">
-          <span className="min-w-0"><span className="block font-semibold">{working ? "Configuração no iPhone" : "Configurar no iPhone"}</span><span className="block text-xs text-muted-foreground">{working ? "Passo a passo, para outro iPhone ou para refazer." : (ready ? "Atalho pronto: 4 passos, sem montar nada." : "7 passos no app Atalhos, com o desenho de cada tela.")}</span></span>
+          <span className="min-w-0"><span className="block font-semibold">{working ? "Configuração no iPhone" : "Configurar no iPhone"}</span><span className="block text-xs text-muted-foreground">{working ? "Passo a passo, para outro iPhone ou para refazer." : (ready ? "4 toques: instalar, conectar, ligar e conferir." : "7 passos no app Atalhos, com o desenho de cada tela.")}</span></span>
           <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", showGuide && "rotate-180")} aria-hidden="true" />
         </button>
         {showGuide ? (
@@ -172,34 +182,28 @@ export function ApplePaySetup() {
               <p className="text-muted-foreground">Nada entra no saldo sem você: a compra espera até você tocar em Registrar. Se o cartão do Apple Pay não estiver cadastrado, o FINNOS pergunta de onde saiu o dinheiro.</p>
             </section>
       <ol className="space-y-5" data-testid="applepay-steps">
-        <Step n={1} done={hasCode} title="Gere o código de conexão">
-          <p className="text-muted-foreground">É o que deixa o iPhone falar com a sua conta. Só cria compras pendentes e lista nomes; você desconecta quando quiser.</p>
-          {fresh ? (
-            <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3" data-testid="applepay-fresh-code">
-              <p className="font-semibold">Guarde: ele não aparece de novo.</p>
-              <CopyField value={code ?? ""} label="código" />
-            </div>
-          ) : (
-            <button type="button" onClick={() => create.mutate()} disabled={create.isPending} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-primary px-3 font-semibold text-primary-foreground disabled:opacity-60" data-testid="applepay-create-code">
-              {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
-              {hasCode ? "Gerar outro código" : "Gerar código"}
-            </button>
-          )}
-        </Step>
-
         {ready && !manual ? (
           <>
-        <Step n={2} title="Adicione o atalho pronto">
-          <p className="text-muted-foreground">Ele já vem com a automação do Apple Pay. Ao tocar, o código é copiado e o app Atalhos abre no “Adicionar Atalho”. Quando ele pedir o código, cole.</p>
-          <a href={ready ?? "#"} onClick={addReady} aria-disabled={!code}
-            className={cn("inline-flex h-11 items-center gap-2 rounded-2xl px-4 font-semibold", code ? "bg-primary text-primary-foreground" : "pointer-events-none bg-muted text-muted-foreground")} data-testid="applepay-ready-link">
-            <Download className="h-5 w-5" aria-hidden="true" />Adicionar atalho pronto
+        <Step n={1} title="Instale o atalho do FINNOS">
+          <p className="text-muted-foreground">É o mesmo para todo mundo e não leva código nenhum. Toque, e o app Atalhos abre no “Adicionar Atalho”.</p>
+          <a href={ready ?? "#"} className="inline-flex h-11 items-center gap-2 rounded-2xl border border-border px-4 font-semibold" data-testid="applepay-ready-link">
+            <Download className="h-5 w-5" aria-hidden="true" />Adicionar o atalho
           </a>
-          {!code ? <p className="text-xs text-muted-foreground">Gere o código no passo 1 primeiro: ele só aparece uma vez e é copiado neste toque.</p> : null}
+        </Step>
+
+        <Step n={2} done={Boolean(connected)} title="Conecte este iPhone">
+          <p className="text-muted-foreground">Cria um código só deste iPhone e entrega direto para o atalho, sem copiar nem colar. Ele avisa “iPhone conectado ao FINNOS”.</p>
+          <button type="button" onClick={() => connect.mutate()} disabled={connect.isPending} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-60" data-testid="applepay-connect">
+            {connect.isPending ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Smartphone className="h-5 w-5" aria-hidden="true" />}
+            {connected ? "Conectar de novo" : "Conectar este iPhone"}
+          </button>
+          {connected ? (
+            <p className="text-xs text-muted-foreground" data-testid="applepay-connect-again">O Atalhos não abriu? <a href={connectShortcutUrl(connected)} className="font-semibold text-primary">Abrir de novo</a>. O atalho precisa se chamar exatamente “{SHORTCUT_NAME}”.</p>
+          ) : null}
         </Step>
 
         <Step n={3} title="Ligue a automação">
-          <p className="text-muted-foreground">No app Atalhos, abra o atalho que acabou de adicionar (<strong>Apple Pay Finnos</strong>). No topo, em “Quando … for aproximado”, escolha os cartões e ligue <strong>Automação</strong>.</p>
+          <p className="text-muted-foreground">No app Atalhos, abra <strong>{SHORTCUT_NAME}</strong>. No topo, em “Quando … for aproximado”, escolha os cartões e ligue <strong>Automação</strong>.</p>
         </Step>
 
         <Step n={4} done={received.length > 0} title="Confira que funcionou">
@@ -216,6 +220,21 @@ export function ApplePaySetup() {
           </>
         ) : (
           <>
+        <Step n={1} done={hasCode} title="Gere o código de conexão">
+          <p className="text-muted-foreground">É o que deixa o iPhone falar com a sua conta. Só cria compras pendentes e lista nomes; você desconecta quando quiser.</p>
+          {fresh ? (
+            <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3" data-testid="applepay-fresh-code">
+              <p className="font-semibold">Guarde: ele não aparece de novo.</p>
+              <CopyField value={code ?? ""} label="código" />
+            </div>
+          ) : (
+            <button type="button" onClick={() => create.mutate()} disabled={create.isPending} className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-primary px-3 font-semibold text-primary-foreground disabled:opacity-60" data-testid="applepay-create-code">
+              {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+              {hasCode ? "Gerar outro código" : "Gerar código"}
+            </button>
+          )}
+        </Step>
+
         <Step n={2} title="Abra o app Atalhos e crie a automação">
           <p className="text-muted-foreground">Automação → <strong>+</strong> → <strong>Transação</strong> (no iOS 26 aparece como <strong>Carteira</strong>).</p>
           <StepPicture n={2} alt="App Atalhos, aba Automação"><MockAutomationTab /></StepPicture>
