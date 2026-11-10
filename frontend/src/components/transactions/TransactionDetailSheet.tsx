@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, ChartNoAxesCombined, ChevronRight, Pencil, Radar as RadarIcon } from "lucide-react";
 import { Link } from "react-router-dom";
+import { motion, useReducedMotion } from "motion/react";
 import { fetchBudget, fetchBudgetCycleProgress, fetchCurrentBudgetCycle, fetchCalendar, fetchRadar, fetchSubscriptions, fetchTransactions } from "@/lib/data";
 import { addMonth, formatBRL, formatDate, formatHiddenBRL, formatSignedBRL, monthLabel } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
@@ -12,6 +13,40 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { Transaction } from "@/types/finnos";
+
+const TYPE_LABEL = { despesa: "Despesa", receita: "Receita", transferencia: "Transferência" } as const;
+
+/** The lançamento as a receipt: it unrolls from the top and lists every detail that was recorded. */
+function Receipt({ tx }: { tx: Transaction }) {
+  const reduce = useReducedMotion();
+  const origin = tx.capture === "apple_pay_auto" ? "Apple Pay · automático" : tx.capture === "apple_pay" ? "Apple Pay · confirmado" : "Registro manual";
+  const created = tx.created_at ? new Date(tx.created_at) : null;
+  const rows: [string, string][] = [
+    ["Tipo", TYPE_LABEL[tx.type]],
+    [tx.type === "transferencia" ? "Sai de" : tx.card_name ? "Cartão" : "Conta", tx.card_name ?? tx.account_name],
+    ...(tx.type === "transferencia" && tx.to_account_name ? [["Vai para", tx.to_account_name] as [string, string]] : []),
+    ...(tx.category_name ? [["Categoria", tx.category_name] as [string, string]] : []),
+    ["Data", formatDate(tx.date)],
+    ["Origem", origin],
+    ...(tx.installment && tx.total_installments ? [["Parcela", `${tx.current_installment ?? 1} de ${tx.total_installments}`] as [string, string]] : []),
+    ...(created && !Number.isNaN(created.getTime()) ? [["Registrado em", created.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })] as [string, string]] : []),
+  ];
+  return (
+    <motion.section data-testid="transaction-detail-receipt" aria-label="Comprovante"
+      className="overflow-hidden rounded-2xl border border-dashed border-border bg-card"
+      initial={reduce ? false : { clipPath: "inset(0 0 100% 0)", opacity: 0.6 }} animate={{ clipPath: "inset(0 0 0% 0)", opacity: 1 }}
+      transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}>
+      <dl className="divide-y divide-dashed divide-border px-3.5">
+        {rows.map(([label, value], i) => (
+          <motion.div key={label} className="flex items-center justify-between gap-4 py-2.5 text-sm"
+            initial={reduce ? false : { opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 + i * 0.07, duration: 0.3 }}>
+            <dt className="text-muted-foreground">{label}</dt><dd className="min-w-0 truncate text-right font-medium">{value}</dd>
+          </motion.div>
+        ))}
+      </dl>
+    </motion.section>
+  );
+}
 
 const pct = (value: number) => `${Math.round(value * 100)}%`;
 
@@ -92,6 +127,8 @@ export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, on
           <p className={cn("font-heading text-3xl font-bold tabular-nums", tone)} data-testid="transaction-detail-value">
             {hidden ? formatHiddenBRL() : tx.type === "transferencia" ? formatBRL(tx.value) : formatSignedBRL(signedAmount(tx))}
           </p>
+
+          <Receipt tx={tx} />
 
           <section className="rounded-2xl bg-muted/60 p-3.5" data-testid="transaction-detail-path">
             <h3 className="text-xs font-medium text-muted-foreground">{tx.type === "receita" ? "De onde veio" : "De onde saiu e para onde foi"}</h3>
