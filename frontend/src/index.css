@@ -272,3 +272,7 @@
 @media (max-width: 639px) {
   main h1 + p.text-muted-foreground:not([data-keep]) { display: none; }
 }
+
+/* Colour bars in the category colour picker. */
+.color-range::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 9999px; background: #fff; border: 3px solid rgba(0,0,0,.35); box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.color-range::-moz-range-thumb { width: 18px; height: 18px; border-radius: 9999px; background: #fff; border: 3px solid rgba(0,0,0,.35); }

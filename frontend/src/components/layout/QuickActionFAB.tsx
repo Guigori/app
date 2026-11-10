@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { RegisterFab } from "@/components/layout/RegisterFab";
 import { toast } from "sonner";
+import { onRegisterSheet, type RegisterSheetRequest } from "@/lib/registerSheet";
 import { DiscardRegisterDialog } from "@/components/layout/DiscardRegisterDialog";
 import type { RegisterController } from "@/pages/SmartRegister";
 const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
@@ -12,6 +13,10 @@ export function QuickActionFAB() {
   const [open, setOpenRaw] = useState(false);
   const [controller, setController] = useState<RegisterController | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
+  // Opened from elsewhere (a lançamento tapped in a list, "Registrar outro" after editing one).
+  const [request, setRequest] = useState<RegisterSheetRequest>({});
+  const [requestKey, setRequestKey] = useState(0);
+  useEffect(() => onRegisterSheet((r) => { setRequest(r); setRequestKey((k) => k + 1); setOpenRaw(true); }, true), []);
   const setOpen = (next: boolean) => { setOpenRaw(next); if (!next) { setController(null); setDiscardOpen(false); } };
   const dirty = open && controller?.view !== "success" && controller?.dirty;
   const requestClose = () => { if (dirty) setDiscardOpen(true); else setOpen(false); };
@@ -24,7 +29,7 @@ export function QuickActionFAB() {
   }, [open, dirty, discardOpen]);
 
   const onClick = () => {
-    if (!open) { setOpen(true); return; }
+    if (!open) { setRequest({}); setRequestKey((k) => k + 1); setOpen(true); return; }
     if (dirty && controller) {
       if (controller.canSave && !controller.saving) controller.save();
       else toast(controller.hint ?? "Informe o valor para salvar");
@@ -45,7 +50,7 @@ export function QuickActionFAB() {
               initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 330, damping: 34 }}>
               <div className="min-h-0 flex-1 overflow-hidden pb-24">
                 <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">Preparando o registro...</div>}>
-                  <SmartRegister embedded desktop onClose={() => setOpen(false)} onController={setController} />
+                  <SmartRegister key={requestKey} existing={request.existing} initialKind={request.kind} embedded desktop onClose={() => setOpen(false)} onController={setController} />
                 </Suspense>
               </div>
             </motion.aside>

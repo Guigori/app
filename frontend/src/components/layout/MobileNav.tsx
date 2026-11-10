@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { RegisterFab } from "@/components/layout/RegisterFab";
 import { toast } from "sonner";
+import { onRegisterSheet, type RegisterSheetRequest } from "@/lib/registerSheet";
 import { DiscardRegisterDialog } from "@/components/layout/DiscardRegisterDialog";
 import type { RegisterController } from "@/pages/SmartRegister";
 const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
@@ -73,6 +74,10 @@ export function MobileNav() {
   const [registerOpen, setRegisterOpenRaw] = useState(false);
   const [controller, setController] = useState<RegisterController | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
+  // Opened from elsewhere (a lançamento tapped in a list, "Registrar outro" after editing one).
+  const [request, setRequest] = useState<RegisterSheetRequest>({});
+  const [requestKey, setRequestKey] = useState(0);
+  useEffect(() => onRegisterSheet((r) => { setRequest(r); setRequestKey((k) => k + 1); setRegisterOpenRaw(true); }, false), []);
   const setRegisterOpen = (open: boolean) => { setRegisterOpenRaw(open); if (!open) { setController(null); setDiscardOpen(false); } };
   const entryDirty = registerOpen && controller?.view !== "success" && controller?.dirty;
   // Closing with something typed asks first; otherwise it just closes.
@@ -181,7 +186,7 @@ export function MobileNav() {
               {controller?.view === "success" ? null : <div className="absolute left-1/2 top-2 z-10 h-[5px] w-20 -translate-x-1/2 rounded-full bg-[#2a2b52]/70 dark:bg-[#2a2b52]" aria-hidden="true" />}
               <div className="min-h-0 flex-1 overflow-hidden">
                 <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">Preparando o registro...</div>}>
-                  <SmartRegister embedded onClose={() => setRegisterOpen(false)} onController={setController} />
+                  <SmartRegister key={requestKey} existing={request.existing} initialKind={request.kind} embedded onClose={() => setRegisterOpen(false)} onController={setController} />
                 </Suspense>
               </div>
             </motion.section>
@@ -210,7 +215,7 @@ export function MobileNav() {
           <RegisterFab open={registerOpen} dirty={Boolean(entryDirty)} kind={controller?.kind ?? "Despesa"} success={registerOpen && controller?.view === "success"}
             testId="mobile-quick-action-button" discardTestId="mobile-quick-action-discard" onDiscard={() => setDiscardOpen(true)}
             onMain={() => {
-              if (!registerOpen) { setRegisterOpen(true); return; }
+              if (!registerOpen) { setRequest({}); setRequestKey((k) => k + 1); setRegisterOpen(true); return; }
               if (controller?.view !== "success" && controller?.dirty) {
                 if (controller.canSave && !controller.saving) controller.save();
                 else toast(controller.hint ?? "Informe o valor para salvar");

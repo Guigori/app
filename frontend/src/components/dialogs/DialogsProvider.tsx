@@ -1,4 +1,5 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useState, type ReactNode } from "react";
+import { openRegisterSheet, opensInRegister } from "@/lib/registerSheet";
 import type { Account, Category, Transaction, TxType } from "@/types/finnos";
 
 // Each form loads the first time it is opened, not with the app.
@@ -56,11 +57,19 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
   const [detail, setDetail] = useState<{ open: boolean; transaction: Transaction | null }>({ open: false, transaction: null });
   const [seen, setSeen] = useState({ tx: false, detail: false, account: false, category: false });
   const openTransaction = useCallback(
-    (init?: TransactionDialogInit) => { setSeen((s) => ({ ...s, tx: true })); setTx({ open: true, ...init }); },
+    (init?: TransactionDialogInit) => {
+      // Editing a lançamento happens in the register screen, like creating one.
+      if (init?.transaction && !init.syncOperationId && opensInRegister(init.transaction)) { openRegisterSheet({ existing: init.transaction }); return; }
+      setSeen((s) => ({ ...s, tx: true })); setTx({ open: true, ...init });
+    },
     [],
   );
   const openTransactionDetail = useCallback(
-    (transaction: Transaction) => { setSeen((s) => ({ ...s, detail: true })); setDetail({ open: true, transaction }); },
+    (transaction: Transaction) => {
+      // A saved lançamento opens in the register screen: its fields, its impact and the receipt below.
+      if (opensInRegister(transaction)) { openRegisterSheet({ existing: transaction }); return; }
+      setSeen((s) => ({ ...s, detail: true })); setDetail({ open: true, transaction });
+    },
     [],
   );
   const openAccount = useCallback(
