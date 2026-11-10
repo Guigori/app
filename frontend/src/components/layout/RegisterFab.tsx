@@ -45,13 +45,6 @@ export function RegisterFab({ open, dirty, kind, success, size = "lg", onMain, o
         ) : null}
       </AnimatePresence>
 
-      {/* On save the ✓ grows to cover the screen, then fades into the success screen. */}
-      <AnimatePresence>
-        {success && !reduce ? (
-          <motion.span key="grow" aria-hidden="true" className={cn("pointer-events-none absolute inset-0 z-10 rounded-full", KIND_BG[kind])}
-            initial={{ scale: 1, opacity: 1 }} animate={{ scale: [1, 30, 30], opacity: [1, 1, 0] }} transition={{ duration: 0.95, times: [0, 0.5, 1], ease: [0.22, 1, 0.36, 1] }} />
-        ) : null}
-      </AnimatePresence>
 
       <motion.button type="button" onClick={onMain} data-testid={testId} aria-expanded={open}
         aria-label={check ? "Salvar registro" : open ? "Fechar Registro Inteligente" : "Abrir Registro Inteligente"}

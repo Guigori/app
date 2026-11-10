@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { RegisterFab } from "@/components/layout/RegisterFab";
 import { toast } from "sonner";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { DiscardRegisterDialog } from "@/components/layout/DiscardRegisterDialog";
 import type { RegisterController } from "@/pages/SmartRegister";
 const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
 import { cn } from "@/lib/utils";
@@ -220,7 +220,7 @@ export function MobileNav() {
             }} />
         </div>
       </motion.nav>
-      <ConfirmDialog open={discardOpen} onOpenChange={setDiscardOpen} title="Descartar este registro?" description="O que você preencheu será perdido." confirmLabel="Descartar e fechar" destructive onConfirm={() => setRegisterOpen(false)} />
+      <DiscardRegisterDialog open={discardOpen} kind={controller?.kind ?? "Despesa"} onKeep={() => setDiscardOpen(false)} onDiscard={() => setRegisterOpen(false)} />
     </>
   );
 }

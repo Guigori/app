@@ -301,8 +301,8 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     return <div className={embedded ? "h-full min-h-0 w-full" : "mx-auto h-[min(860px,calc(100dvh-8rem))] w-full max-w-md overflow-hidden rounded-[30px] border border-border bg-background shadow-2xl"}>
       <RegisterSuccess kind={done.kind} amount={done.amount} name={done.name} chips={done.chips} pending={saveStatus === "pending"}
         onAnother={(next) => { if (capture) { onClose?.(); return; } setDone(null); resetForm(); setKind(next); }}
-        onView={() => { const tx = done.transaction; setDone(null); resetForm(); if (embedded) onClose?.(); else navigate("/transacoes"); if (tx) window.setTimeout(() => dialogs.openTransactionDetail(tx), 120); }}
-        onDone={() => { setDone(null); resetForm(); onClose?.(); }} />
+        onView={() => { const tx = done.transaction; if (embedded && onClose) onClose(); else { setDone(null); resetForm(); navigate("/transacoes"); } if (tx) window.setTimeout(() => dialogs.openTransactionDetail(tx), 120); }}
+        onDone={() => { if (onClose) { onClose(); return; } setDone(null); resetForm(); }} />
     </div>;
   }
   // Quick entry, laid out as in the prototype: header, amount, name, tag, categories, ⋮ · wallet · date, keypad.
@@ -312,7 +312,6 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     const fromAccount = selectedAccount;
     const toAccount = accounts.find((a) => a.id === destination);
     const fromAfter = (fromAccount?.balance ?? 0) - amountValue;
-    const pickDate = () => { const el = dateInput.current; if (!el) return; try { el.showPicker(); } catch { el.focus(); } };
     return <div className={embedded ? "relative flex h-full min-h-0 w-full flex-col gap-2.5 bg-background px-5 pb-4 pt-6 text-foreground" : "relative mx-auto flex h-[min(860px,calc(100dvh-8rem))] w-full max-w-md flex-col gap-2.5 overflow-hidden rounded-[36px] border border-border bg-background px-5 pb-4 pt-6 text-foreground shadow-2xl"} data-testid="quick-entry">
       {embedded ? null : <div className="absolute left-1/2 top-2 h-[5px] w-20 -translate-x-1/2 rounded-full bg-border" aria-hidden="true" />}
       {/* Header: calculator · type (icons, the chosen one named) · AI. */}
@@ -361,7 +360,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       ) : null}
       {kind === "Transferência" && fromAccount && amountValue > 0 && fromAfter < 0 ? <p className="shrink-0 text-xs text-expense" role="status" data-testid="transfer-negative">{fromAccount.name} fica negativa em {formatBRL(-fromAfter)} com esta transferência.</p> : null}
 
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Uber, mercado)" aria-label="Nome" onFocus={() => setKeypadOpen(false)} onBlur={() => window.setTimeout(() => setKeypadOpen(true), 280)} className="h-12 w-full shrink-0 rounded-full bg-muted px-5 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Uber, mercado)" aria-label="Nome" onFocus={() => setKeypadOpen(false)} className="h-12 w-full shrink-0 rounded-full bg-muted px-5 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
 
       <div className="flex h-[30px] shrink-0 items-center gap-2 text-[13px]">
         {originOpen ? (
@@ -369,7 +368,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setOriginOpen(false); } }} onFocus={() => setKeypadOpen(false)} aria-label="Origem" placeholder="Origem (ex.: Mercado Pago)" data-testid="quick-entry-origin-input"
             className="h-7 min-w-0 flex-1 rounded-full bg-primary/10 px-3 font-medium text-primary outline-none placeholder:text-primary/50 dark:bg-[#1d1640] dark:text-[#c4b5fd]" />
         ) : (
-          <button type="button" onClick={() => setOriginOpen(true)} aria-label="Editar origem" data-testid="quick-entry-origin" className="flex h-7 items-center gap-1.5 rounded-full bg-primary/10 px-3 font-medium text-primary dark:bg-[#1d1640] dark:text-[#c4b5fd]"><Tag size={13} aria-hidden="true" />{origin.trim() || (capture ? "Apple Pay" : "Registro")}</button>
+          <button type="button" onClick={() => { setKeypadOpen(false); setOriginOpen(true); }} aria-label="Editar origem" data-testid="quick-entry-origin" className="flex h-7 items-center gap-1.5 rounded-full bg-primary/10 px-3 font-medium text-primary dark:bg-[#1d1640] dark:text-[#c4b5fd]"><Tag size={13} aria-hidden="true" />{origin.trim() || (capture ? "Apple Pay" : "Registro")}</button>
         )}
         {originOpen ? (origins.data ?? []).filter((o) => o.label.toLowerCase().includes(origin.trim().toLowerCase()) && o.label !== origin).slice(0, 3).map((o) => (
           <button key={o.label} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setOrigin(o.label); setOriginOpen(false); }} className="shrink-0 rounded-full border border-border px-2.5 py-1 text-muted-foreground">{o.label}</button>
@@ -377,13 +376,13 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       </div>
 
       {kind !== "Transferência" ? (
-        <div className="shrink-0 rounded-[22px] bg-card px-3 pb-2 pt-2.5">
-          <div className="flex items-center gap-2.5 overflow-x-auto [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]" role="radiogroup" aria-label="Categoria">
+        <div className="shrink-0 rounded-[22px] bg-card px-3 pb-2 pt-[7px]">
+          <div className="-mx-1 flex items-center gap-2.5 overflow-x-auto px-1 py-[3px] [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]" role="radiogroup" aria-label="Categoria">
             <button type="button" onClick={() => go("categories")} aria-label="Buscar categoria" className="grid size-11 shrink-0 place-items-center rounded-full border-[1.5px] border-dashed border-[#3a3b6a] text-muted-foreground"><Search size={18} /></button>
             {kindCategories.map((c) => {
               const active = category === c.id;
               return (
-                <button key={c.id} type="button" role="radio" aria-checked={active} aria-label={c.name} onClick={() => setCategory(active ? "" : c.id)} className="grid size-11 shrink-0 place-items-center rounded-full transition-shadow" style={{ backgroundColor: `color-mix(in oklab, ${c.color} 16%, transparent)`, color: c.color, boxShadow: active ? `0 0 0 2px ${c.color}` : undefined }}>
+                <button key={c.id} type="button" role="radio" aria-checked={active} aria-label={c.name} onClick={() => { setCategory(active ? "" : c.id); setKeypadOpen(false); }} className="grid size-11 shrink-0 place-items-center rounded-full transition-shadow" style={{ backgroundColor: `color-mix(in oklab, ${c.color} 16%, transparent)`, color: c.color, boxShadow: active ? `0 0 0 2px ${c.color}` : undefined }}>
                   <CategoryIcon name={c.icon} className="size-5" />
                 </button>
               );
@@ -416,8 +415,11 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
             {selectedCard ? <span className="text-xs text-muted-foreground">Crédito</span> : null}
           </span>
         </button> : null}
-        <button type="button" onClick={pickDate} className={cn("h-12 shrink-0 rounded-full bg-muted px-5 text-[15px] font-bold", kind === "Transferência" && "flex-1")} data-testid="quick-entry-date">{dateLabel}</button>
-        <input ref={dateInput} type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="sr-only" tabIndex={-1} aria-label="Data" />
+        <label className={cn("relative grid h-12 shrink-0 cursor-pointer place-items-center rounded-full bg-muted px-5 text-[15px] font-bold", kind === "Transferência" && "flex-1")} data-testid="quick-entry-date">
+          {dateLabel}
+          {/* The real date field covers the chip, so a tap opens the phone's own date picker. */}
+          <input ref={dateInput} type="date" value={date} onFocus={() => setKeypadOpen(false)} onChange={(e) => e.target.value && setDate(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full" aria-label="Data" />
+        </label>
       </div>
 
       {selectedCard && kind === "Despesa" ? (
@@ -482,6 +484,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         <input value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Buscar categoria" aria-label="Buscar categoria" className="mb-1 h-12 w-full rounded-full bg-muted px-5 text-base outline-none placeholder:text-muted-foreground" />
         {categoriesQuery.isError ? <p role="alert">Erro ao carregar categorias. <button onClick={() => categoriesQuery.refetch()}>Tentar novamente</button></p> : kindCategories.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase())).map(c => pickRow({ key: c.id, selected: category === c.id, onClick: () => { setCategory(c.id); back(); }, icon: <CategoryIcon name={c.icon} className="size-5" />, iconStyle: { backgroundColor: `color-mix(in oklab, ${c.color} 16%, transparent)`, color: c.color }, title: c.name }))}
         {!categoriesQuery.isPending && !categoriesQuery.isError && categories.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma categoria cadastrada.</p>}
+        <button type="button" onClick={() => dialogs.openCategory()} data-testid="register-new-category" className="mt-1 h-[52px] shrink-0 rounded-full border-[1.5px] border-dashed border-[#3a3b6a] text-[15px] font-medium text-primary dark:text-[#c4b5fd]">+ Nova categoria</button>
       </div>}
       {(page === "pay" || (page === "accounts" && destinationPicker)) && <div className="flex flex-col gap-2">
         <p className="mt-0.5 text-[13px] text-muted-foreground">Contas e dinheiro</p>
@@ -493,16 +496,18 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           <p className="mt-2 text-[13px] text-muted-foreground">Cartões de crédito</p>
           {cards.length === 0 ? <p className="rounded-full border-[1.5px] border-dashed border-[#3a3b6a] px-5 py-3.5 text-sm text-muted-foreground">Nenhum cartão cadastrado.</p> : cards.map(c => pickRow({ key: c.id, selected: selectedCardId === c.id, testId: "pay-card-" + c.id, onClick: () => { setSelectedCardId(c.id); setAccount(c.payment_account_id ?? accounts[0]?.id ?? ""); setPayment("Crédito"); back(); }, icon: <CreditCard size={20} />, iconClass: "bg-primary/15 text-primary dark:bg-[#1d1640] dark:text-[#a78bfa]", title: c.name, sub: hidden ? "Disponível R$ ••••" : `Disponível ${formatBRL(c.available)} · fecha dia ${c.closing_day}` }))}
         </> : null}
-        <button type="button" onClick={() => navigate("/contas")} className="mt-1 h-[52px] shrink-0 rounded-full border-[1.5px] border-dashed border-[#3a3b6a] text-[15px] font-medium text-primary dark:text-[#c4b5fd]">+ Nova carteira</button>
+        <button type="button" onClick={() => dialogs.openAccount()} data-testid="register-new-wallet" className="mt-1 h-[52px] shrink-0 rounded-full border-[1.5px] border-dashed border-[#3a3b6a] text-[15px] font-medium text-primary dark:text-[#c4b5fd]">+ Nova carteira</button>
       </div>}
       {page === "more" && <div className="flex min-h-full flex-col gap-2.5">
-        <input ref={dateInput} type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="sr-only" tabIndex={-1} aria-label="Data" />
         <section className={MORE_CARD + " px-4 py-3"}>
           <div className="mb-2 flex items-center justify-between text-[15px]"><span className="font-bold">Data</span><span className="text-sm text-[#a78bfa]">{new Date(`${date}T12:00:00`).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" })}</span></div>
           <div className="flex gap-2 overflow-x-auto [scrollbar-width:none]">
             {chip("Hoje", date === todayISO(), () => setDate(todayISO()))}
             {chip("Ontem", date === addDays(todayISO(), -1), () => setDate(addDays(todayISO(), -1)))}
-            {chip("Outra data", date !== todayISO() && date !== addDays(todayISO(), -1), () => { const el = dateInput.current; if (!el) return; try { el.showPicker(); } catch { el.focus(); } })}
+            <label className={cn("relative h-9 shrink-0 cursor-pointer rounded-full border px-4 text-sm leading-[2.125rem]", date !== todayISO() && date !== addDays(todayISO(), -1) ? "border-[#a78bfa] bg-primary/10 font-medium text-primary dark:bg-[#1d1640] dark:text-[#c4b5fd]" : "border-transparent bg-muted")}>
+              Outra data
+              <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full" aria-label="Outra data" />
+            </label>
           </div>
         </section>
         {kind !== "Transferência" ? <section className={MORE_CARD + " px-4 py-3"}>
