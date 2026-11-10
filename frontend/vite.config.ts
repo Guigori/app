@@ -16,7 +16,7 @@ if (!hotReloadDisabled) {
 export default defineConfig(() => {
   return {
     define: {
-      __FINNOS_VERSION__: JSON.stringify(process.env.FINNOS_APP_VERSION || "0.1.0-beta.1"),
+      __FINNOS_VERSION__: JSON.stringify(process.env.FINNOS_APP_VERSION || "0.1.0-beta.2"),
       __FINNOS_COMMIT__: JSON.stringify((process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || "local").slice(0, 7)),
       __FINNOS_ENV__: JSON.stringify(process.env.VERCEL_ENV || (process.env.NODE_ENV === "production" ? "production" : "development")),
       __FINNOS_BUILD_TIME__: JSON.stringify(new Date().toISOString()),
