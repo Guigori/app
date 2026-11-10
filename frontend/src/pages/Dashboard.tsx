@@ -211,7 +211,7 @@ export default function Dashboard() {
                   }
                   selectedCategoryId={selectedCategory?.category_id ?? null}
                   onSelectCategory={setSelectedCategory}
-                  onOpenCategory={(slice) => navigate(`/transacoes?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)}
+                  onOpenCategory={(slice) => navigate(slice.category_id ? `/categorias/${encodeURIComponent(slice.category_id)}` : `/transacoes?month=${activeMonth}&metric=despesas`)}
                 />
               </div>
             );
