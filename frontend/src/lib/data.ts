@@ -695,6 +695,22 @@ export async function fetchTransactionById(id: string): Promise<Transaction> {
   return apiGet<Transaction>(`/transactions/${encodeURIComponent(id)}`);
 }
 
+/** The editable fields of a saved lançamento, ready to send back (with any changes on top). */
+export function transactionInput(tx: Transaction, patch: Partial<TransactionInput> = {}): TransactionInput {
+  return {
+    name: tx.name, value: tx.value, type: tx.type, status: tx.status, date: tx.date, account_id: tx.account_id, card_id: tx.card_id,
+    to_account_id: tx.to_account_id, category_id: tx.category_id, fixed: tx.fixed, recurrence: tx.recurrence, installment: tx.installment,
+    total_installments: tx.total_installments, current_installment: tx.current_installment, adjusted_value: tx.adjusted_value,
+    attachment: tx.attachment, notes: tx.notes, origin: tx.origin ?? null, notify_enabled: tx.notify_enabled ?? true, ...patch,
+  };
+}
+
+/** Marks a scheduled or pending lançamento as paid; a future date becomes today, since it was paid now. */
+export async function settleTransaction(tx: Transaction): Promise<Transaction> {
+  const today = new Date(); const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  return updateTransaction(tx.id, transactionInput(tx, { status: "pago", date: tx.date > iso ? iso : tx.date }), "manual", tx.version);
+}
+
 export interface HistoryEvent { id: string; action: "created" | "updated" | "deleted"; created_at: string; before: Record<string, string | number> | null; after: Record<string, string | number> | null }
 /** Every recorded change of one lançamento, newest first. */
 export async function fetchTransactionHistory(id: string): Promise<HistoryEvent[]> {

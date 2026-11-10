@@ -19,7 +19,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { PendingCapture, Transaction, TransactionInput } from "@/types/finnos";
 import { confirmBody, type CaptureChoice } from "@/lib/pendingCaptures";
-import { editRecurrence, type RecurrenceEditScope, confirmPendingCapture, createTransaction, fetchTransactionById, updateTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
+import { editRecurrence, settleTransaction, type RecurrenceEditScope, confirmPendingCapture, createTransaction, fetchTransactionById, updateTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getAccountPaymentMethods } from "@/lib/accountPaymentPreferences";
 import { addMonth, formatBRL, isISODate, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
@@ -121,6 +121,20 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [expanded, setExpanded] = useState(false);
   const recordScroll = useRef<HTMLDivElement>(null);
   const collapsing = useRef(false);
+  // "Marcar como pago": settles it now and reopens the lançamento with its new state.
+  const [settling, setSettling] = useState(false);
+  const settle = async () => {
+    if (!existing || settling) return;
+    if (dirtyRef.current) { toast("Salve as alterações antes de marcar como pago."); return; }
+    setSettling(true);
+    try {
+      const updated = await settleTransaction(existing);
+      await refreshFinancialData();
+      toast.success(existing.type === "receita" ? "Marcado como recebido." : "Marcado como pago.");
+      openRegisterSheet({ existing: updated });
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível marcar agora."); } finally { setSettling(false); }
+  };
+  const dirtyRef = useRef(false);
   // Back to the register as it opened: fields shown, receipt at the top.
   const collapseRecord = () => { collapsing.current = true; setExpanded(false); recordScroll.current?.scrollTo({ top: 0, behavior: "smooth" }); window.setTimeout(() => { collapsing.current = false; }, 900); };
   const [scopeOpen, setScopeOpen] = useState(false);
@@ -324,6 +338,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const savedSignature = useRef<string | null>(null);
   if (existing && savedSignature.current === null && accountsQuery.isSuccess && categoriesQuery.isSuccess) savedSignature.current = signature;
   const dirty = existing ? savedSignature.current !== null && signature !== savedSignature.current : amountValue > 0 || name.trim() !== "" || expr !== "";
+  dirtyRef.current = dirty;
   const latest = useRef({ save });
   latest.current = { save };
   const view = done ? "success" : page === "entry" ? "entry" : "other";
@@ -424,7 +439,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         ) : (
           <button type="button" onClick={() => { setKeypadOpen(false); setOriginOpen(true); }} aria-label="Editar origem" data-testid="quick-entry-origin" className="flex h-7 items-center gap-1.5 rounded-full bg-primary/10 px-3 font-medium text-primary dark:bg-[#1d1640] dark:text-[#c4b5fd]"><Tag size={13} aria-hidden="true" />{origin.trim() || (capture || existing?.capture ? "Apple Pay" : "Registro")}</button>
         )}
-        {existing && !originOpen ? <span className={cn("flex h-7 items-center gap-1.5 rounded-full px-3 font-medium", existing.status === "pago" ? "bg-income/12 text-income dark:bg-[#0d2a22] dark:text-[#34d399]" : "bg-amber-500/12 text-amber-500")} data-testid="record-status"><Check size={13} aria-hidden="true" />{existing.status === "pago" ? (existing.type === "receita" ? "Recebido" : "Pago") : existing.status === "agendado" ? "Agendado" : "Pendente"}</span> : null}
+        {existing && !originOpen ? <button type="button" onClick={existing.status === "pago" ? undefined : () => void settle()} aria-label={existing.status === "pago" ? undefined : "Marcar como pago"} className={cn("flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 font-medium", existing.status === "pago" ? "bg-income/12 text-income dark:bg-[#0d2a22] dark:text-[#34d399]" : "bg-amber-500/12 text-amber-500")} data-testid="record-status"><Check size={13} aria-hidden="true" />{existing.status === "pago" ? (existing.type === "receita" ? "Recebido" : "Pago") : existing.status === "agendado" ? "Agendado" : "Pendente"}</button> : null}
         {existing && !originOpen && (existing.installment || existing.fixed || existing.invoice_payment || existing.invoice_refund) ? <span className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-sky-500/12 px-3 font-medium text-sky-500 dark:bg-[#0c2330] dark:text-[#38bdf8]" data-testid="record-kind">{existing.installment ? `Parcela ${existing.current_installment ?? 1}/${existing.total_installments ?? "?"}` : existing.invoice_payment ? "Fatura" : existing.invoice_refund ? "Estorno" : "Mensal"}</span> : null}
         {existing && dirty && !originOpen ? <span className="flex h-7 items-center gap-1.5 rounded-full bg-amber-500/12 px-3 font-medium text-amber-500 dark:bg-[#2a1a0c] dark:text-[#fb923c]" data-testid="record-changed"><Pencil size={12} aria-hidden="true" />Alterado</span> : null}
         {originOpen ? (origins.data ?? []).filter((o) => o.label.toLowerCase().includes(origin.trim().toLowerCase()) && o.label !== origin).slice(0, 3).map((o) => (
@@ -457,7 +472,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       })()}
       {existing && !keypadOpen ? (
         <div ref={recordScroll} onScroll={(e) => { const top = e.currentTarget.scrollTop; if (collapsing.current) { if (top <= 4) collapsing.current = false; return; } if (!expanded && top > 24) setExpanded(true); }} className={cn("-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1", expanded && "pb-24")} data-testid="record-scroll">
-          <RecordInsight tx={existing} onDeleted={() => onClose?.()} onLeave={() => onClose?.()} />
+          <RecordInsight tx={existing} onDeleted={() => onClose?.()} onLeave={() => onClose?.()} onSettle={settle} settling={settling} />
         </div>
       ) : null}
 
