@@ -95,6 +95,7 @@ def enrich_transaction(
         adjusted_value=doc.get("adjusted_value"),
         attachment=doc.get("attachment"),
         notes=doc.get("notes"),
+        origin=doc.get("origin"),
         notify_enabled=doc.get("notify_enabled", True),
         capture=capture_origin(doc),
         capture_unusual=bool(doc.get("capture_unusual")),
@@ -186,6 +187,7 @@ def _document(user_id: str, payload: TransactionIn) -> dict:
         "adjusted_value": payload.adjusted_value,
         "attachment": payload.attachment,
         "notes": payload.notes,
+        "origin": (payload.origin or "").strip() or None,
         "notify_enabled": payload.notify_enabled,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
@@ -237,6 +239,21 @@ async def list_transactions(
         enrich_transaction(d, accounts_by_id, categories_by_id, cards_by_id)
         for d in docs
     ]
+
+
+@router.get("/origins")
+async def list_origins(user: dict = Depends(require_user)) -> dict:
+    """Origin labels the person used before, most recent first, to suggest them again."""
+    docs = await db.transactions.find({"user_id": user["id"]}).sort([("created_at", -1)]).to_list(500)
+    seen: dict[str, dict] = {}
+    for d in docs:
+        label = (d.get("origin") or "").strip()
+        if not label:
+            continue
+        key = label.casefold()
+        entry = seen.setdefault(key, {"label": label, "count": 0})
+        entry["count"] += 1
+    return {"items": list(seen.values())[:20]}
 
 
 @router.get("/page")

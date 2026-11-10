@@ -1,7 +1,10 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, X } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import type { RegisterController } from "@/pages/SmartRegister";
 const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
 import { cn } from "@/lib/utils";
 import { type NavItem } from "@/components/layout/nav";
@@ -67,7 +70,14 @@ export function MobileNav() {
   const location = useLocation();
   const activeIndex = mobileItems.findIndex((item) => item.to === location.pathname || isSubPage(item.to, location.pathname) || (item.to === "/" && location.pathname === "/"));
 
-  const [registerOpen, setRegisterOpen] = useState(false);
+  const [registerOpen, setRegisterOpenRaw] = useState(false);
+  const [controller, setController] = useState<RegisterController | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const setRegisterOpen = (open: boolean) => { setRegisterOpenRaw(open); if (!open) { setController(null); setDiscardOpen(false); } };
+  const entryDirty = registerOpen && controller?.view === "entry" && controller.dirty;
+  // Closing with something typed asks first; otherwise it just closes.
+  const requestClose = () => { if (entryDirty) setDiscardOpen(true); else setRegisterOpen(false); };
+  const kindBg = controller?.kind === "Despesa" ? "bg-expense" : controller?.kind === "Receita" ? "bg-income" : "bg-primary";
   const [transitioning, setTransitioning] = useState(false);
   const [visible, setVisible] = useState(true);
   const [compact, setCompact] = useState(false);
@@ -125,14 +135,15 @@ export function MobileNav() {
 
   useEffect(() => {
     if (!registerOpen) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setRegisterOpen(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") requestClose(); };
     window.addEventListener("keydown", onKey);
     const previousOverflow = document.body.style.overflow;
     const previousHtmlOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
     return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = previousOverflow; document.documentElement.style.overflow = previousHtmlOverflow; };
-  }, [registerOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registerOpen, entryDirty]);
 
   return (
     <>
@@ -157,7 +168,7 @@ export function MobileNav() {
       <AnimatePresence>
         {registerOpen && (
           <>
-            <motion.button type="button" aria-label="Fechar registro" onClick={() => setRegisterOpen(false)}
+            <motion.button type="button" aria-label="Fechar registro" onClick={requestClose}
               className="fixed inset-0 z-[39] bg-black/40 backdrop-blur-[12px] dashboard:hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} />
             <motion.section role="dialog" aria-modal="true" aria-label="Novo registro"
@@ -167,7 +178,7 @@ export function MobileNav() {
               <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden="true" />
               <div className="min-h-0 flex-1 overflow-hidden">
                 <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">Preparando o registro...</div>}>
-                  <SmartRegister embedded onClose={() => setRegisterOpen(false)} />
+                  <SmartRegister embedded onClose={() => setRegisterOpen(false)} onController={setController} />
                 </Suspense>
               </div>
             </motion.section>
@@ -193,19 +204,36 @@ export function MobileNav() {
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setRegisterOpen(open => !open)}
-            className="flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-[0_4px_18px_rgba(75,44,255,.18)] transition-all duration-300 active:scale-95"
-            aria-label={registerOpen ? "Fechar Registro Inteligente" : "Abrir Registro Inteligente"}
-            aria-expanded={registerOpen}
-            data-testid="mobile-quick-action-button"
-          >
-            {/* A real X while the register is open: tapping it closes the register. */}
-            {registerOpen ? <X className="h-8 w-8" aria-hidden="true" /> : <Plus className="h-8 w-8" aria-hidden="true" />}
-          </button>
+          <div className="relative shrink-0">
+            {entryDirty ? (
+              <button type="button" onClick={() => setDiscardOpen(true)} aria-label="Descartar registro" data-testid="mobile-quick-action-discard"
+                className="absolute -left-1.5 -top-1.5 z-10 grid size-7 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-md active:scale-95">
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                if (!registerOpen) { setRegisterOpen(true); return; }
+                if (controller?.view === "entry" && controller.dirty) {
+                  if (controller.canSave && !controller.saving) controller.save();
+                  else toast(controller.hint ?? "Informe o valor para salvar");
+                  return;
+                }
+                setRegisterOpen(false);
+              }}
+              className={cn("flex h-[4.15rem] w-[4.15rem] items-center justify-center rounded-full text-white shadow-[0_4px_18px_rgba(75,44,255,.18)] transition-all duration-300 active:scale-95", entryDirty ? kindBg : "bg-primary")}
+              aria-label={entryDirty ? "Salvar registro" : registerOpen ? "Fechar Registro Inteligente" : "Abrir Registro Inteligente"}
+              aria-expanded={registerOpen}
+              data-testid="mobile-quick-action-button"
+            >
+              {/* + opens, ✕ closes an empty register, ✓ (in the type's colour) saves what was typed. */}
+              {entryDirty ? <Check className="h-8 w-8" aria-hidden="true" /> : registerOpen ? <X className="h-8 w-8" aria-hidden="true" /> : <Plus className="h-8 w-8" aria-hidden="true" />}
+            </button>
+          </div>
         </div>
       </motion.nav>
+      <ConfirmDialog open={discardOpen} onOpenChange={setDiscardOpen} title="Descartar este registro?" description="O que você preencheu será perdido." confirmLabel="Descartar e fechar" destructive onConfirm={() => setRegisterOpen(false)} />
     </>
   );
 }

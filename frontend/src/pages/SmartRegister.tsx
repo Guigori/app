@@ -1,24 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AnimatePresence, motion } from "motion/react";
 import { parseReceiptText, parseRegisterText } from "@/lib/registerParsing";
 import { registerProposal, type Proposal, type ProposalState, type ProposedEntry } from "@/lib/finnActions";
 import { applyProposal, undoProposal } from "@/lib/finnApply";
 import { readMemory } from "@/lib/finnMemory";
 import { ProposalCard } from "@/components/ai/ProposalCard";
 import { TransferPreview } from "@/components/transactions/TransferPreview";
-import { getRegisterDefault } from "@/lib/registerPreferences";
+import { getRegisterCalc, getRegisterDefault, setRegisterCalc } from "@/lib/registerPreferences";
+import { KIND_THEME, RegisterSuccess } from "@/components/transactions/RegisterSuccess";
+import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { evaluateExpression, KEYS, OPS, pressKey, typedDisplay } from "@/lib/registerKeypad";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { TransactionInput } from "@/types/finnos";
-import { createTransaction, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
+import type { PendingCapture, Transaction, TransactionInput } from "@/types/finnos";
+import { confirmBody, type CaptureChoice } from "@/lib/pendingCaptures";
+import { confirmPendingCapture, createTransaction, fetchTransactionById, updateTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getAccountPaymentMethods } from "@/lib/accountPaymentPreferences";
 import { addMonth, formatBRL, isISODate, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
-import { ArrowLeft, ArrowUp, Camera, Check, ChevronRight, Mic, Paperclip, Plus, X, Wallet, CreditCard, Landmark, Repeat2, StickyNote, Bell, Tag, FolderOpen, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Delete, MoreVertical, Search, Ban, WandSparkles, ReceiptText, Square } from "lucide-react";
+import { ArrowLeft, ArrowUp, Camera, Check, ChevronRight, Mic, Paperclip, Plus, X, Wallet, CreditCard, Landmark, Repeat2, StickyNote, Bell, Tag, FolderOpen, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Delete, MoreVertical, Search, Ban, WandSparkles, ReceiptText, Square, Calculator } from "lucide-react";
 
 /** Voice, receipt photo and file attachment are hidden until they work reliably on every phone; the code stays. */
 const MEDIA_INPUTS = false;
@@ -27,16 +29,29 @@ type Page = "entry" | "pay" | "start" | "manual" | "details" | "categories" | "a
 type Kind = "Despesa" | "Receita" | "Transferência";
 const format = (n: string) => (Number(n || 0) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const KIND_UI: Record<Kind, { icon: typeof ArrowDownLeft; tint: string; amount: string }> = {
-  Receita: { icon: ArrowDownLeft, tint: "bg-income/12 text-income", amount: "text-income" },
-  Despesa: { icon: ArrowUpRight, tint: "bg-expense/12 text-expense", amount: "text-foreground" },
-  "Transferência": { icon: ArrowLeftRight, tint: "bg-primary/12 text-primary", amount: "text-foreground" },
+  Receita: { icon: ArrowDownLeft, tint: "bg-income/12 text-income", amount: KIND_THEME.Receita.amount },
+  Despesa: { icon: ArrowUpRight, tint: "bg-expense/12 text-expense", amount: KIND_THEME.Despesa.amount },
+  "Transferência": { icon: ArrowLeftRight, tint: "bg-primary/12 text-primary", amount: KIND_THEME["Transferência"].amount },
 };
-export default function SmartRegister({ embedded = false, onClose }: { embedded?: boolean; onClose?: () => void }) {
+/** What the floating button needs to know: the "+" turns into ✕ (nothing typed) or ✓ in the type's colour. */
+export interface RegisterController {
+  view: "entry" | "success" | "other";
+  kind: Kind;
+  dirty: boolean;
+  canSave: boolean;
+  saving: boolean;
+  hint: string | null;
+  save: () => void;
+}
+export default function SmartRegister({ embedded = false, desktop = false, capture, onClose, onController }: { embedded?: boolean; desktop?: boolean; /** An Apple Pay purchase being reviewed: same screens, prefilled; saving confirms it. */ capture?: { item: PendingCapture; choice: CaptureChoice }; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
+  const dialogs = useDialogs();
   const navigate = useNavigate();
   const { hidden } = useBalanceHidden();
   const dateInput = useRef<HTMLInputElement>(null);
-  const [expr, setExpr] = useState("");
-  const [saved, setSaved] = useState(false);
+  const [expr, setExpr] = useState(() => (capture ? String(capture.item.value).replace(".", ",") : ""));
+  const [done, setDone] = useState<{ kind: Kind; amount: string; name: string; chips: string[]; transaction: Transaction } | null>(null);
+  const [calc, setCalc] = useState(getRegisterCalc);
+  const [keypadOpen, setKeypadOpen] = useState(true);
   const [listening, setListening] = useState(false);
   const [ocrProgress, setOcrProgress] = useState<number | null>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
@@ -56,7 +71,7 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
   const [paymentsLoading, setPaymentsLoading] = useState(false);
   const [paymentsError, setPaymentsError] = useState(false);
   useEffect(() => { const listener = () => setPaymentPreferencesVersion(v => v + 1); window.addEventListener("finnos:payment-methods-changed", listener); return () => window.removeEventListener("finnos:payment-methods-changed", listener); }, []);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(() => (capture?.choice.method === "credito" && capture.choice.cardId ? capture.choice.cardId : null));
   const [institutionId, setInstitutionId] = useState<string | null>(null);
   useEffect(() => {
     const selected = accounts.find(a => a.id === institutionId);
@@ -71,16 +86,19 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
   const [page, setPage] = useState<Page>(() => (getRegisterDefault() === "inteligente" ? "start" : "entry"));
   const [history, setHistory] = useState<Page[]>([]);
   const [text, setText] = useState("");
-  const [value, setValue] = useState("");
-  const [name, setName] = useState("");
+  const [value, setValue] = useState(() => (capture ? String(capture.item.value) : ""));
+  const [name, setName] = useState(() => capture?.item.name ?? "");
   const [kind, setKind] = useState<Kind>("Despesa");
-  const [category, setCategory] = useState("");
-  const [account, setAccount] = useState("");
+  const [category, setCategory] = useState(() => capture?.choice.categoryId ?? "");
+  const [account, setAccount] = useState(() => capture?.choice.accountId ?? "");
   const selectedAccount = accounts.find(a => a.id === account);
   const [destination, setDestination] = useState("");
   const [installments, setInstallments] = useState(1);
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(() => capture?.item.date ?? todayISO());
   const [note, setNote] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [originOpen, setOriginOpen] = useState(false);
+  const origins = useQuery({ queryKey: ["origins"], queryFn: fetchOrigins, staleTime: 60_000 });
   const [recurring, setRecurring] = useState(false);
   const [attachment, setAttachment] = useState("");
   const [destinationPicker, setDestinationPicker] = useState(false);
@@ -88,20 +106,28 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
   const [categorySearch, setCategorySearch] = useState("");
   const [saveStatus, setSaveStatus] = useState<"synced" | "pending" | null>(null);
   const refreshFinancialData = async () => { await Promise.all(["transactions", "accounts", "dashboard", "cards", "categories", "flow", "calendar"].map(key => queryClient.invalidateQueries({ queryKey: [key] }))); };
-  const saveMutation = useMutation({ mutationFn: (input: TransactionInput) => createTransaction(input, "manual"), onSuccess: async () => { setSaveStatus("synced"); await refreshFinancialData(); finishSave(); }, onError: async (error: Error) => { if (error.message.includes("FINNOS_OFFLINE_QUEUED")) { setSaveStatus("pending"); await refreshFinancialData(); finishSave(); toast.info("Registro salvo neste dispositivo. Sincronização pendente."); return; } toast.error("Não foi possível salvar. O registro não foi confirmado; tente novamente."); } });
+  const saveMutation = useMutation({ mutationFn: async (input: TransactionInput): Promise<Transaction> => {
+    if (!capture) return createTransaction(input, "manual");
+    // Reviewing an Apple Pay purchase: confirm it with the chosen wallet, then apply any edit to value, name, date or origin.
+    const credit = Boolean(input.card_id);
+    const { transaction_id: id } = await confirmPendingCapture(capture.item.id, confirmBody({ method: credit ? "credito" : "debito", accountId: input.account_id, cardId: input.card_id ?? "", categoryId: input.category_id ?? "", installments: input.installment ? input.total_installments ?? 1 : 1 }));
+    const edited = input.name !== capture.item.name || input.value !== capture.item.value || input.date !== capture.item.date || Boolean(input.origin);
+    await queryClient.invalidateQueries({ queryKey: ["pending-captures"] });
+    return edited ? updateTransaction(id, { ...input, installment: false, total_installments: null, current_installment: null }, "manual") : fetchTransactionById(id);
+  }, onSuccess: async (transaction) => { setSaveStatus("synced"); await refreshFinancialData(); finishSave(transaction); }, onError: async (error: Error) => { if (error.message.includes("FINNOS_OFFLINE_QUEUED")) { setSaveStatus("pending"); await refreshFinancialData(); finishSave(null); toast.info("Registro salvo neste dispositivo. Sincronização pendente."); return; } toast.error("Não foi possível salvar. O registro não foi confirmado; tente novamente."); } });
   const save = () => {
     if (!canSave) return;
     const amount = Number(value);
     if (!Number.isFinite(amount) || amount <= 0 || !account || !isISODate(date) || (kind !== "Transferência" && !category) || (kind === "Transferência" && (!destination || destination === account))) return;
-    const input: TransactionInput = { name: displayName, value: amount, type: kind === "Despesa" ? "despesa" : kind === "Receita" ? "receita" : "transferencia", status: "pago", date, account_id: account, card_id: kind === "Despesa" ? selectedCardId : null, to_account_id: kind === "Transferência" ? destination : null, category_id: kind === "Transferência" ? null : category, fixed: recurring, recurrence: recurring ? "mensal" : null, installment: kind === "Despesa" && !!selectedCardId && installments > 1, total_installments: kind === "Despesa" && !!selectedCardId && installments > 1 ? installments : null, current_installment: kind === "Despesa" && !!selectedCardId && installments > 1 ? 1 : null, adjusted_value: null, attachment: null, notes: [note.trim(), payment && kind !== "Transferência" ? `Forma de pagamento: ${payment}` : "", project.trim() ? `Projeto: ${project.trim()}` : "", tags.trim() ? `Tags: ${tags.trim()}` : ""].filter(Boolean).join("\n") || null, notify_enabled: reminder };
+    const input: TransactionInput = { name: displayName, value: amount, type: kind === "Despesa" ? "despesa" : kind === "Receita" ? "receita" : "transferencia", status: "pago", date, account_id: account, card_id: kind === "Despesa" ? selectedCardId : null, to_account_id: kind === "Transferência" ? destination : null, category_id: kind === "Transferência" ? null : category, fixed: recurring, recurrence: recurring ? "mensal" : null, installment: kind === "Despesa" && !!selectedCardId && installments > 1, total_installments: kind === "Despesa" && !!selectedCardId && installments > 1 ? installments : null, current_installment: kind === "Despesa" && !!selectedCardId && installments > 1 ? 1 : null, adjusted_value: null, attachment: null, notes: [note.trim(), payment && kind !== "Transferência" ? `Forma de pagamento: ${payment}` : "", project.trim() ? `Projeto: ${project.trim()}` : "", tags.trim() ? `Tags: ${tags.trim()}` : ""].filter(Boolean).join("\n") || null, origin: origin.trim() || null, notify_enabled: reminder };
     saveMutation.mutate(input);
   };
   
-  useEffect(() => { if (category && !categories.some(c => c.id === category)) setCategory(""); }, [categories, category]);
-  useEffect(() => { if (account && !accounts.some(a => a.id === account)) setAccount(""); }, [accounts, account]);
+  useEffect(() => { if (categoriesQuery.isSuccess && category && !categories.some(c => c.id === category)) setCategory(""); }, [categories, category, categoriesQuery.isSuccess]);
+  useEffect(() => { if (accountsQuery.isSuccess && account && !accounts.some(a => a.id === account)) setAccount(""); }, [accounts, account, accountsQuery.isSuccess]);
   // A single wallet is the obvious default; with several, the first one (changeable in the chip).
   useEffect(() => { if (!account && accounts.length > 0) setAccount(accounts[0].id); }, [accounts, account]);
-  useEffect(() => { if (selectedCardId && !cards.some(c => c.id === selectedCardId)) setSelectedCardId(null); }, [cards, selectedCardId]);
+  useEffect(() => { if (cardsQuery.isSuccess && selectedCardId && !cards.some(c => c.id === selectedCardId)) setSelectedCardId(null); }, [cards, selectedCardId, cardsQuery.isSuccess]);
   const selectedCategory = categories.find(c => c.id === category);
   const visibleCategories = selectedCategory && !categories.slice(0, 4).some(c => c.id === selectedCategory.id) ? [...categories.slice(0, 3), selectedCategory] : categories.slice(0, 4);
   const canSave = Number(value) > 0 && !!account && (kind === "Transferência" ? !!destination && destination !== account : !!category && !(kind === "Despesa" && selectedCategory?.name.toLocaleLowerCase("pt-BR") === "renda"));
@@ -111,15 +137,15 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
   const [tags, setTags] = useState("");
   const go = (p: Page) => { setHistory(h => [...h, page]); setPage(p); };
   const back = () => { setPage(history.at(-1) || "entry"); setHistory(h => h.slice(0, -1)); };
-  // A short check mark, then the sheet closes (or a fresh entry on the full page).
-  const finishSave = () => {
-    setSaved(true);
-    window.setTimeout(() => {
-      setSaved(false);
-      setExpr(""); setValue(""); setName(""); setNote(""); setCategory(""); setAttachment(""); setText("");
-      setHistory([]); setPage("entry");
-      onClose?.();
-    }, 850);
+  // Saved: the success screen shows what was recorded; from there the person starts another entry or opens it.
+  const resetForm = () => {
+    setExpr(""); setValue(""); setName(""); setNote(""); setOrigin(""); setOriginOpen(false); setCategory(""); setAttachment(""); setText(""); setProject(""); setTags("");
+    setRecurring(false); setReminder(false); setInstallments(1); setDestination(""); setKeypadOpen(true);
+    setHistory([]); setPage("entry");
+  };
+  const finishSave = (transaction: Transaction | null) => {
+    const chips = [kind === "Transferência" ? [selectedAccount?.name, accounts.find(a => a.id === destination)?.name].filter(Boolean).join(" → ") : selectedCategory?.name, selectedCard ? selectedCard.name : kind === "Transferência" ? "" : selectedAccount?.name, dateLabel, origin.trim() || (capture ? "Apple Pay" : "Registro")].filter((c): c is string => !!c);
+    setDone({ kind, amount: formatBRL(Number(value)).replace(/,00$/, ""), name: displayName, chips, transaction: transaction as Transaction });
   };
   const applyParsed = (parsed: { value?: number | null; kind?: Kind; date?: string | null; accountId?: string | null; destinationId?: string | null; categoryId?: string | null; name?: string }) => {
     if (parsed.value) setExpr(String(parsed.value).replace(".", ","));
@@ -240,18 +266,43 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+  const dirty = amountValue > 0 || name.trim() !== "" || expr !== "";
+  const latest = useRef({ save });
+  latest.current = { save };
+  const view = done ? "success" : page === "entry" ? "entry" : "other";
+  const saving = saveMutation.isPending;
+  useEffect(() => {
+    onController?.({ view, kind, dirty, canSave, saving, hint, save: () => latest.current.save() });
+  }, [onController, view, kind, dirty, canSave, saving, hint]);
+  const toggleCalc = () => {
+    const next = !calc;
+    // Leaving the calculator keeps the result of what was typed instead of a half-built sum.
+    if (!next && /[+−×÷]/.test(expr)) { const result = evaluateExpression(expr); setExpr(result > 0 ? String(result).replace(".", ",") : ""); }
+    setCalc(next); setRegisterCalc(next);
+  };
+  if (done) {
+    return <div className={embedded ? "h-full min-h-0 w-full" : "mx-auto h-[min(860px,calc(100dvh-8rem))] w-full max-w-md overflow-hidden rounded-[30px] border border-border bg-background shadow-2xl"}>
+      <RegisterSuccess kind={done.kind} amount={done.amount} name={done.name} chips={done.chips} pending={saveStatus === "pending"}
+        onAnother={(next) => { if (capture) { onClose?.(); return; } setDone(null); resetForm(); setKind(next); }}
+        onView={() => { const tx = done.transaction; setDone(null); resetForm(); if (embedded) onClose?.(); else navigate("/transacoes"); if (tx) window.setTimeout(() => dialogs.openTransactionDetail(tx), 120); }}
+        onDone={() => { setDone(null); resetForm(); onClose?.(); }} />
+    </div>;
+  }
   // Quick entry: amount, account, date, note, category and a calculator keypad on one screen.
   if (page === "entry") {
     return <div className={embedded ? "relative flex h-full min-h-0 w-full flex-col bg-background text-foreground" : "relative mx-auto flex h-[min(860px,calc(100dvh-8rem))] w-full max-w-md flex-col overflow-hidden rounded-[30px] border border-border bg-background text-foreground shadow-2xl"} data-testid="quick-entry">
       {/* In the sheet the X sits on the floating button, so the header keeps the full width for the type. */}
       <header className="flex shrink-0 items-center justify-between gap-2 px-5 pt-4">
-        {embedded ? null : <button type="button" onClick={close} aria-label="Fechar" className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card"><X size={20} /></button>}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {embedded ? null : <button type="button" onClick={close} aria-label="Fechar" className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card"><X size={20} /></button>}
+          <button type="button" onClick={toggleCalc} aria-pressed={calc} aria-label="Modo calculadora" data-testid="quick-entry-calc" className={cn("grid size-11 shrink-0 place-items-center rounded-full border transition-colors", calc ? "border-primary bg-primary text-primary-foreground" : "border-primary/50 bg-primary/10 text-primary")}><Calculator size={19} aria-hidden="true" /></button>
+        </div>
         <div className="flex items-center gap-0.5 rounded-full border border-border bg-card p-1" role="radiogroup" aria-label="Tipo">
           {(["Receita", "Despesa", "Transferência"] as Kind[]).map((k) => {
             const Icon = KIND_UI[k].icon;
             const active = kind === k;
             return (
-              <button key={k} type="button" role="radio" aria-checked={active} aria-label={k} onClick={() => setKind(k)} className={cn("flex h-9 items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold transition-all", active ? KIND_UI[k].tint : "text-muted-foreground")}>
+              <button key={k} type="button" role="radio" aria-checked={active} aria-label={k} disabled={Boolean(capture) && k !== "Despesa"} onClick={() => setKind(k)} className={cn("flex h-9 items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold transition-all", active ? KIND_UI[k].tint : "text-muted-foreground")}>
                 <Icon size={17} aria-hidden="true" />{active ? <span>{k === "Transferência" ? "Transferir" : k}</span> : null}
               </button>
             );
@@ -263,23 +314,11 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
         </div>
       </header>
 
-      <AnimatePresence>
-        {saved ? (
-          <motion.div key="saved" className="absolute inset-0 z-10 grid place-items-center bg-background/80 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} role="status" aria-live="polite">
-            <motion.div className="flex flex-col items-center gap-3" initial={{ scale: 0.85, y: 6 }} animate={{ scale: 1, y: 0 }} transition={{ type: "spring", stiffness: 420, damping: 26 }}>
-              <span className="grid size-16 place-items-center rounded-full bg-primary text-primary-foreground">
-                <svg viewBox="0 0 24 24" className="size-8" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><motion.path d="M5 12.5l4.5 4.5L19 7.5" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.35, delay: 0.08, ease: "easeOut" }} /></svg>
-              </span>
-              <span className="text-sm font-medium">{saveStatus === "pending" ? "Salvo no aparelho" : "Salvo"}</span>
-            </motion.div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
       <div className="flex min-h-14 flex-1 flex-col items-center justify-center px-4">
-        <p className="h-5 text-sm tabular-nums text-muted-foreground" aria-hidden="true">{/[+−×÷]/.test(expr) ? expr : ""}</p>
-        <p className={cn("font-heading text-[clamp(2.75rem,15vw,4.5rem)] font-bold leading-none tracking-tight tabular-nums", amountValue ? KIND_UI[kind].amount : "text-muted-foreground/50")} data-testid="quick-entry-amount" aria-live="polite">
+        <p className={cn("h-5 text-sm tabular-nums", /[+−×÷]/.test(expr) ? KIND_UI[kind].amount : "text-muted-foreground")} aria-hidden={!hint}>{/[+−×÷]/.test(expr) ? expr : embedded ? hint ?? "" : ""}</p>
+        <button type="button" onClick={() => setKeypadOpen(true)} aria-label="Valor: toque para digitar" className={cn("font-heading text-[clamp(2.75rem,15vw,4.5rem)] font-bold leading-none tracking-tight tabular-nums", amountValue ? KIND_UI[kind].amount : "text-muted-foreground/50")} data-testid="quick-entry-amount" aria-live="polite">
           {typedAmount ?? formatBRL(amountValue).replace(/,00$/, "")}
-        </p>
+        </button>
       </div>
 
       <div className="shrink-0 space-y-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -314,8 +353,21 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
         ) : null}
 
         <div className="flex items-center gap-2">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nota (opcional)" aria-label="Nota" className="h-12 min-w-0 flex-1 rounded-2xl bg-muted px-4 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Uber, mercado)" aria-label="Nome" onFocus={() => setKeypadOpen(false)} className="h-12 min-w-0 flex-1 rounded-2xl bg-muted px-4 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
           {kind === "Transferência" ? <button type="button" onClick={() => { const el = dateInput.current; if (!el) return; try { el.showPicker(); } catch { el.focus(); } }} className="h-12 shrink-0 rounded-2xl bg-muted px-4 text-sm font-semibold">{dateLabel}</button> : null}
+        </div>
+
+        <div className="flex h-7 items-center gap-2 text-[0.8125rem]">
+          {originOpen ? (
+            <input autoFocus value={origin} maxLength={40} onChange={(e) => setOrigin(e.target.value)} onBlur={() => window.setTimeout(() => setOriginOpen(false), 150)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setOriginOpen(false); } }} onFocus={() => setKeypadOpen(false)} aria-label="Origem" placeholder="Origem (ex.: Mercado Pago)" data-testid="quick-entry-origin-input"
+              className="h-7 min-w-0 flex-1 rounded-full bg-primary/12 px-3 font-medium text-primary outline-none placeholder:text-primary/50" />
+          ) : (
+            <button type="button" onClick={() => setOriginOpen(true)} aria-label="Editar origem" data-testid="quick-entry-origin" className="flex items-center gap-1.5 rounded-full bg-primary/12 px-3 py-1 font-medium text-primary"><Tag size={14} aria-hidden="true" />{origin.trim() || (capture ? "Apple Pay" : "Registro")}</button>
+          )}
+          {originOpen ? (origins.data ?? []).filter((o) => o.label.toLowerCase().includes(origin.trim().toLowerCase()) && o.label !== origin).slice(0, 3).map((o) => (
+            <button key={o.label} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setOrigin(o.label); setOriginOpen(false); }} className="shrink-0 rounded-full border border-border px-2.5 py-1 text-muted-foreground">{o.label}</button>
+          )) : null}
         </div>
 
         {kind !== "Transferência" ? (
@@ -337,8 +389,8 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
           </div>
         ) : null}
 
-        <div className="grid grid-cols-4 gap-2.5" data-testid="quick-entry-keypad">
-          {KEYS.map((key) => (
+        {keypadOpen && !desktop ? <div className={cn("grid gap-2.5", calc ? "grid-cols-4" : "grid-cols-3")} data-testid="quick-entry-keypad">
+          {(calc ? KEYS : KEYS.filter((key) => !OPS.includes(key))).map((key) => (
             <button key={key} type="button" onClick={() => press(key)} aria-label={key === "⌫" ? "Apagar (segure para limpar)" : key}
               onPointerDown={key === "⌫" ? () => { clearTimer.current = window.setTimeout(() => { setExpr(""); clearTimer.current = null; }, 550); } : undefined}
               onPointerUp={key === "⌫" ? () => { if (clearTimer.current) window.clearTimeout(clearTimer.current); } : undefined}
@@ -346,10 +398,11 @@ export default function SmartRegister({ embedded = false, onClose }: { embedded?
               {key === "⌫" ? <Delete className="mx-auto" size={24} aria-hidden="true" /> : key}
             </button>
           ))}
-        </div>
-        <button type="button" onClick={save} disabled={saveMutation.isPending || !canSave} className="h-13 w-full rounded-2xl bg-primary text-lg font-semibold text-primary-foreground transition-opacity disabled:opacity-40" data-testid="quick-entry-save">
+        </div> : null}
+        {/* In the sheet the floating button saves (✓ in the type's colour); the full page keeps its own button. */}
+        {embedded ? null : <button type="button" onClick={save} disabled={saveMutation.isPending || !canSave} className={cn("h-13 w-full rounded-2xl text-lg font-semibold transition-opacity disabled:opacity-40", KIND_THEME[kind].solid)} data-testid="quick-entry-save">
           {saveMutation.isPending ? "Salvando…" : hint ?? "Salvar"}
-        </button>
+        </button>}
       </div>
     </div>;
   }

@@ -19,3 +19,22 @@ export function setRegisterDefault(value: RegisterDefault): void {
     // Private mode: the choice simply isn't remembered.
   }
 }
+
+const CALC_KEY = "finnos:register-calc:v1";
+
+/** Calculator keypad (with + − × ÷) or digits only. Remembered per device, off by default. */
+export function getRegisterCalc(): boolean {
+  try {
+    return localStorage.getItem(CALC_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+export function setRegisterCalc(on: boolean): void {
+  try {
+    localStorage.setItem(CALC_KEY, on ? "on" : "off");
+  } catch {
+    // Private mode: the choice simply isn't remembered.
+  }
+}

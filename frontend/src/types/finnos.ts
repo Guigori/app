@@ -183,6 +183,7 @@ export interface Transaction {
   adjusted_value: number | null;
   attachment: string | null;
   notes: string | null;
+  origin?: string | null;
   notify_enabled?: boolean;
   created_at: string;
 }
@@ -211,6 +212,7 @@ export interface TransactionInput {
   adjusted_value: number | null;
   attachment: string | null;
   notes: string | null;
+  origin?: string | null;
   notify_enabled?: boolean;
 }
 

@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { createPortal } from "react-dom";
+import type { RegisterController } from "@/pages/SmartRegister";
+import { RegisterSuccess } from "@/components/transactions/RegisterSuccess";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, ChevronRight, CreditCard, Landmark, Loader2, Pencil, ReceiptText, Sparkles, Trash2, Undo2 } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronRight, CreditCard, Landmark, Loader2, Pencil, ReceiptText, Sparkles, Trash2, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   confirmAllPendingCaptures, confirmPendingCapture, discardPendingCapture, fetchAccounts, fetchCards, fetchCategories,
@@ -11,157 +14,46 @@ import { getMode } from "@/lib/mode";
 import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatDate, formatHiddenBRL } from "@/lib/format";
 import {
-  activeAccounts, activeCards, asksDebitOrCredit, canRegister, choiceSummary, confirmBody, initialChoice, invoiceFor, invoiceLabel, needsWallet,
+  asksDebitOrCredit, choiceSummary, confirmBody, initialChoice, needsWallet,
   orderForReview, readyToRegister, refusalMessage, waitingLabel, type CaptureChoice,
 } from "@/lib/pendingCaptures";
 import { cn } from "@/lib/utils";
 import type { Account, AutoRegisteredCapture, Category, CreditCard as Card_, PaymentMethod, PendingCapture } from "@/types/finnos";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { CardDialog } from "@/components/cards/CardDialog";
-import { AccountDialog } from "@/components/accounts/AccountDialog";
 
-const FIELD = "h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
 
 /** Keys that change when a purchase becomes a lançamento (or goes away). */
 const REFRESH = ["pending-captures", "notifications", "transactions", "accounts", "dashboard", "cards", "flow", "calendar", "radar"];
 
-const METHODS: { key: PaymentMethod; label: string; Icon: typeof Landmark }[] = [
-  { key: "debito", label: "Débito", Icon: Landmark },
-  { key: "credito", label: "Crédito", Icon: CreditCard },
-];
-
 interface Lists { accounts: Account[]; cards: Card_[]; categories: Category[] }
 
-/** "Alterar": everything about one purchase, in a panel from the bottom of the screen. */
-function EditSheet({
-  item, choice, set, lists, open, onOpenChange, onRegister, registering, onDiscard,
-}: {
-  item: PendingCapture; choice: CaptureChoice; set: (patch: Partial<CaptureChoice>) => void; lists: Lists;
-  open: boolean; onOpenChange: (open: boolean) => void; onRegister: () => void; registering: boolean; onDiscard: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const { hidden } = useBalanceHidden();
-  const money = (v: number) => (hidden ? formatHiddenBRL() : formatBRL(v));
-  const [dialog, setDialog] = useState<"card" | "account" | null>(null);
-  const credit = choice.method === "credito";
-  const accounts = activeAccounts(lists.accounts);
-  const cards = activeCards(lists.cards);
-  const card = cards.find((c) => c.id === choice.cardId);
-  const account = accounts.find((a) => a.id === choice.accountId);
-  const invoice = credit && card ? invoiceFor(item.date, card) : null;
-  const walletName = credit ? card?.name : account?.name;
-  const missing = credit ? !card : !account;
-  const sent = item.source_sent;
-  // The usual screens save the card/account themselves; closing them re-checks this purchase.
-  const closeDialog = (next: boolean) => {
-    if (next) return;
-    setDialog(null);
-    void Promise.all(["pending-captures", "cards", "accounts"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
-  };
-
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[92dvh] gap-0 overflow-y-auto rounded-t-3xl p-0 pb-[env(safe-area-inset-bottom)] sm:mx-auto sm:max-w-lg" data-testid="pending-capture-sheet">
-        <SheetHeader className="px-5 pt-5 pb-3 text-left">
-          <SheetTitle className="pr-8 font-heading text-lg">{item.name}</SheetTitle>
-          <SheetDescription>
-            <span className="font-heading text-xl font-bold tabular-nums text-expense">{money(item.value)}</span>
-            <span className="block text-xs">{formatDate(item.date)}{sent ? ` · Apple Pay: ${sent}` : ""}</span>
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="space-y-4 px-5 pb-4">
-          <div>
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">Como você pagou</p>
-            <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1" role="radiogroup" aria-label="Como você pagou">
-              {METHODS.map(({ key, label, Icon }) => (
-                <button
-                  key={key} type="button" role="radio" aria-checked={choice.method === key} onClick={() => set({ method: key })}
-                  data-testid={`pending-capture-method-${key}`}
-                  className={cn("flex h-11 items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-colors",
-                    choice.method === key ? "bg-background text-foreground shadow-sm ring-1 ring-primary/40" : "text-muted-foreground")}
-                >
-                  <Icon className="h-4 w-4" aria-hidden="true" />{label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {credit ? (
-            <div className="grid grid-cols-2 gap-3">
-              <label className="col-span-2 block text-xs font-medium text-muted-foreground">Cartão
-                <select className={cn(FIELD, "mt-1")} value={choice.cardId} onChange={(e) => set({ cardId: e.target.value })} data-testid="pending-capture-card">
-                  <option value="">Escolher…</option>
-                  {cards.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </label>
-              <label className="col-span-2 block text-xs font-medium text-muted-foreground">Parcelas
-                <select className={cn(FIELD, "mt-1")} value={choice.installments} onChange={(e) => set({ installments: Number(e.target.value) })} data-testid="pending-capture-installments">
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
-                    <option key={n} value={n}>{n === 1 ? "À vista" : `${n}x de ${money(Math.round((item.value / n) * 100) / 100)}`}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          ) : (
-            <label className="block text-xs font-medium text-muted-foreground">Conta
-              <select className={cn(FIELD, "mt-1")} value={choice.accountId} onChange={(e) => set({ accountId: e.target.value })} data-testid="pending-capture-account">
-                <option value="">Escolher…</option>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-            </label>
-          )}
-
-          {missing && sent ? (
-            <div className="flex items-start gap-2 rounded-xl bg-amber-500/10 px-3 py-2.5 text-xs text-amber-800 dark:text-amber-300" data-testid="pending-capture-origin-unknown">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <div className="min-w-0">
-                <p>“{sent}” não está cadastrado como {credit ? "cartão de crédito" : "conta"}. Escolha acima ou cadastre.</p>
-                <button type="button" className="mt-1 font-semibold text-primary hover:underline" onClick={() => setDialog(credit ? "card" : "account")} data-testid={credit ? "pending-capture-create-card" : "pending-capture-create-account"}>
-                  Cadastrar “{sent}” como {credit ? "cartão" : "conta ou vale"}
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {invoice ? (
-            <p className="rounded-xl bg-primary/5 px-3 py-2.5 text-xs text-foreground" data-testid="pending-capture-invoice">
-              <strong className="font-semibold">{invoiceLabel(invoice)}</strong>
-              {invoice.afterClosing ? ". Comprou depois do fechamento, por isso entra na próxima fatura." : "."}
-              {choice.installments > 1 ? ` As outras ${choice.installments - 1} parcelas vêm nas faturas seguintes.` : ""}
-            </p>
-          ) : null}
-
-          <label className="block text-xs font-medium text-muted-foreground">Categoria
-            <select className={cn(FIELD, "mt-1")} value={choice.categoryId} onChange={(e) => set({ categoryId: e.target.value })} data-testid="pending-capture-category">
-              <option value="">Sem categoria</option>
-              {lists.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            {item.learned_category && choice.categoryId === item.suggested_category_id ? (
-              <span className="mt-1 flex items-center gap-1 text-[11px] font-normal text-primary" data-testid="pending-capture-learned-category">
-                <Sparkles className="h-3 w-3" aria-hidden="true" />Aprendida com suas compras neste comerciante
-              </span>
-            ) : null}
-          </label>
+/** "Editar": the same register screens as a manual entry, prefilled with the purchase; ✓ confirms it. */
+function CaptureEditor({ item, choice, onClose }: { item: PendingCapture; choice: CaptureChoice; onClose: () => void }) {
+  const [controller, setController] = useState<RegisterController | null>(null);
+  const showCheck = controller?.view === "entry";
+  return createPortal(
+    <div className="fixed inset-0 z-[60] bg-background" role="dialog" aria-modal="true" aria-label="Editar compra do Apple Pay" data-testid="pending-capture-sheet">
+      <div className="relative mx-auto h-full max-w-md">
+        <div className="h-full pb-24">
+          <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">Preparando…</div>}>
+            <SmartRegister embedded capture={{ item, choice }} onClose={onClose} onController={setController} />
+          </Suspense>
         </div>
-
-        <SheetFooter className="sticky bottom-0 flex-row items-center gap-2 border-t border-border bg-popover px-5 py-3">
-          <Button type="button" variant="ghost" className="shrink-0 text-destructive hover:text-destructive" onClick={onDiscard} disabled={registering} data-testid="pending-capture-discard">
-            <Trash2 className="h-4 w-4" aria-hidden="true" />Excluir
-          </Button>
-          <Button type="button" className="h-11 min-w-0 flex-1" onClick={onRegister} disabled={!canRegister(choice) || registering} data-testid="pending-capture-register">
-            {registering ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-            <span className="truncate">Registrar no {credit ? "crédito" : "débito"}{walletName ? ` · ${walletName}` : ""}</span>
-          </Button>
-        </SheetFooter>
-
-        <CardDialog open={dialog === "card"} onOpenChange={closeDialog} initialName={sent} />
-        <AccountDialog open={dialog === "account"} onOpenChange={closeDialog} initialName={sent} />
-      </SheetContent>
-    </Sheet>
-  );
+        {controller && controller.view !== "success" ? (
+          <div className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] flex items-center justify-center gap-3">
+            <button type="button" onClick={onClose} aria-label="Fechar sem confirmar" className="grid h-12 w-12 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-md"><X className="h-5 w-5" aria-hidden="true" /></button>
+            {showCheck ? (
+              <button type="button" onClick={() => (controller.canSave && !controller.saving ? controller.save() : toast(controller.hint ?? "Escolha categoria e conta"))} aria-label="Confirmar compra" data-testid="pending-capture-register"
+                className="grid h-[4.15rem] w-[4.15rem] place-items-center rounded-full bg-expense text-white shadow-lg active:scale-95">
+                {controller.saving ? <Loader2 className="h-7 w-7 animate-spin" aria-hidden="true" /> : <Check className="h-8 w-8" aria-hidden="true" />}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>, document.body);
 }
 
 /** One purchase in one short card: what will be registered, and two buttons. */
@@ -170,9 +62,9 @@ function Row({ item, lists }: { item: PendingCapture; lists: Lists }) {
   const { hidden } = useBalanceHidden();
   const money = (v: number) => (hidden ? formatHiddenBRL() : formatBRL(v));
   const [choice, setChoice] = useState<CaptureChoice>(() => initialChoice(item));
-  const set = (patch: Partial<CaptureChoice>) => setChoice((c) => ({ ...c, ...patch }));
   const [editing, setEditing] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [success, setSuccess] = useState<{ amount: string; chips: string[] } | null>(null);
   const refresh = () => Promise.all(REFRESH.map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
 
   // A card or account registered meanwhile becomes the suggestion, unless the person already picked one.
@@ -190,8 +82,11 @@ function Row({ item, lists }: { item: PendingCapture; lists: Lists }) {
     mutationFn: (as?: PaymentMethod) => confirmPendingCapture(item.id, confirmBody(as ? { ...choice, method: as, installments: as === "debito" ? 1 : choice.installments } : choice)),
     onSuccess: async (_, as) => {
       setEditing(false);
-      toast.success(`${item.name} registrada no ${(as ?? choice.method) === "credito" ? "crédito" : "débito"}.`);
-      await refresh();
+      const method = (as ?? choice.method) === "credito" ? "Crédito" : "Débito";
+      const wallet = method === "Crédito" ? lists.cards.find((c) => c.id === choice.cardId)?.name : lists.accounts.find((a) => a.id === choice.accountId)?.name;
+      const category = lists.categories.find((c) => c.id === choice.categoryId)?.name;
+      // Same animated screen as a manual register; the list refreshes when it closes.
+      setSuccess({ amount: formatBRL(item.value).replace(/,00$/, ""), chips: [category, wallet ? `${method} · ${wallet}` : method, "Apple Pay"].filter(Boolean) as string[] });
     },
     // The server explains refusals in plain Portuguese ("cartão sem conta de pagamento", ...).
     onError: (error) => toast.error(refusalMessage(error, "Não foi possível registrar. A compra continua pendente.")),
@@ -216,6 +111,7 @@ function Row({ item, lists }: { item: PendingCapture; lists: Lists }) {
     );
   }
 
+  const closeSuccess = () => { setSuccess(null); void refresh(); };
   const summary = choiceSummary(choice, lists.accounts, lists.cards, lists.categories);
   const MethodIcon = choice.method === "credito" ? CreditCard : Landmark;
   // "Nubank" is both an account and a card: ask, with both answers one tap away.
@@ -263,12 +159,13 @@ function Row({ item, lists }: { item: PendingCapture; lists: Lists }) {
                 : formatDate(item.date)}
             </p>
             <div className="flex shrink-0 gap-1.5">
+              <Button type="button" variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label="Excluir compra" onClick={() => setDiscarding(true)} data-testid="pending-capture-discard"><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)} data-testid="pending-capture-edit">
-                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />{summary.missing ? "Completar" : "Alterar"}
+                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />{summary.missing ? "Completar" : "Editar"}
               </Button>
               {!summary.missing ? (
                 <Button type="button" size="sm" onClick={() => register.mutate(undefined)} disabled={register.isPending} data-testid="pending-capture-quick-register">
-                  {register.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Check className="h-3.5 w-3.5" aria-hidden="true" />}Registrar
+                  {register.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Check className="h-3.5 w-3.5" aria-hidden="true" />}Confirmar
                 </Button>
               ) : null}
             </div>
@@ -276,10 +173,13 @@ function Row({ item, lists }: { item: PendingCapture; lists: Lists }) {
         </>
       )}
 
-      <EditSheet
-        item={item} choice={choice} set={set} lists={lists} open={editing} onOpenChange={setEditing}
-        onRegister={() => register.mutate(undefined)} registering={register.isPending} onDiscard={() => setDiscarding(true)}
-      />
+      {success && typeof document !== "undefined" ? createPortal(
+        <div className="fixed inset-0 z-[60] bg-background" data-testid="pending-capture-success">
+          <div className="mx-auto h-full max-w-md">
+            <RegisterSuccess kind="Despesa" amount={success.amount} name={item.name} chips={success.chips} onAnother={closeSuccess} onView={closeSuccess} onDone={closeSuccess} />
+          </div>
+        </div>, document.body) : null}
+      {editing ? <CaptureEditor item={item} choice={choice} onClose={() => setEditing(false)} /> : null}
       <ConfirmDialog
         open={discarding}
         onOpenChange={setDiscarding}

@@ -690,6 +690,10 @@ export async function confirmPendingCapture(id: string, input: PendingCaptureCon
   return apiPost<{ ok: boolean; transaction_id: string }>(`/pending-captures/${encodeURIComponent(id)}/confirm`, input);
 }
 
+export async function fetchTransactionById(id: string): Promise<Transaction> {
+  return apiGet<Transaction>(`/transactions/${encodeURIComponent(id)}`);
+}
+
 export async function confirmAllPendingCaptures(): Promise<ConfirmAllResult> {
   return apiPost<ConfirmAllResult>("/pending-captures/confirm-all", {});
 }
@@ -764,6 +768,12 @@ export async function refundInvoiceToBank(cardId: string, input: BankRefundInput
 export async function creditInvoice(cardId: string, input: CreditInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
   if (isLocalMode()) return localCreditInvoice(cardId, input, operationId);
   return apiPost<Invoice>(`/cards/${encodeURIComponent(cardId)}/credits`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+
+/** Origin labels used before ("Mercado Pago", "iFood"), most recent first. */
+export async function fetchOrigins(): Promise<{ label: string; count: number }[]> {
+  if (isLocalMode() || !navigator.onLine) return [];
+  try { return (await apiGet<{ items: { label: string; count: number }[] }>("/transactions/origins")).items; } catch { return []; }
 }
 
 export async function fetchSubscriptions(): Promise<Subscriptions> {
