@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+// The notifications invitation would sit over the screens under test.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("finnos:notifications-prompt-dismissed-at", String(Date.now())));
+});
+
 test.beforeEach(async ({ page }) => {
   // Device-only mode tests the real wizard UI without a Firebase test account.
   await page.addInitScript(() => window.localStorage.setItem("finnos:mode", "local"));

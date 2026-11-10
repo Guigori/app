@@ -15,5 +15,5 @@ export function onRegisterSheet(handler: (request: RegisterSheetRequest) => void
   return () => window.removeEventListener(EVENT, listener);
 }
 
-/** Lançamentos the register screen edits; installments and invoice entries keep their own form. */
-export const opensInRegister = (tx: Transaction) => !tx.fixed && !tx.recurrence_id && !tx.installment && !tx.invoice_payment && !tx.invoice_refund && !tx.id.startsWith("offline:");
+/** Every saved lançamento opens in the register screen; only an unsynced offline one keeps the review form. */
+export const opensInRegister = (tx: Transaction) => !tx.id.startsWith("offline:");

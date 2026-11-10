@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
+// The notifications invitation would sit over the screens under test.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("finnos:notifications-prompt-dismissed-at", String(Date.now())));
+});
+
 // Simulated online session with synthetic data: not a test of Firebase Auth or real records.
 const now = new Date();
 const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;

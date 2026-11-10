@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+// The notifications invitation would sit over the screens under test.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("finnos:notifications-prompt-dismissed-at", String(Date.now())));
+});
+
 // Local mode with a synthetic goal: nothing here touches a server or real data.
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {

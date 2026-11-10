@@ -4,10 +4,11 @@ import { motion, useReducedMotion } from "motion/react";
 import { ChartNoAxesCombined, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { deleteTransaction, fetchBudget, fetchBudgetCycleProgress, fetchCalendar, fetchCurrentBudgetCycle, fetchSubscriptions, fetchTransactions } from "@/lib/data";
+import { deleteTransaction, fetchTransactionHistory, fetchBudget, fetchBudgetCycleProgress, fetchCalendar, fetchCurrentBudgetCycle, fetchSubscriptions, fetchTransactions } from "@/lib/data";
 import { addMonth, formatBRL, formatHiddenBRL } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { budgetImpact, cashFlowLink, cycleImpact, monthImpact, rhythm, signedAmount } from "@/lib/transactionInsight";
+import { HistorySheet } from "@/components/transactions/HistorySheet";
 import { DiscardRegisterDialog } from "@/components/layout/DiscardRegisterDialog";
 import type { Transaction } from "@/types/finnos";
 
@@ -40,10 +41,12 @@ export function RecordInsight({ tx, onDeleted, onLeave }: { tx: Transaction; onD
   const { hidden } = useBalanceHidden();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const money = (v: number) => (hidden ? formatHiddenBRL() : formatBRL(v));
   const month = tx.date.slice(0, 7);
   const enabled = !tx.id.startsWith("offline:");
   const spends = enabled && tx.type === "despesa";
+  const historyQuery = useQuery({ queryKey: ["transaction-history", tx.id, tx.version], queryFn: () => fetchTransactionHistory(tx.id), enabled, retry: 1 });
   const budget = useQuery({ queryKey: ["budget", month], queryFn: () => fetchBudget(month), enabled: spends });
   const cycle = useQuery({ queryKey: ["budget-v2-current"], queryFn: fetchCurrentBudgetCycle, enabled: spends });
   const cycleProgress = useQuery({ queryKey: ["budget-v2-progress", cycle.data?.id], queryFn: () => fetchBudgetCycleProgress(cycle.data!.id), enabled: spends && Boolean(cycle.data?.id) });
@@ -121,8 +124,13 @@ export function RecordInsight({ tx, onDeleted, onLeave }: { tx: Transaction; onD
       <Card title="DETALHES">
         <Row label={tx.type === "receita" ? "Receita fixa" : "Despesa fixa"} value={tx.fixed ? "Sim" : "Não"} i={0} />
         <Row label="Parcelado" value={tx.installment && tx.total_installments ? `${tx.current_installment ?? 1} de ${tx.total_installments}` : "Não"} i={1} />
-        <Row label="Repetição" value={repeats.kind === "unica" ? "Avulso" : repeats.kind === "repete" ? `${repeats.times}× em 6 meses` : repeats.kind === "assinatura" ? "Assinatura" : repeats.kind === "fixa" ? "Fixa" : "Avulso"} i={2} last />
+        <Row label="Repetição" value={repeats.kind === "unica" ? "Avulso" : repeats.kind === "repete" ? `${repeats.times}× em 6 meses` : repeats.kind === "assinatura" ? "Assinatura" : repeats.kind === "fixa" ? "Fixa" : "Avulso"} i={2} />
+        <button type="button" onClick={() => setHistoryOpen(true)} data-testid="record-history-open" className="flex min-h-[38px] w-full items-center justify-between gap-4 text-sm">
+          <span className="text-muted-foreground">Histórico de alterações</span>
+          <span className="flex items-center gap-1 font-semibold">{historyQuery.isPending ? "…" : historyQuery.data?.length ?? 0}<ChevronRight size={15} className="text-[#a78bfa]" aria-hidden="true" /></span>
+        </button>
       </Card>
+      <HistorySheet open={historyOpen} events={historyQuery.data ?? []} onClose={() => setHistoryOpen(false)} />
       {enabled ? <Link to={cashFlowLink(tx)} onClick={onLeave} data-testid="transaction-detail-cashflow" className="flex h-[46px] shrink-0 items-center justify-between rounded-full border border-border bg-card px-5 text-[15px] font-semibold">
         <span className="flex items-center gap-2"><ChartNoAxesCombined size={17} className="text-[#a78bfa]" aria-hidden="true" />Ver no Caixa</span><ChevronRight size={17} className="text-muted-foreground" aria-hidden="true" />
       </Link> : null}

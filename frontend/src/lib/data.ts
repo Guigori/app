@@ -34,6 +34,7 @@ import {
   localUpdateAccount,
   localUpdateCategory,
   localUpdateTransaction,
+  localTransactionHistory,
   localTrends,
   localBudget,
   localFlow,
@@ -692,6 +693,13 @@ export async function confirmPendingCapture(id: string, input: PendingCaptureCon
 
 export async function fetchTransactionById(id: string): Promise<Transaction> {
   return apiGet<Transaction>(`/transactions/${encodeURIComponent(id)}`);
+}
+
+export interface HistoryEvent { id: string; action: "created" | "updated" | "deleted"; created_at: string; before: Record<string, string | number> | null; after: Record<string, string | number> | null }
+/** Every recorded change of one lançamento, newest first. */
+export async function fetchTransactionHistory(id: string): Promise<HistoryEvent[]> {
+  if (isLocalMode()) return (localTransactionHistory(id).items as unknown as HistoryEvent[]);
+  return (await apiGet<{ items: HistoryEvent[] }>(`/transactions/${encodeURIComponent(id)}/history`)).items;
 }
 
 export async function confirmAllPendingCaptures(): Promise<ConfirmAllResult> {

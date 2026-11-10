@@ -20,7 +20,8 @@ def visible_summary(collection: str, doc: dict | None) -> dict | None:
         return None
     result = {"name": str(doc.get("name") or "").strip()[:80]}
     for key in ("date", "status", "type", "category_id", "card_id", "account_id",
-                "start_date", "end_date", "closing_day", "due_day"):
+                "to_account_id", "origin", "source", "start_date", "end_date",
+                "closing_day", "due_day"):
         if doc.get(key) is not None:
             result[key] = str(doc[key])[:80]
     for key in ("value", "monthly_budget", "monthly_goal", "initial_balance",

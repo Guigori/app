@@ -524,6 +524,28 @@ async def delete_transaction(
         raise HTTPException(status_code=404, detail="Transação não encontrada.")
 
 
+@router.get("/{tx_id}/history")
+async def transaction_history(tx_id: str, user: dict = Depends(require_user)) -> dict:
+    """Every recorded change of one lançamento (created, edited, deleted), newest first.
+
+    Reads the append-only finance history written with each mutation. Filters
+    on one field only so no composite index is needed; sorting is done here.
+    """
+    uid = store.scoped({"user_id": user["id"]})
+
+    def read():
+        collection = store.root(store.client(), uid).collection("finance_history")
+        rows = [
+            {"id": snap.id, **snap.to_dict()}
+            for snap in collection.where("entity_id", "==", tx_id).limit(200).stream(timeout=15)
+        ]
+        rows = [row for row in rows if row.get("entity") == "transactions"]
+        rows.sort(key=lambda row: row.get("created_at") or "", reverse=True)
+        return {"items": rows}
+
+    return await run_in_threadpool(read)
+
+
 @router.get("/{tx_id}", response_model=TransactionOut)
 async def get_transaction(tx_id: str, user: dict = Depends(require_user)):
     doc = await db.transactions.find_one({"user_id": user["id"], "id": tx_id})

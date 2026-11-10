@@ -109,17 +109,20 @@ test("recurrence editor sends scoped changes with a durable operation ID", async
   await page.goto("/transacoes?metric=caixa");
   // Desktop table and mobile list both render this button; only one is visible per viewport.
   await page.getByTestId("edit-transaction-series-root").filter({ visible: true }).first().click();
-  await page.getByTestId("open-recurrence-scope").click();
+  // A series opens in the register screen like any lançamento; saving asks which months it applies to.
+  await expect(page.getByTestId("record-insight").filter({ visible: true })).toBeVisible();
+  await expect(page.getByTestId("record-kind").filter({ visible: true })).toHaveText("Mensal");
+  for (const key of ["Backspace", "Backspace", "Backspace", "1", "2", "5"]) await page.keyboard.press(key);
+  await expect(page.getByTestId("quick-entry-amount").filter({ visible: true })).toHaveText("R$ 125");
+  await page.getByRole("button", { name: "Salvar registro" }).filter({ visible: true }).click();
   const dialog = page.getByTestId("recurrence-scope-dialog");
   await expect(dialog).toBeVisible();
-  await dialog.locator("#recurrence-value").fill("125");
-  await dialog.getByRole("radio", { name: /Somente esta ocorrência/ }).check();
-  await dialog.getByTestId("recurrence-save").click();
+  await dialog.getByTestId("scope-proximas").click();
   await expect.poll(() => captured).not.toBeNull();
   const call = captured as unknown as { id: string; version: string; payload: { scope: string; changes: { value: number } } };
   expect(call.version).toBe("2");
   expect(call.id).toBeTruthy();
-  expect(call.payload.scope).toBe("esta");
+  expect(call.payload.scope).toBe("proximas");
   expect(call.payload.changes.value).toBe(125);
   await expect(dialog).not.toBeVisible();
 });
