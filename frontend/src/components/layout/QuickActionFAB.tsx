@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { RegisterFab } from "@/components/layout/RegisterFab";
 import { toast } from "sonner";
-import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { DiscardRegisterDialog } from "@/components/layout/DiscardRegisterDialog";
 import type { RegisterController } from "@/pages/SmartRegister";
 const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
 
@@ -56,7 +56,7 @@ export function QuickActionFAB() {
         <RegisterFab size="md" open={open} dirty={Boolean(dirty)} kind={controller?.kind ?? "Despesa"} success={open && controller?.view === "success"}
           testId="quick-action-fab" discardTestId="quick-action-discard" onMain={onClick} onDiscard={() => setDiscardOpen(true)} />
       </div>
-      <ConfirmDialog open={discardOpen} onOpenChange={setDiscardOpen} title="Descartar este registro?" description="O que você preencheu será perdido." confirmLabel="Descartar e fechar" destructive onConfirm={() => setOpen(false)} />
+      <DiscardRegisterDialog open={discardOpen} kind={controller?.kind ?? "Despesa"} onKeep={() => setDiscardOpen(false)} onDiscard={() => setOpen(false)} />
     </>
   );
 }
