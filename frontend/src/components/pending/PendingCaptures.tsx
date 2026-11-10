@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { createPortal } from "react-dom";
+import { RegisterSuccess } from "@/components/transactions/RegisterSuccess";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check, ChevronDown, ChevronRight, CreditCard, Landmark, Loader2, Pencil, ReceiptText, Sparkles, Trash2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
@@ -173,6 +175,7 @@ function Row({ item, lists }: { item: PendingCapture; lists: Lists }) {
   const set = (patch: Partial<CaptureChoice>) => setChoice((c) => ({ ...c, ...patch }));
   const [editing, setEditing] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [success, setSuccess] = useState<{ amount: string; chips: string[] } | null>(null);
   const refresh = () => Promise.all(REFRESH.map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
 
   // A card or account registered meanwhile becomes the suggestion, unless the person already picked one.
@@ -190,8 +193,11 @@ function Row({ item, lists }: { item: PendingCapture; lists: Lists }) {
     mutationFn: (as?: PaymentMethod) => confirmPendingCapture(item.id, confirmBody(as ? { ...choice, method: as, installments: as === "debito" ? 1 : choice.installments } : choice)),
     onSuccess: async (_, as) => {
       setEditing(false);
-      toast.success(`${item.name} registrada no ${(as ?? choice.method) === "credito" ? "crédito" : "débito"}.`);
-      await refresh();
+      const method = (as ?? choice.method) === "credito" ? "Crédito" : "Débito";
+      const wallet = method === "Crédito" ? lists.cards.find((c) => c.id === choice.cardId)?.name : lists.accounts.find((a) => a.id === choice.accountId)?.name;
+      const category = lists.categories.find((c) => c.id === choice.categoryId)?.name;
+      // Same animated screen as a manual register; the list refreshes when it closes.
+      setSuccess({ amount: formatBRL(item.value).replace(/,00$/, ""), chips: [category, wallet ? `${method} · ${wallet}` : method, "Apple Pay"].filter(Boolean) as string[] });
     },
     // The server explains refusals in plain Portuguese ("cartão sem conta de pagamento", ...).
     onError: (error) => toast.error(refusalMessage(error, "Não foi possível registrar. A compra continua pendente.")),
@@ -216,6 +222,7 @@ function Row({ item, lists }: { item: PendingCapture; lists: Lists }) {
     );
   }
 
+  const closeSuccess = () => { setSuccess(null); void refresh(); };
   const summary = choiceSummary(choice, lists.accounts, lists.cards, lists.categories);
   const MethodIcon = choice.method === "credito" ? CreditCard : Landmark;
   // "Nubank" is both an account and a card: ask, with both answers one tap away.
@@ -264,11 +271,11 @@ function Row({ item, lists }: { item: PendingCapture; lists: Lists }) {
             </p>
             <div className="flex shrink-0 gap-1.5">
               <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)} data-testid="pending-capture-edit">
-                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />{summary.missing ? "Completar" : "Alterar"}
+                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />{summary.missing ? "Completar" : "Editar"}
               </Button>
               {!summary.missing ? (
                 <Button type="button" size="sm" onClick={() => register.mutate(undefined)} disabled={register.isPending} data-testid="pending-capture-quick-register">
-                  {register.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Check className="h-3.5 w-3.5" aria-hidden="true" />}Registrar
+                  {register.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Check className="h-3.5 w-3.5" aria-hidden="true" />}Confirmar
                 </Button>
               ) : null}
             </div>
@@ -276,6 +283,12 @@ function Row({ item, lists }: { item: PendingCapture; lists: Lists }) {
         </>
       )}
 
+      {success && typeof document !== "undefined" ? createPortal(
+        <div className="fixed inset-0 z-[60] bg-background" data-testid="pending-capture-success">
+          <div className="mx-auto h-full max-w-md">
+            <RegisterSuccess kind="Despesa" amount={success.amount} name={item.name} chips={success.chips} onAnother={closeSuccess} onView={closeSuccess} onDone={closeSuccess} />
+          </div>
+        </div>, document.body) : null}
       <EditSheet
         item={item} choice={choice} set={set} lists={lists} open={editing} onOpenChange={setEditing}
         onRegister={() => register.mutate(undefined)} registering={register.isPending} onDiscard={() => setDiscarding(true)}
