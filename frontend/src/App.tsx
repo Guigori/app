@@ -31,6 +31,7 @@ const DashboardEntry = lazy(() => import("@/pages/DashboardEntry"));
 const Transactions = lazy(() => import("@/pages/Transactions"));
 const Accounts = lazy(() => import("@/pages/Accounts"));
 const Categories = lazy(() => import("@/pages/Categories"));
+const CategoryDetail = lazy(() => import("@/pages/CategoryDetail"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const SettingsIntegrations = lazy(() => import("@/pages/SettingsIntegrations"));
 const ChartSettings = lazy(() => import("@/pages/ChartSettings"));
@@ -84,6 +85,7 @@ export default function App() {
             <Route path="/transacoes" element={<Transactions />} />
             <Route path="/contas" element={<Accounts />} />
             <Route path="/categorias" element={<Categories />} />
+            <Route path="/categorias/:categoryId" element={<CategoryDetail />} />
             <Route path="/configuracoes" element={<SettingsHub />} />
             <Route path="/configuracoes/avancado" element={<Settings />} />
             <Route path="/configuracoes/:section" element={<Settings />} />

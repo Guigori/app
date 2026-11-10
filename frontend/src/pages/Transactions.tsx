@@ -345,10 +345,10 @@ export default function Transactions() {
     "aria-label": `Ver detalhes de ${t.name}`,
     onClick: (event: MouseEvent) => {
       if ((event.target as HTMLElement).closest("button, a")) return;
-      dialogs.openTransactionDetail(t);
+      dialogs.openTransactionDetail(t, transactions);
     },
     onKeyDown: (event: KeyboardEvent) => {
-      if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); dialogs.openTransactionDetail(t); }
+      if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); dialogs.openTransactionDetail(t, transactions); }
     },
   });
   const rolling = periodMode === "rolling30" && scope === "mes";

@@ -1,11 +1,12 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Camera, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronRight, Copy, Repeat, Share2, Trash2, TriangleAlert, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { CalendarSync, Camera, ChartNoAxesCombined, CheckCircle2, ChevronDown, ChevronRight, Copy, Repeat, Share2, Trash2, TriangleAlert, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { listGoals } from "@/lib/goals";
 import { toast } from "sonner";
-import { addTransactionPhoto, createTransaction, deleteTransaction, fetchTransactionHistory, removeTransactionPhoto, transactionInput, updateTransaction, fetchBudget, fetchBudgetCycleProgress, fetchCalendar, fetchCurrentBudgetCycle, fetchSubscriptions, fetchTransactions } from "@/lib/data";
+import { addTransactionPhoto, fetchCards, fetchMe, createTransaction, deleteTransaction, fetchTransactionHistory, removeTransactionPhoto, transactionInput, updateTransaction, fetchBudget, fetchBudgetCycleProgress, fetchCalendar, fetchCurrentBudgetCycle, fetchSubscriptions, fetchTransactions } from "@/lib/data";
 import { addMonth, formatBRL, formatHiddenBRL, monthLabel, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { budgetImpact, cashFlowLink, cycleImpact, monthImpact, monthlyHistory, rhythm, signedAmount } from "@/lib/transactionInsight";
@@ -18,9 +19,9 @@ import type { Transaction } from "@/types/finnos";
 
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("pt-BR").trim();
 
-function Card({ title, children }: { title: string; children: ReactNode }) {
+function Card({ title, children, label }: { title: string; children: ReactNode; /** Read aloud instead of the rows, as one sentence. */ label?: string }) {
   return (
-    <section className="shrink-0 rounded-[20px] border border-border/70 bg-card px-4 pb-2">
+    <section className="shrink-0 rounded-[20px] border border-border/70 bg-card px-4 pb-2" aria-label={label}>
       <h3 className="pb-0.5 pt-2.5 text-xs font-semibold tracking-[1.5px] text-muted-foreground">{title}</h3>
       {children}
     </section>
@@ -74,6 +75,11 @@ function PhotoViewer({ open, src, onClose, onReplace, onRemove }: { open: boolea
 
 /** A saved lançamento, under the register's fields: what it changed, then the full receipt as it scrolls. */
 const HINT_KEY = "finnos:record-scroll-hint";
+/** Category colours lightened a little so dark ones (navy, purple) stay readable on the dark background. */
+const readable = (c?: string | null) => (c ? `color-mix(in oklab, ${c} 72%, white)` : undefined);
+const SUBSCRIPTION_HINTS = ["netflix", "spotify", "disney", "prime video", "amazon prime", "hbo", "max", "globoplay", "deezer", "youtube premium", "apple music", "icloud", "google one", "chatgpt", "claude", "xbox", "playstation", "gympass", "wellhub", "smart fit", "academia", "paramount", "crunchyroll", "dropbox", "adobe", "canva", "microsoft 365", "office 365", "ifood clube", "uber one", "mercado livre", "meli+"];
+/** A short code to find this lançamento again ("#7KQ2MX"). */
+export const receiptCode = (id: string) => { let h = 2166136261; for (const ch of id) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return "#" + (h >>> 0).toString(36).toUpperCase().padStart(6, "0").slice(-6); };
 const shortDate = (iso: string) => iso.split("-").reverse().slice(0, 2).join("/");
 
 export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onChanged, onRepeat }: { tx: Transaction; onDeleted: () => void; /** Leaving for another screen (the Caixa). */ onLeave: () => void; /** Marks it paid (or received) now. */ onSettle?: () => void; settling?: boolean; /** The lançamento was changed here (photo, series, history): show it again as it is now. */ onChanged?: (tx: Transaction) => void; /** "Lançar de novo": a new register with the same fields, dated today. */ onRepeat?: () => void }) {
@@ -103,19 +109,29 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onCh
   const enabled = !tx.id.startsWith("offline:");
   const spends = enabled && tx.type === "despesa";
   const historyQuery = useQuery({ queryKey: ["transaction-history", tx.id, tx.version], queryFn: () => fetchTransactionHistory(tx.id), enabled, retry: 1 });
-  const budget = useQuery({ queryKey: ["budget", month], queryFn: () => fetchBudget(month), enabled: spends });
-  const cycle = useQuery({ queryKey: ["budget-v2-current"], queryFn: fetchCurrentBudgetCycle, enabled: spends });
+  const budget = useQuery({ queryKey: ["budget", month], queryFn: () => fetchBudget(month), enabled: spends, staleTime: 60_000 });
+  const cycle = useQuery({ queryKey: ["budget-v2-current"], queryFn: fetchCurrentBudgetCycle, enabled: spends, staleTime: 60_000 });
   const cycleProgress = useQuery({ queryKey: ["budget-v2-progress", cycle.data?.id], queryFn: () => fetchBudgetCycleProgress(cycle.data!.id), enabled: spends && Boolean(cycle.data?.id) });
-  const calendar = useQuery({ queryKey: ["calendar", month, "todas"], queryFn: () => fetchCalendar(month), enabled });
+  const calendar = useQuery({ queryKey: ["calendar", month, "todas"], queryFn: () => fetchCalendar(month), enabled, staleTime: 60_000 });
   const history = useQuery({
     queryKey: ["transactions", "insight", tx.name, month],
     queryFn: () => fetchTransactions({ search: tx.name.slice(0, 80), start_date: `${addMonth(month, -5)}-01`, end_date: `${month}-31` }),
-    enabled,
+    enabled, staleTime: 60_000,
   });
-  const subscriptions = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions, enabled });
+  const subscriptions = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions, enabled, staleTime: 60_000 });
+  const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards, enabled: enabled && Boolean(tx.card_id), staleTime: 60_000 });
+  const me = useQuery({ queryKey: ["me"], queryFn: fetchMe, staleTime: 300_000 });
+  const goals = useQuery({ queryKey: ["goals", me.data?.id], queryFn: () => listGoals(me.data!.id), enabled: Boolean(me.data?.id) && tx.type !== "receita", staleTime: 60_000 });
+  const navigate = useNavigate();
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  useEffect(() => { const on = () => setOnline(true), off = () => setOnline(false); window.addEventListener("online", on); window.addEventListener("offline", off); return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); }; }, []);
+  const openCategory = () => { if (!tx.category_id) return; onLeave(); navigate(`/categorias/${tx.category_id}`); };
 
   const fromCycle = cycleImpact(tx, cycleProgress.data);
   // Older lançamentos (imported, restored, or created before the history existed) still show when they were made.
+  const SOURCE_LABEL: Record<string, string> = { manual: "Registro manual", apple_pay: "Apple Pay", ai: "Registro inteligente", import: "Importação", offline: "Sem conexão (sincronizado depois)", shortcut: "Atalho do iPhone", sync: "Sincronização" };
+  const createdSource = historyQuery.data?.slice().reverse().find((e) => e.action === "created")?.after?.source as string | undefined;
+  const createdVia = createdSource ? SOURCE_LABEL[createdSource] ?? createdSource : null;
   const events = historyQuery.data?.length ? historyQuery.data : historyQuery.isSuccess || historyQuery.isError
     ? [{ id: "created", action: "created" as const, created_at: tx.created_at, before: null, after: { name: tx.name, value_cents: Math.round(tx.value * 100), date: tx.date } }] : [];
   const impact = fromCycle ?? budgetImpact(tx, budget.data);
@@ -125,6 +141,8 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onCh
   const total = same.reduce((s, r) => s + r.value, 0);
   const repeats = rhythm(tx, history.data ?? [], subscriptions.data?.items ?? []);
   const canSplit = tx.type === "despesa" && Boolean(tx.card_id) && !tx.installment && !tx.fixed && !tx.invoice_payment;
+  const looksLikeSubscription = tx.type === "despesa" && SUBSCRIPTION_HINTS.some((k) => norm(tx.name).includes(k));
+  const subscriptionHint = looksLikeSubscription && subscriptions.isSuccess && !(subscriptions.data?.items ?? []).some((sub) => norm(sub.name) === norm(tx.name) || norm(tx.name).includes(norm(sub.name)));
   const suggestFixed = !tx.fixed && !tx.installment && !tx.invoice_payment && tx.type !== "transferencia" && repeats.kind === "repete" && repeats.times >= 3;
   const signed = signedAmount(tx);
   const created = tx.created_at ? new Date(tx.created_at) : null;
@@ -133,6 +151,12 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onCh
   const statusLabel = tx.status === "pago" ? (tx.type === "receita" ? "Recebido" : "Pago") : tx.status === "pendente" ? "Pendente" : tx.status === "agendado" ? "Agendado" : tx.status;
 
   const done = tx.status === "pago";
+  const card = tx.card_id ? cards.data?.find((c) => c.id === tx.card_id) : undefined;
+  const daysLeft = Math.max(1, Number(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()) - Number(todayISO().slice(8, 10)) + 1);
+  // When the month closes below what the goals need this month, the first unfinished goal is the one that waits.
+  const openGoals = (goals.data ?? []).filter((g) => g.saved < g.target && g.contribution > 0);
+  const neededForGoals = openGoals.reduce((sum, g) => sum + g.contribution, 0);
+  const atRiskGoal = month_ && tx.type === "despesa" && openGoals.length && month_.closes < neededForGoals ? openGoals[0] : null;
   const where = tx.card_name ? `da fatura ${tx.card_name}` : tx.account_name;
   // Paid money already moved; scheduled or pending money will move on its date.
   const moneyLine: [string, string, string | undefined] = tx.type === "transferencia"
@@ -147,9 +171,14 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onCh
     ...(impact ? [over
       ? [`Orçamento de ${impact.name}`, `passou ${money(-impact.remaining)}`, "#fb7185"] as [string, string, string]
       : [`Orçamento de ${impact.name}`, `+${Math.max(1, Math.round(impact.share * 100))}% do limite`, impact.used > 0.8 ? "#fbbf24" : undefined] as [string, string, string | undefined]] : []),
-    ...(tx.category_name && tx.type !== "transferencia" ? [[`${tx.category_name} no mês`, `${position}º lançamento`, undefined] as [string, string, undefined]] : []),
+    ...(tx.type !== "transferencia" ? [[`${tx.name.length > 22 ? tx.name.slice(0, 21) + "…" : tx.name} no mês`, same.length <= 1 ? "o único" : `${position}º de ${same.length}`, undefined] as [string, string, undefined]] : []),
+    ...(impact && !over && month === todayISO().slice(0, 7) && tx.type === "despesa" ? [[`Sobra por dia em ${impact.name}`, `${money(impact.remaining / daysLeft)}/dia`, undefined] as [string, string, undefined]] : []),
+    ...(month_?.ofIncome != null ? [["Peso na renda do mês", `${Math.max(1, Math.round(month_.ofIncome * 100))}%`, month_.ofIncome >= 0.2 ? "#fbbf24" : undefined] as [string, string, string | undefined]] : []),
+    ...(card ? [[`Limite livre no ${card.name}`, money(card.available), card.available < 0.1 * card.limit ? "#fbbf24" : undefined] as [string, string, string | undefined], [`Fatura atual do ${card.name}`, money(card.current_invoice), undefined] as [string, string, undefined]] : []),
     ...(month_ ? [[done ? "Mês fecha em" : "Mês deve fechar em", money(month_.closes), month_.closes < 0 ? "#fb7185" : undefined] as [string, string, string | undefined]] : []),
+    ...(atRiskGoal ? [["Pode atrasar a meta", atRiskGoal.name, "#fbbf24"] as [string, string, string]] : []),
   ];
+  const impactSentence = [`${tx.name}: ${impactRows[0][0]} ${hidden ? "" : impactRows[0][1].replace("−", "menos ")}`, impact ? (over ? `passou o orçamento de ${impact.name}` : `usa ${Math.round(impact.share * 100)}% do orçamento de ${impact.name}`) : "", month_ ? `o mês deve fechar em ${hidden ? "valor oculto" : formatBRL(month_.closes)}` : ""].filter(Boolean).join(", ") + ".";
   // The same name in the previous months: is this one higher or lower than usual?
   const months = Array.from({ length: 6 }, (_, i) => addMonth(month, i - 5));
   const bars = monthlyHistory(tx, history.data ?? [], months);
@@ -216,8 +245,16 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onCh
           <button type="button" onClick={() => setFixOpen(true)} className="h-9 shrink-0 rounded-full bg-[#7c3aed] px-3.5 text-sm font-bold text-white">Tornar fixa</button>
         </div>
       ) : null}
-      <Card title="IMPACTO">
-        {impactRows.map(([l, v, t], k) => <Row key={l} label={l} value={v} tone={t} i={k} last={k === impactRows.length - 1} />)}
+      {!online ? <p className="shrink-0 rounded-full bg-muted px-4 py-2 text-center text-xs text-muted-foreground" data-testid="record-offline">Sem conexão: mostrando o que já está salvo no aparelho.</p> : null}
+      {subscriptionHint ? (
+        <div className="flex shrink-0 items-center gap-3 rounded-[20px] border border-sky-500/30 bg-sky-500/10 px-4 py-3" data-testid="record-subscription">
+          <CalendarSync size={18} className="shrink-0 text-sky-400" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-sm">Parece uma assinatura. <span className="text-muted-foreground">Cadastre para ver quanto ela custa por ano e ser avisado antes de renovar.</span></p>
+          <Link to="/assinaturas" onClick={onLeave} className="h-9 shrink-0 rounded-full bg-sky-600 px-3.5 text-sm font-bold leading-9 text-white">Cadastrar</Link>
+        </div>
+      ) : null}
+      <Card title="IMPACTO" label={impactSentence}>
+        {impactRows.map(([l, v, t], k) => <Row key={l} label={l} value={tx.category_id && l.startsWith("Orçamento de") ? <button type="button" onClick={openCategory} className="inline-flex items-center gap-0.5" data-testid="record-open-category">{v}<ChevronRight size={14} className="text-[#a78bfa]" aria-hidden="true" /></button> : v} tone={t} i={k} last={k === impactRows.length - 1} />)}
         {impact ? (
           <div className="pb-1 pt-1" data-testid="transaction-detail-budget">
             <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.round(impact.used * 100))}%`, backgroundColor: impact.used > 1 ? "#fb7185" : impact.used > 0.8 ? "#fbbf24" : "#34d399" }} /></div>
@@ -250,7 +287,9 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onCh
           <Row label={tx.type === "transferencia" ? "Sai de" : "Como pagou"} value={tx.card_name ? `Crédito · ${tx.card_name}` : tx.account_name} i={i++} />
           {tx.type === "transferencia" && tx.to_account_name ? <Row label="Vai para" value={tx.to_account_name} i={i++} /> : null}
           <Row label="Origem" value={origin} tone="#c4b5fd" i={i++} />
-          {tx.category_name ? <Row label="Categoria" value={tx.category_name} tone={tx.category_color ?? undefined} i={i++} /> : null}
+          {tx.category_name ? <Row label="Categoria" value={<button type="button" onClick={openCategory} className="inline-flex items-center gap-0.5 font-semibold" data-testid="record-category-link">{tx.category_name}<ChevronRight size={14} aria-hidden="true" /></button>} tone={readable(tx.category_color)} i={i++} /> : null}
+          {createdVia ? <Row label="Registrado via" value={createdVia} i={i++} /> : null}
+          <Row label="Código" value={<button type="button" onClick={() => { void navigator.clipboard?.writeText(receiptCode(tx.id)).then(() => toast.success("Código copiado.")); }} className="font-mono tracking-wider" aria-label={`Código ${receiptCode(tx.id)}, tocar para copiar`} data-testid="record-code">{receiptCode(tx.id)}</button>} i={i++} />
           {tx.notes ? <Row label="Nota" value={tx.notes} i={i++} /> : null}
           <Row label="Status" value={statusLabel} tone={tx.status === "pago" ? "#34d399" : "#fbbf24"} i={i++} last={!hasPhoto} />
           {hasPhoto ? (

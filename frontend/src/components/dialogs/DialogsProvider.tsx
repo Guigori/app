@@ -29,7 +29,8 @@ export interface CategoryDialogInit {
 interface DialogsApi {
   openTransaction: (init?: TransactionDialogInit) => void;
   /** What a lançamento means (budget, recurrence, impact); editing is one action inside it. */
-  openTransactionDetail: (transaction: Transaction) => void;
+  /** The list it was opened from lets the register swipe to the previous and next ones. */
+  openTransactionDetail: (transaction: Transaction, siblings?: Transaction[]) => void;
   openAccount: (account?: Account) => void;
   openCategory: (init?: CategoryDialogInit) => void;
 }
@@ -65,9 +66,9 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
     [],
   );
   const openTransactionDetail = useCallback(
-    (transaction: Transaction) => {
+    (transaction: Transaction, siblings?: Transaction[]) => {
       // A saved lançamento opens in the register screen: its fields, its impact and the receipt below.
-      if (opensInRegister(transaction)) { openRegisterSheet({ existing: transaction }); return; }
+      if (opensInRegister(transaction)) { openRegisterSheet({ existing: transaction, siblings: siblings?.filter(opensInRegister) }); return; }
       setSeen((s) => ({ ...s, detail: true })); setDetail({ open: true, transaction });
     },
     [],
