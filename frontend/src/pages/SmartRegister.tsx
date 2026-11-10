@@ -60,6 +60,8 @@ export interface RegisterController {
   canSave: boolean;
   saving: boolean;
   hint: string | null;
+  /** A saved lançamento with its receipt open over the whole screen. */
+  expanded?: boolean;
   save: () => void;
 }
 export default function SmartRegister({ embedded = false, desktop = false, capture, existing, initialKind, onClose, onController }: { initialKind?: Kind; embedded?: boolean; desktop?: boolean; /** A saved lançamento: opens in the same screen, with its impact and receipt below; ✓ saves changes. */ existing?: Transaction; /** An Apple Pay purchase being reviewed: same screens, prefilled; saving confirms it. */ capture?: { item: PendingCapture; choice: CaptureChoice }; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
@@ -327,8 +329,8 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const view = done ? "success" : page === "entry" ? "entry" : "other";
   const saving = saveMutation.isPending;
   useEffect(() => {
-    onController?.({ view, kind, dirty, canSave, saving, hint, save: () => latest.current.save() });
-  }, [onController, view, kind, dirty, canSave, saving, hint]);
+    onController?.({ view, kind, dirty, canSave, saving, hint, expanded: Boolean(existing && expanded), save: () => latest.current.save() });
+  }, [onController, view, kind, dirty, canSave, saving, hint, existing, expanded]);
   const toggleCalc = () => {
     const next = !calc;
     // Leaving the calculator keeps the result of what was typed instead of a half-built sum.
@@ -356,12 +358,18 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     return <div className={embedded ? "relative flex h-full min-h-0 w-full flex-col gap-2.5 bg-background px-5 pb-4 pt-6 text-foreground" : "relative mx-auto flex h-[min(860px,calc(100dvh-8rem))] w-full max-w-md flex-col gap-2.5 overflow-hidden rounded-[36px] border border-border bg-background px-5 pb-4 pt-6 text-foreground shadow-2xl"} data-testid="quick-entry">
       {embedded ? null : <div className="absolute left-1/2 top-2 h-[5px] w-20 -translate-x-1/2 rounded-full bg-border" aria-hidden="true" />}
       {/* Header: calculator · type (icons, the chosen one named) · AI. */}
-      <header className="flex h-10 shrink-0 items-center gap-2">
+      {existing && expanded ? (
+        // Receipt over the whole screen: only the way back and what this lançamento is.
+        <motion.header className="flex h-12 shrink-0 items-center gap-2 pt-[max(0rem,calc(env(safe-area-inset-top)-1.5rem))] box-content" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
+          <button type="button" onClick={collapseRecord} aria-label="Voltar ao registro" data-testid="record-collapse" className="grid size-12 shrink-0 place-items-center rounded-full border border-border bg-card"><ArrowLeft size={20} /></button>
+          <button type="button" onClick={collapseRecord} className="flex h-12 min-w-0 flex-1 items-center justify-between gap-3 rounded-full bg-muted px-4 text-left" data-testid="record-summary">
+            <span className="min-w-0 truncate text-[15px] font-bold">{name || "Sem nome"}</span>
+            <span className={cn("shrink-0 text-[17px] font-bold tabular-nums", tone.text)}>{formatBRL(amountValue)}</span>
+          </button>
+        </motion.header>
+      ) : <header className="flex h-10 shrink-0 items-center gap-2">
         {embedded ? null : <button type="button" onClick={close} aria-label="Fechar" className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card"><X size={18} /></button>}
-        {existing && expanded ? (
-          <motion.button type="button" onClick={collapseRecord} aria-label="Voltar ao registro" data-testid="record-collapse"
-            initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card"><ArrowLeft size={18} /></motion.button>
-        ) : desktop || !keypadOpen ? <div className="size-10 shrink-0" aria-hidden="true" /> : (
+        {desktop || !keypadOpen ? <div className="size-10 shrink-0" aria-hidden="true" /> : (
           <button type="button" onClick={toggleCalc} aria-pressed={calc} aria-label="Modo calculadora" data-testid="quick-entry-calc" className={cn("grid size-10 shrink-0 place-items-center rounded-full border border-[#a78bfa] transition-colors", calc ? "bg-[#7c3aed] text-white" : "bg-primary/10 text-[#a78bfa] dark:bg-[#17132e]")}><Calculator size={19} strokeWidth={1.8} aria-hidden="true" /></button>
         )}
         <div className="flex h-10 min-w-0 flex-1 items-center justify-between rounded-full border border-border bg-card px-[3px]" role="radiogroup" aria-label="Tipo">
@@ -377,15 +385,8 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           })}
         </div>
         <button type="button" onClick={() => go("start")} aria-label={MEDIA_INPUTS ? "Registro inteligente: escrever, falar ou fotografar" : "Registro inteligente: escrever como foi"} title="Registro inteligente" className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card text-[#a78bfa]"><Sparkles size={18} /></button>
-      </header>
+      </header>}
 
-      {existing && expanded ? (
-        <motion.button type="button" onClick={collapseRecord} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-          className="flex h-11 shrink-0 items-center justify-between gap-3 rounded-full bg-muted px-4 text-left" data-testid="record-summary">
-          <span className="min-w-0 truncate text-[15px] font-bold">{name || "Sem nome"}</span>
-          <span className={cn("shrink-0 text-[17px] font-bold tabular-nums", tone.text)}>{formatBRL(amountValue)}</span>
-        </motion.button>
-      ) : null}
       {(() => {
         const top = <>
       {/* Amount: big, in the type's colour, with a caret while typing; the sum above it in calculator mode. */}
@@ -455,7 +456,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           animate={expanded ? { height: 0, opacity: 0, marginBottom: -10 } : { height: "auto", opacity: 1, marginBottom: 0 }} transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }} aria-hidden={expanded}>{top}</motion.div>;
       })()}
       {existing && !keypadOpen ? (
-        <div ref={recordScroll} onScroll={(e) => { const top = e.currentTarget.scrollTop; if (collapsing.current) { if (top <= 4) collapsing.current = false; return; } if (!expanded && top > 24) setExpanded(true); }} className="-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1" data-testid="record-scroll">
+        <div ref={recordScroll} onScroll={(e) => { const top = e.currentTarget.scrollTop; if (collapsing.current) { if (top <= 4) collapsing.current = false; return; } if (!expanded && top > 24) setExpanded(true); }} className={cn("-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1", expanded && "pb-24")} data-testid="record-scroll">
           <RecordInsight tx={existing} onDeleted={() => onClose?.()} onLeave={() => onClose?.()} />
         </div>
       ) : null}
@@ -474,7 +475,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       ) : null}
 
       {/* ⋮ · wallet · date */}
-      <div className="flex h-12 shrink-0 items-center gap-2">
+      <div className={cn("flex h-12 shrink-0 items-center gap-2", existing && expanded && "hidden")}>
         <button type="button" onClick={() => go("more")} aria-label="Mais opções" data-testid="quick-entry-more" className="grid size-12 shrink-0 place-items-center rounded-full border border-border bg-card"><MoreVertical size={20} /></button>
         {kind !== "Transferência" ? <button type="button" onClick={() => go("pay")} className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-muted px-1.5 text-left" data-testid="quick-entry-account">
           <span className={cn("grid size-9 shrink-0 place-items-center rounded-full", selectedCard ? "bg-primary/15 text-primary" : "bg-income/15 text-income dark:bg-[#0d2a22] dark:text-[#10b981]")}>{selectedCard ? <CreditCard size={17} /> : <Wallet size={17} />}</span>
