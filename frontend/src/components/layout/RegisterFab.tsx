@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils";
 type Kind = "Despesa" | "Receita" | "Transferência";
 
 const KIND_BG: Record<Kind, string> = {
-  Despesa: "bg-expense shadow-[0_0_0_5px_rgba(225,29,72,.28),0_8px_24px_rgba(225,29,72,.28)]",
-  Receita: "bg-income shadow-[0_0_0_5px_rgba(16,185,129,.28),0_8px_24px_rgba(16,185,129,.28)]",
-  Transferência: "bg-primary shadow-[0_0_0_5px_rgba(139,92,246,.28),0_8px_24px_rgba(139,92,246,.28)]",
+  Despesa: "bg-[#e11d48] shadow-[0_0_0_5px_rgba(225,29,72,.28),0_8px_24px_rgba(225,29,72,.28)]",
+  Receita: "bg-[#047857] shadow-[0_0_0_5px_rgba(4,120,87,.38),0_8px_24px_rgba(4,120,87,.38)]",
+  Transferência: "bg-[#7c3aed] shadow-[0_0_0_5px_rgba(124,58,237,.34),0_8px_24px_rgba(124,58,237,.34)]",
 };
 
 interface Props {
@@ -38,7 +38,7 @@ export function RegisterFab({ open, dirty, kind, success, size = "lg", onMain, o
       <AnimatePresence>
         {check ? (
           <motion.button key="discard" type="button" onClick={onDiscard} aria-label="Descartar registro" data-testid={discardTestId}
-            className={cn("absolute top-1/2 grid -translate-y-1/2 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-md", big ? "right-[calc(100%+0.75rem)] size-11" : "right-[calc(100%+0.6rem)] size-9")}
+            className={cn("absolute top-1/2 -mt-6 grid place-items-center rounded-full border border-[#2f3060] bg-muted text-foreground", big ? "right-[calc(100%+0.75rem)] size-12" : "right-[calc(100%+0.6rem)] size-12")}
             initial={reduce ? { opacity: 0 } : { x: 68, scale: 0.3, opacity: 0 }} animate={{ x: 0, scale: 1, opacity: 1 }} exit={reduce ? { opacity: 0 } : { x: 68, scale: 0.3, opacity: 0 }} transition={spring}>
             <X className={big ? "size-5" : "size-4"} aria-hidden="true" />
           </motion.button>
@@ -57,7 +57,7 @@ export function RegisterFab({ open, dirty, kind, success, size = "lg", onMain, o
         aria-label={check ? "Salvar registro" : open ? "Fechar Registro Inteligente" : "Abrir Registro Inteligente"}
         whileTap={{ scale: 0.88 }} animate={{ opacity: success ? 0 : 1, scale: success ? 0.6 : 1 }} transition={spring}
         className={cn("relative grid size-full place-items-center rounded-full text-white transition-[background-color,box-shadow] duration-300",
-          check ? KIND_BG[kind] : "bg-primary shadow-[0_8px_24px_rgba(139,92,246,.35)]", success && "pointer-events-none")}>
+          check ? KIND_BG[kind] : "bg-[#8b5cf6] shadow-[0_8px_24px_rgba(139,92,246,.35)]", success && "pointer-events-none")}>
         {/* One + that turns into ✕ (45°); the ✓ takes its place when there is something to save. */}
         <motion.span className="absolute grid place-items-center" initial={false}
           animate={{ rotate: check ? 90 : open ? 45 : 0, opacity: check ? 0 : 1 }} transition={spring}>

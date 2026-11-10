@@ -171,12 +171,14 @@ export function MobileNav() {
               className="fixed inset-0 z-[39] bg-black/40 backdrop-blur-[12px] dashboard:hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} />
             <motion.section role="dialog" aria-modal="true" aria-label="Novo registro"
-              className="fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] bottom-[calc(5.6rem+env(safe-area-inset-bottom))] z-[40] mx-auto flex max-w-[28rem] flex-col overflow-hidden rounded-[30px] border border-border bg-background shadow-2xl dashboard:hidden"
+              className={cn("fixed z-[40] mx-auto flex flex-col overflow-hidden bg-background dashboard:hidden",
+                // Saved: the ✓ has grown over the screen, so the success screen takes all of it, as in the prototype.
+                controller?.view === "success" ? "inset-0 pt-[env(safe-area-inset-top)]" : "inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] bottom-[calc(5.6rem+env(safe-area-inset-bottom))] max-w-[28rem] rounded-[36px] border border-border shadow-2xl")}
               // Grows out of the + button and goes back into it when it closes.
               style={{ transformOrigin: "calc(100% - 2.1rem) calc(100% + 2.85rem)" }}
               initial={{ scale: 0.06, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.06, opacity: 0 }}
               transition={{ type: "spring", stiffness: 300, damping: 30, opacity: { duration: 0.18 } }}>
-              <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden="true" />
+              {controller?.view === "success" ? null : <div className="absolute left-1/2 top-2 z-10 h-[5px] w-20 -translate-x-1/2 rounded-full bg-[#2a2b52]/70 dark:bg-[#2a2b52]" aria-hidden="true" />}
               <div className="min-h-0 flex-1 overflow-hidden">
                 <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">Preparando o registro...</div>}>
                   <SmartRegister embedded onClose={() => setRegisterOpen(false)} onController={setController} />
