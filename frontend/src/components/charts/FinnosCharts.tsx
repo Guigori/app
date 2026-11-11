@@ -4,7 +4,9 @@
  * segmentada · Limite → Bullet chart · Tendência rápida → Sparkline ·
  * Comparação → Barras.
  */
+import { useState } from "react";
 import { motion } from "motion/react";
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
 
 export { Sparkline } from "@/components/dashboard/Sparkline";
@@ -23,7 +25,9 @@ export const FINNOS_COLOR = {
 export interface ProjectionPoint { value: number; kind: "real" | "previsto"; label?: string }
 
 /** Linha de projeção: real in a solid line, the estimate dashed in the same colour, "hoje" at the joint (like the Início chart). */
-export function ProjectionLine({ points, height = 96, labels = true, className, ariaLabel }: { points: ProjectionPoint[]; height?: number; labels?: boolean; className?: string; ariaLabel?: string }) {
+export function ProjectionLine({ points, height = 96, labels = true, className, ariaLabel, format }: { points: ProjectionPoint[]; height?: number; labels?: boolean; className?: string; ariaLabel?: string; format?: (v: number) => string }) {
+  // Touch or hover a point to read it; touch the same point again to go back.
+  const [pick, setPick] = useState<number | null>(null);
   if (points.length < 2) return null;
   const w = 320, pad = 10, top = labels ? 18 : 8, bottom = 8;
   const values = points.map((p) => p.value);
@@ -36,15 +40,40 @@ export function ProjectionLine({ points, height = 96, labels = true, className, 
   const future = lastReal >= 0 ? points.slice(lastReal).map((p, i) => [x(i + lastReal), y(p.value)] as const) : [];
   const dots = false;
   const end = future.at(-1);
+  const indexAt = (e: React.PointerEvent<SVGSVGElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const vx = ((e.clientX - r.left) / r.width) * w;
+    return Math.max(0, Math.min(points.length - 1, Math.round(((vx - pad) / (w - pad * 2)) * (points.length - 1))));
+  };
+  const picked = pick !== null ? points[pick] : null;
   return (
-    <svg viewBox={`0 0 ${w} ${height}`} className={cn("h-auto w-full overflow-visible", className)} role="img" aria-label={ariaLabel}>
+    <svg viewBox={`0 0 ${w} ${height}`} className={cn("h-auto w-full touch-pan-y overflow-visible", format && "cursor-crosshair", className)} role="img" aria-label={ariaLabel}
+      {...(format ? {
+        "data-chart-interactive": "",
+        onClick: (e: React.MouseEvent) => e.stopPropagation(),
+        onPointerDown: (e: React.PointerEvent<SVGSVGElement>) => { const i = indexAt(e); setPick((cur) => (e.pointerType !== "mouse" && cur === i ? null : i)); },
+        onPointerMove: (e: React.PointerEvent<SVGSVGElement>) => { if (e.pointerType === "mouse" || e.buttons) setPick(indexAt(e)); },
+        onPointerLeave: (e: React.PointerEvent<SVGSVGElement>) => { if (e.pointerType === "mouse") setPick(null); },
+      } : {})}>
       {min < 0 ? <line x1={pad} x2={w - pad} y1={y(0)} y2={y(0)} stroke={FINNOS_COLOR.expense} strokeOpacity="0.45" strokeDasharray="3 4" /> : null}
       <line x1={pad} x2={w - pad} y1={height - bottom} y2={height - bottom} stroke="var(--border)" strokeWidth="1.5" />
       {real.length > 1 ? <motion.polyline initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.6 }} points={real.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.result} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /> : null}
       {real.map(([px, py], i) => (dots || i === real.length - 1 ? <circle key={i} cx={px} cy={py} r="4.5" fill="var(--card)" stroke={FINNOS_COLOR.result} strokeWidth="2.5" /> : null))}
-      {future.length > 1 ? <polyline points={future.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.result} strokeOpacity="0.7" strokeWidth="2.5" strokeDasharray="6 6" strokeLinecap="round" strokeLinejoin="round" /> : null}
+      {future.length > 1 ? <motion.polyline initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45, duration: 0.4 }} points={future.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.result} strokeOpacity="0.7" strokeWidth="2.5" strokeDasharray="6 6" strokeLinecap="round" strokeLinejoin="round" /> : null}
       {end && future.length > 1 ? <circle cx={end[0]} cy={end[1]} r="4.5" fill="var(--card)" stroke={FINNOS_COLOR.result} strokeWidth="2.5" /> : null}
-      {labels && lastReal >= 0 && future.length > 1 ? (
+      {picked && format ? (() => {
+        const px = x(pick!), py = y(picked.value);
+        const label = `${picked.label ? `${picked.label} · ` : ""}${format(picked.value)}${picked.kind === "previsto" ? " (estimativa)" : ""}`;
+        const anchor = px < w * 0.25 ? "start" : px > w * 0.75 ? "end" : "middle";
+        return (
+          <g data-testid="projection-pick">
+            <line x1={px} x2={px} y1={top - 4} y2={height - bottom} stroke="var(--muted-foreground)" strokeOpacity="0.5" strokeDasharray="2 3" />
+            <circle cx={px} cy={py} r="5.5" fill={FINNOS_COLOR.result} stroke="var(--card)" strokeWidth="2" />
+            <text x={px} y={Math.max(11, py - 12)} textAnchor={anchor} fontSize="12" fontWeight="600" fill="var(--foreground)" paintOrder="stroke" stroke="var(--card)" strokeWidth="4">{label}</text>
+          </g>
+        );
+      })() : null}
+      {labels && !picked && lastReal >= 0 && future.length > 1 ? (
         <>
           <text x={real.at(-1)![0]} y="11" textAnchor="middle" fontSize="11" fill="var(--muted-foreground)">hoje</text>
           <text x={end![0]} y="11" textAnchor="end" fontSize="11" fill="var(--muted-foreground)">estimativa</text>
@@ -104,21 +133,68 @@ export interface BarDatum { label: string; value: number; focus?: boolean; futur
 /** Barras: values side by side from zero; the one in focus in purple, estimated months dashed in the same purple. */
 export function Bars({ data, height = 112, onPick, className }: { data: BarDatum[]; height?: number; onPick?: (d: BarDatum) => void; className?: string }) {
   const peak = Math.max(1, ...data.map((d) => d.value));
+  // Without its own action, a bar is selected by touch (the others fade) and released by touching it again.
+  const [sel, setSel] = useState<number | null>(null);
   return (
     <div className={cn("flex items-end gap-2", className)} style={{ height }}>
       {data.map((d, i) => {
         const body = (
           <>
             <span className="text-[10px] tabular-nums text-muted-foreground">{d.valueLabel ?? ""}</span>
-            <motion.span className="block w-full rounded-lg" initial={{ height: 0 }} animate={{ height: Math.max(4, (d.value / peak) * (height - 36)) }} transition={{ delay: i * 0.04 }}
+            <motion.span className="block w-full rounded-lg" initial={{ height: 0 }} animate={{ height: Math.max(4, (d.value / peak) * (height - 36)), opacity: sel !== null && sel !== i ? 0.35 : 1 }} transition={{ delay: i * 0.04 }}
               style={d.future ? { backgroundColor: "color-mix(in srgb, var(--finnos-purple) 18%, transparent)", outline: "1.5px dashed color-mix(in srgb, var(--finnos-purple) 70%, transparent)", outlineOffset: -1.5 } : { backgroundColor: d.focus ? FINNOS_COLOR.result : "color-mix(in srgb, var(--finnos-purple) 32%, var(--background))" }} />
             <span className={cn("text-[11px]", d.focus ? "font-semibold text-foreground" : "text-muted-foreground")}>{d.label}</span>
           </>
         );
         return onPick ? (
           <button key={d.label + i} type="button" onClick={() => onPick(d)} aria-pressed={d.focus} aria-label={`${d.label}: ${d.valueLabel ?? d.value}`} className="flex flex-1 flex-col items-center gap-1">{body}</button>
-        ) : <div key={d.label + i} className="flex flex-1 flex-col items-center gap-1">{body}</div>;
+        ) : <button key={d.label + i} type="button" data-chart-interactive="" onClick={(e) => { e.stopPropagation(); setSel(sel === i ? null : i); }} aria-pressed={sel === i} aria-label={`${d.label}: ${d.valueLabel ?? d.value}`} className="flex flex-1 flex-col items-center gap-1">{body}</button>;
       })}
+    </div>
+  );
+}
+
+export interface DonutSlice { id: string; name: string; value: number; color: string }
+
+/**
+ * Donut FINNOS (Composição): the same chart as "Pra onde foi o dinheiro?" — rounded segments with a gap between them,
+ * the growing animation, and selection: tap a slice to focus it (the others fade and the centre shows it), tap it again to
+ * go back to the whole. The centre shows the total, or the focused slice.
+ */
+export function Donut({ slices, size = 176, selectedId, onSelect, centerLabel = "Total", format, className }: {
+  slices: DonutSlice[]; size?: number; selectedId?: string | null; onSelect?: (id: string | null) => void;
+  centerLabel?: string; format: (v: number) => string; className?: string;
+}) {
+  const selected = selectedId ? slices.find((s) => s.id === selectedId) ?? null : null;
+  const total = slices.reduce((s, x) => s + x.value, 0);
+  const small = size < 120;
+  return (
+    <div
+      className={cn("relative shrink-0", className)}
+      style={{ width: size, height: size }}
+      data-testid="finnos-donut"
+      data-chart-interactive=""
+      onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onSelect?.(null); }}
+    >
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie data={slices} dataKey="value" nameKey="name" innerRadius="68%" outerRadius="98%" paddingAngle={slices.length > 1 ? 2 : 0} cornerRadius={small ? 4 : 6} strokeWidth={0}
+            isAnimationActive animationDuration={700} animationEasing="ease-out"
+            onClick={(_, i) => { const s = slices[i]; if (s) onSelect?.(selected?.id === s.id ? null : s.id); }}>
+            {slices.map((s) => <Cell key={s.id} fill={s.color} opacity={selected && s.id !== selected.id ? 0.22 : 1} style={{ transition: "opacity 200ms ease", cursor: onSelect ? "pointer" : undefined, outline: "none" }} />)}
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-[18%] text-center">
+        {small ? (
+          <p className="max-w-full truncate text-[12px] font-semibold tabular-nums">{selected ? `${Math.round((selected.value / Math.max(total, 0.01)) * 100)}%` : ""}</p>
+        ) : (
+          <>
+            <p className="max-w-full truncate text-[11px] text-muted-foreground">{selected ? selected.name : centerLabel}</p>
+            <p className="max-w-full truncate font-heading text-[15px] font-bold tabular-nums">{format(selected ? selected.value : total)}</p>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -10,6 +10,9 @@ import { budgetPressure, installmentPlans, installmentSchedule, summarizeInstall
 import { cn } from "@/lib/utils";
 import { InsightShell, NOTE, NUMBER_TILE, Tile } from "@/components/insights/InsightShell";
 import { Bars, BulletBar } from "@/components/charts/FinnosCharts";
+import { FinnSummary, VsLastMonth } from "@/components/insights/FinnSummary";
+import { compare, shortMonthName } from "@/lib/insights/compare";
+import { addMonth } from "@/lib/format";
 import type { WidgetSize } from "@/lib/insights/registry";
 
 const SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -36,12 +39,19 @@ export function InstallmentsInsight({ cardId = null, compact = false, size, to, 
   const rules = new Map((cards.data ?? []).map((c) => [c.id, { closing_day: c.closing_day, next_closing: c.next_closing }]));
   const plans = installmentPlans(transactions.data ?? [], month, cardId, rules).map((p) => ({ ...p, where: (p.cardId && cardName.get(p.cardId)) || p.where }));
   const summary = summarizeInstallments(plans, month);
+  // Installments of last month, counted the same way, for "vs mês passado".
+  const prevMonth = addMonth(month, -1);
+  const prevRules = new Map((cards.data ?? []).map((c) => [c.id, { closing_day: c.closing_day, next_closing: `${addMonth(c.next_closing.slice(0, 7), -1)}${c.next_closing.slice(7)}` }]));
+  const prevMonthly = summarizeInstallments(installmentPlans(transactions.data ?? [], prevMonth, cardId, prevRules), prevMonth).monthly;
+  const vs = compare(summary.monthly, prevMonthly, "lower");
+  const vsLine = <VsLastMonth c={vs} label={`por mês vs ${shortMonthName(prevMonth)}`} format={money} />;
   if (!plans.length && compact) return null;
   if (size === "S" || size === "M") {
     const top = plans.filter((p) => p.current > 0).slice(0, 2);
     return (
       <Tile title="Parcelas" icon={<Layers className="size-3.5" />} className={className} testId="installments-insight">
         <div className="flex items-baseline justify-between gap-3"><p className={NUMBER_TILE}>{money(summary.monthly)}</p>{size === "M" ? <span className={cn(NOTE, "shrink-0")}>faltam {money(summary.remaining)}</span> : null}</div>
+        {size === "M" ? vsLine : null}
         {size === "S" ? <p className={cn(NOTE, "mt-auto line-clamp-2")}>por mês · faltam {money(summary.remaining)}</p> : (
           <ul className="mt-auto space-y-2">
             {top.map((p) => (
@@ -64,7 +74,14 @@ export function InstallmentsInsight({ cardId = null, compact = false, size, to, 
   const pressure = budgetPressure(installmentSchedule(allPlans, month, 6), planned, fixedMonthly).slice(1);
   const visible = open ? plans : plans.slice(0, 3);
 
+  const ending = plans.filter((p) => p.current > 0 && p.left === 0);
+  const summarySentences = [
+    plans.length ? `Você tem ${plans.length} ${plans.length === 1 ? "compra parcelada" : "compras parceladas"}: ${money(summary.monthly)} por mês e ainda faltam ${money(summary.remaining)}.` : "Nenhuma compra parcelada em andamento.",
+    ending.length ? `${ending.map((p) => p.name).join(", ")} ${ending.length === 1 ? "termina" : "terminam"} neste mês: a partir do próximo sobram ${money(ending.reduce((s2, p) => s2 + p.value, 0))} por mês.` : plans[0] ? `A maior é ${plans[0].name}, com ${money(plans[0].remaining)} ainda a pagar.` : "",
+    vs ? `Por mês, as parcelas estão ${vs.same ? "iguais a" : vs.better ? `${money(-vs.delta)} menores que` : `${money(vs.delta)} maiores que`} em ${shortMonthName(prevMonth)}.` : "",
+  ].filter(Boolean);
   return (
+    <>{size === "XL" ? <FinnSummary title="Parcelas em andamento" sentences={summarySentences} context={{ por_mes: summary.monthly, falta: summary.remaining, compras: plans.map((p) => ({ nome: p.name, parcela: `${p.current}/${p.count}`, valor: p.value, falta: p.remaining })) }} /> : null}
     <InsightShell
       to={to}
       className={className}
@@ -74,6 +91,7 @@ export function InstallmentsInsight({ cardId = null, compact = false, size, to, 
     >
       {plans.length ? (
         <>
+          {vs ? <div className="-mt-1 mb-3">{vsLine}</div> : null}
           <ul className="space-y-3" data-testid="installments-list">
             {visible.map((p) => (
               <li key={p.id}>
@@ -128,6 +146,6 @@ export function InstallmentsInsight({ cardId = null, compact = false, size, to, 
           </button>}
         </>
       ) : null}
-    </InsightShell>
+    </InsightShell></>
   );
 }

@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import type { CreditCard } from "@/types/finnos";
 import { BigMoney, FindingList, InsightShell, NOTE, NUMBER_TILE, Tile } from "@/components/insights/InsightShell";
 import { FINNOS_COLOR, ProjectionLine } from "@/components/charts/FinnosCharts";
+import { FinnSummary } from "@/components/insights/FinnSummary";
 import type { WidgetSize } from "@/lib/insights/registry";
 
 const SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -73,7 +74,13 @@ export function InvoicesInsight({ cards, cardId = null, compact: compactProp = f
   const y = (p: InvoicePoint) => 8 + (1 - p.total / peak) * 44;
   const x = (i: number) => ((i + 0.5) * 400) / Math.max(points.length, 1);
 
+  const summary = [
+    `A fatura atual ${single && card ? `do ${card.name}` : "somando os cartões"} está em ${money(reading.present?.total ?? 0)}${reading.change != null && reading.past && reading.past.total > 0 ? `, ${reading.change > 0 ? `${money(reading.change)} acima` : `${money(-reading.change)} abaixo`} da passada` : ""}.`,
+    reading.topCategory ? `${reading.topCategory.name} é o que mais pesa: ${money(reading.topCategory.total)} (${Math.round(reading.topCategory.share * 100)}%).` : "",
+    reading.future[0] ? `A próxima já começa com ${money(reading.future[0].total)} lançados${reading.installmentsInPresent > 0 ? `, e ${money(reading.installmentsInPresent)} da atual são parcelas` : ""}.` : "",
+  ].filter(Boolean);
   return (
+    <>{size === "XL" ? <FinnSummary title="Faturas" sentences={summary} context={{ cartao: card?.name ?? "todos", atual: reading.present?.total, passada: reading.past?.total, proximas: reading.future.map((p) => p.total) }} /> : null}
     <InsightShell
       to={to}
       className={className}
@@ -116,6 +123,6 @@ export function InvoicesInsight({ cards, cardId = null, compact: compactProp = f
       {!compact && reading.biggest ? (
         <p className="mt-3 text-xs text-muted-foreground">Maior compra da fatura atual: <span className="font-semibold text-foreground">{reading.biggest.name}</span> · {money(reading.biggest.value)}{reading.biggest.installment_label ? ` · parcela ${reading.biggest.installment_label}` : ""}</p>
       ) : null}
-    </InsightShell>
+    </InsightShell></>
   );
 }

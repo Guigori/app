@@ -15,7 +15,7 @@ export const newKey = () => `w${Date.now().toString(36)}${(counter++).toString(3
 
 /** Default Início: today's room to spend, the next bill, the month's forecast, the week, fixed bills, categories, Radar. */
 export function defaultLayouts(): Layouts {
-  const home: Array<[string, WidgetSize]> = [["gastar-hoje", "S"], ["fatura-que-vem", "S"], ["previsao-saldo", "L"], ["radar", "M"], ["semana-que-vem", "M"], ["contas-fixas", "M"], ["categorias", "L"]];
+  const home: Array<[string, WidgetSize]> = [["gastar-hoje", "S"], ["fatura-que-vem", "S"], ["previsao-saldo", "L"], ["radar", "M"], ["orcamento", "M"], ["semana-que-vem", "M"], ["contas-fixas", "M"], ["metas", "M"], ["categorias", "L"]];
   let hidden: string[] = [];
   // People who hid Radar or the categories in the old "Modificar painel" keep them hidden.
   try { hidden = (JSON.parse(localStorage.getItem(OLD_HOME_KEY) ?? "{}").hidden ?? []) as string[]; } catch { hidden = []; }
