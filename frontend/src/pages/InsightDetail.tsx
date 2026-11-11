@@ -19,6 +19,8 @@ export default function InsightDetail() {
   const pinned = useLayout("analise");
   if (!def) return <Navigate to="/analise" replace />;
   const config: WidgetConfig = def.cardScope ? { cardId: params.get("cartao") } : {};
+  // One place per thing: an analysis that lives on another screen opens that screen.
+  if (def.canonical) return <Navigate to={def.canonical(config)} replace />;
   const cardName = config.cardId ? cards.data?.find((c) => c.id === config.cardId)?.name : null;
   const scope = def.cardScope ? (cardName ?? "Todos os cartões") : null;
 

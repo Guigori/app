@@ -12,3 +12,11 @@ describe("offerFeatured", () => {
     expect(next.analise[0].id).toBe("assinaturas");
   });
 });
+
+describe("offerAnalysisTop", () => {
+  it("brings what used to be fixed on Análise to the top of the board, without repeating", async () => {
+    const { offerAnalysisTop } = await import("@/lib/insights/layout");
+    const next = offerAnalysisTop({ inicio: [], analise: [{ key: "x", id: "seis-meses", size: "M" }, { key: "y", id: "faturas", size: "L" }] });
+    expect(next.analise.map((w) => w.id)).toEqual(["descobertas", "resultado-mes", "orcamento", "contas", "habitos", "categorias", "compromissos", "seis-meses", "faturas"]);
+  });
+});
