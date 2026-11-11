@@ -15,6 +15,8 @@ export type FinnMessage = {
   insight?: string; followUps?: string[]; links?: { label: string; to: string }[]; query?: FinnQuery;
   /** "✓ …" lines, and a change the user reviews before anything is saved. */
   steps?: string[]; proposal?: Proposal; proposalState?: ProposalState;
+  /** The analysis being talked about (follow-ups keep the subject). */
+  topic?: string;
 };
 export type FinnConversation = { id: string; title: string; updatedAt: string; messages: FinnMessage[] };
 

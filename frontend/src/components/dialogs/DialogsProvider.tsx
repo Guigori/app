@@ -1,12 +1,13 @@
-import { createContext, lazy, Suspense, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, Suspense, useCallback, useContext, useState, type ReactNode } from "react";
+import { lazyRetry } from "@/lib/lazyRetry";
 import { openRegisterSheet, opensInRegister } from "@/lib/registerSheet";
 import type { Account, Category, Transaction, TxType } from "@/types/finnos";
 
 // Each form loads the first time it is opened, not with the app.
-const AccountDialog = lazy(() => import("@/components/accounts/AccountDialog").then((m) => ({ default: m.AccountDialog })));
-const CategoryDialog = lazy(() => import("@/components/categories/CategoryDialog").then((m) => ({ default: m.CategoryDialog })));
-const TransactionDetailSheet = lazy(() => import("@/components/transactions/TransactionDetailSheet").then((m) => ({ default: m.TransactionDetailSheet })));
-const TransactionDialog = lazy(() => import("@/components/transactions/TransactionDialog").then((m) => ({ default: m.TransactionDialog })));
+const AccountDialog = lazyRetry(() => import("@/components/accounts/AccountDialog").then((m) => ({ default: m.AccountDialog })));
+const CategoryDialog = lazyRetry(() => import("@/components/categories/CategoryDialog").then((m) => ({ default: m.CategoryDialog })));
+const TransactionDetailSheet = lazyRetry(() => import("@/components/transactions/TransactionDetailSheet").then((m) => ({ default: m.TransactionDetailSheet })));
+const TransactionDialog = lazyRetry(() => import("@/components/transactions/TransactionDialog").then((m) => ({ default: m.TransactionDialog })));
 
 export interface TransactionDialogInit {
   type?: TxType;

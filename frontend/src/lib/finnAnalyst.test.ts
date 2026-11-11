@@ -137,3 +137,15 @@ describe("FINNOS IA knows the user's goals", () => {
     expect(answer(parseQuestion("como estão minhas metas?", ctx), { ...d, goals: [] }).text).toContain("ainda não tem metas");
   });
 });
+
+describe("FINNOS IA explains how to spend less on what was asked", () => {
+  it("shows where the money of a category went, how it compares and concrete ideas", () => {
+    const a = ask("o que foi gasto em transporte e como posso economizar?");
+    expect(a.text).toContain("Neste mês você gastou **R$ 100,00** com Transporte");
+    expect(a.text).toContain("acima** da sua média");
+    expect(a.text).toContain("Como economizar com Transporte");
+    expect(a.text).toContain("Uber (R$ 80,00, 2×)");
+    expect(a.visual?.items?.[0].label).toBe("Uber");
+    expect(a.followUps[0]).toBe("Crie um limite para Transporte no orçamento");
+  });
+});

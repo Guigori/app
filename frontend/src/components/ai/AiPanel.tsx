@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazyRetry } from "@/lib/lazyRetry";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Clock3, FileText, Loader2, Mic, Plus, Send, Sparkles, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
@@ -7,6 +8,7 @@ import { getApiErrorMessage } from "@/lib/errors";
 import { getMode, isLocalMode } from "@/lib/mode";
 import { askLocalFinnos } from "@/lib/local/ai";
 import { askFinnAnalyst, askFinnProposal } from "@/lib/askFinnAnalyst";
+import { askFinnConverse } from "@/lib/finnConverse";
 import { applyProposal, undoProposal } from "@/lib/finnApply";
 import { ProposalCard } from "@/components/ai/ProposalCard";
 import { memoryCommand, notesFor, personalSuggestions, readMemory, rememberFeedback, rememberTopic, writeMemory, type FinnMemory } from "@/lib/finnMemory";
@@ -20,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { useNavigationPreferences } from "@/lib/navigationPreferences";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 // Charts only load when an answer actually has one (keeps recharts out of the first download).
-const AiVisual = lazy(() => import("@/components/ai/AiVisual").then((m) => ({ default: m.AiVisual })));
+const AiVisual = lazyRetry(() => import("@/components/ai/AiVisual").then((m) => ({ default: m.AiVisual })));
 
 const BASE_SUGGESTIONS = ["Quanto gastei este mês?", "Onde posso economizar?", "Como está minha regra 50/30/20?", "O que merece minha atenção no Radar?"];
 
@@ -88,8 +90,16 @@ export function AiPanel() {
         next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:proposed.text,steps:proposed.steps,proposal:proposed.proposal,proposalState:proposed.proposal?{status:"pending"}:undefined,followUps:proposed.followUps,createdAt:new Date().toISOString()}]};persist(next);
         return;
       }
-      const analyst=pendingContext?null:await askFinnAnalyst(text,conversation.messages,memory.aliases);
+      // An analysis being talked about ("Me explique a análise…", the page's "Conversar sobre isso", "e como melhoro?").
+      const talk=await askFinnConverse(text,pendingContext,conversation.messages,queryClient,memory.aliases);
+      if(talk){
+        setPendingContext(null);
+        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:talk.text,visual:talk.visual,steps:talk.steps,followUps:talk.followUps,links:talk.links,topic:talk.topic,createdAt:new Date().toISOString()}]};persist(next);
+        return;
+      }
+      const analyst=pendingContext&&!pendingContext.analise?null:await askFinnAnalyst(text,conversation.messages,memory.aliases);
       if(analyst){
+        setPendingContext(null);
         writeMemory(rememberTopic(memory,analyst.query,text));
         const shaped=styled(analyst,memory);
         next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:shaped.text,visual:shaped.visual,steps:analyst.steps,insight:analyst.insight,followUps:analyst.followUps,links:analyst.links,query:analyst.query,createdAt:new Date().toISOString()}]};persist(next);

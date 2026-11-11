@@ -1,5 +1,6 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
+import { AppErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { useLocation, useNavigate, useNavigationType, useOutlet } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { AiPanel } from "@/components/ai/AiPanel";
@@ -102,9 +103,11 @@ export function AppShell() {
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
               >
                 {/* Suspense inside the shell keeps sidebar and header in place while a page chunk loads. */}
-                <Suspense fallback={<FinnosPageLoading title="Abrindo" />}>
-                  {outlet}
-                </Suspense>
+                <AppErrorBoundary compact resetKey={location.pathname}>
+                  <Suspense fallback={<FinnosPageLoading title="Abrindo" />}>
+                    {outlet}
+                  </Suspense>
+                </AppErrorBoundary>
               </motion.div>
             </AnimatePresence>
           </main>

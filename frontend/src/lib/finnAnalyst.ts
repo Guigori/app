@@ -529,6 +529,71 @@ function goalsAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
 }
 
 /** An establishment keeps the spelling of its lançamentos ("Ônibus", not "Onibus"). */
+/** Ready ideas per kind of spending (matched on the category or establishment name). */
+const SAVE_TIPS: Array<[RegExp, string[]]> = [
+  [/academia|smart ?fit|bluefit|crossfit|pilates|gym|personal/, ["Veja se usa a academia o bastante para o plano: abaixo de 2 vezes por semana, um plano mais simples ou por aula sai mais barato.", "Planos anuais ou recorrentes costumam custar menos por mês; benefícios como Gympass/Wellhub pela empresa também.", "Treino ao ar livre ou em casa alguns dias da semana pode substituir aulas extras pagas."]],
+  [/saude|farmacia|drogaria|medic|consulta|exame|dentist|plano de saude/, ["Peça o genérico na farmácia: costuma custar de 30% a 60% menos que o de marca.", "Compare o preço do remédio em 2 ou 3 farmácias ou apps antes de comprar; os programas de desconto do laboratório (pelo CPF) também baixam o valor.", "Consultas e exames: veja o que o plano cobre ou se há reembolso antes de pagar particular.", "Se o plano de saúde pesa, compare a coparticipação ou um plano de rede menor no próximo reajuste."]],
+  [/restaurante|lanche|ifood|delivery|bar\b|padaria|cafe|alimentacao fora/, ["Defina quantos pedidos de delivery por semana cabem e deixe o resto para comida de casa.", "Taxa de entrega e serviço somam muito: retirar no local ou pedir com cupom corta parte disso.", "Levar marmita 2 ou 3 dias na semana costuma economizar mais do que cortar tudo de uma vez."]],
+  [/mercado|supermercado|alimentacao|feira|hortifruti/, ["Vá ao mercado com lista e um valor máximo por compra.", "Compare marcas próprias e compre os básicos em atacarejo uma vez por mês.", "Menos idas por semana = menos compras por impulso."]],
+  [/transporte|uber|99|taxi|combustivel|gasolina|posto|estacionamento|pedagio/, ["Junte trajetos curtos no mesmo dia e compare app × transporte público nas rotas mais frequentes.", "Combustível: abasteça no posto mais barato da sua rota (apps de preço ajudam) e calibre os pneus.", "Corridas em horário de pico custam mais; sair 15 minutos antes ou depois já muda o preço."]],
+  [/assinatura|streaming|netflix|spotify|disney|prime|max\b|youtube/, ["Liste as assinaturas e cancele as que você não usou no último mês.", "Faça rodízio: um streaming por vez, trocando a cada mês.", "Planos família ou anuais saem mais baratos por mês se você vai manter."]],
+  [/lazer|entretenimento|cinema|show|viagem|passeio/, ["Defina um valor de lazer para o mês e acompanhe quanto sobra dele.", "Programe os passeios caros e alterne com programas gratuitos."]],
+  [/compras|roupa|vestuario|shopping|eletronic|casa|decoracao|marketplace/, ["Espere 48 horas antes de compras que não são essenciais.", "Tire os cartões salvos dos sites e apps de compra para criar um passo a mais.", "Compare preços e use cashback antes de comprar."]],
+  [/moradia|aluguel|condominio|energia|luz|agua|gas\b|internet|telefone|celular/, ["Revise o plano de internet e celular: muitas vezes há um plano menor ou uma oferta de retenção.", "Na energia, os maiores vilões são chuveiro, ar-condicionado e geladeira antiga.", "Pergunte por desconto para pagamento em dia ou débito automático."]],
+  [/educacao|curso|escola|faculdade|livro/, ["Veja bolsas, descontos para pagamento à vista ou convênios da empresa.", "Cursos gratuitos e bibliotecas cobrem boa parte do conteúdo."]],
+  [/pet|veterin/, ["Ração em embalagem maior ou por assinatura sai mais barata por quilo.", "Planos de saúde pet só compensam se o uso for frequente; compare com o que você gastou no ano."]],
+];
+
+/** "O que gastei em saúde e como economizar?": where the money went, how it compares and what to do about it. */
+function saveAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
+  const entity = q.entities[0];
+  const month = q.period.end.slice(0, 7);
+  const now = rowsFor(data, q, q.period);
+  const monthPeriod = (m: string): Period => ({ start: `${m}-01`, end: `${m}-31`, label: m, months: [m] });
+  const history = [1, 2, 3].map((n) => { const m = addMonth(month, -n); return { m, total: rowsFor(data, q, monthPeriod(m)).total }; });
+  const withData = history.filter((h) => h.total > 0);
+  const avg = withData.length ? round(withData.reduce((s, h) => s + h.total, 0) / withData.length) : 0;
+  // Where it went: grouped by establishment, biggest first.
+  const byName = new Map<string, { name: string; total: number; n: number }>();
+  for (const tx of now.paid) { const k = norm(tx.name); const g = byName.get(k) ?? { name: tx.name, total: 0, n: 0 }; g.total = round(g.total + tx.value); g.n += 1; byName.set(k, g); }
+  const places = [...byName.values()].sort((a, b) => b.total - a.total);
+  const allSpend = rowsFor(data, q, q.period, []).total;
+  const subject = entity.name;
+  if (!now.paid.length && !avg) {
+    return { text: `Não encontrei gastos com **${subject}** ${inP(q.period)} nem nos três meses anteriores, então não há o que cortar aí por enquanto.`, followUps: ["Onde posso economizar este mês?", "Para onde foi meu dinheiro este mês?"], links: linksFor(q), query: q };
+  }
+  const parts: string[] = [];
+  parts.push(`${cap(inP(q.period))} você gastou **${money(now.total)}** com ${subject}${now.paid.length ? ` em ${plural(now.paid.length, "lançamento", "lançamentos")}` : ""}${allSpend ? ` (${share(now.total, allSpend)}% das despesas)` : ""}.`);
+  if (avg) {
+    const diff = round(now.total - avg);
+    parts.push(diff > 0
+      ? `Isso está **${money(diff)} acima** da sua média dos últimos meses (${money(avg)} por mês).`
+      : `Está ${diff < 0 ? `${money(-diff)} abaixo` : "igual"} da sua média dos últimos meses (${money(avg)} por mês).`);
+  }
+  if (places.length) {
+    const top = places.slice(0, 3).map((p) => `${p.name} (${money(p.total)}${p.n > 1 ? `, ${p.n}×` : ""})`).join(", ");
+    parts.push(`O que mais pesou: ${top}.`);
+  }
+  const repeated = places.filter((p) => p.n >= 3);
+  const base = Math.max(now.total, avg);
+  const target = round(base * 0.15);
+  const ideas: string[] = [];
+  if (avg && now.total > avg * 1.1) ideas.push(`Voltar para a sua média já libera **${money(round(now.total - avg))}** por mês.`);
+  if (repeated.length) ideas.push(`${repeated[0].name} aparece ${repeated[0].n} vezes no mês: é aí que um limite por semana faz mais diferença.`);
+  const key = `${norm(subject)} ${places.slice(0, 5).map((p) => norm(p.name)).join(" ")}`;
+  const tips = SAVE_TIPS.find(([re]) => re.test(key))?.[1] ?? ["Defina um limite mensal para essa categoria no Orçamento e o FINNOS avisa quando você chegar perto.", "Revise os três maiores lançamentos: algum podia ter sido adiado ou trocado por uma opção mais barata?"];
+  ideas.push(...tips.slice(0, 3));
+  ideas.push(`Uma meta realista: cortar 15% (cerca de **${money(target)} por mês**, ${money(round(target * 12))} no ano).`);
+  return {
+    text: `${parts.join(" ")}\n\n**Como economizar com ${subject}:**\n${ideas.map((i) => `• ${i}`).join("\n")}`,
+    visual: places.length ? { title: `Onde foi o gasto com ${subject}`, items: places.slice(0, 5).map((p) => ({ label: p.name, value: money(p.total), detail: plural(p.n, "vez", "vezes") })) } : undefined,
+    insight: noticed(data, q),
+    followUps: [`Crie um limite para ${subject} no orçamento`, `Evolução de ${subject} por mês`, "Onde mais posso economizar?"],
+    links: linksFor(q),
+    query: q,
+  };
+}
+
 function spelled(e: Entity, data: AnalystData): Entity {
   if (e.kind !== "merchant") return e;
   for (const tx of data.transactions) {
@@ -543,7 +608,7 @@ export function answer(parsed: FinnQuery, data: AnalystData): FinnAnswer {
   const q = { ...parsed, entities: parsed.entities.map((e) => spelled(e, data)) };
   switch (q.op) {
     case "top": return topAnswer(q, data);
-    case "save": return topAnswer({ ...q, type: "despesa" }, data, true);
+    case "save": return q.entities.length ? saveAnswer({ ...q, type: "despesa" }, data) : topAnswer({ ...q, type: "despesa" }, data, true);
     case "trend": return trendAnswer(q, data);
     case "compare": return compareAnswer(q, data);
     case "balance": return balanceAnswer(q, data);

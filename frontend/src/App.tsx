@@ -1,4 +1,6 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
+import { AppErrorBoundary } from "@/components/layout/ErrorBoundary";
+import { lazyRetry } from "@/lib/lazyRetry";
 import { categoryFlowPath } from "@/lib/categoryLinks";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
@@ -28,29 +30,29 @@ import { AppShell } from "@/components/layout/AppShell";
 
 
 
-const DashboardEntry = lazy(() => import("@/pages/DashboardEntry"));
-const Transactions = lazy(() => import("@/pages/Transactions"));
-const Accounts = lazy(() => import("@/pages/Accounts"));
-const Categories = lazy(() => import("@/pages/Categories"));
-const Settings = lazy(() => import("@/pages/Settings"));
-const SettingsIntegrations = lazy(() => import("@/pages/SettingsIntegrations"));
-const ChartSettings = lazy(() => import("@/pages/ChartSettings"));
-const Budget = lazy(() => import("@/pages/Budget"));
-const BudgetSettings = lazy(() => import("@/pages/BudgetSettings"));
-const FinanceHistory = lazy(() => import("@/pages/FinanceHistory"));
-const Subscriptions = lazy(() => import("@/pages/Subscriptions"));
-const CardInvoice = lazy(() => import("@/pages/CardInvoice"));
-const Radar = lazy(() => import("@/pages/Radar"));
-const RadarDetail = lazy(() => import("@/pages/RadarDetail"));
-const Onboarding = lazy(() => import("@/pages/Onboarding"));
-const Analysis = lazy(() => import("@/pages/Analysis"));
-const Patrimonio = lazy(() => import("@/pages/Patrimonio"));
-const PreviewValidation = lazy(() => import("@/pages/PreviewValidation"));
-const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
-const Login = lazy(() => import("@/pages/Login"));
-const Register = lazy(() => import("@/pages/Register"));
-const InsightDetail = lazy(() => import("@/pages/InsightDetail"));
-const SettingsHub = lazy(() => import("@/pages/SettingsHub").then(module => ({ default: module.SettingsHub })));
+const DashboardEntry = lazyRetry(() => import("@/pages/DashboardEntry"));
+const Transactions = lazyRetry(() => import("@/pages/Transactions"));
+const Accounts = lazyRetry(() => import("@/pages/Accounts"));
+const Categories = lazyRetry(() => import("@/pages/Categories"));
+const Settings = lazyRetry(() => import("@/pages/Settings"));
+const SettingsIntegrations = lazyRetry(() => import("@/pages/SettingsIntegrations"));
+const ChartSettings = lazyRetry(() => import("@/pages/ChartSettings"));
+const Budget = lazyRetry(() => import("@/pages/Budget"));
+const BudgetSettings = lazyRetry(() => import("@/pages/BudgetSettings"));
+const FinanceHistory = lazyRetry(() => import("@/pages/FinanceHistory"));
+const Subscriptions = lazyRetry(() => import("@/pages/Subscriptions"));
+const CardInvoice = lazyRetry(() => import("@/pages/CardInvoice"));
+const Radar = lazyRetry(() => import("@/pages/Radar"));
+const RadarDetail = lazyRetry(() => import("@/pages/RadarDetail"));
+const Onboarding = lazyRetry(() => import("@/pages/Onboarding"));
+const Analysis = lazyRetry(() => import("@/pages/Analysis"));
+const Patrimonio = lazyRetry(() => import("@/pages/Patrimonio"));
+const PreviewValidation = lazyRetry(() => import("@/pages/PreviewValidation"));
+const SmartRegister = lazyRetry(() => import("@/pages/SmartRegister"));
+const Login = lazyRetry(() => import("@/pages/Login"));
+const Register = lazyRetry(() => import("@/pages/Register"));
+const InsightDetail = lazyRetry(() => import("@/pages/InsightDetail"));
+const SettingsHub = lazyRetry(() => import("@/pages/SettingsHub").then(module => ({ default: module.SettingsHub })));
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 /** Only for the very first chunk; inside the app shell pages use their own skeleton. */
@@ -85,7 +87,7 @@ function CategoryRedirect() {
 
 export default function App() {
   return (
-    <>
+    <AppErrorBoundary>
       <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -132,6 +134,6 @@ export default function App() {
       {/* bottom-center keeps toasts clear of the right-side FAB/Finn cluster, which they
           would otherwise cover and swallow clicks on */}
       <Toaster richColors position="bottom-center" offset={{ bottom: "5.5rem" }} />
-    </>
+    </AppErrorBoundary>
   );
 }

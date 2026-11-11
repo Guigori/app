@@ -1,11 +1,12 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { lazyRetry } from "@/lib/lazyRetry";
 import { AnimatePresence, motion } from "motion/react";
 import { RegisterFab } from "@/components/layout/RegisterFab";
 import { toast } from "sonner";
 import { onRegisterSheet, type RegisterSheetRequest } from "@/lib/registerSheet";
 import { DiscardRegisterDialog } from "@/components/layout/DiscardRegisterDialog";
 import type { RegisterController } from "@/pages/SmartRegister";
-const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
+const SmartRegister = lazyRetry(() => import("@/pages/SmartRegister"));
 
 /** Desktop "+": opens the register in a drawer on the right (no on-screen keypad; the keyboard types the amount).
  *  On mobile the central button in the bottom bar owns it. Same ✕ / ✓ states and discard question as there. */
