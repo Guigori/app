@@ -110,11 +110,11 @@ def test_authenticated_route_limits_import_and_is_read_only(monkeypatch):
     assert all(query == {"user_id": "account-A"} for _, query in calls)
 
 
-def test_vercel_has_no_unimplemented_dispatch_cron_and_exposes_reconciliation():
+def test_vercel_has_only_the_approved_daily_dispatch_cron_and_exposes_reconciliation():
+    # Approved by the owner on 2026-11-11: one daily push dispatch (vencimentos + Descobertas), nothing else.
     path = Path(__file__).resolve().parents[2] / "vercel.json"
     config = json.loads(path.read_text(encoding="utf-8"))
-    assert config.get("crons") == []
-    assert not any("/api/push/dispatch" in str(c) for c in config.get("crons", []))
+    assert config.get("crons") == [{"path": "/api/push/dispatch?daily=1", "schedule": "0 12 * * *"}]
     assert "reconciliation/preview" in config["routes"][0]["src"]
 
 

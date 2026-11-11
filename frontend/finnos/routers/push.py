@@ -147,7 +147,7 @@ async def send_test_push(user: dict = Depends(require_user)):
     return {"sent": count}
 
 
-def _dispatch_window(prefs: dict, hour: int) -> int | None:
+def _dispatch_window(prefs: dict, hour: int, any_hour: bool = False) -> int | None:
     """Only send during the hour explicitly chosen by this user (São Paulo time).
 
     A zero-day preference means due today, plus overdue items already surfaced
@@ -155,7 +155,9 @@ def _dispatch_window(prefs: dict, hour: int) -> int | None:
     """
     if not prefs.get("push_enabled", True):
         return None
-    if int(prefs.get("hour", 9)) != hour:
+    # The daily run (one a day, the only kind the Hobby plan allows) sends to everyone at once;
+    # an hourly run sends only in the hour each person chose.
+    if not any_hour and int(prefs.get("hour", 9)) != hour:
         return None
     return max(0, min(7, int(prefs.get("days_before", 1))))
 
@@ -169,6 +171,7 @@ def _dispatch_kind_allowed(kind: str, prefs: dict) -> bool:
 @router.get("/dispatch")
 async def dispatch_push(
     authorization: str | None = Header(default=None),
+    daily: int = Query(default=0, ge=0, le=1),
 ):
     """Daily, admin-only, bounded dispatcher.
 
@@ -208,7 +211,7 @@ async def dispatch_push(
                 "user_id": uid, "id": "prefs",
             })
             settings = {**NotifyPrefsIn().model_dump(), **(prefs or {})}
-            window = _dispatch_window(settings, local_hour)
+            window = _dispatch_window(settings, local_hour, any_hour=bool(daily))
             if window is None:
                 continue
             reminder = await notifications(window_days=window, user={"id": uid})
@@ -246,6 +249,34 @@ async def dispatch_push(
                     failures += 1
                     await run_in_threadpool(lambda: ref.update({"state": "failed"}))
                     # Never disclose tokens or endpoints via logs/response.
+            # Descobertas FINNOS that turned red: sent once per situation (the id changes when it changes),
+            # not every day, so a red month does not become a daily alarm.
+            if settings.get("insight_alerts", True):
+                try:
+                    from finnos.lib.server_discoveries import critical
+                    found = await critical(uid)
+                except Exception:
+                    found = []
+                for item in found:
+                    fingerprint = sha256((uid + "\0" + subscription["endpoint"] + "\0" + item["id"]).encode()).hexdigest()
+                    ref = store.client().collection("finnos_push_dispatch_receipts").document(fingerprint)
+
+                    def claim_once():
+                        from google.api_core.exceptions import AlreadyExists
+                        try:
+                            ref.create({"uid": uid, "notification_id": item["id"], "date": today_iso(), "state": "claimed"})
+                            return True
+                        except AlreadyExists:
+                            return False
+                    if not await run_in_threadpool(claim_once):
+                        continue
+                    try:
+                        await run_in_threadpool(send, subscription, {"title": item["title"], "body": item["body"], "url": item["url"]})
+                        await run_in_threadpool(lambda: ref.update({"state": "sent"}))
+                        sent += 1
+                    except Exception:
+                        failures += 1
+                        await run_in_threadpool(lambda: ref.update({"state": "failed"}))
         finally:
             active_uid.reset(token)
     return {"sent": sent, "failed": failures, "processed_devices": len(registrations_list)}
