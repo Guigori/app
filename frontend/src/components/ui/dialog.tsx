@@ -73,7 +73,7 @@ function DialogContent({
           >
             <XIcon
             />
-            <span className="sr-only">Fechar</span>
+            <span className="sr-only">Fechar janela</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
