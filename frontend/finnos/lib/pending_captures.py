@@ -39,7 +39,26 @@ def find_wallet(text: str | None, items: list[dict]) -> dict | None:
     if exact:
         return exact[0]
     partial = [i for i in items if wanted in normalize(i.get("name", "")) or normalize(i.get("name", "")) in wanted]
-    return partial[0] if len(partial) == 1 else None
+    if len(partial) == 1:
+        return partial[0]
+    if partial:
+        return None
+    # Words in common: the phone says "Pluxee Refeição", the person registered "VR Refeição" or
+    # "Refeição Pluxee". The single wallet sharing the most meaningful words wins; a tie is "not found".
+    words = _words(wanted)
+    if not words:
+        return None
+    scored = sorted(((len(words & _words(normalize(i.get("name", "")))), i) for i in items), key=lambda x: -x[0])
+    best = [i for n, i in scored if n and n == scored[0][0]]
+    return best[0] if len(best) == 1 else None
+
+
+# Words that say nothing about which wallet it is.
+_GENERIC = {"cartao", "cartoes", "card", "conta", "credito", "debito", "de", "do", "da", "dos", "das", "e", "the", "visa", "master", "mastercard", "elo"}
+
+
+def _words(text: str) -> set[str]:
+    return {w for w in "".join(c if c.isalnum() else " " for c in text).split() if len(w) >= 3 and w not in _GENERIC}
 
 
 def identify_source(text: str | None, accounts: list[dict], cards: list[dict]) -> dict:

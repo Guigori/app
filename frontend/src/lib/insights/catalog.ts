@@ -4,7 +4,8 @@
  * summary). One component (CatalogInsight) draws every reading in the P/M/G sizes and on the analysis page, always
  * with the Gráficos FINNOS.
  */
-import type { CategorySlice, CreditCard, Account, Dashboard, Flow, Subscriptions, Transaction, BalanceHistory } from "@/types/finnos";
+import type { CategorySlice, CreditCard, Account, Dashboard, Flow, Subscriptions, Transaction, BalanceHistory, BudgetSummary, BudgetCycle, BudgetCycleProgress, BudgetSuggestion, Category } from "@/types/finnos";
+import { MORE_READERS } from "@/lib/insights/catalog2";
 import type { Finding } from "@/lib/insights/invoices";
 import type { Comparison } from "@/lib/insights/compare";
 import { compare, shortMonthName } from "@/lib/insights/compare";
@@ -14,7 +15,7 @@ import { fluxoSubscriptions } from "@/lib/subscriptionsView";
 import { installmentPlans } from "@/lib/insights/installments";
 import { lastMonths } from "@/lib/insights/habits";
 
-export type Need = "tx" | "prevTx" | "allTx" | "dashboard" | "prevDashboard" | "subs" | "cards" | "accounts" | "flow" | "prevHistory";
+export type Need = "tx" | "prevTx" | "allTx" | "dashboard" | "prevDashboard" | "subs" | "cards" | "accounts" | "flow" | "prevHistory" | "history" | "budget" | "cycle" | "suggestion" | "categories";
 
 export interface Ctx {
   today: string;
@@ -31,6 +32,11 @@ export interface Ctx {
   accounts: Account[];
   flow: Flow | null;
   prevHistory: BalanceHistory | null;
+  history: BalanceHistory | null;
+  budget: BudgetSummary | null;
+  cycle: { cycle: BudgetCycle; progress: BudgetCycleProgress | null } | null;
+  suggestion: BudgetSuggestion | null;
+  categories: Category[];
 }
 
 export interface BarItem { label: string; value: number; focus?: boolean; future?: boolean; valueLabel?: string }
@@ -554,6 +560,9 @@ export const READERS: Record<string, { needs: Need[]; read: (c: Ctx) => Reading 
     },
   },
 };
+
+// The second batch (Meu orçamento and fifteen more) lives in catalog2.ts.
+Object.assign(READERS, MORE_READERS);
 
 export type CatalogId = keyof typeof READERS;
 /** Used by tests and by the analysis page: the category slices of a dashboard, for categoryChanges. */

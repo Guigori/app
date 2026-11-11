@@ -10,8 +10,10 @@ import { useCards } from "@/components/insights/useInsightData";
 
 const PREVIEW_H: Record<WidgetSize, string> = { S: "h-[11rem] w-[54%]", M: "h-[11rem] w-full", L: "h-[23rem] w-full", XL: "h-[23rem] w-full" };
 
-export function WidgetGallery({ open, onClose, onAdd }: { open: boolean; onClose: () => void; onAdd: (id: string, size: WidgetSize, config?: WidgetConfig) => void }) {
+export function WidgetGallery({ open, onClose, onAdd, placedIds = [] }: { open: boolean; onClose: () => void; onAdd: (id: string, size: WidgetSize, config?: WidgetConfig) => void; placedIds?: string[] }) {
   const [query, setQuery] = useState("");
+  // Theme filter: "todas", "novas" (the newest analyses) or one theme of the library.
+  const [theme, setTheme] = useState<string>("todas");
   const [picked, setPicked] = useState<InsightDef | null>(null);
   const cards = useCards();
   const hasCards = Boolean(cards.data?.some((c) => c.active));
@@ -19,7 +21,13 @@ export function WidgetGallery({ open, onClose, onAdd }: { open: boolean; onClose
     const q = query.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
     return INSIGHTS.filter((d) => (d.requires !== "cards" || hasCards) && (!q || `${d.title} ${d.description} ${d.theme}`.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().includes(q)));
   }, [query, hasCards]);
-  const close = () => { setPicked(null); setQuery(""); onClose(); };
+  const shown = list.filter((d) => theme === "todas" || (theme === "novas" ? d.star : d.theme === theme));
+  const chips = [
+    { key: "todas", label: "Todas", count: list.length },
+    { key: "novas", label: "Novas", count: list.filter((d) => d.star).length },
+    ...THEMES.map((t) => ({ key: t, label: t, count: list.filter((d) => d.theme === t).length })),
+  ].filter((c) => c.count > 0 || c.key === "todas");
+  const close = () => { setPicked(null); setQuery(""); setTheme("todas"); onClose(); };
   // The page behind stays still while the gallery scrolls.
   useEffect(() => {
     if (!open) return;
@@ -38,26 +46,42 @@ export function WidgetGallery({ open, onClose, onAdd }: { open: boolean; onClose
             <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-muted" aria-hidden="true" />
             {picked ? <Detail def={picked} onBack={() => setPicked(null)} onAdd={(size, config) => { onAdd(picked.id, size, config); close(); }} /> : (
               <div className="flex min-h-0 flex-col">
-                <div className="flex items-center gap-2 px-4 pt-3">
+                <div className="flex items-center gap-3 px-4 pt-3">
                   <button type="button" onClick={close} aria-label="Fechar" className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card"><X className="size-5" /></button>
-                  <label className="flex h-11 flex-1 items-center gap-2 rounded-full bg-muted px-4">
-                    <Search className="size-4 text-muted-foreground" aria-hidden="true" />
-                    <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar análises" className="min-w-0 flex-1 bg-transparent text-sm outline-none" aria-label="Buscar análises" data-testid="widget-gallery-search" />
+                  <div className="min-w-0 flex-1">
+                    <h2 className="font-heading text-lg font-bold leading-tight">Adicionar análise</h2>
+                    <p className="text-xs text-muted-foreground">{INSIGHTS.length} análises na biblioteca</p>
+                  </div>
+                </div>
+                {/* Search and themes stay on top while the list scrolls. */}
+                <div className="space-y-2.5 border-b border-border/70 px-4 pb-3 pt-3">
+                  <label className="flex h-12 items-center gap-2 rounded-2xl border border-border bg-card px-4 focus-within:border-primary">
+                    <Search className="size-4.5 text-primary" aria-hidden="true" />
+                    <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar: fatura, metas, gastos…" className="min-w-0 flex-1 bg-transparent text-[15px] outline-none" aria-label="Buscar análises" data-testid="widget-gallery-search" />
+                    {query ? <button type="button" onClick={() => setQuery("")} aria-label="Limpar busca" className="grid size-6 place-items-center rounded-full bg-muted"><X className="size-3.5" /></button> : null}
                   </label>
+                  <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Temas" data-testid="widget-gallery-themes">
+                    {chips.map((c) => (
+                      <button key={c.key} type="button" role="tab" aria-selected={theme === c.key} onClick={() => setTheme(c.key)}
+                        className={cn("flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors", theme === c.key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground")}>
+                        {c.label}<span className={cn("text-xs tabular-nums", theme === c.key ? "text-primary-foreground/80" : "text-muted-foreground")}>{c.count}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-8 pt-3">
-                  {THEMES.map((theme) => {
-                    const items = list.filter((d) => d.theme === theme);
+                  {THEMES.map((group) => {
+                    const items = shown.filter((d) => d.theme === group);
                     if (!items.length) return null;
                     return (
-                      <section key={theme} className="mb-4">
-                        <h3 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{theme}</h3>
+                      <section key={group} className="mb-4">
+                        <h3 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{group} · {items.length}</h3>
                         <ul className="space-y-2">
                           {items.map((d) => (
                             <li key={d.id}>
                               <button type="button" onClick={() => setPicked(d)} className="flex w-full items-center gap-3 rounded-3xl border border-border/80 bg-card p-4 text-left shadow-sm hover:bg-muted/50" data-testid={`widget-gallery-item-${d.id}`}>
                                 <span className="min-w-0 flex-1">
-                                  <span className="flex items-center gap-2 font-semibold">{d.title}{d.star ? <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">Novo</span> : null}</span>
+                                  <span className="flex flex-wrap items-center gap-2 font-semibold">{d.title}{d.star ? <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">Novo</span> : null}{placedIds.includes(d.id) ? <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">No painel</span> : null}</span>
                                   <span className="mt-0.5 block text-xs text-muted-foreground">{d.description}</span>
                                 </span>
                                 <span className="flex shrink-0 gap-1">{d.sizes.map((s) => <span key={s} className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">{s === "S" ? "P" : s === "M" ? "M" : "G"}</span>)}</span>
@@ -68,7 +92,7 @@ export function WidgetGallery({ open, onClose, onAdd }: { open: boolean; onClose
                       </section>
                     );
                   })}
-                  {!list.length ? <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma análise com esse nome.</p> : null}
+                  {!shown.length ? <p className="py-6 text-center text-sm text-muted-foreground">{query ? "Nenhuma análise com esse nome." : "Nenhuma análise neste tema."}</p> : null}
                 </div>
               </div>
             )}

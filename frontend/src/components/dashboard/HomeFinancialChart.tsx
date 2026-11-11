@@ -1,3 +1,4 @@
+import { ChartReveal, SeriesChip, finnosAnimation, finnosAxisTick, finnosBar, finnosEstimate, finnosGrid, finnosReal, finnosTooltip } from "@/components/charts/rechartsFinnos";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -36,13 +37,13 @@ interface HomeFinancialChartProps {
 }
 
 const METRIC_UI = {
-  Receitas: { icon: ArrowDownLeft, color: "var(--income)", soft: "bg-emerald-500/10 text-emerald-400" },
-  Despesas: { icon: ArrowUpRight, color: "var(--expense)", soft: "bg-rose-500/10 text-rose-400" },
-  Resultado: { icon: Equal, color: "var(--finnos-purple)", soft: "bg-violet-500/10 text-violet-400" },
+  Receitas: { icon: ArrowDownLeft, color: "var(--income)", soft: "bg-income/10 text-income" },
+  Despesas: { icon: ArrowUpRight, color: "var(--expense)", soft: "bg-expense/10 text-expense" },
+  Resultado: { icon: Equal, color: "var(--finnos-purple)", soft: "bg-primary/10 text-primary" },
 } as const;
 
 const PROJECTION_UI: Record<ProjectionKey, { label: string; color: string }> = {
-  balance: { label: "Saldo", color: "var(--finnos-purple-live)" },
+  balance: { label: "Saldo", color: "var(--finnos-purple)" },
   income: { label: "Receitas", color: "var(--income)" },
   expense: { label: "Despesas", color: "var(--expense)" },
 };
@@ -161,10 +162,7 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
   const metricVisible = (name: "Receitas" | "Despesas" | "Resultado") => selectedMetrics.length === 0 || selectedMetrics.includes(name);
   const toggleMetric = (name: "Receitas" | "Despesas" | "Resultado") => setSelectedMetricsValue(selectedMetrics.includes(name) ? selectedMetrics.filter((x) => x !== name) : [...selectedMetrics, name]);
 
-  const tooltipStyle = {
-    background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 16,
-    color: "var(--popover-foreground)", boxShadow: "0 16px 40px rgba(0,0,0,.18)", fontSize: 12,
-  };
+  const tooltipStyle = finnosTooltip.contentStyle;
   const isLoading = daily ? calendarQuery.isPending || (view === "projection" && historyQuery.isPending) : trendsQuery.isPending;
   const periodLabel = menuInterval;
 
@@ -204,9 +202,9 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
       {view === "cards" ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
-            { name: "Receitas", value: periodSummary.income, icon: ArrowDownLeft, tone: "text-emerald-600 bg-emerald-500/10" },
-            { name: "Despesas", value: periodSummary.expense, icon: ArrowUpRight, tone: "text-rose-600 bg-rose-500/10" },
-            { name: "Resultado", value: periodSummary.result, icon: Equal, tone: "text-indigo-600 bg-indigo-500/10" },
+            { name: "Receitas", value: periodSummary.income, icon: ArrowDownLeft, tone: "text-income bg-income/10" },
+            { name: "Despesas", value: periodSummary.expense, icon: ArrowUpRight, tone: "text-expense bg-expense/10" },
+            { name: "Resultado", value: periodSummary.result, icon: Equal, tone: "text-primary bg-primary/10" },
           ].map((item) => (
             <button key={item.name} type="button" onClick={() => onOpenMetric(item.name === "Receitas" ? "income" : item.name === "Despesas" ? "expense" : "balance")} className="flex min-w-0 items-center gap-3 rounded-2xl border border-border/70 bg-card/70 p-4 text-left shadow-sm transition hover:bg-muted/40">
               <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.tone}`}><item.icon className="h-5 w-5" /></span>
@@ -234,40 +232,32 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
             <span className="text-xs font-medium text-muted-foreground">{monthLabel(projectionMonth)}</span>
             <button type="button" onClick={() => shiftProjectionMonth(1)} className="rounded-full px-2 py-1 text-lg text-muted-foreground" aria-label="Próximo mês">›</button>
           </div>
-          <div className="h-[280px] w-full sm:h-[320px]">
+          <ChartReveal className="h-[280px] w-full sm:h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsLineChart data={projectionData} margin={{ top: 16, right: 12, left: -8, bottom: 0 }}>
                 <defs>
                   <linearGradient id="finnosForecastSmoke" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={projectionColor} stopOpacity={0.24} />
-                    <stop offset="48%" stopColor={projectionColor} stopOpacity={0.11} />
-                    <stop offset="100%" stopColor={projectionColor} stopOpacity={0.015} />
+                    <stop offset="0%" stopColor={projectionColor} stopOpacity={0.14} />
+                    <stop offset="100%" stopColor={projectionColor} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.36} strokeDasharray="4 6" />
-                <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: "var(--border)" }} minTickGap={42} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-                <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
+                <CartesianGrid {...finnosGrid} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={42} tick={finnosAxisTick} />
+                <YAxis tickLine={false} axisLine={false} width={62} tick={finnosAxisTick} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
                 <Tooltip active defaultIndex={projectionTooltipIndex} content={projectionTooltip} cursor={{ stroke: "var(--muted-foreground)", strokeOpacity: 0.5 }} />
-                {projectionSeries.length === 1 ? <Area type="monotone" dataKey={`${projectionSeries[0]}Forecast`} stroke="none" fill="url(#finnosForecastSmoke)" connectNulls={false} tooltipType="none" activeDot={false} /> : null}
+                {projectionSeries.length === 1 ? <Area type="monotone" dataKey={`${projectionSeries[0]}Actual`} stroke="none" fill="url(#finnosForecastSmoke)" connectNulls={false} tooltipType="none" activeDot={false} {...finnosAnimation} /> : null}
                 {projectionSeries.flatMap((key) => [
-                  <Line key={`${key}a`} type="monotone" dataKey={`${key}Actual`} stroke={PROJECTION_UI[key].color} strokeWidth={3.25} dot={false} activeDot={{ r: 5, fill: PROJECTION_UI[key].color, stroke: "var(--background)", strokeWidth: 2 }} connectNulls={false} />,
-                  <Line key={`${key}f`} type="monotone" dataKey={`${key}Forecast`} stroke={PROJECTION_UI[key].color} strokeOpacity={0.78} strokeWidth={2.75} strokeDasharray="8 7" dot={false} activeDot={{ r: 5, fill: "var(--background)", stroke: PROJECTION_UI[key].color, strokeWidth: 3 }} connectNulls={false} />,
+                  <Line key={`${key}a`} type="monotone" dataKey={`${key}Actual`} {...finnosReal(PROJECTION_UI[key].color)} connectNulls={false} {...finnosAnimation} />,
+                  <Line key={`${key}f`} type="monotone" dataKey={`${key}Forecast`} {...finnosEstimate(PROJECTION_UI[key].color)} connectNulls={false} {...finnosAnimation} animationBegin={500} />,
                 ])}
               </RechartsLineChart>
             </ResponsiveContainer>
-          </div>
+          </ChartReveal>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs">
-            {PROJECTION_KEYS.map((key) => {
-              const on = projectionSeries.includes(key);
-              return (
-                <button key={key} type="button" onClick={() => toggleProjection(key)} aria-pressed={on} data-testid={`home-chart-series-${key}`}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-medium transition-colors ${on ? "border-transparent bg-card text-foreground shadow-sm ring-2" : "border-border bg-card text-muted-foreground"}`}
-                  style={on ? { ["--tw-ring-color" as string]: PROJECTION_UI[key].color } : undefined}>
-                  <span className="size-2 rounded-full" style={{ backgroundColor: PROJECTION_UI[key].color }} aria-hidden="true" />{PROJECTION_UI[key].label}
-                </button>
-              );
-            })}
-            <span className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-muted-foreground"><span className="h-0 w-5 border-t-2 border-dashed" style={{ borderColor: projectionColor }} />Estimativa</span>
+            {PROJECTION_KEYS.map((key) => (
+              <SeriesChip key={key} on={projectionSeries.includes(key)} color={PROJECTION_UI[key].color} label={PROJECTION_UI[key].label} onClick={() => toggleProjection(key)} testId={`home-chart-series-${key}`} />
+            ))}
+            <span className="flex items-center gap-1.5 px-1.5 py-1.5 text-muted-foreground"><span className="h-0 w-4 border-t-2 border-dashed" style={{ borderColor: projectionColor }} />Estimativa</span>
           </div>
           <p className="mt-2 hidden text-center text-xs text-muted-foreground sm:block">Arraste para os lados para mudar de mês.</p>
         </div>
@@ -304,61 +294,61 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
         </div>
       ) : (
         <div ref={chartScrollerRef} className="w-full overflow-x-auto pb-1 [scrollbar-width:none]">
-          <div className={`h-[280px] sm:h-[310px] ${view === "bars" && daily ? "min-w-[720px]" : "min-w-0 w-full"}`}>
+          <ChartReveal className={`h-[280px] sm:h-[310px] ${view === "bars" && daily ? "min-w-[720px]" : "min-w-0 w-full"}`}>
           <ResponsiveContainer width="100%" height="100%">
             {view === "bars" ? (
               <BarChart data={chartData} margin={{ top: 12, right: 8, left: -8, bottom: 0 }} barGap={3}>
-                <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={daily ? 18 : 8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-                <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
+                <CartesianGrid {...finnosGrid} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={daily ? 18 : 8} tick={finnosAxisTick} />
+                <YAxis tickLine={false} axisLine={false} width={62} tick={finnosAxisTick} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
                 <Tooltip
                   active
                   defaultIndex={defaultTooltipIndex}
                   cursor={{ fill: "var(--muted)", opacity: 0.25 }}
-                  contentStyle={tooltipStyle}
+                  {...finnosTooltip}
                   formatter={(value: number) => money(value)}
                   labelFormatter={(label) => daily ? `Dia ${label}` : String(label)}
                 />
-                {showIncome && metricVisible("Receitas") && <Bar dataKey="Receitas" onClick={() => toggleMetric("Receitas")} className="cursor-pointer" fill={METRIC_UI.Receitas.color} radius={[6, 6, 0, 0]} maxBarSize={22} />}
-                {showExpense && metricVisible("Despesas") && <Bar dataKey="Despesas" onClick={() => toggleMetric("Despesas")} className="cursor-pointer" fill={METRIC_UI.Despesas.color} radius={[6, 6, 0, 0]} maxBarSize={22} />}
-                {showResult && metricVisible("Resultado") && <Bar dataKey="Resultado" onClick={() => toggleMetric("Resultado")} className="cursor-pointer" fill={METRIC_UI.Resultado.color} radius={[6, 6, 0, 0]} maxBarSize={22} />}
+                {showIncome && metricVisible("Receitas") && <Bar dataKey="Receitas" onClick={() => toggleMetric("Receitas")} className="cursor-pointer" fill={METRIC_UI.Receitas.color} {...finnosBar} {...finnosAnimation} />}
+                {showExpense && metricVisible("Despesas") && <Bar dataKey="Despesas" onClick={() => toggleMetric("Despesas")} className="cursor-pointer" fill={METRIC_UI.Despesas.color} {...finnosBar} {...finnosAnimation} />}
+                {showResult && metricVisible("Resultado") && <Bar dataKey="Resultado" onClick={() => toggleMetric("Resultado")} className="cursor-pointer" fill={METRIC_UI.Resultado.color} {...finnosBar} {...finnosAnimation} />}
               </BarChart>
             ) : (
               <AreaChart data={chartData} margin={{ top: 12, right: 8, left: -8, bottom: 0 }}>
                 <defs>
                   <linearGradient id="finnosResultFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.2} />
+                    <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.14} />
                     <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.01} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.5} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={daily ? 18 : 8} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-                <YAxis tickLine={false} axisLine={false} width={62} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
+                <CartesianGrid {...finnosGrid} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={daily ? 18 : 8} tick={finnosAxisTick} />
+                <YAxis tickLine={false} axisLine={false} width={62} tick={finnosAxisTick} tickFormatter={(v) => hidden ? "•••" : `R$ ${Math.round(Number(v) / 1000)}k`} />
                 <Tooltip
                   active
                   defaultIndex={defaultTooltipIndex}
-                  contentStyle={tooltipStyle}
+                  {...finnosTooltip}
                   formatter={(value: number) => money(value)}
                   labelFormatter={(label) => daily ? `Dia ${label}` : String(label)}
                 />
-                {showResult && metricVisible("Resultado") && <Area type="monotone" dataKey="Resultado" onClick={() => toggleMetric("Resultado")} className="cursor-pointer" stroke={METRIC_UI.Resultado.color} strokeWidth={3} fill="url(#finnosResultFill)" activeDot={{ r: 5 }} />}
-                {showIncome && metricVisible("Receitas") && <Area type="monotone" dataKey="Receitas" onClick={() => toggleMetric("Receitas")} className="cursor-pointer" stroke={METRIC_UI.Receitas.color} strokeWidth={2.25} fill="transparent" activeDot={{ r: 4 }} />}
-                {showExpense && metricVisible("Despesas") && <Area type="monotone" dataKey="Despesas" onClick={() => toggleMetric("Despesas")} className="cursor-pointer" stroke={METRIC_UI.Despesas.color} strokeWidth={2.25} fill="transparent" activeDot={{ r: 4 }} />}
+                {showResult && metricVisible("Resultado") && <Area type="monotone" dataKey="Resultado" onClick={() => toggleMetric("Resultado")} className="cursor-pointer" {...finnosReal(METRIC_UI.Resultado.color)} fill="url(#finnosResultFill)" {...finnosAnimation} />}
+                {showIncome && metricVisible("Receitas") && <Area type="monotone" dataKey="Receitas" onClick={() => toggleMetric("Receitas")} className="cursor-pointer" {...finnosReal(METRIC_UI.Receitas.color)} fill="transparent" {...finnosAnimation} />}
+                {showExpense && metricVisible("Despesas") && <Area type="monotone" dataKey="Despesas" onClick={() => toggleMetric("Despesas")} className="cursor-pointer" {...finnosReal(METRIC_UI.Despesas.color)} fill="transparent" {...finnosAnimation} />}
               </AreaChart>
             )}
           </ResponsiveContainer>
-          </div>
+          </ChartReveal>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs" role="group" aria-label="Filtrar série do gráfico">
             <button
               type="button"
               onClick={() => setSelectedMetricsValue([])}
-              className={`rounded-full border px-3 py-1.5 font-medium transition-colors ${selectedMetrics.length === 0 ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"}`}
+              className={`rounded-full border px-3 py-1.5 font-medium transition-colors ${selectedMetrics.length === 0 ? "border-border bg-muted text-foreground" : "border-border/60 text-muted-foreground"}`}
             >
               Todos
             </button>
-            {showExpense && <button type="button" onClick={() => toggleMetric("Despesas")} aria-pressed={selectedMetrics.includes("Despesas")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium transition-colors ${selectedMetrics.includes("Despesas") ? "border-rose-400 bg-rose-500/10 text-rose-600" : "border-border text-muted-foreground"}`}><span className="flex h-5 w-5 items-center justify-center rounded-lg bg-rose-500/10"><ArrowUpRight className="h-3.5 w-3.5 text-rose-400" /></span>Despesas</button>}
-            {showIncome && <button type="button" onClick={() => toggleMetric("Receitas")} aria-pressed={selectedMetrics.includes("Receitas")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium transition-colors ${selectedMetrics.includes("Receitas") ? "border-emerald-400 bg-emerald-500/10 text-emerald-600" : "border-border text-muted-foreground"}`}><span className="flex h-5 w-5 items-center justify-center rounded-lg bg-emerald-500/10"><ArrowDownLeft className="h-3.5 w-3.5 text-emerald-400" /></span>Receitas</button>}
-            {showResult && <button type="button" onClick={() => toggleMetric("Resultado")} aria-pressed={selectedMetrics.includes("Resultado")} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 font-medium transition-colors ${selectedMetrics.includes("Resultado") ? "border-violet-400 bg-violet-500/10 text-violet-600" : "border-border text-muted-foreground"}`}><span className="flex h-5 w-5 items-center justify-center rounded-lg bg-violet-500/10"><Equal className="h-3.5 w-3.5 text-violet-400" /></span>Resultado</button>}
+            {showExpense && <SeriesChip on={selectedMetrics.includes("Despesas")} color={METRIC_UI.Despesas.color} label="Despesas" onClick={() => toggleMetric("Despesas")} />}
+            {showIncome && <SeriesChip on={selectedMetrics.includes("Receitas")} color={METRIC_UI.Receitas.color} label="Receitas" onClick={() => toggleMetric("Receitas")} />}
+            {showResult && <SeriesChip on={selectedMetrics.includes("Resultado")} color={METRIC_UI.Resultado.color} label="Resultado" onClick={() => toggleMetric("Resultado")} />}
           </div>
         </div>
       )}

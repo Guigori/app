@@ -4,7 +4,7 @@ import type { Ctx } from "@/lib/insights/catalog";
 import type { Transaction } from "@/types/finnos";
 
 const tx = (o: Partial<Transaction>): Transaction => ({ id: Math.random().toString(), name: "X", value: 10, type: "despesa", status: "pago", date: "2026-11-05", account_id: "a", account_name: "Conta", card_id: null, card_name: null, to_account_id: null, to_account_name: null, category_id: "c", category_name: "Mercado", category_color: "#000", category_icon: null, fixed: false, recurrence: null, installment: false, total_installments: null, current_installment: null, installment_value: null, adjusted_value: null, attachment: null, notes: null, created_at: "", ...o });
-const base: Ctx = { today: "2026-11-11", month: "2026-11", prevMonth: "2026-10", money: (v) => `R$ ${v.toFixed(2)}`, tx: [], prevTx: [], allTx: [], dashboard: null, prevDashboard: null, subs: null, cards: [], accounts: [], flow: null, prevHistory: null };
+const base: Ctx = { today: "2026-11-11", month: "2026-11", prevMonth: "2026-10", money: (v) => `R$ ${v.toFixed(2)}`, tx: [], prevTx: [], allTx: [], dashboard: null, prevDashboard: null, subs: null, cards: [], accounts: [], flow: null, prevHistory: null, history: null, budget: null, cycle: null, suggestion: null, categories: [] };
 
 describe("discoveries", () => {
   it("puts what is late first and keeps the analysis it came from", () => {

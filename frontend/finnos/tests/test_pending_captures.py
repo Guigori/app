@@ -639,3 +639,19 @@ def test_the_fields_the_automation_guide_tells_people_to_send_are_the_ones_the_s
     sent = re.findall(r'key: "(\w+)"', guide)
     assert sent == ["valor", "descricao", "carteira"]
     assert set(sent) <= set(shortcuts.PendenteIn.model_fields)
+
+
+def test_benefit_card_matches_by_words_in_common():
+    from finnos.lib.pending_captures import find_wallet
+    accounts = [{"id": "a1", "name": "Nubank"}, {"id": "a2", "name": "VR Refeição"}, {"id": "a3", "name": "Alelo Alimentação"}]
+    assert find_wallet("Pluxee Refeição", accounts)["id"] == "a2"
+    assert find_wallet("PLUXEE REFEICAO", accounts)["id"] == "a2"
+    # Only generic words in common: never guessed.
+    assert find_wallet("Cartão de Crédito", accounts) is None
+
+
+def test_words_in_common_tie_is_not_a_guess():
+    from finnos.lib.pending_captures import find_wallet
+    accounts = [{"id": "a1", "name": "Refeição Pluxee"}, {"id": "a2", "name": "Refeição Ticket"}]
+    assert find_wallet("Pluxee Refeição", accounts)["id"] == "a1"
+    assert find_wallet("Refeição", accounts) is None

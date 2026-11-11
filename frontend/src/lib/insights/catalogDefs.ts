@@ -2,9 +2,64 @@
 import type { InsightDef } from "@/lib/insights/registry";
 
 const S_M_L = ["S", "M", "L"] as InsightDef["sizes"];
-const def = (d: Omit<InsightDef, "sizes" | "star"> & { sizes?: InsightDef["sizes"] }): InsightDef => ({ sizes: S_M_L, star: true, ...d });
+// "Novo" in the gallery: only the latest batch.
+const NEWEST = new Set(["analise-do-dia", "meu-orcamento", "fim-de-semana", "recorrentes-escondidos", "aumentos-de-preco", "fora-do-orcamento", "ano-ate-agora", "efeito-salario", "fontes-de-renda", "proximos-30-dias", "parcelas-novas", "acima-do-normal", "onde-economizou", "dinheiro-parado", "dias-no-vermelho", "custo-de-vida", "juros-e-tarifas"]);
+const def = (d: Omit<InsightDef, "sizes" | "star"> & { sizes?: InsightDef["sizes"] }): InsightDef => ({ sizes: S_M_L, star: NEWEST.has(d.id), ...d });
 
 export const CATALOG_DEFS: InsightDef[] = [
+  def({ id: "analise-do-dia", title: "Análise do dia", description: "Todo dia uma análise diferente da biblioteca que não está no seu painel, escolhida pelo que mais merece atenção hoje.", theme: "Alertas", defaultSize: "M", to: () => "/analise", toLabel: "Ver a análise de hoje",
+    // Tapping it opens today's analysis (the one it is showing).
+    canonical: () => { try { const d = JSON.parse(localStorage.getItem("finnos:analise-do-dia") ?? "null"); if (d?.id) return `/analise/painel/${d.id}`; } catch { /* storage unavailable */ } return "/analise"; },
+    how: "Lemos as análises da biblioteca que não estão no Início nem na Análise. As que têm algo pedindo ação (atrasado, acima do limite, piorou muito) vêm primeiro; entre as mais relevantes, a escolha muda a cada dia, para você conhecer o que a biblioteca mostra.",
+    questions: ["Por que esta análise hoje?", "O que eu faço com isso?", "Me mostre outra análise importante"] }),
+  def({ id: "meu-orcamento", title: "Meu orçamento", description: "O seu orçamento no modelo que você usa — personalizado, por categoria ou 50/30/20 — no ritmo do ciclo. Sem orçamento, o FINNOS sugere um.", theme: "Orçamento", defaultSize: "L", to: () => "/orcamento", toLabel: "Ver orçamento",
+    how: "Se você tem um ciclo de orçamento, comparamos o que já foi usado (gasto + comprometido) com quanto do ciclo já passou, por prioridade (essenciais, flexíveis, metas). Se usa limites por categoria, comparamos com o mês. Sem orçamento, mostramos a sugestão pela média dos seus gastos recentes.",
+    questions: ["Meu orçamento está realista?", "Onde ajusto para fechar o ciclo?", "Qual modelo de orçamento combina comigo?"] }),
+  def({ id: "fim-de-semana", title: "Fim de semana x dias úteis", description: "Quanto você gasta por dia no fim de semana contra os dias úteis.", theme: "Gastos", defaultSize: "M", to: () => "/transacoes", toLabel: "Ver no calendário",
+    how: "Somamos os gastos variáveis (sem contas fixas) de sábados e domingos e dos dias úteis do mês até hoje, e dividimos pelo número de dias de cada tipo.",
+    questions: ["Como gastar menos no fim de semana?", "Vale ter um limite para o fim de semana?", "O que mais pesa no sábado?"] }),
+  def({ id: "recorrentes-escondidos", title: "Assinaturas escondidas", description: "Cobranças com o mesmo valor todo mês que não estão marcadas como fixas nem como assinatura.", theme: "Compromissos", defaultSize: "M", to: () => "/assinaturas", toLabel: "Ver assinaturas",
+    how: "Procuramos gastos com o mesmo nome nos últimos 3 meses, com valor quase igual (até 15% de diferença), que não estão marcados como fixos, recorrentes ou assinatura.",
+    questions: ["Devo cancelar algum desses?", "Como marcar como assinatura?", "Quanto isso custa no ano?"] }),
+  def({ id: "aumentos-de-preco", title: "Contas que subiram", description: "Contas fixas e assinaturas cobradas mais caro do que da vez anterior.", theme: "Compromissos", defaultSize: "M", to: () => "/transacoes?fixas=1", toLabel: "Ver contas fixas",
+    how: "Para cada conta fixa ou recorrente paga, comparamos a última cobrança com a anterior.",
+    questions: ["Posso negociar esse aumento?", "Existe opção mais barata?", "Quanto isso pesa no ano?"] }),
+  def({ id: "fora-do-orcamento", title: "Fora do orçamento", description: "O que você gastou em categorias que não têm limite no orçamento.", theme: "Orçamento", defaultSize: "M", to: () => "/orcamento", toLabel: "Ver orçamento",
+    how: "Somamos o gasto do mês nas categorias sem limite definido no Orçamento.",
+    questions: ["Devo criar limite para essas categorias?", "Quanto colocar de limite?", "Por que isso importa?"] }),
+  def({ id: "ano-ate-agora", title: "Seu ano até agora", description: "O que entrou, saiu e sobrou neste ano, e onde o ano termina se continuar assim.", theme: "Renda", defaultSize: "L", to: () => "/transacoes?aba=caixa", toLabel: "Ver no Caixa",
+    how: "Somamos receitas e despesas pagas de janeiro até hoje e comparamos com o mesmo período do ano passado. A estimativa do ano repete a média por mês até dezembro.",
+    questions: ["Como foi meu ano?", "Vou fechar o ano no azul?", "Quanto consigo guardar até dezembro?"] }),
+  def({ id: "efeito-salario", title: "Efeito salário", description: "Quanto do mês vai embora nos 5 dias depois que a renda cai.", theme: "Gastos", defaultSize: "M", to: () => "/transacoes", toLabel: "Ver no calendário",
+    how: "Pegamos a maior receita paga do mês e somamos os gastos variáveis dos 5 dias seguintes, comparando com o total de gastos variáveis do mês.",
+    questions: ["Como não gastar tudo logo que o salário cai?", "Vale separar um valor assim que a renda entra?", "O que mais pesa nesses dias?"] }),
+  def({ id: "fontes-de-renda", title: "Fontes de renda", description: "De onde veio o dinheiro nos últimos 6 meses e o quanto depende de uma fonte só.", theme: "Renda", defaultSize: "M", to: () => "/transacoes?metric=receitas", toLabel: "Ver receitas",
+    how: "Somamos as receitas pagas dos últimos 6 meses agrupadas pelo nome de cada fonte.",
+    questions: ["Como criar outra fonte de renda?", "É arriscado depender de uma renda só?", "Minha renda está crescendo?"] }),
+  def({ id: "proximos-30-dias", title: "Próximos 30 dias", description: "Tudo que já está agendado para sair nos próximos 30 dias, semana a semana.", theme: "Compromissos", defaultSize: "M", to: () => "/transacoes?aba=lista", toLabel: "Ver no Fluxo",
+    how: "Somamos as despesas agendadas ou pendentes (fora do cartão, que vai para a fatura) dos próximos 30 dias, inclusive as do mês que vem.",
+    questions: ["Vou ter dinheiro para tudo?", "Qual semana é mais apertada?", "O que dá para adiar?"] }),
+  def({ id: "parcelas-novas", title: "Parcelas novas do mês", description: "As compras parceladas feitas neste mês e quanto elas já comprometem dos próximos.", theme: "Cartões", defaultSize: "M", to: () => "/contas?aba=cartoes", toLabel: "Ver cartões",
+    how: "Compras parceladas cuja primeira parcela é deste mês: o valor por mês e o total das parcelas que ainda vêm.",
+    questions: ["Estou parcelando demais?", "Posso parcelar mais alguma coisa?", "Quando essas parcelas acabam?"] }),
+  def({ id: "acima-do-normal", title: "Acima do normal", description: "Categorias gastando mais do que costumam, comparando com a mesma altura dos últimos meses.", theme: "Alertas", defaultSize: "M", to: () => "/transacoes?aba=analise", toLabel: "Ver categorias",
+    how: "Para cada categoria, a média dos últimos 3 meses proporcional ao dia de hoje é o “normal”. Aparece quem está pelo menos 20% (e R$ 30) acima disso.",
+    questions: ["Por que essa categoria subiu?", "Como voltar ao normal?", "Isso vai estourar o mês?"] }),
+  def({ id: "onde-economizou", title: "Onde você economizou", description: "As categorias em que o mês passado ficou abaixo da média: o que está funcionando.", theme: "Gastos", defaultSize: "M", to: () => "/transacoes?aba=analise", toLabel: "Ver categorias",
+    how: "Comparamos cada categoria do mês passado com a média dos 3 meses anteriores. Aparece quem ficou pelo menos 15% abaixo.",
+    questions: ["Como manter essa economia?", "Para onde levo o que economizei?", "Onde mais posso economizar?"] }),
+  def({ id: "dinheiro-parado", title: "Dinheiro parado", description: "O que está nas contas além de 6 meses de gastos e poderia estar rendendo.", theme: "Patrimônio", defaultSize: "M", to: () => "/patrimonio", toLabel: "Ver patrimônio",
+    how: "Do saldo positivo das contas (sem benefícios), separamos 6 meses do seu gasto médio como reserva. O que passa disso está parado.",
+    questions: ["Onde deixar esse dinheiro?", "Quanto devo manter na conta corrente?", "Vale investir agora?"] }),
+  def({ id: "dias-no-vermelho", title: "Dias no vermelho", description: "Em quantos dias do mês o saldo das contas fechou negativo, e o ponto mais baixo.", theme: "Alertas", defaultSize: "M", to: () => "/contas", toLabel: "Ver contas",
+    how: "Usamos o saldo das contas no fim de cada dia do mês, como no Saldo total.",
+    questions: ["Como não entrar no cheque especial?", "Quanto custou ficar negativo?", "O que puxou o saldo para baixo?"] }),
+  def({ id: "custo-de-vida", title: "Custo de vida", description: "Quanto custa um mês com o básico: contas fixas e necessidades, em média.", theme: "Orçamento", defaultSize: "M", to: () => "/orcamento", toLabel: "Ver orçamento",
+    how: "Média dos últimos 3 meses das contas fixas e das categorias do grupo Necessidades.",
+    questions: ["Meu custo de vida está alto?", "Como reduzir o básico?", "Quanto preciso de reserva?"] }),
+  def({ id: "juros-e-tarifas", title: "Juros e tarifas", description: "O que foi pago em juros, tarifas, IOF, anuidade e multas nos últimos 12 meses.", theme: "Alertas", defaultSize: "M", to: () => "/transacoes?aba=lista", toLabel: "Ver no Fluxo",
+    how: "Procuramos lançamentos dos últimos 12 meses com juros, tarifa, IOF, anuidade, multa, encargos ou mora no nome ou na categoria.",
+    questions: ["Como zerar essas tarifas?", "Vale negociar a anuidade?", "Quanto isso custa em 5 anos?"] }),
   def({ id: "descobertas", title: "Descobertas FINNOS", description: "O FINNOS escolhe sozinho o que mudou ou chama atenção agora, com um gráfico e uma frase. Deslize para ver as próximas.", theme: "Alertas", defaultSize: "M", to: () => "/analise", toLabel: "Ver todas as análises",
     how: "Lemos todas as análises da biblioteca e damos mais peso ao que pede ação (atrasado, acima do limite, mês no negativo), depois ao que mudou muito em relação ao mês passado e ao que mais pesa no mês. As mais importantes aparecem primeiro; tocar abre a análise de onde veio.",
     questions: ["O que devo resolver primeiro?", "O que mudou no meu mês?", "Me explica a descoberta mais importante"] }),
@@ -84,4 +139,6 @@ export const FEATURED_RELEASE = "catalogo-2026-11";
  * Evolução, Ritmo, Categorias, Compromissos) comes in as analyses at the top, once, for people with a saved layout.
  */
 export const ANALYSIS_RELEASE = "analise-biblioteca-2026-11";
+/** Análise do dia joins Início right after the Descobertas, once. */
+export const DAILY_RELEASE = "analise-do-dia-2026-11";
 export const ANALYSIS_TOP: Array<[string, "S" | "M" | "L"]> = [["descobertas", "M"], ["resultado-mes", "M"], ["orcamento", "S"], ["contas", "S"], ["habitos", "L"], ["categorias", "L"], ["seis-meses", "L"], ["compromissos", "L"]];

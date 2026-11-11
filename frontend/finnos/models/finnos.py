@@ -13,7 +13,7 @@ from pydantic import ConfigDict, Field
 TxType = Literal["receita", "despesa", "transferencia"]
 TxStatus = Literal["pago", "pendente", "agendado"]
 CategoryGroup = Literal["necessidades", "desejos", "metas"]
-AccountType = Literal["corrente", "salario", "digital", "poupanca", "carteira"]
+AccountType = Literal["corrente", "salario", "digital", "poupanca", "carteira", "beneficio"]
 
 HEX_PATTERN = r"^#[0-9a-fA-F]{6}$"
 DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
