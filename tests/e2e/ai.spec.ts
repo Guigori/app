@@ -55,8 +55,9 @@ test("FINNOS IA answers a free question with the user's data, without a paid cal
 
   await input.fill("me conta uma piada");
   await input.press("Enter");
-  await expect(page.getByText("Ainda não sei responder essa pergunta com os seus dados.", { exact: false })).toBeVisible();
-  expect(paidAsk.calls).toBe(1);
+  // Not in the data: it says so instead of answering about something else, and with no AI key it does not call one.
+  await expect(page.getByText("Não encontrei uma resposta para isso nos seus dados", { exact: false })).toBeVisible();
+  expect(paidAsk.calls).toBe(0);
 });
 
 test("FINNOS IA learns what the user teaches and keeps it in the account", async ({ page }) => {
