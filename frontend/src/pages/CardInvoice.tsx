@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import { ScreenHeader } from "@/components/layout/BackButton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Search, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
@@ -184,16 +185,11 @@ export default function CardInvoice() {
 
   return (
     <div className="space-y-6">
+      <ScreenHeader title={<>Fatura · {invoice.card_name}</>} titleTestId="invoice-card-name" keepSubtitle
+        subtitle={<span data-keep data-testid="invoice-cycle">Ciclo de {formatDate(invoice.cycle_start)} a {formatDate(invoice.cycle_end)} · vence {formatDate(invoice.due_date)}</span>} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl" data-testid="invoice-card-name">
-            Fatura · {invoice.card_name}
-          </h1>
-          <p data-keep className="mt-1 text-sm text-muted-foreground" data-testid="invoice-cycle">
-            Ciclo de {formatDate(invoice.cycle_start)} a {formatDate(invoice.cycle_end)} · vence{" "}
-            {formatDate(invoice.due_date)}
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Label htmlFor="invoice-cycle-month" className="text-xs text-muted-foreground">
               Consultar histórico (mês de fechamento)
             </Label>

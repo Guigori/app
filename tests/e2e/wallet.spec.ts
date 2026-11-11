@@ -63,7 +63,7 @@ test("manages standalone institutions and refuses silent account creation", asyn
   await dialog.locator("#institution-create-name").fill("Banco Novo");
   await dialog.getByRole("button", { name: "Adicionar" }).click();
   await expect(dialog.getByText("Banco Novo")).toBeVisible();
-  await dialog.getByRole("button", { name: "Fechar" }).click();
+  await dialog.getByRole("button", { name: "Fechar", exact: true }).click();
   await expect(page.getByTestId("wallet-institutions")).toBeVisible();
   await expect(page.getByTestId("wallet-balance")).toContainText("0,00");
   await page.getByRole("button", { name: "Instituições", exact: true }).click();

@@ -86,9 +86,10 @@ export function HistorySheet({ open, events: raw, onClose, onRestore }: { open: 
             className="flex max-h-[85dvh] w-full max-w-md flex-col rounded-t-[32px] border border-b-0 border-border bg-card px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3.5 text-foreground dashboard:rounded-[28px] dashboard:border-b"
             initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", stiffness: 360, damping: 34 }}>
             <div className="mx-auto mb-3 h-[5px] w-20 shrink-0 rounded-full bg-[#2a2b52]" aria-hidden="true" />
-            <div className="flex h-11 shrink-0 items-center justify-between">
-              <h2 className="flex items-center gap-2 text-[21px] font-bold"><History size={20} className="text-[#a78bfa]" aria-hidden="true" />Histórico de alterações</h2>
-              <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-10 place-items-center rounded-full border border-border bg-background"><X size={18} /></button>
+            <div className="flex h-11 shrink-0 items-center gap-3">
+              <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-background"><X size={18} /></button>
+              <h2 className="flex min-w-0 flex-1 items-center gap-2 text-[21px] font-bold">Histórico de alterações</h2>
+              <History size={20} className="shrink-0 text-[#a78bfa]" aria-hidden="true" />
             </div>
             <ol className="mt-3 min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-contain">
               {events.length === 0 ? <li className="py-6 text-center text-sm text-muted-foreground">Nenhuma alteração registrada ainda.</li> : events.map((event, i) => {

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Bell, BrainCircuit, ChevronDown, KeyRound, ShieldCheck, WalletCards } from "lucide-react";
+import { ScreenHeader } from "@/components/layout/BackButton";
 import { Link, useLocation } from "react-router-dom";
 import { isLocalMode } from "@/lib/mode";
 import { AiKeysCard } from "@/components/ai/AiKeysCard";
@@ -38,7 +39,7 @@ export default function SettingsIntegrations() {
   ];
 
   return <main className="mx-auto max-w-2xl space-y-5 pb-28 text-foreground animate-fade-up" data-testid="settings-integrations">
-    <div><h1 className="font-heading text-2xl font-bold">Integrações e automações</h1><p className="mt-1 text-sm text-muted-foreground">Compras do Apple Pay direto no FINNOS e a sua IA conectada.</p></div>
+    <ScreenHeader title="Integrações e automações" subtitle="Compras do Apple Pay direto no FINNOS e a sua IA conectada." />
 
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
       {items.map((item, index) => (

@@ -61,15 +61,15 @@ export default function EditarMeta({ goal, userId, onClose, onSaved }: Props) {
 
   return (
     <section className="rounded-3xl border border-border bg-card p-5 sm:p-6" aria-label={`Editar meta ${goal.name}`}>
-      <div className="flex items-center justify-between gap-3">
-        <div>
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={onClose} className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card" aria-label="Voltar às metas">
+          <ArrowLeft size={18} />
+        </button>
+        <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold tracking-wide text-primary dark:text-[#A46DFF]">FINNOS · METAS</p>
           <h2 className="mt-1 text-xl font-bold text-foreground">Editar meta</h2>
           <p className="mt-1 text-sm text-muted-foreground">Ajuste seu planejamento sem movimentar o saldo bancário.</p>
         </div>
-        <button type="button" onClick={onClose} className="rounded-full border border-border p-3" aria-label="Voltar às metas">
-          <ArrowLeft size={19} />
-        </button>
       </div>
 
       <form onSubmit={save} className="mt-5 grid gap-4 sm:grid-cols-2">

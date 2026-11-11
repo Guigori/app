@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Save, SlidersHorizontal, Sparkles } from "lucide-react";
-import { Link } from "react-router-dom";
+import { ScreenHeader } from "@/components/layout/BackButton";
+import { Save, SlidersHorizontal, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { createBudgetCycle, fetchCategories, fetchCurrentBudgetCycle, fetchNextBudgetCycle, fetchBudgetSuggestion, updateBudgetCycle, type BudgetCyclePayload } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -77,7 +77,7 @@ export default function BudgetSettings(){
  const save=useMutation({mutationFn:async()=>{if(!start||!end)throw new Error("Defina o período do ciclo.");const payload:BudgetCyclePayload={mode,period,start_date:start,end_date:end,expected_income:incomeNumber,extraordinary,notes:notes.trim()||null,allocations:categories.map(c=>{const d=getDraft(c);return{category_id:c.id,planned:Math.max(Number(d.planned)||0,0),priority:d.priority,rollover:d.rollover}}).filter(a=>a.planned>0)};return existing?updateBudgetCycle(existing.id,payload):createBudgetCycle(payload);},onSuccess:async()=>{toast.success(existing?"Orçamento atualizado.":"Orçamento criado.");await Promise.all([qc.invalidateQueries({queryKey:["budget-v2-current"]}),qc.invalidateQueries({queryKey:["budget-v2-next"]}),qc.invalidateQueries({queryKey:["budget-v2-history"]})]);},onError:e=>toast.error(e instanceof Error&&e.message.startsWith("Defina")?e.message:getApiErrorMessage(e))});
 
  return <div className="mx-auto max-w-4xl space-y-6 animate-fade-up">
-  <div><Link to="/orcamento" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4"/> Voltar ao orçamento</Link><h1 className="font-heading text-2xl font-bold">Configurações do orçamento</h1><p className="mt-1 text-sm text-muted-foreground">Configure o planejamento sem poluir sua visão diária.</p></div>
+  <ScreenHeader title="Configurações do orçamento" subtitle="Configure o planejamento sem poluir sua visão diária." backLabel="Voltar ao orçamento" />
   <div className="inline-flex rounded-xl bg-muted p-1">{([["current","Ciclo atual"],["next","Próximo ciclo"]] as const).map(([k,l])=><button key={k} onClick={()=>setTarget(k)} className={cn("rounded-lg px-4 py-2 text-sm font-medium",target===k?"bg-background shadow-sm":"text-muted-foreground")}>{l}</button>)}</div>
   <Card><CardHeader><CardTitle className="font-heading">Modelo e período</CardTitle><CardDescription>Mudar o modelo no próximo ciclo não altera seu histórico.</CardDescription></CardHeader><CardContent className="space-y-5">
    <div className="grid gap-3 sm:grid-cols-2">{MODES.map(([v,l,d])=><button type="button" key={v} onClick={()=>setMode(v)} className={cn("rounded-2xl border p-4 text-left transition-colors",mode===v?"border-primary bg-primary/5":"border-border hover:bg-muted/50")}><p className="font-semibold">{l}</p><p className="mt-1 text-xs text-muted-foreground">{d}</p></button>)}</div>

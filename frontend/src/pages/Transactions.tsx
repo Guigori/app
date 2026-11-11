@@ -423,14 +423,17 @@ export default function Transactions() {
   return (
     <div className="relative flex flex-col gap-4 animate-fade-up">
       <div className="grid grid-cols-1 items-start gap-x-3 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto]" data-testid="flow-header-grid">
-        <div className="min-w-0 pt-1">
+        <div className="flex min-w-0 items-center gap-3 pt-1">
+          {/* Padrão FINNOS: voltar à esquerda, o título ao lado. */}
           {cameFromLink ? (
-            <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="mb-3 size-10 rounded-full border border-border bg-card text-foreground hover:bg-muted" aria-label="Voltar para a tela anterior" title="Voltar" data-testid="flow-back-button">
+            <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="size-10 shrink-0 rounded-full border border-border bg-card text-foreground hover:bg-muted" aria-label="Voltar para a tela anterior" title="Voltar" data-testid="flow-back-button">
               <ArrowLeft className="h-5 w-5" aria-hidden="true" />
             </Button>
           ) : null}
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo</h1>
-          <p className="mt-1 text-sm text-muted-foreground">O que entrou, saiu e o que vem pela frente.</p>
+          <div className="min-w-0">
+            <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Fluxo</h1>
+            <p className="mt-1 text-sm text-muted-foreground">O que entrou, saiu e o que vem pela frente.</p>
+          </div>
         </div>
 
         {/* Always a horizontal, labelled segmented control: no vertical rail eating a column. */}

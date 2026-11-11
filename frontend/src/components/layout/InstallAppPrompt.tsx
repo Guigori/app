@@ -63,7 +63,7 @@ export function InstallAppPrompt() {
       <SheetContent side="bottom" className="max-h-[90svh] gap-0 overflow-y-auto rounded-t-3xl p-0" data-testid="install-app">
         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30" aria-hidden="true" />
         <div className="mx-auto w-full max-w-md space-y-4 p-5 pb-8">
-          <div className="pr-8">
+          <div className="flex min-h-10 flex-col justify-center pl-12">
             <SheetTitle className="font-heading text-xl font-bold">Instale o FINNOS no celular</SheetTitle>
             <SheetDescription className="mt-1 text-sm">Abre direto da tela inicial, em tela cheia, e no iPhone é assim que os avisos de vencimento chegam.</SheetDescription>
           </div>
