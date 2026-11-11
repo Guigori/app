@@ -42,7 +42,7 @@ export function GoalDetailSheet({ goal, goals, accounts, open, onOpenChange, onM
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side={side} className={cn("gap-0 overflow-y-auto p-0", side === "bottom" ? "max-h-[92svh] rounded-t-3xl" : "w-full sm:max-w-md")} data-testid="goal-detail">
         <div className="space-y-4 p-5 pb-8">
-          <header className="pr-8">
+          <header className="pl-12">
             <p className="text-xs font-semibold text-primary">{goal.mode === "inteligente" ? "✦ Meta inteligente" : "Meta"} · {goal.category}</p>
             <SheetTitle className="mt-1 font-heading text-xl font-bold">{goal.name}</SheetTitle>
             <SheetDescription className="mt-1 text-sm">

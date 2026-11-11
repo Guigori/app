@@ -114,7 +114,7 @@ export function GoalMoneySheet({ goal, goals, accounts, userId, mode, open, onOp
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side={side} className={cn("gap-0 overflow-y-auto p-0", side === "bottom" ? "max-h-[90svh] rounded-t-3xl" : "w-full sm:max-w-md")} data-testid="goal-money-sheet">
         <div className="space-y-4 p-5 pb-8">
-          <div className="pr-8">
+          <div className="flex min-h-10 flex-col justify-center pl-12">
             <SheetTitle className="flex items-center gap-2 font-heading text-lg font-bold">
               {mode === "aporte" ? <ArrowDownLeft className="h-5 w-5 text-income" aria-hidden="true" /> : <ArrowUpRight className="h-5 w-5 text-expense" aria-hidden="true" />}
               {mode === "aporte" ? `Guardar em ${goal.name}` : `Retirar ou mover de ${goal.name}`}

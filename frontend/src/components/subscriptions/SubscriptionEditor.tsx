@@ -64,15 +64,15 @@ export default function SubscriptionEditor({ original, seed, saving, error, onCl
 
   return (
     <section className="rounded-3xl border border-border bg-card p-5 sm:p-6" aria-label={original ? `Editar assinatura ${original.name}` : "Nova assinatura"}>
-      <div className="flex items-center justify-between gap-3">
-        <div>
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={onClose} className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card" aria-label="Voltar às assinaturas">
+          <ArrowLeft size={18} />
+        </button>
+        <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold tracking-widest text-primary dark:text-[#A46DFF]">FINNOS · ASSINATURAS</p>
           <h2 className="mt-2 text-xl font-bold text-foreground">{original ? "Editar assinatura" : "Nova assinatura"}</h2>
           <p className="mt-1 text-sm text-muted-foreground">Cadastre o serviço sem criar uma despesa financeira automaticamente.</p>
         </div>
-        <button type="button" onClick={onClose} className="rounded-full border border-border p-3" aria-label="Voltar às assinaturas">
-          <ArrowLeft size={18} />
-        </button>
       </div>
       <form onSubmit={submit} className="mt-5 grid gap-4 sm:grid-cols-2">
         <label className="block text-sm font-medium">Nome do serviço

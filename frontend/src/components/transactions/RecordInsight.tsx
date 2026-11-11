@@ -58,9 +58,9 @@ function PhotoViewer({ open, src, onClose, onReplace, onRemove }: { open: boolea
     <AnimatePresence>
       {open ? (
         <motion.div key="photo" className="fixed inset-0 z-[86] flex flex-col bg-black/95 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="dialog" aria-modal="true" aria-label="Foto do comprovante" data-testid="record-photo-viewer">
-          <div className="flex items-center justify-between px-4">
+          <div className="flex items-center gap-3 px-4">
+            <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-10 shrink-0 place-items-center rounded-full border border-white/20 text-white"><X size={20} /></button>
             <span className="text-[17px] font-bold text-white">Foto do comprovante</span>
-            <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-11 place-items-center rounded-full border border-white/20 text-white"><X size={20} /></button>
           </div>
           <div className="flex min-h-0 flex-1 items-center justify-center p-4">{src ? <motion.img src={src} alt="Foto do comprovante" className="max-h-full max-w-full rounded-2xl object-contain" initial={{ scale: 0.94 }} animate={{ scale: 1 }} /> : <span className="text-white/60">Carregando…</span>}</div>
           <div className="flex gap-2 px-4">

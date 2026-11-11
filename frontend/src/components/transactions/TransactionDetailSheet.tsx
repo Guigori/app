@@ -113,7 +113,7 @@ export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, on
       <SheetContent side={side} className={cn("gap-0 overflow-y-auto p-0", side === "bottom" ? "max-h-[90svh] rounded-t-3xl" : "w-full sm:max-w-md")} data-testid="transaction-detail">
         {side === "bottom" ? <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30" aria-hidden="true" /> : null}
         <div className="space-y-4 p-5 pb-8">
-          <header className="flex items-start gap-3 pr-8">
+          <header className="flex items-start gap-3 pl-12">
             <span className="grid size-11 shrink-0 place-items-center rounded-2xl" style={{ backgroundColor: `color-mix(in oklab, ${tx.category_color ?? "#64748B"} 16%, transparent)`, color: tx.category_color ?? "#64748B" }}>
               <CategoryIcon name={tx.category_icon ?? "more-horizontal"} className="h-5 w-5" />
             </span>

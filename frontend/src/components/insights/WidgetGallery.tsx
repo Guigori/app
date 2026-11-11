@@ -39,11 +39,11 @@ export function WidgetGallery({ open, onClose, onAdd }: { open: boolean; onClose
             {picked ? <Detail def={picked} onBack={() => setPicked(null)} onAdd={(size, config) => { onAdd(picked.id, size, config); close(); }} /> : (
               <div className="flex min-h-0 flex-col">
                 <div className="flex items-center gap-2 px-4 pt-3">
+                  <button type="button" onClick={close} aria-label="Fechar" className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card"><X className="size-5" /></button>
                   <label className="flex h-11 flex-1 items-center gap-2 rounded-full bg-muted px-4">
                     <Search className="size-4 text-muted-foreground" aria-hidden="true" />
                     <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar análises" className="min-w-0 flex-1 bg-transparent text-sm outline-none" aria-label="Buscar análises" data-testid="widget-gallery-search" />
                   </label>
-                  <button type="button" onClick={close} aria-label="Fechar" className="grid size-11 place-items-center rounded-full bg-muted"><X className="size-5" /></button>
                 </div>
                 <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-8 pt-3">
                   {THEMES.map((theme) => {
@@ -94,7 +94,7 @@ function Detail({ def, onBack, onAdd }: { def: InsightDef; onBack: () => void; o
   return (
     <div className="flex min-h-0 flex-col">
       <div className="flex items-center gap-2 px-4 pt-3">
-        <button type="button" onClick={onBack} aria-label="Voltar à galeria" className="grid size-11 place-items-center rounded-full bg-muted"><ArrowLeft className="size-5" /></button>
+        <button type="button" onClick={onBack} aria-label="Voltar à galeria" className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card"><ArrowLeft className="size-5" /></button>
         <p className="text-sm font-semibold text-muted-foreground">{def.theme}</p>
       </div>
       <div className="min-h-0 overflow-y-auto overscroll-contain pb-4">

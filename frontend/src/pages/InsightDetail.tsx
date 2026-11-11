@@ -1,6 +1,7 @@
 /** An analysis of the library on its own page (where a widget leads): the full analysis, how it is made,
  *  questions for FINNOS IA with its context, the filtered screen, and placing it in Início or Análise. */
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { ScreenHeader } from "@/components/layout/BackButton";
 import { toast } from "sonner";
 import { ArrowRight, Check, Pin, Plus, Sparkles } from "lucide-react";
 import { insightById, type WidgetConfig } from "@/lib/insights/registry";
@@ -39,11 +40,8 @@ export default function InsightDetail() {
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-5 pb-32 animate-fade-up" data-testid="insight-detail">
-      <header>
-        <p className={LABEL}>{def.theme}</p>
-        <h1 className="mt-1 font-heading text-[28px] font-bold leading-tight tracking-tight">{def.title}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{def.description}</p>
-      </header>
+      <ScreenHeader eyebrow={def.theme} title={def.title} />
+      <p className="-mt-2 text-sm text-muted-foreground">{def.description}</p>
 
       {def.cardScope && cards.data?.some((c) => c.active) ? (
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1" role="group" aria-label="Qual cartão">

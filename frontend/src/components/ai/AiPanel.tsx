@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChevronRight, Clock3, FileText, Loader2, Mic, Plus, Send, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Clock3, FileText, Loader2, Mic, Plus, Send, Sparkles, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { getMode, isLocalMode } from "@/lib/mode";
@@ -14,6 +14,7 @@ import type { FinnAnswer } from "@/lib/finnAnalyst";
 import { fetchAccounts, fetchCategories, fetchRadar } from "@/lib/data";
 import { clearFinnConversations, newFinnConversation, readFinnConversations, upsertFinnConversation, type FinnConversation, type FinnMessage } from "@/lib/aiConversations";
 import type { AiAnswer, AiKey, AiProvider, CreditCard } from "@/types/finnos";
+import { HeaderIconButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigationPreferences } from "@/lib/navigationPreferences";
@@ -127,10 +128,10 @@ export function AiPanel() {
     {showTrigger&&!isMobile?<SheetTrigger className="fixed bottom-[5.75rem] right-4 z-40 flex lg:hidden h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg transition-all duration-200 dashboard:md:bottom-[6.25rem] dashboard:md:right-6" style={{opacity:triggerVisible?1:0,pointerEvents:triggerVisible?"auto":"none"}} aria-label="Abrir FINNOS IA"><Sparkles className="h-5 w-5"/></SheetTrigger>:null}
     <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 data-[side=right]:w-full sm:max-w-xl data-[side=right]:sm:max-w-xl [&>button]:hidden">
       <header className="flex items-center gap-3 border-b border-border px-5 py-4">
-        {historyOpen?<button onClick={()=>setHistoryOpen(false)} aria-label="Voltar"><ArrowLeft/></button>:<Sparkles className="h-6 w-6 text-primary"/>}
-        <div className="min-w-0 flex-1"><h2 className="font-heading text-lg font-bold">{historyOpen?"Conversas anteriores":"FINNOS IA"}</h2><p className="text-xs text-muted-foreground">{historyOpen?"Últimas conversas neste dispositivo":appMode==="demo"?"Assistente financeiro · Demonstração":appMode==="local"?"Assistente financeiro · Local":"Assistente financeiro contextual"}</p></div>
+        {/* Padrão FINNOS: voltar/fechar à esquerda, título ao lado, ações à direita. */}
+        {historyOpen?<HeaderIconButton onClick={()=>setHistoryOpen(false)} label="Voltar"/>:<HeaderIconButton kind="close" onClick={()=>setOpen(false)} label="Fechar"/>}
+        <div className="min-w-0 flex-1"><h2 className="flex items-center gap-1.5 font-heading text-lg font-bold">{historyOpen?null:<Sparkles className="h-4.5 w-4.5 text-primary" aria-hidden="true"/>}{historyOpen?"Conversas anteriores":"FINNOS IA"}</h2><p className="text-xs text-muted-foreground">{historyOpen?"Últimas conversas neste dispositivo":appMode==="demo"?"Assistente financeiro · Demonstração":appMode==="local"?"Assistente financeiro · Local":"Assistente financeiro contextual"}</p></div>
         {!historyOpen?<><Button variant="ghost" size="icon" onClick={startNew} title="Nova conversa"><Plus/></Button><Button variant="ghost" size="icon" onClick={()=>setHistoryOpen(true)} title="Conversas anteriores"><Clock3/></Button></>:null}
-        <Button variant="ghost" size="icon" onClick={()=>setOpen(false)} aria-label="Fechar"><X/></Button>
       </header>
 
       {historyOpen?<div className="flex-1 overflow-y-auto p-5">

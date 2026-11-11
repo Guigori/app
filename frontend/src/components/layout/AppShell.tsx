@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useNavigationType, useOutlet } from "react-ro
 import { AnimatePresence, motion } from "motion/react";
 import { AiPanel } from "@/components/ai/AiPanel";
 import { DialogsProvider } from "@/components/dialogs/DialogsProvider";
-import { BackButton } from "@/components/layout/BackButton";
+import { BackButton, HeaderSlotProvider, useHeaderSlotState } from "@/components/layout/BackButton";
 import { Header } from "@/components/layout/Header";
 import { NavDrawer } from "@/components/layout/NavDrawer";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -81,14 +81,16 @@ export function AppShell() {
     return () => cancelAnimationFrame(frame);
   }, [location.key, location.hash, navigationType]);
 
+  const [hasScreenHeader, setHasScreenHeader] = useHeaderSlotState();
   return (
+    <HeaderSlotProvider onChange={setHasScreenHeader}>
     <DialogsProvider>
       <div className="min-h-svh bg-background">
         <Sidebar />
         <div className="transition-[padding] duration-200 ease-out lg:pl-[var(--sidebar-w,16rem)]">
           <div className="lg:hidden"><Header onOpenMenu={() => setMenuOpen(true)} /></div>
           <main className="mx-auto w-full max-w-[1600px] px-4 py-5 pb-32 sm:px-6 lg:px-8 dashboard:pb-28">
-            {/^\/radar\/[^/]+$/.test(location.pathname) || location.pathname === "/configuracoes" ? null : <BackButton />}
+            {hasScreenHeader || /^\/radar\/[^/]+$/.test(location.pathname) ? null : <BackButton />}
             {/* Each route fades/slides in, so navigation feels continuous instead of a jump. */}
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
@@ -118,5 +120,6 @@ export function AppShell() {
         <LocalNotificationPulse />
       </div>
     </DialogsProvider>
+    </HeaderSlotProvider>
   );
 }

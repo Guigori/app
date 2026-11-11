@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ScreenHeader } from "@/components/layout/BackButton";
 import { ArrowLeft, Check, ChevronRight, Repeat, Sparkles, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -55,13 +56,14 @@ export default function RadarDetail() {
     onSuccess: () => toast.success("Obrigado! O Radar aprende com isso."),
   });
 
+  const goBack = () => {
+    const notificationOrigin = sessionStorage.getItem("finnos:notifications-return-origin");
+    navigate(notificationOrigin || "/radar");
+  };
   const back = (
     <button
       type="button"
-      onClick={() => {
-        const notificationOrigin = sessionStorage.getItem("finnos:notifications-return-origin");
-        navigate(notificationOrigin || "/radar");
-      }}
+      onClick={goBack}
       className="flex size-10 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-muted"
       aria-label="Voltar"
       data-testid="radar-detail-back"
@@ -91,7 +93,7 @@ export default function RadarDetail() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 animate-fade-up">
-      {back}
+      <ScreenHeader title="Radar" subtitle={RADAR_LABEL[signal.type]} onBack={goBack} keepSubtitle backLabel="Voltar" />
       <section className="overflow-hidden rounded-3xl border border-border bg-card">
         <div className="p-6 sm:p-8" style={{ background: `linear-gradient(180deg, color-mix(in oklab, ${color} 10%, transparent), transparent)` }}>
           <div className="flex items-center gap-2">

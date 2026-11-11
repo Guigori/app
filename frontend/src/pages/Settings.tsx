@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { DataBackupCard } from "@/components/settings/DataBackupCard";
+import { ScreenHeader } from "@/components/layout/BackButton";
 import { RegisterDefaultCard } from "@/components/settings/RegisterDefaultCard";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -127,10 +128,7 @@ export default function Settings() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-5 pb-44 sm:pb-32 animate-fade-up">
-      <div>
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">{({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", registro: "Novo registro", painel: "Painel da Home", navegacao: "Barra de navegação", dados: "Dados e backup", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Gerencie suas preferências e informações com segurança.</p>
-      </div>
+      <ScreenHeader title={({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", registro: "Novo registro", painel: "Painel da Home", navegacao: "Barra de navegação", dados: "Dados e backup", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"} subtitle="Gerencie suas preferências e informações com segurança." />
 
       {visible("desenvolvedor") && !local && (
         <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">

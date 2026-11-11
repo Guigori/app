@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { Donut } from "@/components/charts/FinnosCharts";
+import { ScreenHeader } from "@/components/layout/BackButton";
 import { cn } from "@/lib/utils";
-import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3 } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { buttonVariants } from "@/components/ui/button";
 
 type ChartSpec = {
   name: string;
@@ -256,18 +255,7 @@ function ChartPreview({ type }: { type: ChartSpec["preview"] }) {
 export default function ChartSettings() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 animate-fade-up">
-      <div className="flex items-start gap-3">
-        <Link to="/configuracoes" className={buttonVariants({ variant: "ghost", size: "icon" })} aria-label="Voltar para configurações">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-primary" aria-hidden="true" />
-            <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Gráficos FINNOS</h1>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">Biblioteca visual oficial: significado, cores e locais de uso de cada gráfico.</p>
-        </div>
-      </div>
+      <ScreenHeader title="Gráficos FINNOS" subtitle="Biblioteca visual oficial: significado, cores e locais de uso de cada gráfico." actions={<BarChart3 className="h-5 w-5 text-primary" aria-hidden="true" />} />
 
       <Card>
         <CardHeader>
