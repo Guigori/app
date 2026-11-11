@@ -33,6 +33,8 @@ export interface InsightDef {
   star?: boolean;
 }
 
+import { CATALOG_DEFS } from "@/lib/insights/catalogDefs";
+
 export const INSIGHTS: InsightDef[] = [
   { id: "gastar-hoje", title: "Quanto posso gastar hoje", description: "O que sobra do mês por dia, depois do que já saiu e do que está agendado.", theme: "Orçamento", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/orcamento", toLabel: "Ver orçamento",
     how: "Pegamos o orçamento do mês (ou a renda, se não houver orçamento), tiramos o que já saiu e o que está agendado até o fim do mês e dividimos pelos dias que faltam, contando hoje.",
@@ -79,6 +81,7 @@ export const INSIGHTS: InsightDef[] = [
   { id: "radar", title: "Radar", description: "Os avisos do FINNOS que pedem atenção agora.", theme: "Alertas", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/radar", toLabel: "Ver Radar",
     how: "O Radar cruza orçamento, faturas, contas agendadas e o seu histórico e avisa o que foge do padrão ou pede ação.",
     questions: ["Qual aviso devo resolver primeiro?", "Por que esse aviso apareceu?", "Como evito isso no próximo mês?"] },
+  ...CATALOG_DEFS,
 ];
 
 /** The analysis page of a widget (a tap on the widget opens it). */
