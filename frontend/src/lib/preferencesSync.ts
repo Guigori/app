@@ -7,6 +7,8 @@ import { getMode } from "@/lib/mode";
 const SYNCED = {
   navigation: { storage: "finnos:navigation-preferences:v2", event: "finnos-navigation-preferences" },
   home: { storage: "finnos:home-preferences:v1", event: "finnos-home-preferences" },
+  // Início and Análise as the person arranged them (lib/insights/layout): analyses, sizes, order.
+  widgets: { storage: "finnos:widgets:v1", event: "finnos-widgets" },
   register_default: { storage: "finnos:register-default:v1", event: "finnos-register-default" },
   // What the user taught FINNOS IA (lib/finnMemory), so it knows them on every device.
   finn_memory: { storage: "finnos:finn-memory:v1", event: "finnos-finn-memory" },

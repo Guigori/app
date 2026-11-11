@@ -72,3 +72,17 @@ def test_chart_and_theme_are_kept_and_an_unknown_theme_is_refused(monkeypatch):
     assert asyncio.run(preferences.read_preferences(user=me))["values"] == values
     with pytest.raises(HTTPException):
         asyncio.run(preferences.save_preferences(preferences.PreferencesIn(values={"theme": "roxo"}), user=me))
+
+
+def test_widget_layout_is_a_known_preference(monkeypatch):
+    stored = {}
+
+    class Doc:
+        def set(self, data, merge=False):
+            stored.update(data)
+
+    monkeypatch.setattr(preferences, "_doc", lambda uid: Doc())
+    monkeypatch.setattr(preferences, "run_in_threadpool", lambda fn: asyncio.sleep(0, result=fn()))
+    layout = '{"inicio":[{"key":"d0","id":"gastar-hoje","size":"S"}],"analise":[]}'
+    asyncio.run(preferences.save_preferences(preferences.PreferencesIn(values={"widgets": layout}), user={"id": "u1"}))
+    assert stored["values"]["widgets"] == layout

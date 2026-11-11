@@ -10,7 +10,7 @@ type ChartSpec = {
   where: string;
   rule: string;
   status: "Principal" | "Complementar";
-  preview: "donut" | "heatmap" | "projection" | "gauge" | "bullet" | "sparkline";
+  preview: "donut" | "heatmap" | "projection" | "gauge" | "bullet" | "sparkline" | "bars";
 };
 
 const chartSpecs: ChartSpec[] = [
@@ -61,6 +61,14 @@ const chartSpecs: ChartSpec[] = [
     rule: "Sem eixos e sem excesso de rótulos. Serve como contexto visual rápido.",
     status: "Principal",
     preview: "sparkline",
+  },
+  {
+    name: "Barras",
+    purpose: "Comparar valores lado a lado entre meses ou itens.",
+    where: "Evolução mês a mês, categoria nos últimos meses, compromissos e parcelas por mês.",
+    rule: "O mês ou item em foco em roxo, os outros em azul-escuro; meses que ainda vão acontecer em amarelo de previsto. Sempre começam do zero.",
+    status: "Principal",
+    preview: "bars",
   },
 ];
 
@@ -213,12 +221,28 @@ function SparklinePreview() {
   );
 }
 
+function BarsPreview() {
+  const bars = [{ v: 52, k: "past" }, { v: 64, k: "past" }, { v: 58, k: "past" }, { v: 80, k: "focus" }, { v: 46, k: "future" }, { v: 34, k: "future" }];
+  const labels = ["Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  return (
+    <div className="flex h-28 items-end gap-2" role="img" aria-label="Exemplo de barras por mês">
+      {bars.map((b, i) => (
+        <div key={labels[i]} className="flex flex-1 flex-col items-center gap-1">
+          <span className="block w-full rounded-lg" style={{ height: `${b.v}%`, backgroundColor: b.k === "focus" ? "var(--finnos-purple)" : b.k === "future" ? "var(--chart-3)" : "color-mix(in srgb, var(--finnos-purple) 28%, var(--background))", opacity: b.k === "future" ? 0.85 : 1 }} />
+          <span className="text-[11px] text-muted-foreground">{labels[i]}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ChartPreview({ type }: { type: ChartSpec["preview"] }) {
   if (type === "donut") return <DonutPreview />;
   if (type === "heatmap") return <HeatmapPreview />;
   if (type === "projection") return <ProjectionPreview />;
   if (type === "gauge") return <GaugePreview />;
   if (type === "bullet") return <BulletPreview />;
+  if (type === "bars") return <BarsPreview />;
   return <SparklinePreview />;
 }
 
@@ -304,6 +328,7 @@ export default function ChartSettings() {
           <div className="rounded-xl bg-muted/60 p-3"><strong>Progresso</strong><span className="block text-muted-foreground">Gauge / Barra segmentada</span></div>
           <div className="rounded-xl bg-muted/60 p-3"><strong>Limite</strong><span className="block text-muted-foreground">Bullet chart</span></div>
           <div className="rounded-xl bg-muted/60 p-3"><strong>Tendência rápida</strong><span className="block text-muted-foreground">Sparklines</span></div>
+          <div className="rounded-xl bg-muted/60 p-3"><strong>Comparação</strong><span className="block text-muted-foreground">Barras</span></div>
         </CardContent>
       </Card>
     </div>

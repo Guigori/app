@@ -8,14 +8,17 @@ import { useBalanceHidden } from "@/lib/balance";
 import { closingForMonth, invoiceMonths, invoicePoint, mergeInvoicePoints, overdueFinding, readInvoices, type InvoicePoint } from "@/lib/insights/invoices";
 import { cn } from "@/lib/utils";
 import type { CreditCard } from "@/types/finnos";
-import { BigMoney, FindingList, InsightShell } from "@/components/insights/InsightShell";
+import { BigMoney, FindingList, InsightShell, Tile } from "@/components/insights/InsightShell";
+import { FINNOS_COLOR, ProjectionLine } from "@/components/charts/FinnosCharts";
+import type { WidgetSize } from "@/lib/insights/registry";
 
 const SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const short = (month: string) => SHORT[Number(month.slice(5, 7)) - 1] ?? month;
 const dm = (date: string) => date.split("-").reverse().slice(0, 2).join("/");
 
 /** Analysis library · Faturas: last, current and next invoices of one card, or of every active card together. */
-export function InvoicesInsight({ cards, cardId = null, compact = false, className }: { cards: CreditCard[]; cardId?: string | null; compact?: boolean; className?: string }) {
+export function InvoicesInsight({ cards, cardId = null, compact: compactProp = false, size, to, className }: { cards: CreditCard[]; cardId?: string | null; compact?: boolean; size?: WidgetSize; to?: string; className?: string }) {
+  const compact = size ? size !== "XL" : compactProp;
   const { hidden } = useBalanceHidden();
   const money = (v: number) => (hidden ? formatHiddenBRL() : formatBRL(v));
   const scope = useMemo(() => cards.filter((c) => (cardId ? c.id === cardId : c.active)), [cards, cardId]);
@@ -46,7 +49,22 @@ export function InvoicesInsight({ cards, cardId = null, compact = false, classNa
   const findings = [...overdue, ...reading.findings];
 
   if (!scope.length) return null;
-  if (pending && !points.length) return <div className={cn("h-60 animate-pulse rounded-[24px] bg-muted", className)} aria-label="Carregando faturas" />;
+  if (pending && !points.length) return <div className={cn("h-full min-h-40 animate-pulse rounded-[24px] bg-muted", className)} aria-label="Carregando faturas" />;
+  const vs = reading.change != null && reading.past && reading.past.total > 0
+    ? <span className={reading.change > 0 ? "text-expense" : "text-income"}>{reading.change > 0 ? "+" : "−"}{money(Math.abs(reading.change))} vs {single ? short(reading.past.month).toLowerCase() : "a passada"}</span> : null;
+  const tileTitle = card ? `Fatura ${card.name}` : "Faturas";
+  if (size === "S") return (
+    <Tile title={tileTitle} icon={<CardIcon className="size-3.5" />} className={className} testId="invoices-insight">
+      <p className="font-heading text-[clamp(1.15rem,6vw,1.625rem)] font-bold tabular-nums leading-none">{money(reading.present?.total ?? 0)}</p>
+      <p className="mt-auto text-xs text-muted-foreground">{vs ?? "fatura atual"}</p>
+    </Tile>
+  );
+  if (size === "M") return (
+    <Tile title={tileTitle} icon={<CardIcon className="size-3.5" />} className={className} testId="invoices-insight">
+      <div className="flex items-baseline justify-between gap-2"><p className="font-heading text-[22px] font-bold tabular-nums leading-none">{money(reading.present?.total ?? 0)}</p><span className="text-xs">{vs}</span></div>
+      {hidden ? null : <div className="mt-auto"><ProjectionLine points={points.map((p) => ({ value: p.total, kind: p.offset > 0 ? "previsto" as const : "real" as const }))} height={56} labels={false} ariaLabel="Fatura passada, atual e próximas" /></div>}
+    </Tile>
+  );
 
   const peak = Math.max(1, ...points.map((p) => p.total));
   const POSITION: Record<number, string> = { [-1]: "Passada", 0: "Atual", 1: "Próxima", 2: "Depois" };
@@ -57,6 +75,7 @@ export function InvoicesInsight({ cards, cardId = null, compact = false, classNa
 
   return (
     <InsightShell
+      to={to}
       className={className}
       testId={cardId ? `invoices-insight-${cardId}` : "invoices-insight"}
       title="Faturas"
@@ -71,14 +90,17 @@ export function InvoicesInsight({ cards, cardId = null, compact = false, classNa
 
       <div className="relative mt-4 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(points.length, 1)}, minmax(0, 1fr))` }} data-testid="invoices-timeline">
         <svg className="pointer-events-none absolute inset-x-0 top-1 h-[60px] w-full" viewBox="0 0 400 60" preserveAspectRatio="none" aria-hidden="true">
-          <polyline fill="none" stroke="currentColor" strokeDasharray="4 4" strokeWidth="1.5" className="text-primary/60" vectorEffect="non-scaling-stroke"
-            points={points.map((p, i) => `${x(i)},${y(p)}`).join(" ")} />
+          {/* Linha de projeção: what already closed or is open in a solid line, the next invoices dashed in the forecast colour. */}
+          <polyline fill="none" stroke={FINNOS_COLOR.result} strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke"
+            points={points.map((p, i) => ({ p, i })).filter(({ p }) => p.offset <= 0).map(({ p, i }) => `${x(i)},${y(p)}`).join(" ")} />
+          <polyline fill="none" stroke={FINNOS_COLOR.forecast} strokeDasharray="6 6" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke"
+            points={points.map((p, i) => ({ p, i })).filter(({ p }) => p.offset >= 0).map(({ p, i }) => `${x(i)},${y(p)}`).join(" ")} />
         </svg>
         {points.map((p) => {
           const tile = (
             <div className={cn("relative flex h-full flex-col items-center rounded-2xl border px-1 pb-2.5 pt-1", p.offset === 0 ? "border-primary/60 bg-primary/8" : "border-transparent")}>
               <div className="relative h-[60px] w-full">
-                <span className={cn("absolute left-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-card", p.offset === 0 ? "border-primary bg-primary" : p.offset < 0 ? "border-muted-foreground" : "border-primary")} style={{ top: y(p) }} />
+                <span className="absolute left-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2" style={{ top: y(p), borderColor: p.offset > 0 ? FINNOS_COLOR.forecast : FINNOS_COLOR.result, backgroundColor: p.offset > 0 ? "var(--card)" : FINNOS_COLOR.result }} />
               </div>
               <span className={cn("text-[11px]", p.offset === 0 ? "font-semibold text-foreground" : "text-muted-foreground")}>{label(p)}</span>
               <span className="mt-0.5 text-xs font-semibold tabular-nums">{money(p.total)}</span>

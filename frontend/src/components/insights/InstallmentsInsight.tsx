@@ -8,14 +8,16 @@ import { useBalanceHidden } from "@/lib/balance";
 import { commitments } from "@/lib/analysisInsights";
 import { budgetPressure, installmentPlans, installmentSchedule, summarizeInstallments } from "@/lib/insights/installments";
 import { cn } from "@/lib/utils";
-import { InsightShell } from "@/components/insights/InsightShell";
+import { InsightShell, Tile } from "@/components/insights/InsightShell";
+import { Bars, BulletBar } from "@/components/charts/FinnosCharts";
+import type { WidgetSize } from "@/lib/insights/registry";
 
 const SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const short = (month: string) => SHORT[Number(month.slice(5, 7)) - 1] ?? month;
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Analysis library · Parcelas em andamento: where each one is, what is left, the next months and their weight on the budget. */
-export function InstallmentsInsight({ cardId = null, compact = false, className }: { cardId?: string | null; compact?: boolean; className?: string }) {
+export function InstallmentsInsight({ cardId = null, compact = false, size, to, className }: { cardId?: string | null; compact?: boolean; size?: WidgetSize; to?: string; className?: string }) {
   const { hidden } = useBalanceHidden();
   const money = (v: number) => (hidden ? formatHiddenBRL() : formatBRL(v));
   const [open, setOpen] = useState(false);
@@ -33,8 +35,26 @@ export function InstallmentsInsight({ cardId = null, compact = false, className 
   const plans = installmentPlans(transactions.data ?? [], month, cardId, rules).map((p) => ({ ...p, where: (p.cardId && cardName.get(p.cardId)) || p.where }));
   const summary = summarizeInstallments(plans, month);
   if (!plans.length && compact) return null;
+  if (size === "S" || size === "M") {
+    const top = plans.filter((p) => p.current > 0).slice(0, 2);
+    return (
+      <Tile title="Parcelas" icon={<Layers className="size-3.5" />} className={className} testId="installments-insight">
+        <div className="flex items-baseline justify-between gap-2"><p className="font-heading text-[24px] font-bold tabular-nums leading-none">{money(summary.monthly)}<span className="text-xs font-normal text-muted-foreground">/mês</span></p>{size === "M" ? <span className="text-xs text-muted-foreground">faltam {money(summary.remaining)}</span> : null}</div>
+        {size === "S" ? <p className="mt-auto text-xs text-muted-foreground">{plans.length} {plans.length === 1 ? "compra" : "compras"} · faltam {money(summary.remaining)}</p> : (
+          <ul className="mt-auto space-y-2">
+            {top.map((p) => (
+              <li key={p.id} className="text-xs">
+                <div className="flex justify-between gap-2"><span className="min-w-0 truncate">{p.name}</span><span className="shrink-0 text-muted-foreground">{p.current} de {p.count}</span></div>
+                <div className="mt-1 flex gap-0.5">{Array.from({ length: Math.min(p.count, 24) }, (_, i) => <span key={i} className={cn("h-1 flex-1 rounded-full", i < p.current ? "bg-primary" : "bg-muted")} />)}</div>
+              </li>
+            ))}
+            {!top.length ? <li className="text-xs text-muted-foreground">Nenhuma parcela neste mês.</li> : null}
+          </ul>
+        )}
+      </Tile>
+    );
+  }
   const schedule = installmentSchedule(plans, month, 6);
-  const peak = Math.max(1, ...schedule.map((m) => m.total));
   // The budget question looks at everything the month already owes: installments of every card plus fixed costs.
   const allPlans = cardId ? installmentPlans(transactions.data ?? [], month, null, rules) : plans;
   const fixedMonthly = open && transactions.data ? commitments(transactions.data, subscriptions.data?.items ?? [], month, 1).fixedMonthly : 0;
@@ -44,6 +64,7 @@ export function InstallmentsInsight({ cardId = null, compact = false, className 
 
   return (
     <InsightShell
+      to={to}
       className={className}
       testId={cardId ? `installments-insight-${cardId}` : "installments-insight"}
       title="Parcelas em andamento"
@@ -80,16 +101,8 @@ export function InstallmentsInsight({ cardId = null, compact = false, className 
             <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mt-5 space-y-5">
               <div data-testid="installments-schedule">
                 <p className="text-xs font-semibold tracking-[1.5px] text-muted-foreground">PRÓXIMAS PARCELAS</p>
-                <ul className="mt-2 space-y-2">
-                  {schedule.map((m) => (
-                    <li key={m.month} className="grid grid-cols-[2.5rem_1fr_auto] items-center gap-2 text-sm">
-                      <span className="text-muted-foreground">{cap(short(m.month))}</span>
-                      <span className="h-2 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-primary" style={{ width: `${(m.total / peak) * 100}%` }} /></span>
-                      <span className="tabular-nums font-semibold">{money(m.total)}</span>
-                      {m.ending.length ? <span className="col-span-3 -mt-1 pl-12 text-xs text-income">termina: {m.ending.join(", ")}</span> : null}
-                    </li>
-                  ))}
-                </ul>
+                <Bars className="mt-3" height={120} data={schedule.map((m, k) => ({ label: cap(short(m.month)), value: m.total, focus: k === 0, future: k > 0, valueLabel: hidden || !m.total ? "" : String(Math.round(m.total)) }))} />
+                {schedule.some((m) => m.ending.length) ? <ul className="mt-2 space-y-0.5 text-xs text-income">{schedule.filter((m) => m.ending.length).map((m) => <li key={m.month}>{cap(short(m.month))}: termina {m.ending.join(", ")}</li>)}</ul> : null}
               </div>
               <div data-testid="installments-budget">
                 <p className="text-xs font-semibold tracking-[1.5px] text-muted-foreground">NO ORÇAMENTO DOS PRÓXIMOS MESES</p>
@@ -97,11 +110,8 @@ export function InstallmentsInsight({ cardId = null, compact = false, className 
                   <ul className="mt-2 space-y-2.5">
                     {pressure.map((m) => (
                       <li key={m.month} className="text-sm">
-                        <div className="flex items-baseline justify-between gap-2"><span>{cap(short(m.month))}</span><span className={cn("font-semibold tabular-nums", (m.share ?? 0) > 0.8 ? "text-expense" : (m.share ?? 0) > 0.5 ? "text-amber-400" : "text-foreground")}>{Math.round((m.share ?? 0) * 100)}% já comprometido</span></div>
-                        <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-muted">
-                          <span className="h-full bg-primary" style={{ width: `${Math.min(100, (m.installments / planned) * 100)}%` }} />
-                          <span className="h-full bg-primary/35" style={{ width: `${Math.max(0, Math.min(100, (m.committed / planned) * 100) - Math.min(100, (m.installments / planned) * 100))}%` }} />
-                        </div>
+                        <div className="flex items-baseline justify-between gap-2"><span>{cap(short(m.month))}</span><span className={cn("font-semibold tabular-nums", (m.share ?? 0) > 1 ? "text-expense" : "text-foreground")}>{Math.round((m.share ?? 0) * 100)}% já comprometido</span></div>
+                        <BulletBar className="mt-2" value={m.committed} limit={planned} />
                         <p className="mt-0.5 text-xs text-muted-foreground">{money(m.installments)} em parcelas{m.fixed > 0 ? ` + ${money(m.fixed)} fixos` : ""} · livre {money(Math.max(0, planned - m.committed))} de {money(planned)}</p>
                       </li>
                     ))}

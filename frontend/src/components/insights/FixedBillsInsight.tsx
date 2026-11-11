@@ -9,15 +9,18 @@ import { useBalanceHidden } from "@/lib/balance";
 import { readFixedBills, type FixedBillState } from "@/lib/insights/fixedBills";
 import { cn } from "@/lib/utils";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
-import { BigMoney, InsightShell } from "@/components/insights/InsightShell";
+import { BigMoney, InsightShell, Tile } from "@/components/insights/InsightShell";
+import { FINNOS_COLOR, SegmentedBar } from "@/components/charts/FinnosCharts";
+import type { WidgetSize } from "@/lib/insights/registry";
 
 type Filter = "todas" | "pagas" | "apagar";
 const dm = (date: string) => date.split("-").reverse().slice(0, 2).join("/");
 
 /** Analysis library · Contas fixas: in a period, what was paid and what is still to pay (tap the circle to pay). */
-export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLabel = "neste mês", compact = false, flowLink, className }: {
-  start: string; end: string; title?: string; periodLabel?: string; compact?: boolean; flowLink?: string; className?: string;
+export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLabel = "neste mês", compact: compactProp = false, size, to, flowLink, className }: {
+  start: string; end: string; title?: string; periodLabel?: string; compact?: boolean; size?: WidgetSize; to?: string; flowLink?: string; className?: string;
 }) {
+  const compact = size ? size !== "XL" : compactProp;
   const { hidden } = useBalanceHidden();
   const money = (v: number) => (hidden ? formatHiddenBRL() : formatBRL(v));
   const dialogs = useDialogs();
@@ -30,11 +33,26 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
 
   if (query.isPending) return <div className={cn("h-48 animate-pulse rounded-[24px] bg-muted", className)} aria-label="Carregando contas fixas" />;
   const r = readFixedBills(query.data ?? [], start, end, today);
-  if (compact && !r.bills.length) return null;
+  if (compact && !r.bills.length && !size) return null;
+  const late = r.bills.filter((b) => b.state === "atrasado").reduce((s2, b) => s2 + b.value, 0);
+  // Barra segmentada: paid (income), still to pay (forecast, striped) and late (expense).
+  const bar = <SegmentedBar segments={[{ value: r.paidTotal, color: FINNOS_COLOR.income, label: "Pagas" }, { value: late, color: FINNOS_COLOR.expense, label: "Atrasadas" }, { value: Math.max(0, r.dueTotal - late), color: FINNOS_COLOR.forecast, striped: true, label: "A pagar" }]} total={r.total} height={8} />;
+  if (size === "S" || size === "M") return (
+    <Tile title="Contas fixas" icon={<CalendarCheck className="size-3.5" />} className={className} testId="fixed-bills-insight">
+      <p className="font-heading text-[22px] font-bold tabular-nums leading-none">{r.paidCount} de {r.bills.length} <span className="text-sm font-semibold text-muted-foreground">pagas</span></p>
+      <p className="mt-1 text-xs text-muted-foreground">{r.dueTotal > 0 ? <>falta <b className="text-foreground">{money(r.dueTotal)}</b></> : r.bills.length ? "tudo pago" : "nenhuma no mês"}{r.lateCount ? <span className="font-semibold text-expense"> · {r.lateCount} atrasada{r.lateCount > 1 ? "s" : ""}</span> : null}</p>
+      <div className="mt-2">{bar}</div>
+      {size === "M" ? (
+        <ul className="mt-auto space-y-0.5 text-xs">
+          {r.bills.filter((b) => b.state !== "pago").slice(0, 2).map((b) => <li key={b.tx.id} className="flex justify-between gap-2"><span className={cn("min-w-0 truncate", b.state === "atrasado" && "text-expense")}>{b.tx.name} · {b.state === "atrasado" ? "venceu" : "vence"} {dm(b.tx.date)}</span><span className="shrink-0 tabular-nums">{money(b.value)}</span></li>)}
+        </ul>
+      ) : null}
+    </Tile>
+  );
   const shown = r.bills
     .filter((b) => filter === "todas" || (filter === "pagas" ? b.state === "pago" : b.state !== "pago"))
     .filter((b) => !day || b.tx.date === day);
-  const list = (compact ? shown.slice(0, 5) : shown);
+  const list = (compact ? shown.slice(0, size === "L" ? 6 : 5) : shown);
 
   const pay = async (id: string) => {
     const bill = r.bills.find((b) => b.tx.id === id);
@@ -53,6 +71,7 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
     <InsightShell
       className={className}
       testId="fixed-bills-insight"
+      to={to}
       title={title}
       subtitle={`${r.bills.length} ${r.bills.length === 1 ? "conta" : "contas"} ${periodLabel}`}
       icon={<CalendarCheck className="size-5" aria-hidden="true" />}
@@ -64,7 +83,7 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
             {r.paidCount} de {r.bills.length} pagas{r.dueTotal > 0 ? <> · falta <b className="text-foreground">{money(r.dueTotal)}</b></> : " · tudo pago"}
             {r.lateCount ? <> · <span className="font-semibold text-expense">{r.lateCount} {r.lateCount === 1 ? "atrasada" : "atrasadas"}</span></> : null}
           </p>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-income" style={{ width: `${(r.paidTotal / Math.max(r.total, 0.01)) * 100}%` }} /></div>
+          <div className="mt-2">{bar}</div>
 
           {r.days.length > 1 ? (
             <div className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Dias de vencimento">
