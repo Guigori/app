@@ -1,0 +1,1 @@
+/** FINNOS domain boundary: compatibility facade.\n * Phase 1 preserves existing behavior and public signatures; implementations\n * remain in ../data until parity tests allow safe extraction.\n */\nexport { fetchCards, createCard, updateCard, deleteCard, fetchInvoice, payInvoice } from "../data";\n
