@@ -13,7 +13,8 @@ export { Sparkline } from "@/components/dashboard/Sparkline";
 export const FINNOS_COLOR = {
   income: "var(--income)",
   expense: "var(--expense)",
-  forecast: "var(--chart-3)",
+  /** Estimativa: the same colour as its series, drawn dashed (never a colour of its own). */
+  forecast: "var(--finnos-purple)",
   result: "var(--finnos-purple)",
   structure: "var(--finnos-app)",
   highlight: "var(--finnos-violet)",
@@ -21,7 +22,7 @@ export const FINNOS_COLOR = {
 
 export interface ProjectionPoint { value: number; kind: "real" | "previsto"; label?: string }
 
-/** Linha de projeção: real in a solid line with dots, the future dashed in the forecast colour, "hoje" at the joint. */
+/** Linha de projeção: real in a solid line, the estimate dashed in the same colour, "hoje" at the joint (like the Início chart). */
 export function ProjectionLine({ points, height = 96, labels = true, className, ariaLabel }: { points: ProjectionPoint[]; height?: number; labels?: boolean; className?: string; ariaLabel?: string }) {
   if (points.length < 2) return null;
   const w = 320, pad = 10, top = labels ? 18 : 8, bottom = 8;
@@ -33,20 +34,20 @@ export function ProjectionLine({ points, height = 96, labels = true, className, 
   const lastReal = points.map((p) => p.kind).lastIndexOf("real");
   const real = points.slice(0, lastReal + 1).map((p, i) => [x(i), y(p.value)] as const);
   const future = lastReal >= 0 ? points.slice(lastReal).map((p, i) => [x(i + lastReal), y(p.value)] as const) : [];
-  const dots = real.length <= 12;
+  const dots = false;
   const end = future.at(-1);
   return (
     <svg viewBox={`0 0 ${w} ${height}`} className={cn("h-auto w-full overflow-visible", className)} role="img" aria-label={ariaLabel}>
       {min < 0 ? <line x1={pad} x2={w - pad} y1={y(0)} y2={y(0)} stroke={FINNOS_COLOR.expense} strokeOpacity="0.45" strokeDasharray="3 4" /> : null}
       <line x1={pad} x2={w - pad} y1={height - bottom} y2={height - bottom} stroke="var(--border)" strokeWidth="1.5" />
-      {real.length > 1 ? <motion.polyline initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.6 }} points={real.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.result} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" /> : null}
-      {real.map(([px, py], i) => (dots || i === real.length - 1 ? <circle key={i} cx={px} cy={py} r="4" fill={FINNOS_COLOR.result} /> : null))}
-      {future.length > 1 ? <polyline points={future.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.forecast} strokeWidth="3.5" strokeDasharray="7 7" strokeLinecap="round" strokeLinejoin="round" /> : null}
-      {end && future.length > 1 ? <circle cx={end[0]} cy={end[1]} r="5.5" fill="var(--card)" stroke={FINNOS_COLOR.forecast} strokeWidth="3.5" /> : null}
+      {real.length > 1 ? <motion.polyline initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.6 }} points={real.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.result} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /> : null}
+      {real.map(([px, py], i) => (dots || i === real.length - 1 ? <circle key={i} cx={px} cy={py} r="4.5" fill="var(--card)" stroke={FINNOS_COLOR.result} strokeWidth="2.5" /> : null))}
+      {future.length > 1 ? <polyline points={future.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.result} strokeOpacity="0.7" strokeWidth="2.5" strokeDasharray="6 6" strokeLinecap="round" strokeLinejoin="round" /> : null}
+      {end && future.length > 1 ? <circle cx={end[0]} cy={end[1]} r="4.5" fill="var(--card)" stroke={FINNOS_COLOR.result} strokeWidth="2.5" /> : null}
       {labels && lastReal >= 0 && future.length > 1 ? (
         <>
           <text x={real.at(-1)![0]} y="11" textAnchor="middle" fontSize="11" fill="var(--muted-foreground)">hoje</text>
-          <text x={end![0]} y="11" textAnchor="end" fontSize="11" fill={FINNOS_COLOR.forecast}>previsto</text>
+          <text x={end![0]} y="11" textAnchor="end" fontSize="11" fill="var(--muted-foreground)">estimativa</text>
         </>
       ) : null}
     </svg>
@@ -82,10 +83,10 @@ export function BulletBar({ value, limit, max, color = FINNOS_COLOR.result, clas
   );
 }
 
-/** Gauge: a half ring with the share used; turns warning at 80% and expense past 100%. */
+/** Gauge: a half ring with the share used; turns the expense colour past 100%. */
 export function Gauge({ percent, children, size = 168, className }: { percent: number; children?: React.ReactNode; size?: number; className?: string }) {
   const p = Math.max(0, Math.min(1, percent));
-  const color = percent > 1 ? FINNOS_COLOR.expense : percent > 0.8 ? FINNOS_COLOR.forecast : FINNOS_COLOR.result;
+  const color = percent > 1 ? FINNOS_COLOR.expense : FINNOS_COLOR.result;
   const r = 70, c = Math.PI * r;
   return (
     <div className={cn("relative mx-auto", className)} style={{ width: size, height: size / 2 + 8 }}>
@@ -100,7 +101,7 @@ export function Gauge({ percent, children, size = 168, className }: { percent: n
 
 export interface BarDatum { label: string; value: number; focus?: boolean; future?: boolean; valueLabel?: string }
 
-/** Barras: values side by side from zero; the one in focus in purple, what is still to come in the forecast colour. */
+/** Barras: values side by side from zero; the one in focus in purple, estimated months dashed in the same purple. */
 export function Bars({ data, height = 112, onPick, className }: { data: BarDatum[]; height?: number; onPick?: (d: BarDatum) => void; className?: string }) {
   const peak = Math.max(1, ...data.map((d) => d.value));
   return (
@@ -110,7 +111,7 @@ export function Bars({ data, height = 112, onPick, className }: { data: BarDatum
           <>
             <span className="text-[10px] tabular-nums text-muted-foreground">{d.valueLabel ?? ""}</span>
             <motion.span className="block w-full rounded-lg" initial={{ height: 0 }} animate={{ height: Math.max(4, (d.value / peak) * (height - 36)) }} transition={{ delay: i * 0.04 }}
-              style={{ backgroundColor: d.focus ? FINNOS_COLOR.result : d.future ? FINNOS_COLOR.forecast : "color-mix(in srgb, var(--finnos-purple) 28%, var(--background))" }} />
+              style={d.future ? { backgroundColor: "color-mix(in srgb, var(--finnos-purple) 18%, transparent)", outline: "1.5px dashed color-mix(in srgb, var(--finnos-purple) 70%, transparent)", outlineOffset: -1.5 } : { backgroundColor: d.focus ? FINNOS_COLOR.result : "color-mix(in srgb, var(--finnos-purple) 32%, var(--background))" }} />
             <span className={cn("text-[11px]", d.focus ? "font-semibold text-foreground" : "text-muted-foreground")}>{d.label}</span>
           </>
         );

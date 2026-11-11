@@ -8,7 +8,7 @@ import { useBalanceHidden } from "@/lib/balance";
 import { commitments } from "@/lib/analysisInsights";
 import { budgetPressure, installmentPlans, installmentSchedule, summarizeInstallments } from "@/lib/insights/installments";
 import { cn } from "@/lib/utils";
-import { InsightShell, Tile } from "@/components/insights/InsightShell";
+import { InsightShell, NOTE, NUMBER_TILE, Tile } from "@/components/insights/InsightShell";
 import { Bars, BulletBar } from "@/components/charts/FinnosCharts";
 import type { WidgetSize } from "@/lib/insights/registry";
 
@@ -20,7 +20,9 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export function InstallmentsInsight({ cardId = null, compact = false, size, to, className }: { cardId?: string | null; compact?: boolean; size?: WidgetSize; to?: string; className?: string }) {
   const { hidden } = useBalanceHidden();
   const money = (v: number) => (hidden ? formatHiddenBRL() : formatBRL(v));
-  const [open, setOpen] = useState(false);
+  const [opened, setOpen] = useState(false);
+  // The analysis page shows everything; Grande shows the first three.
+  const open = opened || size === "XL";
   const month = currentMonth();
   // Same query as Análise → Compromissos, so both read one cache.
   const transactions = useQuery({ queryKey: ["transactions", "analysis-all"], queryFn: () => fetchTransactions({ start_date: "1900-01-01", end_date: "2999-12-31" }), staleTime: 60_000 });
@@ -39,8 +41,8 @@ export function InstallmentsInsight({ cardId = null, compact = false, size, to, 
     const top = plans.filter((p) => p.current > 0).slice(0, 2);
     return (
       <Tile title="Parcelas" icon={<Layers className="size-3.5" />} className={className} testId="installments-insight">
-        <div className="flex items-baseline justify-between gap-2"><p className="font-heading text-[24px] font-bold tabular-nums leading-none">{money(summary.monthly)}<span className="text-xs font-normal text-muted-foreground">/mês</span></p>{size === "M" ? <span className="text-xs text-muted-foreground">faltam {money(summary.remaining)}</span> : null}</div>
-        {size === "S" ? <p className="mt-auto text-xs text-muted-foreground">{plans.length} {plans.length === 1 ? "compra" : "compras"} · faltam {money(summary.remaining)}</p> : (
+        <div className="flex items-baseline justify-between gap-3"><p className={NUMBER_TILE}>{money(summary.monthly)}</p>{size === "M" ? <span className={cn(NOTE, "shrink-0")}>faltam {money(summary.remaining)}</span> : null}</div>
+        {size === "S" ? <p className={cn(NOTE, "mt-auto line-clamp-2")}>por mês · faltam {money(summary.remaining)}</p> : (
           <ul className="mt-auto space-y-2">
             {top.map((p) => (
               <li key={p.id} className="text-xs">
@@ -69,7 +71,6 @@ export function InstallmentsInsight({ cardId = null, compact = false, size, to, 
       testId={cardId ? `installments-insight-${cardId}` : "installments-insight"}
       title="Parcelas em andamento"
       subtitle={plans.length ? <>{plans.length} {plans.length === 1 ? "compra parcelada" : "compras parceladas"} · <b className="text-foreground">{money(summary.monthly)}</b> por mês · ainda faltam <b className="text-foreground">{money(summary.remaining)}</b></> : "Nenhuma compra parcelada em andamento."}
-      icon={<Layers className="size-5" aria-hidden="true" />}
     >
       {plans.length ? (
         <>
@@ -93,7 +94,7 @@ export function InstallmentsInsight({ cardId = null, compact = false, size, to, 
             ))}
           </ul>
 
-          {summary.freedNextMonth > 0 ? (
+          {summary.freedNextMonth > 0 && size !== "L" ? (
             <p className="mt-3 rounded-2xl bg-income/10 px-3 py-2 text-sm text-income">A partir de {short(schedule[1]?.month ?? month)}, sobram {money(summary.freedNextMonth)} por mês: {summary.plans.filter((p) => p.endMonth === month && p.current > 0).map((p) => p.name).join(", ")} {summary.plans.filter((p) => p.endMonth === month && p.current > 0).length === 1 ? "termina" : "terminam"} agora.</p>
           ) : null}
 
@@ -121,10 +122,10 @@ export function InstallmentsInsight({ cardId = null, compact = false, size, to, 
             </motion.div>
           ) : null}
 
-          <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary" data-testid="installments-more">
+          {size === "L" || size === "XL" ? null : <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary" data-testid="installments-more">
             {open ? "Ver menos" : plans.length > 3 ? `Ver todas (${plans.length}) e os próximos meses` : "Ver próximas parcelas e o orçamento"}
             <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} aria-hidden="true" />
-          </button>
+          </button>}
         </>
       ) : null}
     </InsightShell>

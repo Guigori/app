@@ -2,13 +2,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, Plus, Search, Star, X } from "lucide-react";
+import { ArrowLeft, Plus, Search, X } from "lucide-react";
 import { INSIGHTS, SIZE_LABEL, THEMES, type InsightDef, type WidgetConfig, type WidgetSize } from "@/lib/insights/registry";
 import { cn } from "@/lib/utils";
 import { InsightWidget } from "@/components/insights/widgets";
 import { useCards } from "@/components/insights/useInsightData";
 
-const PREVIEW_H: Record<WidgetSize, string> = { S: "h-[10.5rem] w-[54%]", M: "h-[10.5rem] w-full", L: "w-full", XL: "w-full" };
+const PREVIEW_H: Record<WidgetSize, string> = { S: "h-[11rem] w-[54%]", M: "h-[11rem] w-full", L: "h-[23rem] w-full", XL: "h-[23rem] w-full" };
 
 export function WidgetGallery({ open, onClose, onAdd }: { open: boolean; onClose: () => void; onAdd: (id: string, size: WidgetSize, config?: WidgetConfig) => void }) {
   const [query, setQuery] = useState("");
@@ -20,13 +20,20 @@ export function WidgetGallery({ open, onClose, onAdd }: { open: boolean; onClose
     return INSIGHTS.filter((d) => (d.requires !== "cards" || hasCards) && (!q || `${d.title} ${d.description} ${d.theme}`.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().includes(q)));
   }, [query, hasCards]);
   const close = () => { setPicked(null); setQuery(""); onClose(); };
+  // The page behind stays still while the gallery scrolls.
+  useEffect(() => {
+    if (!open) return;
+    const { overflow } = document.body.style, html = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden"; document.documentElement.style.overflow = "hidden";
+    return () => { document.body.style.overflow = overflow; document.documentElement.style.overflow = html; };
+  }, [open]);
   if (typeof document === "undefined") return null;
   return createPortal(
     <AnimatePresence>
       {open ? (
-        <motion.div className="fixed inset-0 z-[120] flex items-end bg-black/50 dashboard:items-center dashboard:justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close}>
+        <motion.div className="fixed inset-0 z-[120] flex touch-none items-end bg-black/50 dashboard:items-center dashboard:justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close}>
           <motion.div role="dialog" aria-modal="true" aria-label="Adicionar widget" onClick={(e) => e.stopPropagation()}
-            className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[28px] border border-border bg-background dashboard:max-w-xl dashboard:rounded-[28px]"
+            className="flex max-h-[92dvh] w-full touch-auto flex-col overflow-hidden rounded-t-[28px] border border-border bg-background dashboard:max-w-xl dashboard:rounded-[28px]"
             initial={{ y: 60 }} animate={{ y: 0 }} exit={{ y: 60 }} transition={{ type: "spring", damping: 30, stiffness: 320 }} data-testid="widget-gallery">
             <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-muted" aria-hidden="true" />
             {picked ? <Detail def={picked} onBack={() => setPicked(null)} onAdd={(size, config) => { onAdd(picked.id, size, config); close(); }} /> : (
@@ -38,22 +45,22 @@ export function WidgetGallery({ open, onClose, onAdd }: { open: boolean; onClose
                   </label>
                   <button type="button" onClick={close} aria-label="Fechar" className="grid size-11 place-items-center rounded-full bg-muted"><X className="size-5" /></button>
                 </div>
-                <div className="min-h-0 overflow-y-auto px-4 pb-8 pt-3">
+                <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-8 pt-3">
                   {THEMES.map((theme) => {
                     const items = list.filter((d) => d.theme === theme);
                     if (!items.length) return null;
                     return (
                       <section key={theme} className="mb-4">
-                        <h3 className="mb-2 px-1 text-xs font-semibold uppercase tracking-[1.5px] text-muted-foreground">{theme}</h3>
+                        <h3 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{theme}</h3>
                         <ul className="space-y-2">
                           {items.map((d) => (
                             <li key={d.id}>
-                              <button type="button" onClick={() => setPicked(d)} className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 text-left hover:bg-muted/50" data-testid={`widget-gallery-item-${d.id}`}>
+                              <button type="button" onClick={() => setPicked(d)} className="flex w-full items-center gap-3 rounded-3xl border border-border/80 bg-card p-4 text-left shadow-sm hover:bg-muted/50" data-testid={`widget-gallery-item-${d.id}`}>
                                 <span className="min-w-0 flex-1">
-                                  <span className="flex items-center gap-1.5 font-semibold">{d.title}{d.star ? <Star className="size-3.5 fill-current text-[var(--chart-3)]" aria-label="Novo" /> : null}</span>
+                                  <span className="flex items-center gap-2 font-semibold">{d.title}{d.star ? <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">Novo</span> : null}</span>
                                   <span className="mt-0.5 block text-xs text-muted-foreground">{d.description}</span>
                                 </span>
-                                <span className="flex shrink-0 gap-1">{d.sizes.map((s) => <span key={s} className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">{s === "XL" ? "XG" : s === "S" ? "P" : s === "M" ? "M" : "G"}</span>)}</span>
+                                <span className="flex shrink-0 gap-1">{d.sizes.map((s) => <span key={s} className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">{s === "S" ? "P" : s === "M" ? "M" : "G"}</span>)}</span>
                               </button>
                             </li>
                           ))}
@@ -90,7 +97,7 @@ function Detail({ def, onBack, onAdd }: { def: InsightDef; onBack: () => void; o
         <button type="button" onClick={onBack} aria-label="Voltar à galeria" className="grid size-11 place-items-center rounded-full bg-muted"><ArrowLeft className="size-5" /></button>
         <p className="text-sm font-semibold text-muted-foreground">{def.theme}</p>
       </div>
-      <div className="min-h-0 overflow-y-auto pb-4">
+      <div className="min-h-0 overflow-y-auto overscroll-contain pb-4">
         <div className="px-6 pt-3 text-center">
           <h2 className="font-heading text-2xl font-bold">{def.title}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{def.description}</p>

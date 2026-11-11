@@ -9,7 +9,7 @@ import { useBalanceHidden } from "@/lib/balance";
 import { readFixedBills, type FixedBillState } from "@/lib/insights/fixedBills";
 import { cn } from "@/lib/utils";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
-import { BigMoney, InsightShell, Tile } from "@/components/insights/InsightShell";
+import { BigMoney, InsightShell, NOTE, NUMBER_TILE, Tile } from "@/components/insights/InsightShell";
 import { FINNOS_COLOR, SegmentedBar } from "@/components/charts/FinnosCharts";
 import type { WidgetSize } from "@/lib/insights/registry";
 
@@ -39,7 +39,7 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
   const bar = <SegmentedBar segments={[{ value: r.paidTotal, color: FINNOS_COLOR.income, label: "Pagas" }, { value: late, color: FINNOS_COLOR.expense, label: "Atrasadas" }, { value: Math.max(0, r.dueTotal - late), color: FINNOS_COLOR.forecast, striped: true, label: "A pagar" }]} total={r.total} height={8} />;
   if (size === "S" || size === "M") return (
     <Tile title="Contas fixas" icon={<CalendarCheck className="size-3.5" />} className={className} testId="fixed-bills-insight">
-      <p className="font-heading text-[22px] font-bold tabular-nums leading-none">{r.paidCount} de {r.bills.length} <span className="text-sm font-semibold text-muted-foreground">pagas</span></p>
+      <p className={NUMBER_TILE}>{r.paidCount} de {r.bills.length} <span className="text-base font-semibold text-muted-foreground">pagas</span></p>
       <p className="mt-1 text-xs text-muted-foreground">{r.dueTotal > 0 ? <>falta <b className="text-foreground">{money(r.dueTotal)}</b></> : r.bills.length ? "tudo pago" : "nenhuma no mês"}{r.lateCount ? <span className="font-semibold text-expense"> · {r.lateCount} atrasada{r.lateCount > 1 ? "s" : ""}</span> : null}</p>
       <div className="mt-2">{bar}</div>
       {size === "M" ? (
@@ -52,7 +52,7 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
   const shown = r.bills
     .filter((b) => filter === "todas" || (filter === "pagas" ? b.state === "pago" : b.state !== "pago"))
     .filter((b) => !day || b.tx.date === day);
-  const list = (compact ? shown.slice(0, size === "L" ? 6 : 5) : shown);
+  const list = (compact ? shown.slice(0, size === "L" ? 4 : 5) : shown);
 
   const pay = async (id: string) => {
     const bill = r.bills.find((b) => b.tx.id === id);
@@ -74,7 +74,6 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
       to={to}
       title={title}
       subtitle={`${r.bills.length} ${r.bills.length === 1 ? "conta" : "contas"} ${periodLabel}`}
-      icon={<CalendarCheck className="size-5" aria-hidden="true" />}
     >
       {r.bills.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma conta fixa {periodLabel}.</p> : (
         <>
@@ -85,7 +84,7 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
           </p>
           <div className="mt-2">{bar}</div>
 
-          {r.days.length > 1 ? (
+          {r.days.length > 1 && !compact ? (
             <div className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Dias de vencimento">
               {r.days.map((d) => (
                 <button key={d.date} type="button" onClick={() => setDay((v) => (v === d.date ? null : d.date))} aria-pressed={day === d.date}
@@ -125,8 +124,8 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
             ))}
             {!list.length ? <li className="py-3 text-sm text-muted-foreground">Nada aqui com esse filtro.</li> : null}
           </ul>
-          <p className="mt-2 text-xs text-muted-foreground">Toque no círculo para marcar como paga.</p>
-          {compact && (shown.length > list.length || flowLink) ? (
+          {!compact ? <p className={cn(NOTE, "mt-2")}>Toque no círculo para marcar como paga.</p> : null}
+          {compact && !size && (shown.length > list.length || flowLink) ? (
             <Link to={flowLink ?? "/transacoes"} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-primary">Ver todas no Fluxo <ChevronRight className="size-4" /></Link>
           ) : null}
         </>

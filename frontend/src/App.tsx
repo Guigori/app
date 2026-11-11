@@ -53,6 +53,7 @@ const AnalysisEvolution = lazy(() => import("@/pages/analysis/AnalysisEvolution"
 const AnalysisCategories = lazy(() => import("@/pages/analysis/AnalysisCategories"));
 const AnalysisRhythm = lazy(() => import("@/pages/analysis/AnalysisRhythm"));
 const AnalysisCommitments = lazy(() => import("@/pages/analysis/AnalysisCommitments"));
+const InsightDetail = lazy(() => import("@/pages/InsightDetail"));
 const SettingsHub = lazy(() => import("@/pages/SettingsHub").then(module => ({ default: module.SettingsHub })));
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
@@ -111,6 +112,8 @@ export default function App() {
             <Route path="/analise/categorias" element={<AnalysisCategories />} />
             <Route path="/analise/ritmo" element={<AnalysisRhythm />} />
             <Route path="/analise/compromissos" element={<AnalysisCommitments />} />
+            <Route path="/analise/painel/:insightId" element={<InsightDetail />} />
+            <Route path="/analise/painel" element={<Navigate to="/analise" replace />} />
             <Route path="/patrimonio" element={<Patrimonio />} />
             <Route path="/metas" element={<Patrimonio />} />
             <Route path="/investimentos" element={<Patrimonio />} />

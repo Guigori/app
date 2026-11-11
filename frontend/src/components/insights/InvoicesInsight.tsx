@@ -1,14 +1,14 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
-import { ChevronRight, CreditCard as CardIcon } from "lucide-react";
+import { CreditCard as CardIcon } from "lucide-react";
 import { fetchInvoice } from "@/lib/data";
 import { formatBRL, formatHiddenBRL, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { closingForMonth, invoiceMonths, invoicePoint, mergeInvoicePoints, overdueFinding, readInvoices, type InvoicePoint } from "@/lib/insights/invoices";
 import { cn } from "@/lib/utils";
 import type { CreditCard } from "@/types/finnos";
-import { BigMoney, FindingList, InsightShell, Tile } from "@/components/insights/InsightShell";
+import { BigMoney, FindingList, InsightShell, NOTE, NUMBER_TILE, Tile } from "@/components/insights/InsightShell";
 import { FINNOS_COLOR, ProjectionLine } from "@/components/charts/FinnosCharts";
 import type { WidgetSize } from "@/lib/insights/registry";
 
@@ -55,13 +55,13 @@ export function InvoicesInsight({ cards, cardId = null, compact: compactProp = f
   const tileTitle = card ? `Fatura ${card.name}` : "Faturas";
   if (size === "S") return (
     <Tile title={tileTitle} icon={<CardIcon className="size-3.5" />} className={className} testId="invoices-insight">
-      <p className="font-heading text-[clamp(1.15rem,6vw,1.625rem)] font-bold tabular-nums leading-none">{money(reading.present?.total ?? 0)}</p>
-      <p className="mt-auto text-xs text-muted-foreground">{vs ?? "fatura atual"}</p>
+      <p className={NUMBER_TILE}>{money(reading.present?.total ?? 0)}</p>
+      <p className={cn(NOTE, "mt-auto")}>{vs ?? "fatura atual"}</p>
     </Tile>
   );
   if (size === "M") return (
     <Tile title={tileTitle} icon={<CardIcon className="size-3.5" />} className={className} testId="invoices-insight">
-      <div className="flex items-baseline justify-between gap-2"><p className="font-heading text-[22px] font-bold tabular-nums leading-none">{money(reading.present?.total ?? 0)}</p><span className="text-xs">{vs}</span></div>
+      <div className="flex items-baseline justify-between gap-3"><p className={NUMBER_TILE}>{money(reading.present?.total ?? 0)}</p><span className="shrink-0 text-[13px]">{vs}</span></div>
       {hidden ? null : <div className="mt-auto"><ProjectionLine points={points.map((p) => ({ value: p.total, kind: p.offset > 0 ? "previsto" as const : "real" as const }))} height={56} labels={false} ariaLabel="Fatura passada, atual e próximas" /></div>}
     </Tile>
   );
@@ -80,7 +80,6 @@ export function InvoicesInsight({ cards, cardId = null, compact: compactProp = f
       testId={cardId ? `invoices-insight-${cardId}` : "invoices-insight"}
       title="Faturas"
       subtitle={card ? `${card.name} · passada, atual e próximas` : `${scope.length === 1 ? scope[0].name : `Todos os ${scope.length} cartões`} · passada, atual e próximas`}
-      icon={<CardIcon className="size-5" aria-hidden="true" />}
     >
       <BigMoney value={reading.present?.total ?? 0} hidden={hidden} />
       <p className="mt-1 text-xs text-muted-foreground">
@@ -91,19 +90,19 @@ export function InvoicesInsight({ cards, cardId = null, compact: compactProp = f
       <div className="relative mt-4 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(points.length, 1)}, minmax(0, 1fr))` }} data-testid="invoices-timeline">
         <svg className="pointer-events-none absolute inset-x-0 top-1 h-[60px] w-full" viewBox="0 0 400 60" preserveAspectRatio="none" aria-hidden="true">
           {/* Linha de projeção: what already closed or is open in a solid line, the next invoices dashed in the forecast colour. */}
-          <polyline fill="none" stroke={FINNOS_COLOR.result} strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke"
+          <polyline fill="none" stroke={FINNOS_COLOR.result} strokeWidth="2.5" strokeLinecap="round" vectorEffect="non-scaling-stroke"
             points={points.map((p, i) => ({ p, i })).filter(({ p }) => p.offset <= 0).map(({ p, i }) => `${x(i)},${y(p)}`).join(" ")} />
-          <polyline fill="none" stroke={FINNOS_COLOR.forecast} strokeDasharray="6 6" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke"
+          <polyline fill="none" stroke={FINNOS_COLOR.result} strokeOpacity="0.7" strokeDasharray="6 6" strokeWidth="2.5" strokeLinecap="round" vectorEffect="non-scaling-stroke"
             points={points.map((p, i) => ({ p, i })).filter(({ p }) => p.offset >= 0).map(({ p, i }) => `${x(i)},${y(p)}`).join(" ")} />
         </svg>
         {points.map((p) => {
           const tile = (
-            <div className={cn("relative flex h-full flex-col items-center rounded-2xl border px-1 pb-2.5 pt-1", p.offset === 0 ? "border-primary/60 bg-primary/8" : "border-transparent")}>
+            <div className={cn("relative flex h-full flex-col items-center rounded-2xl border px-1 pb-2.5 pt-1", p.offset === 0 ? "border-border bg-muted/40" : "border-transparent")}>
               <div className="relative h-[60px] w-full">
-                <span className="absolute left-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2" style={{ top: y(p), borderColor: p.offset > 0 ? FINNOS_COLOR.forecast : FINNOS_COLOR.result, backgroundColor: p.offset > 0 ? "var(--card)" : FINNOS_COLOR.result }} />
+                <span className="absolute left-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2" style={{ top: y(p), borderColor: FINNOS_COLOR.result, backgroundColor: p.offset === 0 ? FINNOS_COLOR.result : "var(--card)" }} />
               </div>
-              <span className={cn("text-[11px]", p.offset === 0 ? "font-semibold text-foreground" : "text-muted-foreground")}>{label(p)}</span>
-              <span className="mt-0.5 text-xs font-semibold tabular-nums">{money(p.total)}</span>
+              <span className={cn("text-[11px] uppercase tracking-[0.12em]", p.offset === 0 ? "font-semibold text-foreground" : "text-muted-foreground")}>{label(p)}</span>
+              <span className="mt-1 text-[13px] font-semibold tabular-nums">{money(p.total)}</span>
             </div>
           );
           return card ? <Link key={p.offset} to={`/cartoes/${card.id}`} aria-label={`Fatura de ${short(p.month)}: ${money(p.total)}`}>{tile}</Link> : <div key={p.offset}>{tile}</div>;
@@ -111,16 +110,11 @@ export function InvoicesInsight({ cards, cardId = null, compact: compactProp = f
       </div>
 
       <div className="mt-4">
-        <FindingList findings={compact ? findings.slice(0, 2) : findings} testId="invoices-findings" />
+        <FindingList findings={compact ? findings.slice(0, 1) : findings} testId="invoices-findings" />
       </div>
 
       {!compact && reading.biggest ? (
         <p className="mt-3 text-xs text-muted-foreground">Maior compra da fatura atual: <span className="font-semibold text-foreground">{reading.biggest.name}</span> · {money(reading.biggest.value)}{reading.biggest.installment_label ? ` · parcela ${reading.biggest.installment_label}` : ""}</p>
-      ) : null}
-      {card ? (
-        <Link to={`/cartoes/${card.id}`} className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary">Ver fatura detalhada <ChevronRight className="size-4" /></Link>
-      ) : compact ? (
-        <Link to="/contas?aba=cartoes" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary">Ver cartões <ChevronRight className="size-4" /></Link>
       ) : null}
     </InsightShell>
   );
