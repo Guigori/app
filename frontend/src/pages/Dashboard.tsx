@@ -3,18 +3,14 @@ import { BackupReminder } from "@/components/settings/BackupReminder";
 import { useRouteState } from "@/lib/routeState";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { SlidersHorizontal } from "lucide-react";
 import { fetchOnboarding } from "@/lib/onboarding";
 import { getMode } from "@/lib/mode";
 import { useBalanceHidden } from "@/lib/balance";
-import { fetchAccounts, fetchCards, fetchDashboard, fetchMe, fetchRadar, fetchTransactions } from "@/lib/data";
-import { FixedBillsInsight, InvoicesInsight } from "@/components/insights";
-import { monthRange } from "@/lib/insights/fixedBills";
+import { fetchAccounts, fetchDashboard, fetchMe, fetchRadar, fetchTransactions } from "@/lib/data";
+import { WidgetBoard } from "@/components/insights/WidgetBoard";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 
-import { useHomePreferences, type HomeModuleId } from "@/lib/homePreferences";
 import { CHART_RANGES, pickMany, pickOne, useChartPreference } from "@/lib/chartPreferences";
-import { cn } from "@/lib/utils";
 import type { CategorySlice, MetricKind } from "@/types/finnos";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { BalanceHeroCard } from "@/components/dashboard/BalanceHeroCard";
@@ -45,7 +41,6 @@ export default function Dashboard() {
   const onboardingQuery = useQuery({ queryKey: ["onboarding"], queryFn: fetchOnboarding, enabled: getMode() === "account" });
   const needsSetup = ["skipped", "not_started", "in_progress"].includes(onboardingQuery.data?.status ?? "");
   const navigate = useNavigate();
-  const homePreferences = useHomePreferences();
   const { hidden: balanceHidden, toggle: toggleBalance } = useBalanceHidden();
   const { data: user } = useQuery({
     queryKey: ["me"],
@@ -75,7 +70,6 @@ export default function Dashboard() {
   useEffect(() => {
     setSelectedCategory(null);
   }, [activeMonth]);
-  const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: fetchCards, staleTime: 60_000 });
   const radarQuery = useQuery({
     queryKey: ["radar", activeMonth],
     queryFn: fetchRadar,
@@ -194,13 +188,12 @@ export default function Dashboard() {
 
       {data ? (
         <div className="min-w-0 space-y-5 sm:space-y-6">
-          {homePreferences.order.filter((id) => !homePreferences.hidden.includes(id)).map((moduleId: HomeModuleId) => {
-            if (moduleId === "metrics") return null;
-            if (moduleId === "fixed") return <FixedBillsInsight key={moduleId} compact {...monthRange(activeMonth)} flowLink={`/transacoes?month=${activeMonth}&fixas=1`} />;
-            if (moduleId === "cards") return cardsQuery.data?.some((c) => c.active) ? <InvoicesInsight key={moduleId} compact cards={cardsQuery.data} /> : null;
-            if (moduleId === "radar") return <RadarSection key={moduleId} signals={radarQuery.data?.items ?? []} totalCount={radarQuery.data?.count ?? 0} loading={radarQuery.isPending} error={radarQuery.isError} onRetry={() => void radarQuery.refetch()} />;
-            if (moduleId === "categories") return (
-              <div key={moduleId}>
+          <WidgetBoard
+            surface="inicio"
+            header={<h2 className="font-heading text-lg font-semibold">Seu painel</h2>}
+            slots={{
+              radar: () => <RadarSection signals={radarQuery.data?.items ?? []} totalCount={radarQuery.data?.count ?? 0} loading={radarQuery.isPending} error={radarQuery.isError} onRetry={() => void radarQuery.refetch()} />,
+              categorias: () => (
                 <ExpensesDonutChart
                   month={data.month}
                   slices={data.categories}
@@ -218,21 +211,9 @@ export default function Dashboard() {
                   onSelectCategory={setSelectedCategory}
                   onOpenCategory={(slice) => navigate(`/transacoes?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)}
                 />
-              </div>
-            );
-            return null;
-          })}
-
-          <div className="flex justify-center pb-2 pt-2">
-            <Link
-              to="/configuracoes/painel"
-              className={cn(buttonVariants({ variant: "outline" }), "rounded-full border-border/70 bg-card/70 px-5 shadow-sm backdrop-blur-xl")}
-              data-testid="modify-dashboard-button"
-            >
-              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-              Modificar painel
-            </Link>
-          </div>
+              ),
+            }}
+          />
         </div>
       ) : !error ? (
         <div className="space-y-6" aria-hidden="true">

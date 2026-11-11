@@ -15,11 +15,12 @@ from finnos.routers.auth import require_user
 router = APIRouter(prefix="/preferences", tags=["preferences"])
 
 # chart: how the Home chart was left (view, period, series); theme: light/dark/system.
-ALLOWED = {"navigation", "home", "register_default", "finn_memory", "chart", "theme"}
+# widgets: Início and Análise as the person arranged them (analyses, sizes, order).
+ALLOWED = {"navigation", "home", "register_default", "finn_memory", "chart", "theme", "widgets"}
 THEMES = {"light", "dark", "system"}
 MAX_VALUE = 4000
 # FINNOS IA memory (aliases, notes, topics) is capped on the client; it needs more room than a layout.
-MAX_BY_KEY = {"finn_memory": 12000}
+MAX_BY_KEY = {"finn_memory": 12000, "widgets": 8000}
 
 
 class PreferencesIn(BaseModel):

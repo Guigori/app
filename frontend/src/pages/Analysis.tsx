@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { WidgetBoard } from "@/components/insights/WidgetBoard";
 import { useRouteState } from "@/lib/routeState";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -99,9 +100,11 @@ export default function Analysis() {
         {filter!=="income" && <Metric label="Despesas" value={d?.expense ?? 0} change={expenseDelta} negative hidden={hidden}/>}
         <Metric label="Resultado" value={d?.month_balance ?? 0} change={0} hidden={hidden}/>
       </div> : <div className="h-52">
-        <ResponsiveContainer width="100%" height="100%"><BarChart data={chartData}><CartesianGrid vertical={false} strokeDasharray="3 3" opacity={.18}/><XAxis dataKey="label" axisLine={false} tickLine={false}/><YAxis hide/><Tooltip active defaultIndex={pinIndex(chartData,(m)=>m.month===month)} formatter={(v)=>money(Number(v))}/><Bar dataKey="income" name="Receitas" fill="var(--primary)" radius={[5,5,0,0]}/><Bar dataKey="expense" name="Despesas" fill="#A46DFF" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer>
+        <ResponsiveContainer width="100%" height="100%"><BarChart data={chartData}><CartesianGrid vertical={false} strokeDasharray="3 3" opacity={.18}/><XAxis dataKey="label" axisLine={false} tickLine={false}/><YAxis hide/><Tooltip active defaultIndex={pinIndex(chartData,(m)=>m.month===month)} formatter={(v)=>money(Number(v))}/><Bar dataKey="income" name="Receitas" fill="var(--income)" radius={[5,5,0,0]}/><Bar dataKey="expense" name="Despesas" fill="var(--expense)" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer>
       </div>}
     </CardContent></Card></button>
+
+    <WidgetBoard surface="analise" header={<h2 className="px-1 text-sm font-semibold text-muted-foreground">Fixadas</h2>} emptyText="Fixe aqui as análises que você quer ver toda vez." />
 
     <section aria-label="Explorar análises">
       <h2 className="mb-2 px-1 text-sm font-semibold text-muted-foreground">Explorar</h2>

@@ -3,18 +3,14 @@ import { BackupReminder } from "@/components/settings/BackupReminder";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, ChevronLeft, ChevronRight, CreditCard, Eye, EyeOff, Wallet } from "lucide-react";
-import { fetchAccounts, fetchCalendar, fetchCards, fetchDashboard, fetchMe } from "@/lib/data";
-import { FixedBillsInsight, InvoicesInsight } from "@/components/insights";
-import { monthRange } from "@/lib/insights/fixedBills";
+import { fetchAccounts, fetchCalendar, fetchDashboard, fetchMe } from "@/lib/data";
+import { WidgetBoard } from "@/components/insights/WidgetBoard";
 import { currentMonth, firstName, formatDate, monthLabel } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { Sparkline } from "@/components/dashboard/Sparkline";
 import { TransactionCalendar } from "@/components/transactions/TransactionCalendar";
 import { HomeFinancialChart } from "@/components/dashboard/HomeFinancialChart";
 import { CHART_RANGES, pickOne, useChartPreference } from "@/lib/chartPreferences";
-import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
-import { RadarSection } from "@/components/dashboard/RadarSection";
-import { fetchRadar } from "@/lib/data";
 import type { MetricKind } from "@/types/finnos";
 
 const money = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -36,8 +32,6 @@ export default function DashboardWeb() {
   const calendar = useQuery({ queryKey: ["calendar", month], queryFn: () => fetchCalendar(month) });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts });
   const me = useQuery({ queryKey: ["me"], queryFn: fetchMe });
-  const radar = useQuery({ queryKey: ["radar", month], queryFn: fetchRadar });
-  const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards, staleTime: 60_000 });
   const data = dashboard.data;
   const display = (amount: number) => hidden ? "••••••" : money(amount);
   const go = (kind: MetricKind) => navigate(`/transacoes?aba=caixa&month=${month}&metric=${metric[kind]}`);
@@ -147,7 +141,7 @@ export default function DashboardWeb() {
         </div>
       </div>
 
-      <div className="grid items-stretch gap-5 lg:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid items-stretch gap-5 lg:grid-cols-2">
         <section className="rounded-2xl border border-border bg-card p-5">
           <div className="mb-3 flex items-center justify-between"><h2 className="font-heading text-base font-semibold">Minhas contas</h2><Link to="/contas" className="text-xs font-medium text-primary hover:underline">Ver todas</Link></div>
           {accounts.isPending && <p className="text-sm text-muted-foreground">Carregando contas…</p>}
@@ -159,13 +153,8 @@ export default function DashboardWeb() {
           <div className="mb-3 flex items-center justify-between"><h2 className="font-heading text-base font-semibold">Movimentações recentes</h2><Link to={`/transacoes?month=${month}`} className="text-xs font-medium text-primary hover:underline">Ver todas</Link></div>
           {data?.recent.length ? <div className="divide-y divide-border/70">{data.recent.slice(0, 5).map((tx) => <Link key={tx.id} to={`/transacoes?date=${tx.date}&highlight=${tx.id}`} className="-mx-2 flex items-center justify-between gap-3 rounded-xl px-2 py-3 hover:bg-muted/50"><div className="min-w-0"><p className="truncate text-sm font-medium">{tx.name}</p><p className="text-xs text-muted-foreground">{formatDate(tx.date)} · {tx.category_name ?? tx.type}</p></div><span className={`shrink-0 text-sm font-semibold tabular-nums ${tx.type === "despesa" ? "text-expense" : "text-income"}`}>{tx.type === "despesa" ? "−" : "+"}{display(tx.value)}</span></Link>)}</div> : <p className="py-4 text-sm text-muted-foreground">Ainda não há movimentações neste mês.</p>}
         </section>
-        {data ? <ExpensesDonutChart className="lg:col-span-2 2xl:col-span-1" month={data.month} slices={data.categories} total={data.expense} onOpenDetails={() => go("expense")} onOpenCategory={(slice) => navigate(`/transacoes?month=${month}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)} /> : null}
       </div>
-      <div className="grid items-start gap-5 lg:grid-cols-2">
-        <FixedBillsInsight compact {...monthRange(month)} flowLink={`/transacoes?month=${month}&fixas=1`} />
-        {cards.data?.some((c) => c.active) ? <InvoicesInsight compact cards={cards.data} /> : null}
-      </div>
-      <RadarSection signals={radar.data?.items ?? []} totalCount={radar.data?.count ?? 0} loading={radar.isPending} error={radar.isError} onRetry={() => void radar.refetch()} />
+      <WidgetBoard surface="inicio" header={<h2 className="font-heading text-lg font-semibold">Seu painel</h2>} />
     </div>
   );
 }
