@@ -35,10 +35,19 @@ export function useWidgetAlerts() {
   const [dismissed, setDismissed] = useState(() => readSet(DISMISSED));
 
   const all = useMemo(() => {
-    if (!cards.data || !accounts.data) return [];
-    const invoices = nextInvoices(cards.data, accounts.data, today);
-    const forecast = history.data && calendar.data && open.data ? balanceForecast(history.data, open.data, invoices, calendar.data.planned ?? [], today) : null;
-    return widgetAlerts({ invoices, forecast, budget: budget.data ? { month, planned: budget.data.planned, spent: budget.data.spent } : null, today });
+    // A notice is a bonus: whatever the data looks like, it never takes the header (and the screen) down.
+    if (!Array.isArray(cards.data) || !Array.isArray(accounts.data)) return [];
+    try {
+      const invoices = nextInvoices(cards.data, accounts.data, today);
+      let forecast = null;
+      try {
+        forecast = history.data && !Array.isArray(history.data) && calendar.data && Array.isArray(open.data) ? balanceForecast(history.data, open.data, invoices, calendar.data.planned ?? [], today) : null;
+      } catch { forecast = null; }
+      const b = budget.data && typeof budget.data.planned === "number" ? { month, planned: budget.data.planned, spent: budget.data.spent } : null;
+      return widgetAlerts({ invoices, forecast, budget: b, today });
+    } catch {
+      return [];
+    }
   }, [cards.data, accounts.data, history.data, calendar.data, open.data, budget.data, today, month]);
   const alerts = useMemo(() => all.filter((a) => !dismissed.has(a.id)), [all, dismissed]);
 
