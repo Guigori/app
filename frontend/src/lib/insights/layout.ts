@@ -22,7 +22,7 @@ export function defaultLayouts(): Layouts {
   const oldName: Record<string, string> = { radar: "radar", categorias: "categories", "contas-fixas": "fixed", "fatura-que-vem": "cards" };
   return {
     inicio: home.filter(([id]) => !hidden.includes(oldName[id] ?? "")).map(([id, size], i) => ({ key: `d${i}`, id, size })),
-    analise: [["previsao-saldo", "M"], ["faturas", "L"]].map(([id, size], i) => ({ key: `a${i}`, id, size: size as WidgetSize })),
+    analise: [["previsao-saldo", "M"], ["renda", "M"], ["seis-meses", "L"], ["habitos", "L"], ["faturas", "L"]].map(([id, size], i) => ({ key: `a${i}`, id, size: size as WidgetSize })),
   };
 }
 
