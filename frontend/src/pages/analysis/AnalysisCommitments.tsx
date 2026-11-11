@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { pinIndex } from "@/lib/chartPin";
-import { fetchDashboard, fetchSubscriptions, fetchTransactions } from "@/lib/data";
+import { fetchCards, fetchDashboard, fetchSubscriptions, fetchTransactions } from "@/lib/data";
+import { InstallmentsInsight, InvoicesInsight } from "@/components/insights";
 import { currentMonth } from "@/lib/format";
 import { commitments } from "@/lib/analysisInsights";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
@@ -16,6 +17,7 @@ export default function AnalysisCommitments() {
   const { hidden, money } = useMoney();
   const transactions = useQuery({ queryKey: ["transactions", "analysis-all"], queryFn: () => fetchTransactions({ start_date: "1900-01-01", end_date: "2999-12-31" }) });
   const subscriptions = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions });
+  const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards, staleTime: 60_000 });
   const dashboard = useQuery({ queryKey: ["dashboard", month], queryFn: () => fetchDashboard(month) });
   const data = transactions.data ? commitments(transactions.data, subscriptions.data?.items ?? [], month, 6) : null;
   const sixMonths = data ? data.months.reduce((s, m) => s + m.total, 0) : 0;
@@ -37,6 +39,8 @@ export default function AnalysisCommitments() {
             {data.months.at(-1) && data.months.at(-1)!.installments < (data.months[0].installments) ? ` As parcelas diminuem até ${monthShort(data.months.at(-1)!.month)}, liberando ${money(data.months[0].installments - data.months.at(-1)!.installments)} por mês.` : ""}
           </Finding>
         ) : null}
+
+        {cards.data?.some((c) => c.active) ? <InvoicesInsight cards={cards.data} /> : null}
 
         <ChartCard title="O que já está comprometido" subtitle="Por mês, a partir de agora" legend={[{ label: "Fixos e assinaturas", color: "var(--primary)" }, { label: "Parcelas", color: "var(--expense)" }]}>
           <div className="h-56 w-full" data-testid="commitments-bars">
@@ -67,18 +71,7 @@ export default function AnalysisCommitments() {
               </ul>
             )}
           </ChartCard>
-          <ChartCard title="Parcelas em andamento" subtitle="Valor da parcela e quantas faltam">
-            {data.installmentItems.length === 0 ? <p className="py-4 text-sm text-muted-foreground">Nenhuma compra parcelada em andamento.</p> : (
-              <ul className="divide-y divide-border" data-testid="commitments-installments">
-                {data.installmentItems.slice(0, 10).map((item) => (
-                  <li key={item.name + item.value} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                    <span className="min-w-0"><span className="block truncate font-medium">{item.name}</span><span className="block text-xs text-muted-foreground">faltam {item.remaining} {item.remaining === 1 ? "parcela" : "parcelas"} · {money(item.value * item.remaining)} no total</span></span>
-                    <span className="shrink-0 font-semibold tabular-nums text-expense">{money(item.value)}/mês</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </ChartCard>
+          <InstallmentsInsight />
         </div>
       </>}
     </div>

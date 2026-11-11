@@ -7,7 +7,9 @@ import { SlidersHorizontal } from "lucide-react";
 import { fetchOnboarding } from "@/lib/onboarding";
 import { getMode } from "@/lib/mode";
 import { useBalanceHidden } from "@/lib/balance";
-import { fetchAccounts, fetchDashboard, fetchMe, fetchRadar, fetchTransactions } from "@/lib/data";
+import { fetchAccounts, fetchCards, fetchDashboard, fetchMe, fetchRadar, fetchTransactions } from "@/lib/data";
+import { FixedBillsInsight, InvoicesInsight } from "@/components/insights";
+import { monthRange } from "@/lib/insights/fixedBills";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 
 import { useHomePreferences, type HomeModuleId } from "@/lib/homePreferences";
@@ -73,6 +75,7 @@ export default function Dashboard() {
   useEffect(() => {
     setSelectedCategory(null);
   }, [activeMonth]);
+  const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: fetchCards, staleTime: 60_000 });
   const radarQuery = useQuery({
     queryKey: ["radar", activeMonth],
     queryFn: fetchRadar,
@@ -193,6 +196,8 @@ export default function Dashboard() {
         <div className="min-w-0 space-y-5 sm:space-y-6">
           {homePreferences.order.filter((id) => !homePreferences.hidden.includes(id)).map((moduleId: HomeModuleId) => {
             if (moduleId === "metrics") return null;
+            if (moduleId === "fixed") return <FixedBillsInsight key={moduleId} compact {...monthRange(activeMonth)} flowLink={`/transacoes?month=${activeMonth}&fixas=1`} />;
+            if (moduleId === "cards") return cardsQuery.data?.some((c) => c.active) ? <InvoicesInsight key={moduleId} compact cards={cardsQuery.data} /> : null;
             if (moduleId === "radar") return <RadarSection key={moduleId} signals={radarQuery.data?.items ?? []} totalCount={radarQuery.data?.count ?? 0} loading={radarQuery.isPending} error={radarQuery.isError} onRetry={() => void radarQuery.refetch()} />;
             if (moduleId === "categories") return (
               <div key={moduleId}>

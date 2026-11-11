@@ -4,6 +4,8 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { canGoBack } from "@/lib/navigation";
 import { CategoryInsight } from "@/components/transactions/CategoryInsight";
+import { FixedBillsInsight } from "@/components/insights";
+import { monthRange } from "@/lib/insights/fixedBills";
 import { ArrowDown, ArrowLeft, ArrowUp, BellOff, Wallet, CalendarDays, ChartPie, Filter, List, Pencil, PlusCircle, ChevronRight, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { deleteTransaction, fetchAccounts, fetchCalendar, fetchCategories, fetchTransactions, fetchTransactionsPage, isTransactionListComplete } from "@/lib/data";
@@ -76,7 +78,7 @@ export default function Transactions() {
   // Opened from another screen through a link (a category, a total, a day): offer the way back.
   const location = useLocation();
   // oxlint-disable-next-line react-hooks/exhaustive-deps -- recomputed per history entry
-  const cameFromLink = useMemo(() => canGoBack() && ["category_id", "metric", "date", "month", "origem", "highlight"].some((k) => searchParams.has(k)), [location.key]);
+  const cameFromLink = useMemo(() => canGoBack() && ["category_id", "metric", "date", "month", "origem", "highlight", "fixas"].some((k) => searchParams.has(k)), [location.key]);
   const linkedDate = searchParams.get("date");
   const linkedMonth = searchParams.get("month");
   const linkedMetric = searchParams.get("metric");
@@ -101,6 +103,9 @@ export default function Transactions() {
   // "?origem=apple-pay" / "apple-pay-auto" (from the Apple Pay card in Início) opens filtered.
   const [captureFilter, setCaptureFilter] = useState<CaptureFilter>(() => ({ "apple-pay": "apple_pay", "apple-pay-auto": "apple_pay_auto" } as Record<string, CaptureFilter>)[searchParams.get("origem") ?? ""] ?? "todas");
   const [categoryId, setCategoryId] = useRouteState("fluxo:category", "todas");
+  // Calendário → "Contas fixas": only the fixed bills of the period, paid and still to pay.
+  const [fixedOnly, setFixedOnly] = useRouteState("fluxo:fixed-only", false);
+  const linkedFixed = searchParams.get("fixas") === "1";
   const [selectedDonutCategory, setSelectedDonutCategory] = useState<string | null>(null);
   const [accountId, setAccountId] = useState("todas");
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
@@ -156,6 +161,11 @@ export default function Transactions() {
       setSelectedDate(todayISO().slice(0, 7) === linkedMonth ? todayISO() : `${linkedMonth}-01`);
       setScope("mes");
     }
+    if (linkedFixed) {
+      setFixedOnly(true);
+      setFlowView("calendario");
+      return;
+    }
     // In Caixa, metric / category / account belong to the Caixa view, not to the list filters.
     if (linkedTab === "caixa") {
       setFlowView("caixa");
@@ -176,7 +186,7 @@ export default function Transactions() {
       setType("todos");
       setFlowView("lista");
     }
-  }, [linkedCategoryId, linkedDate, linkedMetric, linkedMonth, linkedTab, restoring, setMonth, setSelectedDate, setScope, setCategoryId, setType, setFlowView, location.key]);
+  }, [linkedCategoryId, linkedDate, linkedMetric, linkedMonth, linkedTab, restoring, setMonth, setSelectedDate, setScope, setCategoryId, setType, setFlowView, location.key, linkedFixed, setFixedOnly]);
 
 
   // The global "+" reads this, so a new entry lands on the day being viewed.
@@ -535,6 +545,12 @@ export default function Transactions() {
           onMonthChange={changeMonth}
           onSelectDate={pickDate}
         />
+        <div className="mt-3 flex gap-1 rounded-full border border-border bg-card p-1" role="group" aria-label="O que mostrar">
+          {([[false, "Tudo"], [true, "Contas fixas"]] as const).map(([value, label]) => (
+            <button key={label} type="button" onClick={() => setFixedOnly(value)} aria-pressed={fixedOnly === value} data-testid={`flow-fixed-${value ? "on" : "off"}`}
+              className={cn("flex-1 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors", fixedOnly === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>{label}</button>
+          ))}
+        </div>
         </div>
       ) : null}
 
@@ -616,8 +632,14 @@ export default function Transactions() {
           Sem conexão: mostrando só as páginas carregadas antes. Conecte-se para ver todos os lançamentos do período.
         </p>
       )}
-      {flowView !== "categorias" ? <PlannedCharges items={planned} categories={categories} hidden={hidden} /> : null}
-      {flowView !== "categorias" || selectedDonutCategory ? (
+      {flowView === "calendario" && fixedOnly ? (
+        <FixedBillsInsight
+          {...(scope === "dia" ? { start: selectedDate, end: selectedDate } : periodMode === "rolling30" ? { start: rollingRange.start, end: rollingRange.end } : monthRange(month))}
+          periodLabel={scope === "dia" ? `em ${formatDate(selectedDate).slice(0, 5)}` : periodMode === "rolling30" ? "nos últimos 30 dias" : `em ${monthLabel(month).toLowerCase()}`}
+        />
+      ) : null}
+      {flowView !== "categorias" && !(flowView === "calendario" && fixedOnly) ? <PlannedCharges items={planned} categories={categories} hidden={hidden} /> : null}
+      {(flowView !== "categorias" || selectedDonutCategory) && !(flowView === "calendario" && fixedOnly) ? (
       <div className="min-w-0">{
       listPending ? (
         <FinnosPageLoading title="Carregando transações" description="Buscando seus lançamentos do período." />
