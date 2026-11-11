@@ -25,7 +25,8 @@ export const FINNOS_COLOR = {
 export interface ProjectionPoint { value: number; kind: "real" | "previsto"; label?: string }
 
 /** Linha de projeção: real in a solid line, the estimate dashed in the same colour, "hoje" at the joint (like the Início chart). */
-export function ProjectionLine({ points, height = 96, labels = true, className, ariaLabel, format }: { points: ProjectionPoint[]; height?: number; labels?: boolean; className?: string; ariaLabel?: string; format?: (v: number) => string }) {
+/** With `area`, the real part gets a soft fill below it: the Sparkline of the grammar (tendência rápida). */
+export function ProjectionLine({ points, height = 96, labels = true, className, ariaLabel, format, area = false }: { points: ProjectionPoint[]; height?: number; labels?: boolean; className?: string; ariaLabel?: string; format?: (v: number) => string; area?: boolean }) {
   // Touch or hover a point to read it; touch the same point again to go back.
   const [pick, setPick] = useState<number | null>(null);
   const [ref, seen] = useSeen<SVGSVGElement>();
@@ -58,6 +59,7 @@ export function ProjectionLine({ points, height = 96, labels = true, className, 
       } : {})}>
       {min < 0 ? <line x1={pad} x2={w - pad} y1={y(0)} y2={y(0)} stroke={FINNOS_COLOR.expense} strokeOpacity="0.45" strokeDasharray="3 4" /> : null}
       <line x1={pad} x2={w - pad} y1={height - bottom} y2={height - bottom} stroke="var(--border)" strokeWidth="1.5" />
+      {area && real.length > 1 ? <motion.polygon initial={{ opacity: 0 }} animate={{ opacity: seen ? 0.14 : 0 }} transition={{ delay: 0.5, duration: 0.5 }} fill={FINNOS_COLOR.result} points={[...real.map((p) => p.join(",")), `${real.at(-1)![0]},${height - bottom}`, `${real[0][0]},${height - bottom}`].join(" ")} /> : null}
       {real.length > 1 ? <motion.polyline initial={{ pathLength: 0 }} animate={{ pathLength: seen ? 1 : 0 }} transition={{ duration: 0.8, ease: "easeOut" }} points={real.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.result} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /> : null}
       {real.map(([px, py], i) => (dots || i === real.length - 1 ? <motion.circle initial={{ scale: 0 }} animate={{ scale: seen ? 1 : 0 }} transition={{ delay: 0.7, type: "spring", stiffness: 400, damping: 18 }} style={{ transformOrigin: `${px}px ${py}px` }} key={i} cx={px} cy={py} r="4.5" fill="var(--card)" stroke={FINNOS_COLOR.result} strokeWidth="2.5" /> : null))}
       {future.length > 1 ? <motion.polyline initial={{ pathLength: 0, opacity: 0 }} animate={seen ? { pathLength: 1, opacity: 1 } : { pathLength: 0, opacity: 0 }} transition={{ delay: 0.75, duration: 0.7, ease: "easeOut" }} points={future.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.result} strokeOpacity="0.7" strokeWidth="2.5" strokeDasharray="6 6" strokeLinecap="round" strokeLinejoin="round" /> : null}
@@ -239,6 +241,69 @@ export function Donut({ slices, size = 176, selectedId, onSelect, centerLabel = 
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+const HEAT = [
+  "var(--muted)",
+  "color-mix(in srgb, var(--finnos-purple) 20%, var(--background))",
+  "color-mix(in srgb, var(--finnos-purple) 38%, var(--background))",
+  "color-mix(in srgb, var(--finnos-purple-live) 58%, var(--background))",
+  "color-mix(in srgb, var(--finnos-violet) 78%, var(--finnos-purple))",
+  "var(--finnos-purple-live)",
+];
+const WEEK_LETTERS = ["D", "S", "T", "Q", "Q", "S", "S"];
+const WEEK_SHORT = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+
+/**
+ * Mapa de calor calendário (Comportamento): one square per day, the more spent the stronger the purple. Days still to
+ * come are dashed. The squares light up in sequence when the chart comes into view; touch a day to read it (touch again
+ * to go back), and "Ver o dia" opens it.
+ */
+export function Heatmap({ month, values, today, format, compact = false, onOpenDay, className }: {
+  month: string; values: Record<string, number>; today: string; format: (v: number) => string;
+  compact?: boolean; onOpenDay?: (date: string) => void; className?: string;
+}) {
+  const [sel, setSel] = useState<string | null>(null);
+  const [ref, seen] = useSeen<HTMLDivElement>();
+  const [y, m] = month.split("-").map(Number);
+  const count = new Date(y, m, 0).getDate();
+  const offset = new Date(y, m - 1, 1).getDay();
+  const max = Math.max(0, ...Object.values(values));
+  const level = (v: number) => (v <= 0 || max <= 0 ? 0 : v / max <= 0.2 ? 1 : v / max <= 0.4 ? 2 : v / max <= 0.65 ? 3 : v / max <= 0.85 ? 4 : 5);
+  const days = Array.from({ length: count }, (_, i) => `${month}-${String(i + 1).padStart(2, "0")}`);
+  const selWeekday = sel ? new Date(`${sel}T12:00:00`).getDay() : 0;
+  return (
+    <div ref={ref} className={cn("relative", className)} data-chart-interactive="" data-testid="finnos-heatmap" onClick={(e) => e.stopPropagation()}>
+      {!compact ? <div className="mb-1.5 grid grid-cols-7 gap-1.5 text-center text-[11px] font-semibold text-muted-foreground">{WEEK_LETTERS.map((w, i) => <span key={i}>{w}</span>)}</div> : null}
+      <div className={cn("grid grid-cols-7", compact ? "gap-1" : "gap-1.5")}>
+        {Array.from({ length: offset }, (_, i) => <span key={`e${i}`} aria-hidden="true" />)}
+        {days.map((date, i) => {
+          const v = values[date] ?? 0;
+          const future = date > today;
+          const lv = future ? 0 : level(v);
+          return (
+            <motion.button key={date} type="button" aria-pressed={sel === date} aria-label={`${date.slice(8)}: ${future ? "ainda não chegou" : format(v)}`}
+              initial={{ opacity: 0, scale: 0.6 }} animate={seen ? { opacity: sel && sel !== date ? 0.35 : 1, scale: sel === date ? 1.12 : 1 } : { opacity: 0, scale: 0.6 }}
+              transition={{ delay: seen && !sel ? i * 0.012 : 0, duration: 0.25 }}
+              onClick={() => setSel(sel === date ? null : date)}
+              className={cn("relative aspect-square rounded-[6px] text-[10px] font-semibold tabular-nums", compact && "rounded-[4px]", lv >= 4 ? "text-white" : "text-muted-foreground", future && "border border-dashed border-border bg-transparent", date === today && "ring-2 ring-foreground/70 ring-offset-1 ring-offset-card")}
+              style={future ? undefined : { backgroundColor: HEAT[lv] }}>
+              {compact ? null : Number(date.slice(8))}
+            </motion.button>
+          );
+        })}
+      </div>
+      <AnimatePresence>
+        {sel ? (
+          <motion.div key={sel} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+            className={cn("flex items-baseline justify-between gap-3 text-[13px]", compact ? "mt-1.5" : "mt-3")} data-testid="heatmap-pick">
+            <span className="min-w-0 truncate"><b className="font-semibold">{WEEK_SHORT[selWeekday]} {sel.slice(8)}/{sel.slice(5, 7)}</b> · {sel > today ? "ainda não chegou" : (values[sel] ?? 0) > 0 ? format(values[sel] ?? 0) : "sem gastos"}</span>
+            {onOpenDay && sel <= today ? <button type="button" onClick={() => onOpenDay(sel)} className="shrink-0 text-[12px] font-semibold text-primary">Ver o dia</button> : null}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
