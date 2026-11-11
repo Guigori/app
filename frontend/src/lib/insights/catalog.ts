@@ -9,7 +9,8 @@ import type { Finding } from "@/lib/insights/invoices";
 import type { Comparison } from "@/lib/insights/compare";
 import { compare, shortMonthName } from "@/lib/insights/compare";
 import { addMonth } from "@/lib/format";
-import { categoryChanges } from "@/lib/analysisInsights";
+import { categoryChanges, commitments } from "@/lib/analysisInsights";
+import { fluxoSubscriptions } from "@/lib/subscriptionsView";
 import { installmentPlans } from "@/lib/insights/installments";
 import { lastMonths } from "@/lib/insights/habits";
 
@@ -78,27 +79,63 @@ const groupBy = <T,>(list: T[], key: (t: T) => string) => { const m = new Map<st
 
 // ---------- the twenty readings ----------
 export const READERS: Record<string, { needs: Need[]; read: (c: Ctx) => Reading }> = {
-  /** Assinaturas: what the recurring services cost a month, the next charges and their weight on the income. */
+  /** Assinaturas: what the recurring services cost a month (registered here and the ones Fluxo shows being charged). */
   assinaturas: {
-    needs: ["subs"],
-    read: ({ subs, money, today }) => {
-      const items = (subs?.items ?? []).filter((s) => s.active);
-      const monthly = (s: { value: number; recurrence: string }) => (s.recurrence === "anual" ? s.value / 12 : s.value);
-      const total = subs?.monthly_total ?? items.reduce((a, s) => a + monthly(s), 0);
-      const sorted = [...items].sort((a, b) => monthly(b) - monthly(a));
-      const soon = items.filter((s) => s.next_charge >= today && daysBetween(today, s.next_charge) <= 7).sort((a, b) => a.next_charge.localeCompare(b.next_charge));
+    needs: ["subs", "allTx"],
+    read: ({ subs, allTx, money, today }) => {
+      const registered = (subs?.items ?? []).filter((s) => s.active);
+      // Same rule as the Assinaturas screen: what is registered plus what Fluxo already charges every month.
+      const fluxo = fluxoSubscriptions(allTx, subs?.items ?? [], today).onlyInFluxo;
+      const items = [
+        ...registered.map((s) => ({ name: s.name, monthly: s.recurrence === "anual" ? s.value / 12 : s.value, value: s.value, recurrence: s.recurrence, next: s.next_charge })),
+        ...fluxo.map((f) => ({ name: f.name, monthly: f.value, value: f.value, recurrence: "mensal" as const, next: f.nextCharge })),
+      ];
+      const total = items.reduce((a, s) => a + s.monthly, 0);
+      const sorted = [...items].sort((a, b) => b.monthly - a.monthly);
+      const income = allTx.filter((t) => t.type === "receita" && t.status === "pago" && t.date.slice(0, 7) === today.slice(0, 7)).reduce((a, t) => a + t.value, 0);
+      const share = income > 0 ? total / income : 0;
+      const soon = items.filter((s) => s.next >= today && daysBetween(today, s.next) <= 7).sort((a, b) => a.next.localeCompare(b.next));
       const findings: Finding[] = [];
-      if (soon.length) findings.push({ tone: "info", text: `${plural(soon.length, "cobrança", "cobranças")} nos próximos 7 dias: ${soon.map((s) => `${s.name} ${ddmm(s.next_charge)}`).slice(0, 3).join(", ")}.` });
-      if (subs?.yearly_total) findings.push({ tone: "info", text: `Em um ano as assinaturas somam ${money(subs.yearly_total)}.` });
-      if ((subs?.income_percent ?? 0) > 10) findings.push({ tone: "bad", text: `Levam ${Math.round(subs!.income_percent)}% da renda: vale revisar as que você menos usa.` });
+      if (soon.length) findings.push({ tone: "info", text: `${plural(soon.length, "cobrança", "cobranças")} nos próximos 7 dias: ${soon.map((s) => `${s.name} ${ddmm(s.next)}`).slice(0, 3).join(", ")}.` });
+      if (total > 0) findings.push({ tone: "info", text: `Em um ano as assinaturas somam ${money(total * 12)}.` });
+      if (share > 0.1) findings.push({ tone: "bad", text: `Levam ${pct(share)} da renda do mês: vale revisar as que você menos usa.` });
       return {
-        empty: items.length ? undefined : "Nenhuma assinatura cadastrada. Cadastre em Assinaturas para acompanhar aqui.",
+        empty: items.length ? undefined : "Nenhuma assinatura cadastrada nem cobrada no Fluxo (categoria Assinaturas).",
         tile: "Assinaturas", value: money(total), note: `por mês · ${plural(items.length, "ativa", "ativas")}`,
-        chart: sorted.length ? { type: "segmented", total, segments: sorted.slice(0, 6).map((s, i) => ({ value: monthly(s), color: COLORS[i % COLORS.length], label: s.name })) } : undefined,
-        rows: sorted.map((s) => ({ label: s.name, sub: `${s.recurrence === "anual" ? "anual" : "mensal"} · próxima ${ddmm(s.next_charge)}`, value: money(s.value) })),
+        chart: sorted.length ? { type: "segmented", total, segments: sorted.slice(0, 6).map((s, i) => ({ value: s.monthly, color: COLORS[i % COLORS.length], label: s.name })) } : undefined,
+        rows: sorted.map((s) => ({ label: s.name, sub: `${s.recurrence === "anual" ? "anual" : "mensal"} · próxima ${ddmm(s.next)}`, value: money(s.value) })),
         findings,
-        summary: [`Você tem ${plural(items.length, "assinatura ativa", "assinaturas ativas")} que custam ${money(total)} por mês.`, sorted[0] ? `A mais cara é ${sorted[0].name}: ${money(monthly(sorted[0]))} por mês.` : "", findings[0]?.text ?? ""].filter(Boolean),
-        context: { total_mensal: total, assinaturas: items.map((s) => ({ nome: s.name, valor: s.value, recorrencia: s.recurrence, proxima: s.next_charge })) },
+        summary: [`Você tem ${plural(items.length, "assinatura ativa", "assinaturas ativas")} que custam ${money(total)} por mês.`, sorted[0] ? `A mais cara é ${sorted[0].name}: ${money(sorted[0].monthly)} por mês.` : "", findings[0]?.text ?? ""].filter(Boolean),
+        context: { total_mensal: total, assinaturas: items.map((s) => ({ nome: s.name, valor: s.value, recorrencia: s.recurrence, proxima: s.next })) },
+      };
+    },
+  },
+
+  /** Compromissos: what the next six months already owe (fixed bills, subscriptions and installments). */
+  compromissos: {
+    needs: ["allTx", "subs", "dashboard"],
+    read: ({ allTx, subs, dashboard, month, money }) => {
+      const c = commitments(allTx, subs?.items ?? [], month, 6);
+      const income = dashboard?.prev_income || dashboard?.income || 0;
+      const now = c.months[0];
+      const six = c.months.reduce((s, m) => s + m.total, 0);
+      const last = c.months.at(-1);
+      const findings: Finding[] = [];
+      if (income > 0 && now) findings.push({ tone: now.total / income > 0.6 ? "bad" : "info", text: `Antes de qualquer gasto novo, ${pct(now.total / income)} da renda do mês já tem destino (fixos e parcelas).` });
+      if (now && last && last.installments < now.installments) findings.push({ tone: "good", text: `As parcelas diminuem até ${shortMonthName(last.month)}, liberando ${money(now.installments - last.installments)} por mês.` });
+      return {
+        empty: c.months.some((m) => m.total > 0) ? undefined : "Nenhuma conta fixa, assinatura ou parcela pela frente.",
+        tile: "Já comprometido", value: money(now?.total ?? 0), note: `neste mês · ${money(six)} em 6 meses`,
+        subtitle: "Fixos, assinaturas e parcelas dos próximos meses",
+        chart: { type: "bars", data: c.months.map((m, i) => ({ label: short(m.month), value: m.total, focus: i === 0, future: i > 0, valueLabel: money(m.total).replace(/,\d\d$/, "") })) },
+        rows: [
+          ...c.months.map((m) => ({ label: cap(shortMonthName(m.month)) + " " + m.month.slice(2, 4), sub: `fixos ${money(m.fixed)} · parcelas ${money(m.installments)}`, value: money(m.total) })),
+          ...c.fixedItems.slice(0, 10).map((f) => ({ label: f.name, sub: f.kind === "assinatura" ? "Assinatura" : "Conta fixa", value: `${money(f.value)}/mês` })),
+          ...c.installmentItems.slice(0, 10).map((p) => ({ label: p.name, sub: `parcela · faltam ${money(p.remaining)}`, value: `${money(p.value)}/mês` })),
+        ],
+        findings,
+        summary: [`Neste mês ${money(now?.total ?? 0)} já estavam comprometidos: ${money(now?.fixed ?? 0)} em contas fixas e assinaturas e ${money(now?.installments ?? 0)} em parcelas.`, `Nos próximos 6 meses são ${money(six)}.`, findings[1]?.text ?? findings[0]?.text ?? ""].filter(Boolean),
+        context: { meses: c.months, fixos: c.fixedItems, parcelas: c.installmentItems },
       };
     },
   },
@@ -186,11 +223,11 @@ export const READERS: Record<string, { needs: Need[]; read: (c: Ctx) => Reading 
         vs: { c: compare(dashboard?.expense ?? 0, prevDashboard?.expense ?? null, "lower"), label: "total vs mês passado", format: "money" },
         // Categories that existed last month: the bar against last month's mark. Only new ones: bars of how much each grew.
         chart: up.some((c) => c.previous > 0)
-          ? { type: "bullets", items: up.filter((c) => c.previous > 0).slice(0, 4).map((c) => ({ label: c.name, value: c.current, limit: c.previous, note: c.deltaPct == null ? "nova" : `+${pct(c.deltaPct)}` })) }
+          ? { type: "bullets", items: up.filter((c) => c.previous > 0).slice(0, 4).map((c) => ({ label: c.name, value: c.current, limit: c.previous, note: c.deltaPct == null ? "nova" : `+${Math.round(c.deltaPct)}%` })) }
           : up.length ? { type: "bars", data: up.slice(0, 5).map((c, i) => ({ label: c.name.slice(0, 8), value: c.delta, focus: i === 0, valueLabel: `+${money(c.delta).replace(/,\d\d$/, "")}` })) } : undefined,
         rows: [...up, ...down].map((c) => ({ label: c.name, sub: `${money(c.previous)} → ${money(c.current)}`, value: `${c.delta > 0 ? "+" : "−"}${money(Math.abs(c.delta))}`, tone: c.delta > 0 ? "expense" : "income", color: c.color })),
         findings: [
-          ...(up[0] ? [{ tone: "bad" as const, text: `${up[0].name} subiu ${money(up[0].delta)}${up[0].deltaPct != null ? ` (+${pct(up[0].deltaPct)})` : ", nova neste mês"}.` }] : []),
+          ...(up[0] ? [{ tone: "bad" as const, text: `${up[0].name} subiu ${money(up[0].delta)}${up[0].deltaPct != null ? ` (+${Math.round(up[0].deltaPct)}%)` : ", nova neste mês"}.` }] : []),
           ...(down[0] ? [{ tone: "good" as const, text: `${down[0].name} caiu ${money(-down[0].delta)}.` }] : []),
         ],
         summary: [up[0] ? `${up[0].name} foi o que mais subiu: de ${money(up[0].previous)} para ${money(up[0].current)}.` : "Nenhuma categoria subiu em relação ao mês passado.", down[0] ? `${down[0].name} foi a que mais caiu: ${money(-down[0].delta)} a menos.` : "", `${plural(up.length, "categoria subiu", "categorias subiram")} e ${plural(down.length, "caiu", "caíram")}.`].filter(Boolean),

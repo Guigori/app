@@ -49,10 +49,6 @@ const PreviewValidation = lazy(() => import("@/pages/PreviewValidation"));
 const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
 const Login = lazy(() => import("@/pages/Login"));
 const Register = lazy(() => import("@/pages/Register"));
-const AnalysisEvolution = lazy(() => import("@/pages/analysis/AnalysisEvolution"));
-const AnalysisCategories = lazy(() => import("@/pages/analysis/AnalysisCategories"));
-const AnalysisRhythm = lazy(() => import("@/pages/analysis/AnalysisRhythm"));
-const AnalysisCommitments = lazy(() => import("@/pages/analysis/AnalysisCommitments"));
 const InsightDetail = lazy(() => import("@/pages/InsightDetail"));
 const SettingsHub = lazy(() => import("@/pages/SettingsHub").then(module => ({ default: module.SettingsHub })));
 
@@ -68,6 +64,17 @@ function CaixaRedirect() {
   const params = new URLSearchParams(search);
   params.set("aba", "caixa");
   return <Navigate to={`/transacoes?${params.toString()}`} replace />;
+}
+
+/**
+ * Análise used to have its own Evolução, Ritmo and Compromissos screens, and a Categorias screen that repeated
+ * Fluxo › Análise. Each now has one home: the analysis of the library (or Fluxo for categories).
+ */
+function AnalysisRedirect({ to }: { to: string }) {
+  const { search } = useLocation();
+  const month = new URLSearchParams(search).get("month");
+  if (to.startsWith("/transacoes")) return <Navigate to={`${to}${month ? `&month=${month}` : ""}`} replace />;
+  return <Navigate to={to} replace />;
 }
 
 /** Old category address: a category is explored in Fluxo, filtered by it (Fluxo links on to Análise). */
@@ -108,10 +115,10 @@ export default function App() {
             <Route path="/radar/:signalId" element={<RadarDetail />} />
             <Route path="/assinaturas" element={<Subscriptions />} />
             <Route path="/analise" element={<Analysis />} />
-            <Route path="/analise/evolucao" element={<AnalysisEvolution />} />
-            <Route path="/analise/categorias" element={<AnalysisCategories />} />
-            <Route path="/analise/ritmo" element={<AnalysisRhythm />} />
-            <Route path="/analise/compromissos" element={<AnalysisCommitments />} />
+            <Route path="/analise/evolucao" element={<AnalysisRedirect to="/analise/painel/seis-meses" />} />
+            <Route path="/analise/categorias" element={<AnalysisRedirect to="/transacoes?aba=analise" />} />
+            <Route path="/analise/ritmo" element={<AnalysisRedirect to="/analise/painel/habitos" />} />
+            <Route path="/analise/compromissos" element={<AnalysisRedirect to="/analise/painel/compromissos" />} />
             <Route path="/analise/painel/:insightId" element={<InsightDetail />} />
             <Route path="/analise/painel" element={<Navigate to="/analise" replace />} />
             <Route path="/patrimonio" element={<Patrimonio />} />

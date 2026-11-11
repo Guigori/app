@@ -26,7 +26,7 @@ export const CATALOG_DEFS: InsightDef[] = [
   def({ id: "maiores-gastos", title: "Maiores gastos do mês", description: "As cinco maiores despesas do mês e quanto elas pesam no total.", theme: "Gastos", defaultSize: "L", to: () => "/transacoes?aba=lista&metric=despesas", toLabel: "Ver no Fluxo",
     how: "Ordenamos as despesas do mês pelo valor, sem contar o pagamento de faturas (as compras do cartão já entram uma a uma).",
     questions: ["Esses gastos eram necessários?", "Como evitar um gasto grande assim?", "Quanto esses gastos atrasam minhas metas?"] }),
-  def({ id: "categorias-subiram", title: "O que mais subiu", description: "As categorias que mais cresceram em relação ao mês passado, e as que caíram.", theme: "Gastos", defaultSize: "L", to: () => "/analise/categorias", toLabel: "Ver categorias",
+  def({ id: "categorias-subiram", title: "O que mais subiu", description: "As categorias que mais cresceram em relação ao mês passado, e as que caíram.", theme: "Gastos", defaultSize: "L", to: () => "/transacoes?aba=analise", toLabel: "Ver categorias no Fluxo",
     how: "Comparamos o gasto de cada categoria neste mês com o mês passado. A marca da barra é o valor do mês passado.",
     questions: ["Por que essa categoria subiu?", "Como trazer de volta ao mês passado?", "Isso é normal para esta época?"] }),
   def({ id: "regra-50-30-20", title: "Regra 50/30/20", description: "Necessidades, desejos e metas contra a parte da renda que cada uma deveria levar.", theme: "Orçamento", defaultSize: "L", to: () => "/orcamento", toLabel: "Ver orçamento",
@@ -38,8 +38,11 @@ export const CATALOG_DEFS: InsightDef[] = [
   def({ id: "onde-compra", title: "Onde você mais compra", description: "Os lugares que mais levam dinheiro no mês, com quantas vezes você comprou.", theme: "Gastos", defaultSize: "L", to: () => "/transacoes?aba=lista&metric=despesas", toLabel: "Ver no Fluxo",
     how: "Agrupamos as compras pelo nome (estabelecimento), sem as contas fixas, e somamos o valor e as vezes de cada um no mês.",
     questions: ["Estou indo demais nesse lugar?", "Existe uma opção mais barata?", "Quanto economizo indo menos vezes?"] }),
+  def({ id: "compromissos", title: "Compromissos", description: "O que os próximos 6 meses já devem: contas fixas, assinaturas e parcelas, mês a mês.", theme: "Compromissos", defaultSize: "L", to: () => "/contas?aba=cartoes", toLabel: "Ver cartões e parcelas",
+    how: "Para cada mês a partir de agora, somamos as contas fixas e recorrentes (o valor mais recente de cada uma), as assinaturas e as parcelas que caem naquele mês. Os meses seguintes aparecem tracejados.",
+    questions: ["Posso assumir um compromisso novo?", "Quando o mês fica mais leve?", "Quais fixos posso cortar?"] }),
   def({ id: "assinaturas", title: "Assinaturas", description: "O que os serviços recorrentes custam por mês, as próximas cobranças e o peso na renda.", theme: "Compromissos", defaultSize: "M", to: () => "/assinaturas", toLabel: "Ver assinaturas",
-    how: "Somamos as assinaturas ativas cadastradas; as anuais entram divididas por 12. As próximas cobranças são as dos próximos 7 dias.",
+    how: "Somamos as assinaturas cadastradas e as cobradas no Fluxo na categoria Assinaturas (como na tela Assinaturas); as anuais entram divididas por 12. As próximas cobranças são as dos próximos 7 dias.",
     questions: ["Quais assinaturas posso cancelar?", "Vale trocar para o plano anual?", "Quanto gasto por ano com assinaturas?"] }),
   def({ id: "gastos-pequenos", title: "Gastos pequenos", description: "As compras de até R$ 50 que, juntas, viram um valor grande (efeito formiga).", theme: "Gastos", defaultSize: "M", to: () => "/transacoes?aba=lista&metric=despesas", toLabel: "Ver no Fluxo",
     how: "Somamos as despesas de até R$ 50 do mês que não são fixas nem parcelas, agrupadas pelo lugar.",
@@ -76,3 +79,9 @@ export const FEATURED: { inicio: Array<[string, "S" | "M" | "L"]>; analise: Arra
   analise: [["taxa-poupanca", "M"], ["reserva", "M"], ["categorias-subiram", "L"], ["maiores-gastos", "L"], ["regra-50-30-20", "L"], ["fixo-x-variavel", "M"], ["assinaturas", "M"], ["onde-compra", "L"]],
 };
 export const FEATURED_RELEASE = "catalogo-2026-11";
+/**
+ * The Análise tab became a board of the library: what used to be fixed on it (Visão do período, Resumo do mês,
+ * Evolução, Ritmo, Categorias, Compromissos) comes in as analyses at the top, once, for people with a saved layout.
+ */
+export const ANALYSIS_RELEASE = "analise-biblioteca-2026-11";
+export const ANALYSIS_TOP: Array<[string, "S" | "M" | "L"]> = [["descobertas", "M"], ["resultado-mes", "M"], ["orcamento", "S"], ["contas", "S"], ["habitos", "L"], ["categorias", "L"], ["seis-meses", "L"], ["compromissos", "L"]];

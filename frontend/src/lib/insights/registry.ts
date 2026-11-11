@@ -31,6 +31,8 @@ export interface InsightDef {
   /** Lets the person pick a card for it. */
   cardScope?: boolean;
   star?: boolean;
+  /** The analysis already has a full screen elsewhere (one place per thing): tapping it opens that screen. */
+  canonical?: (config: WidgetConfig) => string;
 }
 
 import { CATALOG_DEFS } from "@/lib/insights/catalogDefs";
@@ -39,14 +41,14 @@ export const INSIGHTS: InsightDef[] = [
   { id: "gastar-hoje", title: "Quanto posso gastar hoje", description: "O que sobra do mês por dia, depois do que já saiu e do que está agendado.", theme: "Orçamento", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/orcamento", toLabel: "Ver orçamento",
     how: "Pegamos o orçamento do mês (ou a renda, se não houver orçamento), tiramos o que já saiu e o que está agendado até o fim do mês e dividimos pelos dias que faltam, contando hoje.",
     questions: ["Por que hoje passei do ritmo?", "Onde posso cortar para fechar o mês?", "Como fica se eu gastar R$ 100 hoje?"] },
-  { id: "habitos", title: "Quando você gasta", description: "O mês em mapa de calor: o dia da semana mais caro, o dia de maior gasto e os dias sem gastar.", theme: "Gastos", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/transacoes", toLabel: "Ver no calendário do Fluxo", star: true,
-    how: "Somamos as despesas de cada dia do mês até hoje. Quanto mais se gastou no dia, mais forte o roxo. A média por dia da semana divide o que saiu em cada dia da semana pelo número de vezes que ele já apareceu no mês.",
+  { id: "habitos", title: "Ritmo do mês", description: "Quanto você gasta por dia, onde o mês fecha se continuar assim e o mês em mapa de calor: dia da semana mais caro, maior gasto e dias sem gastar.", theme: "Gastos", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/transacoes", toLabel: "Ver no calendário do Fluxo", star: true,
+    how: "Somamos as despesas de cada dia do mês até hoje. A estimativa de fechamento repete a média por dia até o fim do mês (linha tracejada). No mapa, quanto mais se gastou no dia, mais forte o roxo. A média por dia da semana divide o que saiu em cada dia da semana pelo número de vezes que ele já apareceu no mês.",
     questions: ["Por que gasto mais nesse dia da semana?", "Como ter mais dias sem gastar?", "O que pesou no meu dia mais caro?"] },
   { id: "renda", title: "Renda do mês", description: "O que já entrou, o que ainda vai entrar e quanto dela os gastos do mês levam.", theme: "Renda", sizes: ["S", "M", "L"], defaultSize: "M", to: () => `/transacoes?metric=receitas`, toLabel: "Ver receitas no Fluxo", star: true,
     how: "Recebido é a soma das receitas do mês que já aconteceram. A receber são as receitas agendadas, pendentes e fixas que ainda vão cair neste mês. A parte da renda que os gastos levam é o total de despesas dividido pela renda esperada.",
     questions: ["Minha renda cobre os gastos do mês?", "Como aumentar minha renda?", "Quanto da renda devo guardar?"] },
-  { id: "seis-meses", title: "Últimos 6 meses", description: "Quanto saiu em cada mês, a média, o melhor e o pior mês, e quantos fecharam no positivo.", theme: "Gastos", sizes: ["S", "M", "L"], defaultSize: "L", to: () => "/transacoes?aba=caixa", toLabel: "Ver no Caixa", star: true,
-    how: "Usamos o Fluxo dos últimos seis meses. A média considera só os meses já fechados; o mês atual aparece em destaque e é comparado com essa média.",
+  { id: "seis-meses", title: "Evolução", description: "Os últimos 6 meses: o que entrou e saiu em cada um, quanto da renda sobrou, o resultado acumulado, o melhor e o pior mês.", theme: "Gastos", sizes: ["S", "M", "L"], defaultSize: "L", to: () => "/transacoes?aba=caixa", toLabel: "Ver no Caixa", star: true,
+    how: "Usamos o Fluxo dos últimos seis meses: o que entrou e saiu em cada um, quanto da renda sobrou (resultado ÷ receitas) e a soma do resultado mês a mês. A média considera só os meses já fechados; o mês atual aparece em destaque e é comparado com essa média.",
     questions: ["Meus gastos estão subindo?", "O que fez o pior mês ser pior?", "Quanto consigo reduzir por mês?"] },
   { id: "contas", title: "Saldo das contas", description: "Quanto há em cada conta agora, como o saldo andou no mês e onde está o dinheiro.", theme: "Patrimônio", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/contas", toLabel: "Ver contas", star: true,
     how: "Somamos o saldo das contas ativas. A linha mostra o saldo no fim de cada dia do mês até hoje, com a mesma regra do Saldo total: compras no cartão contam quando a fatura é paga.",
@@ -75,7 +77,9 @@ export const INSIGHTS: InsightDef[] = [
   { id: "parcelas", title: "Parcelas em andamento", description: "Parcela de cada compra, quanto falta e o peso nos próximos meses.", theme: "Cartões", sizes: ["S", "M", "L"], defaultSize: "M", cardScope: true, to: () => "/contas?aba=cartoes", toLabel: "Ver cartões",
     how: "Parcelas no cartão seguem a fatura em que cada parcela cai. Mostramos a parcela da fatura aberta, quantas faltam e quanto do orçamento dos próximos meses elas já ocupam junto com as contas fixas.",
     questions: ["Quando sobra dinheiro das parcelas?", "Vale antecipar alguma parcela?", "Posso fazer uma compra parcelada agora?"] },
-  { id: "categorias", title: "Gastos por categoria", description: "Para onde foi o dinheiro do mês, por categoria.", theme: "Gastos", sizes: ["S", "M", "L"], defaultSize: "L", to: () => `/transacoes?month=${currentMonth()}&metric=despesas`, toLabel: "Ver no Fluxo",
+  { id: "categorias", title: "Gastos por categoria", description: "Para onde foi o dinheiro do mês, por categoria.", theme: "Gastos", sizes: ["S", "M", "L"], defaultSize: "L", to: () => `/transacoes?aba=analise&month=${currentMonth()}`, toLabel: "Ver no Fluxo",
+    // Categories are explored in one place: Fluxo › Análise (donut, the category's 6 months and where the money went).
+    canonical: () => `/transacoes?aba=analise&month=${currentMonth()}`,
     how: "Despesas pagas do mês somadas por categoria. Compras no cartão contam no mês da compra; parcelas, uma por mês.",
     questions: ["Em que categoria estou gastando mais que o normal?", "Onde dá para economizar?", "Compare com o mês passado"] },
   { id: "radar", title: "Radar", description: "Os avisos do FINNOS que pedem atenção agora.", theme: "Alertas", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/radar", toLabel: "Ver Radar",
@@ -85,8 +89,8 @@ export const INSIGHTS: InsightDef[] = [
 ];
 
 /** The analysis page of a widget (a tap on the widget opens it). */
-export const detailPath = (id: string, config: WidgetConfig = {}) => `/analise/painel/${id}${config.cardId ? `?cartao=${encodeURIComponent(config.cardId)}` : ""}`;
 export const insightById = (id: string) => INSIGHTS.find((i) => i.id === id);
+export const detailPath = (id: string, config: WidgetConfig = {}) => insightById(id)?.canonical?.(config) ?? `/analise/painel/${id}${config.cardId ? `?cartao=${encodeURIComponent(config.cardId)}` : ""}`;
 
 /** The next size the analysis accepts (the handle in edit mode cycles through them). */
 export function nextSize(def: InsightDef, size: WidgetSize): WidgetSize {
@@ -96,8 +100,9 @@ export function nextSize(def: InsightDef, size: WidgetSize): WidgetSize {
 
 /** Grid placement: 4 columns on the phone (Pequeno = half), 12 on the computer. */
 export const SIZE_CLASS: Record<WidgetSize, string> = {
-  S: "col-span-2 dashboard:col-span-3 h-[11rem]",
-  M: "col-span-4 dashboard:col-span-6 h-[11rem]",
-  L: "col-span-4 dashboard:col-span-6 min-h-[23rem]",
-  XL: "col-span-4 dashboard:col-span-6 min-h-[23rem]",
+  // On the larger screens the board is a mural (masonry): each widget takes the height it needs, no holes.
+  S: "col-span-2 dashboard:col-span-3 h-[11rem] dashboard:h-auto",
+  M: "col-span-4 dashboard:col-span-6 h-[11rem] dashboard:h-auto",
+  L: "col-span-4 dashboard:col-span-6 min-h-[23rem] dashboard:min-h-0",
+  XL: "col-span-4 dashboard:col-span-6 min-h-[23rem] dashboard:min-h-0",
 };

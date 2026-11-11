@@ -6,6 +6,7 @@ import { addMonth, currentMonth, formatBRL, formatHiddenBRL, monthLabel, todayIS
 import { useBalanceHidden } from "@/lib/balance";
 import { compare, shortMonthName } from "@/lib/insights/compare";
 import { incomeReading, lastMonths, spendingHabits, WEEKDAY_NAMES } from "@/lib/insights/habits";
+import { rhythm } from "@/lib/analysisInsights";
 import type { Finding } from "@/lib/insights/invoices";
 import type { WidgetSize } from "@/lib/insights/registry";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 /** The focus month with the six before it (the flow brings two future months too, ignored here). */
 const useFlow = (month: string) => useQuery({ queryKey: ["flow", "insights", month], queryFn: () => fetchFlow({ month, months: 6 }), staleTime: 60_000 });
 
-/** Quando você gasta: the month as a heat map, the most expensive weekday, the peak day and the quiet days. */
+/** Ritmo do mês: the pace (per day and where the month ends), and the month as a heat map, the most expensive weekday, the peak day and the quiet days. */
 export function HabitsInsight({ size, to, className }: Props) {
   const { hidden, money } = useMoney();
   const navigate = useNavigate();
@@ -38,6 +39,15 @@ export function HabitsInsight({ size, to, className }: Props) {
   const vs = compare(h.perDay, prev?.perDay, "lower");
   const vsLine = <VsLastMonth c={vs} label={`por dia vs ${shortMonthName(prevMonth)}`} format={money} />;
   const values = Object.fromEntries(calendar.data.days.map((d) => [d.date, Math.max(0, d.expense)]));
+  // Where the month ends if this pace continues (what the old Ritmo do mês screen showed).
+  const pace = rhythm(month, calendar.data.days, prevCalendar.data?.days ?? [], today);
+  const prevTotal = prevCalendar.data ? prevCalendar.data.days.reduce((a, d) => a + Math.max(0, d.expense), 0) : null;
+  const vsEnd = pace.projection != null ? compare(pace.projection, prevTotal, "lower") : null;
+  const curve = pace.curve.filter((p) => p.current != null);
+  const linePoints = [
+    ...curve.map((p) => ({ value: p.current ?? 0, kind: "real" as const, label: `dia ${p.day}` })),
+    ...(pace.projection != null && curve.length ? [{ value: pace.projection, kind: "previsto" as const, label: "fim do mês" }] : []),
+  ];
   const openDay = (date: string) => navigate(`/transacoes?date=${date}`);
   if (size === "S") return (
     <Tile title="Dia mais caro" className={className} testId="habits-insight">
@@ -46,7 +56,7 @@ export function HabitsInsight({ size, to, className }: Props) {
     </Tile>
   );
   if (size === "M") return (
-    <Tile title="Quando você gasta" className={className} testId="habits-insight">
+    <Tile title="Ritmo do mês" className={className} testId="habits-insight">
       <div className="flex min-h-0 flex-1 items-start gap-4">
         <div className="min-w-0 flex-1">
           <p className={NUMBER_TILE}>{money(h.perDay)}</p>
@@ -63,18 +73,25 @@ export function HabitsInsight({ size, to, className }: Props) {
   if (h.peak) findings.push({ tone: "info", text: `O maior gasto foi em ${ddmm(h.peak.date)}: ${money(h.peak.expense)}.` });
   if (h.weekendShare >= 0.5) findings.push({ tone: "bad", text: `${pct(h.weekendShare)} do que saiu foi de sexta a domingo.` });
   if (h.quietDays > 0) findings.push({ tone: "good", text: `${h.quietDays} ${h.quietDays === 1 ? "dia" : "dias"} sem gastar nada neste mês.` });
+  if (pace.projection != null) findings.unshift({ tone: vsEnd && vsEnd.better === false ? "bad" : "info", text: `No ritmo atual o mês fecha em ${money(pace.projection)}${prevTotal != null ? `, ${pace.projection > prevTotal ? `${money(pace.projection - prevTotal)} acima` : `${money(prevTotal - pace.projection)} abaixo`} de ${shortMonthName(prevMonth)}` : ""}.` });
   const summary = [
     `Neste mês você gastou ${money(h.total)} em ${h.daysSoFar} dias, ${money(h.perDay)} por dia${vs && !vs.same ? `, ${vs.better ? `${money(-vs.delta)} a menos` : `${money(vs.delta)} a mais`} por dia que em ${shortMonthName(prevMonth)}` : ""}.`,
     findings[0]?.text ?? "",
     h.weekendShare >= 0.5 ? findings.find((f) => f.tone === "bad")!.text : h.quietDays ? `Foram ${h.quietDays} dias sem nenhum gasto.` : "",
   ].filter(Boolean);
   return (
-    <>{size === "XL" ? <FinnSummary title="Quando você gasta" sentences={summary} context={{ total: h.total, por_dia: h.perDay, dia_mais_caro: h.topWeekday ? WEEKDAY_NAMES[h.topWeekday.weekday] : null, fim_de_semana: pct(h.weekendShare), dias_sem_gastar: h.quietDays }} /> : null}
-    <InsightShell title="Quando você gasta" subtitle={monthLabel(month)} to={to} className={className} testId="habits-insight">
+    <>{size === "XL" ? <FinnSummary title="Ritmo do mês" sentences={pace.projection != null ? [summary[0], findings[0].text, ...summary.slice(1, 2)] : summary} context={{ total: h.total, por_dia: h.perDay, dia_mais_caro: h.topWeekday ? WEEKDAY_NAMES[h.topWeekday.weekday] : null, fim_de_semana: pct(h.weekendShare), dias_sem_gastar: h.quietDays }} /> : null}
+    <InsightShell title="Ritmo do mês" subtitle={monthLabel(month)} to={to} className={className} testId="habits-insight">
       <div className="flex items-end justify-between gap-4">
         <div className="min-w-0"><p className={LABEL}>Por dia</p><p className={cn(NUMBER_HERO, "mt-2")}>{hidden ? "R$ ••••" : formatBRL(h.perDay)}</p><div className="mt-1">{vsLine}</div></div>
-        <div className="shrink-0 text-right"><p className={LABEL}>Sem gastar</p><p className="mt-2 font-heading text-2xl font-semibold tabular-nums">{h.quietDays}<span className="text-sm text-muted-foreground"> de {h.daysSoFar}</span></p></div>
+        <div className="shrink-0 text-right"><p className={LABEL}>{pace.projection != null ? "Se continuar" : "Sem gastar"}</p><p className="mt-2 font-heading text-2xl font-semibold tabular-nums">{pace.projection != null ? money(pace.projection) : <>{h.quietDays}<span className="text-sm text-muted-foreground"> de {h.daysSoFar}</span></>}</p>{pace.projection != null ? <div className="mt-1 flex justify-end"><VsLastMonth c={vsEnd} label={`vs ${shortMonthName(prevMonth)}`} format={money} /></div> : null}</div>
       </div>
+      {size === "XL" && !hidden && linePoints.length > 1 ? (
+        <div className="mt-5">
+          <p className={LABEL}>Gasto acumulado no mês</p>
+          <ProjectionLine className="mt-3" points={linePoints} height={110} format={money} ariaLabel="Gasto acumulado e estimativa do mês" />
+        </div>
+      ) : null}
       {hidden ? null : <Heatmap className="mt-5" month={month} values={values} today={today} format={money} onOpenDay={openDay} />}
       {size === "XL" && !hidden ? (
         <div className="mt-6">
@@ -159,7 +176,7 @@ export function MonthsInsight({ size, to, className }: Props) {
     </Tile>
   );
   if (size === "M") return (
-    <Tile title="Últimos 6 meses" className={className} testId="months-insight">
+    <Tile title="Evolução" className={className} testId="months-insight">
       <div className="flex items-baseline justify-between gap-3"><p className={NUMBER_TILE}>{money(r.averageExpense)}</p><span className={NOTE}>média/mês</span></div>
       {hidden ? null : <Bars className="mt-auto" height={70} data={bars.map((b) => ({ ...b, valueLabel: "" }))} />}
     </Tile>
@@ -173,12 +190,19 @@ export function MonthsInsight({ size, to, className }: Props) {
     findings[0]?.text ?? "", findings[1]?.text ?? "",
   ].filter(Boolean);
   return (
-    <>{size === "XL" ? <FinnSummary title="Últimos 6 meses" sentences={summary} context={{ meses: r.months.map((p) => ({ mes: p.month, entrada: p.income, saida: p.expense, resultado: p.net })) }} /> : null}
-    <InsightShell title="Últimos 6 meses" subtitle="O que saiu em cada mês" to={to} className={className} testId="months-insight">
+    <>{size === "XL" ? <FinnSummary title="Evolução" sentences={summary} context={{ meses: r.months.map((p) => ({ mes: p.month, entrada: p.income, saida: p.expense, resultado: p.net })) }} /> : null}
+    <InsightShell title="Evolução" subtitle="Últimos 6 meses" to={to} className={className} testId="months-insight">
       <div className="flex items-end justify-between gap-4">
         <div className="min-w-0"><p className={LABEL}>Média por mês</p><p className={cn(NUMBER_HERO, "mt-2")}>{hidden ? "R$ ••••" : formatBRL(r.averageExpense)}</p>{cur ? <div className="mt-1"><VsLastMonth c={vs} label="este mês vs média" format={money} /></div> : null}</div>
       </div>
       {hidden ? null : <Bars className="mt-5" height={140} data={bars} />}
+      {size === "XL" && !hidden ? (
+        <>
+          <div className="mt-6"><p className={LABEL}>O que entrou</p><Bars className="mt-3" height={110} data={r.months.map((p) => ({ label: short(p.month), value: p.income, focus: p.month === month, valueLabel: money(p.income).replace(/,\d\d$/, "") }))} /></div>
+          <div className="mt-6"><p className={LABEL}>Quanto da renda sobrou</p><Bars className="mt-3" height={110} data={r.months.map((p) => ({ label: short(p.month), value: Math.max(0, p.income > 0 ? p.net / p.income : 0) * 100, focus: p.month === month, valueLabel: p.income > 0 ? `${Math.round((p.net / p.income) * 100)}%` : "—" }))} /></div>
+          <div className="mt-6"><p className={LABEL}>Resultado acumulado</p><ProjectionLine className="mt-3" area height={100} format={money} ariaLabel="Resultado acumulado mês a mês" points={r.months.reduce<Array<{ value: number; kind: "real"; label: string }>>((acc, p) => [...acc, { value: (acc.at(-1)?.value ?? 0) + p.net, kind: "real", label: short(p.month) }], [])} /></div>
+        </>
+      ) : null}
       {size === "XL" ? (
         <ul className="mt-5 divide-y divide-border/70 text-sm">
           {[...r.months].reverse().map((p) => (

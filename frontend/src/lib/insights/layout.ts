@@ -1,7 +1,7 @@
 /** How the person arranged Início and Análise: which analyses, in which size and order. Synced to the account. */
 import { useMemo, useSyncExternalStore } from "react";
 import { insightById, type WidgetConfig, type WidgetSize } from "@/lib/insights/registry";
-import { FEATURED, FEATURED_RELEASE } from "@/lib/insights/catalogDefs";
+import { ANALYSIS_RELEASE, ANALYSIS_TOP, FEATURED, FEATURED_RELEASE } from "@/lib/insights/catalogDefs";
 
 export type Surface = "inicio" | "analise";
 export interface PlacedWidget { key: string; id: string; size: WidgetSize; config?: WidgetConfig }
@@ -23,7 +23,7 @@ export function defaultLayouts(): Layouts {
   const oldName: Record<string, string> = { radar: "radar", categorias: "categories", "contas-fixas": "fixed", "fatura-que-vem": "cards" };
   return {
     inicio: home.filter(([id]) => !hidden.includes(oldName[id] ?? "")).map(([id, size], i) => ({ key: `d${i}`, id, size })),
-    analise: [["previsao-saldo", "M"], ["renda", "M"], ...FEATURED.analise.slice(0, 2), ["seis-meses", "L"], ...FEATURED.analise.slice(2, 4), ["habitos", "L"], ...FEATURED.analise.slice(4), ["faturas", "L"]].map(([id, size], i) => ({ key: `a${i}`, id, size: size as WidgetSize })),
+    analise: [...ANALYSIS_TOP, ["renda", "M"], ["taxa-poupanca", "M"], ["categorias-subiram", "L"], ["maiores-gastos", "L"], ["previsao-saldo", "M"], ["reserva", "M"], ["regra-50-30-20", "L"], ["fixo-x-variavel", "M"], ["assinaturas", "M"], ["onde-compra", "L"], ["faturas", "L"]].map(([id, size], i) => ({ key: `a${i}`, id, size: size as WidgetSize })),
   };
 }
 
@@ -54,15 +54,24 @@ export function offerFeatured(layouts: Layouts): Layouts {
   return { inicio: add(top, FEATURED.inicio.filter(([id]) => id !== "descobertas"), smallTop < 0 ? top.length : smallTop), analise: add(layouts.analise, FEATURED.analise, layouts.analise.length) };
 }
 
+/** The Análise board gets what used to be fixed on the tab, at the top (only the ones not there yet). */
+export function offerAnalysisTop(layouts: Layouts): Layouts {
+  const fresh = ANALYSIS_TOP.filter(([id]) => !layouts.analise.some((w) => w.id === id)).map(([id, size]) => ({ key: newKey(), id, size: size as WidgetSize }));
+  return { ...layouts, analise: [...fresh, ...layouts.analise] };
+}
+
 export function readLayouts(): Layouts {
   const base = defaultLayouts();
   try {
     const raw = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "null") as (Partial<Layouts> & { offered?: string[] }) | null;
     if (!raw) return base;
     const layouts = { inicio: raw.inicio ? clean(raw.inicio) : base.inicio, analise: raw.analise ? clean(raw.analise) : base.analise };
-    if ((raw.offered ?? []).includes(FEATURED_RELEASE)) return layouts;
-    const next = offerFeatured(layouts);
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...next, offered: [...(raw.offered ?? []), FEATURED_RELEASE] }));
+    const offered = raw.offered ?? [];
+    let next = layouts;
+    if (!offered.includes(FEATURED_RELEASE)) next = offerFeatured(next);
+    if (!offered.includes(ANALYSIS_RELEASE)) next = offerAnalysisTop(next);
+    if (offered.includes(FEATURED_RELEASE) && offered.includes(ANALYSIS_RELEASE)) return layouts;
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...next, offered: [FEATURED_RELEASE, ANALYSIS_RELEASE] }));
     return next;
   } catch { return base; }
 }
@@ -78,7 +87,7 @@ function subscribe(cb: () => void) {
 
 export function saveLayout(surface: Surface, widgets: PlacedWidget[]) {
   const next = { ...readLayouts(), [surface]: widgets };
-  localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...next, offered: [FEATURED_RELEASE] }));
+  localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...next, offered: [FEATURED_RELEASE, ANALYSIS_RELEASE] }));
   snapshot = JSON.stringify(next);
   window.dispatchEvent(new Event(LAYOUT_EVENT));
 }

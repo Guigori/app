@@ -171,6 +171,16 @@ export default function Transactions() {
       setFlowView("caixa");
       return;
     }
+    // ?aba=analise (Categorias: the one place for where the money went) and ?aba=lista open those tabs.
+    if (linkedTab === "analise" || linkedTab === "categorias") {
+      setType("despesa");
+      setFlowView("categorias");
+      if (!linkedCategoryId) return;
+    }
+    if (linkedTab === "lista" && !linkedMetric) {
+      setFlowView("lista");
+      return;
+    }
     if (linkedCategoryId) {
       setCategoryId(linkedCategoryId);
       setSelectedDonutCategory(linkedCategoryId);
