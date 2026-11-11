@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Invoice, Transaction } from "@/types/finnos";
 import { closingForMonth, invoicePoint, mergeInvoicePoints, readInvoices } from "./invoices";
-import { budgetPressure, installmentPlans, installmentSchedule, summarizeInstallments } from "./installments";
+import { budgetPressure, installmentPlans, installmentSchedule, invoiceMonthOf, summarizeInstallments } from "./installments";
 import { readFixedBills } from "./fixedBills";
 
 const tx = (over: Partial<Transaction>): Transaction => ({
@@ -61,6 +61,18 @@ describe("installments", () => {
     const tvPlan = installmentPlans([tv], "2026-11")[0];
     expect(tvPlan).toMatchObject({ current: 11, left: 1, endMonth: "2026-12" });
     expect(installmentPlans([tv], "2027-01")).toEqual([]);
+  });
+  it("follows the card's closing day: what enters each invoice and which one is open now", () => {
+    expect(invoiceMonthOf("2026-11-05", 5)).toBe("2026-11");
+    expect(invoiceMonthOf("2026-11-06", 5)).toBe("2026-12");
+    expect(invoiceMonthOf("2026-02-28", 31)).toBe("2026-02");
+    const cards = new Map([["c6", { closing_day: 5, next_closing: "2026-12-05" }]]);
+    // Bought on 02/11, C6 closes on 5: 1/3 in the November invoice, so the open (December) one carries 2/3.
+    const [plan] = installmentPlans([{ ...som, date: "2026-11-02" }], "2026-11", null, cards);
+    expect(plan).toMatchObject({ startMonth: "2026-11", current: 2, left: 1, remaining: 130.38, endMonth: "2027-01" });
+    // Bought after closing: first installment only in the next invoice.
+    const [late] = installmentPlans([{ ...som, date: "2026-11-25" }], "2026-11", null, new Map([["c6", { closing_day: 5, next_closing: "2026-12-05" }]]));
+    expect(late).toMatchObject({ startMonth: "2026-12", current: 1, left: 2, endMonth: "2027-02" });
   });
   it("filters by card and builds the schedule with the endings", () => {
     const plans = installmentPlans([som, tv], "2026-11", "c6");
