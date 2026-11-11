@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { InstallmentsInsight, InvoicesInsight } from "@/components/insights";
 import { motion } from "motion/react";
 import { CalendarClock, CreditCard as CreditCardIcon, Pencil, Repeat, Sparkles } from "lucide-react";
 import { subscriptionsByCard } from "@/lib/subscriptionsView";
@@ -29,6 +31,9 @@ export function CardsPanel({ cards, subscriptions, onCreate, onEdit }: {
   const openTotal = cards.filter((card) => card.active).reduce((sum, card) => sum + card.current_invoice, 0);
   const limitTotal = cards.filter((card) => card.active).reduce((sum, card) => sum + card.limit, 0);
   const availableTotal = cards.filter((card) => card.active).reduce((sum, card) => sum + card.available, 0);
+  // Which card the analysis looks at; none = all cards together.
+  const [focus, setFocus] = useState<string | null>(null);
+  const focused = focus && cards.some((c) => c.id === focus) ? focus : null;
 
   return (
     <div className="space-y-5" data-testid="cards-panel">
@@ -37,6 +42,23 @@ export function CardsPanel({ cards, subscriptions, onCreate, onEdit }: {
           <div className="rounded-2xl border border-border bg-card p-3 sm:p-4"><p className="text-xs text-muted-foreground">Em faturas</p><p className="mt-1 font-heading text-base font-bold tabular-nums sm:text-xl">{money(openTotal)}</p></div>
           <div className="rounded-2xl border border-border bg-card p-3 sm:p-4"><p className="text-xs text-muted-foreground">Disponível</p><p className="mt-1 font-heading text-base font-bold tabular-nums sm:text-xl">{money(availableTotal)}</p></div>
           <div className="rounded-2xl border border-border bg-card p-3 sm:p-4"><p className="text-xs text-muted-foreground">Limite total</p><p className="mt-1 font-heading text-base font-bold tabular-nums sm:text-xl">{money(limitTotal)}</p></div>
+        </div>
+      ) : null}
+      {cards.length > 0 ? (
+        <div className="space-y-3" data-testid="cards-analysis">
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Analisar cartão">
+            {[{ id: null as string | null, name: "Todos", color: "" }, ...cards.filter((c) => c.active || c.id === focused)].map((c) => (
+              <button key={c.id ?? "todos"} type="button" onClick={() => setFocus(c.id)} aria-pressed={focused === c.id}
+                className={cn("inline-flex h-9 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors", focused === c.id ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground hover:bg-muted")}
+                data-testid={`cards-analysis-${c.id ?? "todos"}`}>
+                {c.id ? <span className="size-2.5 rounded-full" style={{ backgroundColor: c.color }} aria-hidden="true" /> : null}{c.name}
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-3 xl:grid-cols-2">
+            <InvoicesInsight key={focused ?? "todos"} cards={cards} cardId={focused} />
+            <InstallmentsInsight key={`p-${focused ?? "todos"}`} cardId={focused} />
+          </div>
         </div>
       ) : null}
       {cards.length === 0 ? (
@@ -55,7 +77,7 @@ export function CardsPanel({ cards, subscriptions, onCreate, onEdit }: {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2" data-testid="cards-list">
-          {cards.map((card, index) => {
+          {cards.filter((card) => !focused || card.id === focused).map((card, index) => {
             const tone = usageTone(card.used_percent);
             const closedPayable = Boolean(card.payable_cycle && card.payable_cycle !== card.next_closing && (card.payable_invoice ?? 0) > 0);
             return (

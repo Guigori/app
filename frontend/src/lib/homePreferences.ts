@@ -7,6 +7,8 @@ export const HOME_MODULES = [
   { id: "metrics", label: "Receitas, despesas e saldo" },
   { id: "radar", label: "Radar" },
   { id: "categories", label: "Gastos e transações" },
+  { id: "fixed", label: "Contas fixas do mês" },
+  { id: "cards", label: "Faturas dos cartões" },
 ] as const;
 
 export type HomeModuleId = (typeof HOME_MODULES)[number]["id"];
