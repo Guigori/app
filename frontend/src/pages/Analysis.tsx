@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { WidgetBoard } from "@/components/insights/WidgetBoard";
+import { DiscoveriesInsight } from "@/components/insights/Discoveries";
+import { SegmentedBar } from "@/components/charts/FinnosCharts";
 import { useRouteState } from "@/lib/routeState";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { pinIndex } from "@/lib/chartPin";
-import { CalendarDays, ChevronRight, Eye, EyeOff, LayoutGrid, ChartPie, SlidersHorizontal, Sparkles, TrendingUp, WalletCards } from "lucide-react";
+import { CalendarDays, ChevronRight, Eye, EyeOff, LayoutGrid, ChartPie, SlidersHorizontal, TrendingUp, WalletCards } from "lucide-react";
 import { fetchBudget, fetchCalendar, fetchDashboard, fetchTrends } from "@/lib/data";
 import { currentMonth, monthLabel, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -59,11 +61,6 @@ export default function Analysis() {
   const incomeDelta=d?delta(d.income,d.prev_income):0;
   const top=d?.categories?.[0];
   const chartData=trends.data?.months ?? [];
-  const insight=useMemo(()=>{
-    if(!d) return "Preparando suas descobertas financeiras.";
-    if(top) return `${top.name} representa ${pct(top.percent)} dos seus gastos neste período.`;
-    return d.month_balance>=0 ? "Seu resultado do período está positivo." : "Suas despesas superaram suas receitas neste período.";
-  },[d,top]);
 
   // Teasers for the sub-screens: one real number each.
   const isCurrentMonth=month===currentMonth();
@@ -71,10 +68,10 @@ export default function Analysis() {
   const activeTrend=chartData.filter(m=>m.income>0||m.expense>0);
   const avgRate=activeTrend.length?savingsRate(activeTrend.reduce((s,m)=>s+m.income,0),activeTrend.reduce((s,m)=>s+m.expense,0)):null;
   const explore=[
-    {to:"/analise/evolucao",title:"Evolução",icon:ChartColumnBig,text:avgRate===null?"Receitas e despesas mês a mês":`Você guarda ${pct(avgRate)} da renda em média`,spark:chartData.map(m=>m.net)},
-    {to:`/analise/categorias?month=${month}`,title:"Categorias",icon:Layers,text:top?`${top.name} pesa ${pct(top.percent)} do mês`:"Onde vai o dinheiro e o que mudou",spark:null},
-    {to:`/analise/ritmo?month=${month}`,title:"Ritmo do mês",icon:Gauge,text:projection!==null?`No ritmo atual, fecha em ${mask(money(projection))}`:"Gasto por dia e por dia da semana",spark:null},
-    {to:"/analise/compromissos",title:"Compromissos",icon:CalendarClock,text:"Parcelas e fixos dos próximos meses",spark:null},
+    {to:"/analise/evolucao",title:"Evolução",icon:ChartColumnBig,text:avgRate===null?"Receitas e despesas mês a mês":`Você guarda ${pct(avgRate)} da renda em média`,spark:chartData.map(m=>m.net),bar:undefined as undefined|Array<{value:number;color:string;label:string;striped?:boolean}>},
+    {to:`/analise/categorias?month=${month}`,title:"Categorias",icon:Layers,text:top?`${top.name} pesa ${pct(top.percent)} do mês`:"Onde vai o dinheiro e o que mudou",spark:null,bar:(d?.categories ?? []).slice(0,5).map(c=>({value:c.total,color:c.color,label:c.name}))},
+    {to:`/analise/ritmo?month=${month}`,title:"Ritmo do mês",icon:Gauge,text:projection!==null?`No ritmo atual, fecha em ${mask(money(projection))}`:"Gasto por dia e por dia da semana",spark:null,bar:projection!==null&&projection>0?[{value:d?.expense ?? 0,color:"var(--finnos-purple)",label:"Já saiu"},{value:Math.max(0,projection-(d?.expense ?? 0)),color:"var(--finnos-purple)",striped:true,label:"Estimativa"}]:undefined},
+    {to:"/analise/compromissos",title:"Compromissos",icon:CalendarClock,text:"Parcelas, contas fixas e assinaturas dos próximos meses",spark:null},
   ];
 
   return <div className="mx-auto w-full max-w-5xl space-y-4 pb-8 animate-fade-up">
@@ -104,41 +101,41 @@ export default function Analysis() {
       </div>}
     </CardContent></Card></button>
 
-    <WidgetBoard surface="analise" header={<h2 className="px-1 text-sm font-semibold text-muted-foreground">Fixadas</h2>} emptyText="Fixe aqui as análises que você quer ver toda vez." />
+    {/* Descobertas FINNOS: what matters now, picked from every analysis of the library. */}
+    <DiscoveriesInsight size="M" className="h-[11rem]" />
+
+    <section aria-label="Resumo do mês" className="space-y-3">
+      <h2 className="px-1 text-sm font-semibold text-muted-foreground">Resumo do mês</h2>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <AnalysisCard onOpen={()=>open("gasto")} title="Gasto do mês" value={mask(money(d?.expense ?? 0))} note={expenseDelta ? `${expenseDelta>0?"▲":"▼"} ${pct(expenseDelta)} vs. mês anterior` : "Mês atual"} tone={expenseDelta>0?"expense":expenseDelta<0?"income":undefined}/>
+        <AnalysisCard onOpen={()=>open("orcamento")} title="Orçamento" value={hidden?"••••":budget.data?.planned ? `${Math.round((budget.data.spent/budget.data.planned)*100)}%` : "—"} note={budget.data?.planned ? "utilizado" : "não configurado"}/>
+        <AnalysisCard onOpen={()=>open("pico")} title="Dia de maior gasto" value={peakDay ? `${peakDay.date.slice(8,10)}/${peakDay.date.slice(5,7)}` : "—"} note={peakDay ? mask(money(peakDay.expense)) : "sem gastos no período"}/>
+        <AnalysisCard onOpen={()=>open("semgastos")} title="Dias sem gastos" value={calendar.data ? String(daysWithoutSpending) : "—"} note={`de ${elapsedDays} ${elapsedDays===1?"dia":"dias"}`}/>
+      </div>
+      <Card className="rounded-3xl"><CardContent className="divide-y divide-border/70 p-0">
+        <AnalysisRow onOpen={()=>open("saldo")} title="Saldo nas contas" value={mask(money(d?.total_balance ?? 0))} icon={<TrendingUp className="h-5 w-5"/>}/>
+        <AnalysisRow onOpen={()=>open("pesou")} title="O que mais pesou neste mês" value={hidden?"••••••":top ? `${top.name} · ${money(top.total)} · ${pct(top.percent)}` : "Sem dados suficientes"} icon={<Layers className="h-5 w-5"/>}/>
+        <AnalysisRow to="/assinaturas" title="Assinaturas" value="Ver gastos recorrentes" icon={<WalletCards className="h-5 w-5"/>}/>
+      </CardContent></Card>
+      {mode==="charts" && chartData.length ? <Card className="rounded-3xl"><CardContent className="p-5"><p className="text-sm font-semibold">Quanto sobrou em cada mês</p><div className="mt-3 h-28"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><Area type="monotone" dataKey="net" stroke="var(--primary)" fill="var(--primary)" fillOpacity={.12} strokeWidth={2}/></AreaChart></ResponsiveContainer></div></CardContent></Card> : null}
+    </section>
 
     <section aria-label="Explorar análises">
       <h2 className="mb-2 px-1 text-sm font-semibold text-muted-foreground">Explorar</h2>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {explore.map(item=>(
-          <Link key={item.title} to={item.to} className="flex min-w-0 flex-col rounded-[22px] border border-border bg-card p-4 transition-colors hover:bg-muted/40" data-testid={`analysis-explore-${item.to.split("/")[2].split("?")[0]}`}>
+          <Link key={item.title} to={item.to} className="flex min-h-[9.5rem] min-w-0 flex-col rounded-3xl border border-border/80 bg-card p-4 shadow-sm transition-colors hover:bg-muted/40" data-testid={`analysis-explore-${item.to.split("/")[2].split("?")[0]}`}>
             <span className="flex items-center justify-between"><span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary"><item.icon className="h-4.5 w-4.5"/></span><ChevronRight className="h-4 w-4 text-muted-foreground"/></span>
-            <span className="mt-3 font-heading text-sm font-semibold">{item.title}</span>
-            <span className="mt-0.5 text-xs text-muted-foreground">{item.text}</span>
-            {item.spark&&!hidden?<Sparkline values={item.spark} className="mt-2 h-8 text-primary"/>:null}
+            <span className="mt-3 font-heading text-[15px] font-semibold">{item.title}</span>
+            <span className="mt-0.5 text-xs leading-snug text-muted-foreground">{item.text}</span>
+            {item.spark&&!hidden?<Sparkline values={item.spark} className="mt-auto h-8 pt-2 text-primary"/>:null}
+            {item.bar&&item.bar.length&&!hidden?<SegmentedBar className="mt-auto pt-3" height={8} segments={item.bar}/>:null}
           </Link>
         ))}
       </div>
     </section>
 
-    <button type="button" onClick={()=>open("descobertas")} className="block w-full text-left"><Card className="rounded-[24px] border-primary/15 bg-primary/[.035]"><CardContent className="flex items-center gap-3 p-5">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary"><Sparkles className="h-5 w-5"/></span>
-      <div className="min-w-0 flex-1"><p className="font-heading font-semibold">Descobertas FINNOS</p><p className="text-sm text-muted-foreground">{hidden?"Valores ocultos":insight}</p></div><ChevronRight className="h-4 w-4"/>
-    </CardContent></Card></button>
-
-    <div className="grid grid-cols-2 gap-3">
-      <AnalysisCard onOpen={()=>open("gasto")} title="Gasto do mês" value={mask(money(d?.expense ?? 0))} note={expenseDelta ? `${expenseDelta>0?"▲":"▼"} ${pct(expenseDelta)} vs. mês anterior` : "Mês atual"}/>
-      <AnalysisCard onOpen={()=>open("orcamento")} title="Orçamento" value={hidden?"••••":budget.data?.planned ? `${Math.round((budget.data.spent/budget.data.planned)*100)}%` : "—"} note={budget.data?.planned ? "utilizado" : "não configurado"}/>
-      <AnalysisCard onOpen={()=>open("pico")} title="Dia de maior gasto" value={peakDay ? `${peakDay.date.slice(8,10)}/${peakDay.date.slice(5,7)}` : "—"} note={peakDay ? mask(money(peakDay.expense)) : "sem gastos no período"}/>
-      <AnalysisCard onOpen={()=>open("semgastos")} title="Dias sem gastos" value={calendar.data ? String(daysWithoutSpending) : "—"} note={`de ${elapsedDays} ${elapsedDays===1?"dia":"dias"}`}/>
-    </div>
-
-    <button type="button" onClick={()=>open("saldo")} className="block w-full text-left"><Card className="rounded-[24px] transition-colors hover:bg-muted/40"><CardContent className="p-5">
-      <div className="flex items-center justify-between"><div><p className="text-sm font-medium">Evolução do saldo</p><p className="mt-1 text-2xl font-bold">{mask(money(d?.total_balance ?? 0))}</p></div><TrendingUp className="h-5 w-5 text-primary"/></div>
-      {mode==="charts" && <div className="mt-3 h-28"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><Area type="monotone" dataKey="net" stroke="var(--primary)" fill="#8C5BFF" fillOpacity={.12} strokeWidth={2}/></AreaChart></ResponsiveContainer></div>}
-    </CardContent></Card></button>
-
-    <AnalysisRow to="/assinaturas" title="Assinaturas" value="Ver gastos recorrentes" icon={<WalletCards className="h-5 w-5"/>}/>
-    <AnalysisRow onOpen={()=>open("pesou")} title="O que mais pesou neste mês" value={hidden?"••••••":top ? `${top.name} · ${money(top.total)} · ${pct(top.percent)}` : "Sem dados suficientes"} icon={<TrendingUp className="h-5 w-5"/>}/>
+    <WidgetBoard surface="analise" header={<h2 className="px-1 text-sm font-semibold text-muted-foreground">Suas análises</h2>} emptyText="Fixe aqui as análises que você quer ver toda vez." />
 
     <InsightSheet detail={detail} trend={chartData} hidden={hidden} onClose={()=>setDetail(null)}/>
   </div>
@@ -147,10 +144,10 @@ export default function Analysis() {
 function Metric({label,value,change,negative=false,hidden=false}:{label:string,value:number,change:number,negative?:boolean,hidden?:boolean}) {
   return <div className="min-w-0 px-3 first:pl-0 last:pr-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 whitespace-nowrap text-[clamp(0.9rem,4vw,1.25rem)] font-bold tabular-nums">{hidden?"••••••":money(value)}</p><p className={`mt-1 text-xs ${!value?"text-muted-foreground":negative&&change>0?"text-expense":"text-income"}`}>{!value ? "Sem movimento" : change ? `${change>0?"▲":"▼"} ${pct(change)}` : "• período"}</p></div>
 }
-function AnalysisCard({onOpen,title,value,note}:{onOpen:()=>void,title:string,value:string,note:string}) {
-  return <button type="button" onClick={onOpen} className="block min-w-0 text-left"><Card className="h-full min-w-0 rounded-[22px] transition-colors hover:bg-muted/40"><CardContent className="p-4"><div className="flex items-start justify-between gap-1"><p className="text-xs font-medium">{title}</p><ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground"/></div><p className="mt-3 truncate text-xl font-bold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{note}</p></CardContent></Card></button>
+function AnalysisCard({onOpen,title,value,note,tone}:{onOpen:()=>void,title:string,value:string,note:string,tone?:"income"|"expense"}) {
+  return <button type="button" onClick={onOpen} className="block min-w-0 text-left"><Card className="h-full min-w-0 rounded-3xl shadow-sm transition-colors hover:bg-muted/40"><CardContent className="p-4"><div className="flex items-start justify-between gap-1"><p className="truncate text-xs font-medium text-muted-foreground">{title}</p><ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground"/></div><p className="mt-3 truncate font-heading text-[clamp(1.1rem,5vw,1.4rem)] font-bold tabular-nums">{value}</p><p className={`mt-1 truncate text-xs ${tone==="expense"?"text-expense":tone==="income"?"text-income":"text-muted-foreground"}`}>{note}</p></CardContent></Card></button>
 }
 function AnalysisRow({to,onOpen,title,value,icon}:{to?:string,onOpen?:()=>void,title:string,value:string,icon:React.ReactNode}) {
  const Wrapper=({children}:{children:React.ReactNode})=>to?<Link to={to} className="block">{children}</Link>:<button type="button" onClick={onOpen} className="block w-full text-left">{children}</button>;
- return <Wrapper><Card className="rounded-[22px] transition-colors hover:bg-muted/40"><CardContent className="flex items-center gap-3 p-4"><span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">{icon}</span><div className="min-w-0 flex-1"><p className="text-xs font-medium">{title}</p><p className="truncate font-semibold">{value}</p></div><ChevronRight className="h-4 w-4 text-muted-foreground"/></CardContent></Card></Wrapper>
+ return <Wrapper><div className="flex items-center gap-3 p-4 transition-colors hover:bg-muted/40"><span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">{icon}</span><div className="min-w-0 flex-1"><p className="text-xs font-medium">{title}</p><p className="truncate font-semibold">{value}</p></div><ChevronRight className="h-4 w-4 text-muted-foreground"/></div></Wrapper>
 }

@@ -48,7 +48,7 @@ export function ChartView({ chart, size, money }: { chart: Chart; size: WidgetSi
   const small = size === "M";
   if (chart.type === "bars") return <Bars height={small ? 70 : 140} data={small ? chart.data.map((d) => ({ ...d, valueLabel: "" })) : chart.data} />;
   if (chart.type === "segmented") return <SegmentedBar format={money} total={chart.total} height={10} segments={chart.segments} />;
-  if (chart.type === "gauge") return <Gauge percent={chart.percent} size={small ? 104 : 140} detail={chart.detail}><span className="text-sm font-semibold tabular-nums">{chart.center}</span></Gauge>;
+  if (chart.type === "gauge") return <Gauge percent={chart.percent} goal={chart.goal} size={small ? 104 : 140} detail={chart.detail}><span className="text-sm font-semibold tabular-nums">{chart.center}</span></Gauge>;
   if (chart.type === "line") return <ProjectionLine points={chart.points} area labels={false} height={small ? 48 : 90} format={money} />;
   if (chart.type === "bullets") return (
     <ul className={small ? "space-y-2.5" : "space-y-4"}>

@@ -7,8 +7,8 @@ import { currentMonth, formatDate, monthLabel, todayISO } from "@/lib/format";
 import { addMonths, daysInMonth, monthPortion, rhythm, weekdayAverages } from "@/lib/analysisInsights";
 import { useRouteState } from "@/lib/routeState";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
-import { AnalysisHeader, ChartCard, Finding, StatTile } from "@/components/analytics/AnalysisKit";
-import { axisTick, pct, tooltipStyle, useMoney, axisMoney } from "@/lib/analysisFormat";
+import { AnalysisHeader, StatGrid, ChartCard, Finding, StatTile } from "@/components/analytics/AnalysisKit";
+import { axisTick, pct, tooltipStyle, tooltipItemStyle, tooltipLabelStyle, useMoney, axisMoney } from "@/lib/analysisFormat";
 
 /** Análise → Ritmo: how fast the month is going, where it ends at this pace, which weekdays cost more, and the biggest expenses. */
 export default function AnalysisRhythm() {
@@ -34,11 +34,11 @@ export default function AnalysisRhythm() {
     <div className="mx-auto w-full max-w-5xl space-y-4 pb-8 animate-fade-up" data-testid="analysis-rhythm">
       <AnalysisHeader title="Ritmo do mês" month={month} onMonthChange={setMonth} />
       {!data ? <FinnosPageLoading title="Calculando o ritmo" /> : <>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatGrid>
           <StatTile label={data.projection !== null ? "Gasto até hoje" : "Gasto no mês"} value={money(data.spent)} tone="expense" note={`${data.daysElapsed} dias`} />
           <StatTile label="Média por dia" value={money(data.dailyAverage)} />
           <StatTile label={data.projection !== null ? "Se continuar assim" : `${monthLabel(addMonths(month, -1))}`} value={money(data.projection ?? prevTotal)} note={data.projection !== null && prevTotal > 0 ? `${data.projection > prevTotal ? "▲" : "▼"} ${pct(Math.abs(((data.projection - prevTotal) / prevTotal) * 100))} vs. mês anterior` : data.projection !== null ? "projeção do mês" : "mês anterior"} />
-        </div>
+        </StatGrid>
 
         {data.projection !== null && prevTotal > 0 ? (
           <Finding tone={data.projection > prevTotal ? "attention" : "good"}>
@@ -55,7 +55,7 @@ export default function AnalysisRhythm() {
                 <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis dataKey="day" tickLine={false} axisLine={false} tick={axisTick} interval={4} />
                 <YAxis hide={hidden} width={44} tickLine={false} axisLine={false} tick={axisTick} tickFormatter={axisMoney} />
-                <Tooltip active defaultIndex={pinIndex(data.curve, (p) => month === today.slice(0, 7) && p.day === Number(today.slice(8, 10)))} contentStyle={tooltipStyle} labelFormatter={(d: number) => `Dia ${d}`} formatter={(v: number, name: string) => [money(v), name === "current" ? monthLabel(month) : monthLabel(addMonths(month, -1))]} />
+                <Tooltip active defaultIndex={pinIndex(data.curve, (p) => month === today.slice(0, 7) && p.day === Number(today.slice(8, 10)))} contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={(d: number) => `Dia ${d}`} formatter={(v: number, name: string) => [money(v), name === "current" ? monthLabel(month) : monthLabel(addMonths(month, -1))]} />
                 <Line type="monotone" dataKey="previous" stroke="var(--muted-foreground)" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls={false} />
                 <Line type="monotone" dataKey="current" stroke="var(--primary)" strokeWidth={2} dot={false} activeDot={{ r: 5 }} connectNulls={false} />
               </LineChart>
@@ -71,7 +71,7 @@ export default function AnalysisRhythm() {
                   <CartesianGrid vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
                   <YAxis hide width={0} />
-                  <Tooltip active defaultIndex={maxWeekday} contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number) => [money(v), "Média"]} />
+                  <Tooltip active defaultIndex={maxWeekday} contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number) => [money(v), "Média"]} />
                   {/* Emphasis: the costliest weekday in primary, the rest recessive. */}
                   <Bar dataKey="average" radius={[4, 4, 0, 0]} maxBarSize={28}>
                     {weekdays.map((w, i) => <Cell key={w.label} fill={i === maxWeekday ? "var(--primary)" : "color-mix(in srgb, var(--primary) 28%, var(--card))"} />)}

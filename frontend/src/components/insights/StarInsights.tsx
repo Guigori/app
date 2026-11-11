@@ -129,7 +129,7 @@ export function BalanceForecastInsight({ size, to, className }: Props) {
   );
   if (size === "M") return (
     <Tile title="Estimativa de saldo" className={className} testId="forecast-insight">
-      <div className="flex items-baseline justify-between gap-3"><p className={cn(NUMBER_TILE, endTone)}>{money(f.end)}</p><p className={cn(NOTE, "shrink-0")}>{change} até dia {f.series.at(-1)?.date.slice(8)}</p></div>
+      <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3"><p className={cn(NUMBER_TILE, endTone)}>{money(f.end)}</p><p className={cn(NOTE, "min-w-0 truncate")}>{change} até dia {f.series.at(-1)?.date.slice(8)}</p></div>
       <div className="mt-auto">{hidden ? null : <ProjectionLine points={points} height={56} labels={false} ariaLabel="Saldo real e estimativa do mês" format={money} />}</div>
     </Tile>
   );

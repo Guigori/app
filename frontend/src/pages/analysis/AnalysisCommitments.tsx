@@ -6,8 +6,8 @@ import { InstallmentsInsight, InvoicesInsight } from "@/components/insights";
 import { currentMonth } from "@/lib/format";
 import { commitments } from "@/lib/analysisInsights";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
-import { AnalysisHeader, ChartCard, Finding, StatTile } from "@/components/analytics/AnalysisKit";
-import { axisTick, pct, tooltipStyle, useMoney, axisMoney } from "@/lib/analysisFormat";
+import { AnalysisHeader, StatGrid, ChartCard, Finding, StatTile } from "@/components/analytics/AnalysisKit";
+import { axisTick, pct, tooltipStyle, tooltipItemStyle, tooltipLabelStyle, useMoney, axisMoney } from "@/lib/analysisFormat";
 
 const monthShort = (m: string) => new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)) - 1, 1).toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
 
@@ -27,11 +27,11 @@ export default function AnalysisCommitments() {
     <div className="mx-auto w-full max-w-5xl space-y-4 pb-8 animate-fade-up" data-testid="analysis-commitments">
       <AnalysisHeader title="Compromissos" />
       {!data ? <FinnosPageLoading title="Somando compromissos" /> : <>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatGrid>
           <StatTile label="Fixos por mês" value={money(data.fixedMonthly)} note={`${data.fixedItems.length} contas e assinaturas`} />
           <StatTile label="Parcelas neste mês" value={money(data.months[0]?.installments ?? 0)} note={`${data.installmentItems.length} compras parceladas`} />
           <StatTile label="Próximos 6 meses" value={money(sixMonths)} note="já comprometidos" tone="expense" />
-        </div>
+        </StatGrid>
 
         {income > 0 && data.months[0] ? (
           <Finding tone={data.months[0].total / income > 0.6 ? "attention" : "neutral"}>
@@ -49,7 +49,7 @@ export default function AnalysisCommitments() {
                 <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
                 <YAxis hide={hidden} width={44} tickLine={false} axisLine={false} tick={axisTick} tickFormatter={axisMoney} />
-                <Tooltip active defaultIndex={pinIndex(data.months, (m) => m.month === month)} contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number, name: string) => [money(v), name === "fixed" ? "Fixos e assinaturas" : "Parcelas"]} />
+                <Tooltip active defaultIndex={pinIndex(data.months, (m) => m.month === month)} contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number, name: string) => [money(v), name === "fixed" ? "Fixos e assinaturas" : "Parcelas"]} />
                 {/* Stacked with a 2px surface gap between segments. */}
                 <Bar dataKey="fixed" stackId="c" fill="var(--primary)" stroke="var(--card)" strokeWidth={2} maxBarSize={32} />
                 <Bar dataKey="installments" stackId="c" fill="var(--expense)" stroke="var(--card)" strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={32} />

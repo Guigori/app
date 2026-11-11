@@ -37,7 +37,7 @@ export interface SegItem { value: number; color: string; label: string; striped?
 export type Chart =
   | { type: "bars"; data: BarItem[] }
   | { type: "segmented"; segments: SegItem[]; total?: number }
-  | { type: "gauge"; percent: number; center: string; detail: string }
+  | { type: "gauge"; percent: number; center: string; detail: string; goal?: boolean }
   | { type: "donut"; slices: Array<{ id: string; name: string; value: number; color: string }>; center: string }
   | { type: "line"; points: Array<{ value: number; kind: "real" | "previsto"; label?: string }> }
   | { type: "bullets"; items: Array<{ label: string; value: number; limit: number; note?: string }> };
@@ -140,7 +140,7 @@ export const READERS: Record<string, { needs: Need[]; read: (c: Ctx) => Reading 
         empty: cur && cur.income > 0 ? undefined : "Sem renda registrada neste mês para calcular quanto sobra.",
         tile: "Guardou do que entrou", value: pct(now), tone: now < 0 ? "expense" : "income", note: cur ? `${money(cur.net)} de ${money(cur.income)}` : "",
         vs: { c: compare(now * 100, prev && prev.income > 0 ? rate(prev) * 100 : null, "higher"), label: `vs ${short(addMonth(month, -1)).toLowerCase()}`, format: "points" },
-        chart: { type: "gauge", percent: Math.max(0, now) / 0.3, center: pct(now), detail: `${money(cur?.net ?? 0)} guardados` },
+        chart: { type: "gauge", goal: true, percent: Math.max(0, now) / 0.2, center: pct(now), detail: `meta 20% · ${money(cur?.net ?? 0)}` },
         rows: [...r.months].reverse().map((p) => ({ label: cap(shortMonthName(p.month)), sub: `${money(p.income)} entrou`, value: p.income > 0 ? pct(rate(p)) : "—", tone: p.net < 0 ? "expense" : undefined })),
         findings: [
           { tone: now >= 0.2 ? "good" : now >= 0.1 ? "info" : "bad", text: now >= 0.2 ? "Acima dos 20% que costumam ser a meta para guardar." : now >= 0 ? `Para chegar a 20% faltam ${money(Math.max(0, 0.2 * (cur?.income ?? 0) - (cur?.net ?? 0)))} neste mês.` : "Neste mês está saindo mais do que entra." },
@@ -282,8 +282,8 @@ export const READERS: Record<string, { needs: Need[]; read: (c: Ctx) => Reading 
       return {
         empty: avg > 0 ? undefined : "É preciso pelo menos um mês fechado com gastos para calcular a reserva.",
         tile: "Reserva", value: `${label} ${months >= 0.95 && months < 1.05 ? "mês" : "meses"}`, tone: months < 3 ? "expense" : "income", note: `de gastos cobertos · meta ${target}`,
-        vs: { c: compare(Math.round(months * 10) / 10, prevMonths != null ? Math.round(prevMonths * 10) / 10 : null, "higher"), label: "meses vs fim do mês passado", format: "count" },
-        chart: { type: "gauge", percent: months / target, center: `${label}m`, detail: `${money(balance)} de ${money(avg * target)}` },
+        vs: { c: compare(Math.round(months * 10) / 10, prevMonths != null ? Math.round(prevMonths * 10) / 10 : null, "higher"), label: "meses vs mês passado", format: "count" },
+        chart: { type: "gauge", goal: true, percent: months / target, center: `${label} m`, detail: `${money(balance)} de ${money(avg * target)}` },
         rows: [{ label: "Nas contas", value: money(balance) }, { label: "Gasto médio por mês", value: money(avg) }, { label: `Meta de ${target} meses`, value: money(avg * target) }, { label: "Falta para a meta", value: money(Math.max(0, avg * target - balance)), tone: balance < avg * target ? "expense" : "income" }],
         findings: [{ tone: months >= target ? "good" : months >= 3 ? "info" : "bad", text: months >= target ? `A reserva cobre mais de ${target} meses.` : `Para ${target} meses faltam ${money(avg * target - balance)}.` }],
         summary: [`Com ${money(balance)} nas contas e um gasto médio de ${money(avg)}, você cobre ${label} meses.`, months >= target ? "Já passou da meta de 6 meses de reserva." : `Para a meta de ${target} meses faltam ${money(avg * target - balance)}.`],

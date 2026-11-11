@@ -68,7 +68,6 @@ export function HabitsInsight({ size, to, className }: Props) {
     findings[0]?.text ?? "",
     h.weekendShare >= 0.5 ? findings.find((f) => f.tone === "bad")!.text : h.quietDays ? `Foram ${h.quietDays} dias sem nenhum gasto.` : "",
   ].filter(Boolean);
-  const peakWeek = Math.max(1, ...h.byWeekday.map((w) => w.average));
   return (
     <>{size === "XL" ? <FinnSummary title="Quando você gasta" sentences={summary} context={{ total: h.total, por_dia: h.perDay, dia_mais_caro: h.topWeekday ? WEEKDAY_NAMES[h.topWeekday.weekday] : null, fim_de_semana: pct(h.weekendShare), dias_sem_gastar: h.quietDays }} /> : null}
     <InsightShell title="Quando você gasta" subtitle={monthLabel(month)} to={to} className={className} testId="habits-insight">
