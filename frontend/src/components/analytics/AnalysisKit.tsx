@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { useRef, type ReactNode } from "react";
+import { useInView } from "motion/react";
+import { CircleCheck, Eye, EyeOff, Sparkles, TriangleAlert } from "lucide-react";
 import { useBalanceHidden } from "@/lib/balance";
 import { monthLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,7 @@ export function AnalysisHeader({ title, month, onMonthChange, children }: { titl
 
 export function StatTile({ label, value, note, tone }: { label: string; value: string; note?: ReactNode; tone?: "income" | "expense" }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-border bg-card p-4">
+    <div className="min-w-0 rounded-3xl border border-border/80 bg-card p-4 shadow-sm">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={cn("mt-1 whitespace-nowrap font-heading text-[clamp(1rem,4.8vw,1.25rem)] font-bold tabular-nums", tone === "income" && "text-income", tone === "expense" && "text-expense")}>{value}</p>
       {note ? <p className="mt-1 text-xs text-muted-foreground">{note}</p> : null}
@@ -36,9 +37,17 @@ export function StatTile({ label, value, note, tone }: { label: string; value: s
   );
 }
 
+/** Tiles side by side; an odd one at the end takes the whole row instead of leaving a hole. */
+export function StatGrid({ children }: { children: ReactNode }) {
+  return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">{children}</div>;
+}
+
 export function ChartCard({ title, subtitle, legend, children, className }: { title: string; subtitle?: string; legend?: Array<{ label: string; color: string; dashed?: boolean }>; children: ReactNode; className?: string }) {
+  // The chart is drawn (and animates) when the card comes into view, like the Gráficos FINNOS.
+  const ref = useRef<HTMLElement>(null);
+  const seen = useInView(ref, { once: true, amount: 0.25 });
   return (
-    <section className={cn("min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-5", className)}>
+    <section ref={ref} className={cn("min-w-0 rounded-3xl border border-border/80 bg-card p-5 shadow-sm", className)}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="font-heading text-base font-semibold">{title}</h2>
@@ -55,15 +64,20 @@ export function ChartCard({ title, subtitle, legend, children, className }: { ti
           </ul>
         ) : null}
       </div>
-      <div className="mt-3">{children}</div>
+      <div className="mt-3" key={seen ? "seen" : "waiting"}>{children}</div>
     </section>
   );
 }
 
 /** One plain-language finding, the reason the screen exists. */
 export function Finding({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "good" | "attention" }) {
+  // Same look as the library findings: a calm card, the tone only in the icon (no coloured fills).
+  const Icon = tone === "good" ? CircleCheck : tone === "attention" ? TriangleAlert : Sparkles;
   return (
-    <p className={cn("rounded-2xl px-4 py-3 text-sm", tone === "good" ? "bg-income/10" : tone === "attention" ? "bg-amber-500/10" : "bg-primary/5")}>{children}</p>
+    <div className="flex gap-3 rounded-3xl border border-border/80 bg-card p-4 text-sm leading-relaxed shadow-sm" data-tone={tone}>
+      <Icon className={cn("mt-0.5 size-4 shrink-0", tone === "good" ? "text-income" : tone === "attention" ? "text-expense" : "text-primary")} aria-hidden="true" />
+      <p className="min-w-0">{children}</p>
+    </div>
   );
 }
 

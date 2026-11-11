@@ -6,8 +6,8 @@ import { currentMonth, monthLabel } from "@/lib/format";
 import { evolution } from "@/lib/analysisInsights";
 import { useRouteState } from "@/lib/routeState";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
-import { AnalysisHeader, ChartCard, Finding, Segmented, StatTile } from "@/components/analytics/AnalysisKit";
-import { axisTick, pct, tooltipStyle, useMoney, axisMoney } from "@/lib/analysisFormat";
+import { AnalysisHeader, StatGrid, ChartCard, Finding, Segmented, StatTile } from "@/components/analytics/AnalysisKit";
+import { axisTick, pct, tooltipStyle, tooltipItemStyle, tooltipLabelStyle, useMoney, axisMoney } from "@/lib/analysisFormat";
 
 /** Análise → Evolução: income vs expenses month by month, how much of the income stays, and the running result. */
 export default function AnalysisEvolution() {
@@ -15,6 +15,8 @@ export default function AnalysisEvolution() {
   const end = currentMonth();
   const trends = useQuery({ queryKey: ["analysis-trends", Number(months), end], queryFn: () => fetchTrends(Number(months), end) });
   const { hidden, money } = useMoney();
+  // The table shows whole reais so the four columns fit a phone without cutting the result.
+  const whole = (v: number) => (hidden ? "••••" : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }));
   const data = trends.data ? evolution(trends.data.months) : null;
   const pin = data ? pinIndex(data.months, (m) => isThisMonth(m)) : undefined;
 
@@ -24,11 +26,11 @@ export default function AnalysisEvolution() {
         <Segmented label="Período" value={months} onChange={setMonths} options={[{ value: "6", label: "6 meses" }, { value: "12", label: "1 ano" }]} />
       </AnalysisHeader>
       {trends.isPending ? <FinnosPageLoading title="Montando a evolução" /> : !data ? <p role="alert" className="text-sm text-muted-foreground">Não foi possível carregar a evolução.</p> : <>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatGrid>
           <StatTile label="Receita média" value={money(data.avgIncome)} tone="income" note="por mês com movimento" />
           <StatTile label="Despesa média" value={money(data.avgExpense)} tone="expense" note="por mês com movimento" />
           <StatTile label="Você guarda" value={data.avgRate === null ? "—" : pct(data.avgRate)} note="da renda, em média" />
-        </div>
+        </StatGrid>
 
         {data.best ? (
           <Finding tone={data.avgRate !== null && data.avgRate >= 10 ? "good" : "attention"}>
@@ -45,7 +47,7 @@ export default function AnalysisEvolution() {
                 <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
                 <YAxis hide={hidden} width={44} tickLine={false} axisLine={false} tick={axisTick} tickFormatter={axisMoney} />
-                <Tooltip active defaultIndex={pin} contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number, name: string) => [money(v), name === "income" ? "Receitas" : "Despesas"]} />
+                <Tooltip active defaultIndex={pin} contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number, name: string) => [money(v), name === "income" ? "Receitas" : "Despesas"]} />
                 <Bar dataKey="income" fill="var(--income)" radius={[4, 4, 0, 0]} maxBarSize={18} />
                 <Bar dataKey="expense" fill="var(--expense)" radius={[4, 4, 0, 0]} maxBarSize={18} />
               </BarChart>
@@ -62,7 +64,7 @@ export default function AnalysisEvolution() {
                   <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
                   <YAxis width={40} tickLine={false} axisLine={false} tick={axisTick} tickFormatter={(v: number) => `${v}%`} />
                   <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.5} />
-                  <Tooltip active defaultIndex={pin} contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number) => [pct(v), "Da renda"]} />
+                  <Tooltip active defaultIndex={pin} contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number) => [pct(v), "Da renda"]} />
                   <Bar dataKey="rate" radius={[4, 4, 4, 4]} maxBarSize={22}>{data.months.map((m) => <Cell key={m.month} fill={(m.rate ?? 0) < 0 ? "var(--expense)" : "var(--primary)"} />)}</Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -77,7 +79,7 @@ export default function AnalysisEvolution() {
                   <XAxis dataKey="label" tickLine={false} axisLine={false} tick={axisTick} />
                   <YAxis hide={hidden} width={44} tickLine={false} axisLine={false} tick={axisTick} tickFormatter={axisMoney} />
                   <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.5} />
-                  <Tooltip active defaultIndex={pin} contentStyle={tooltipStyle} formatter={(v: number) => [money(v), "Acumulado"]} />
+                  <Tooltip active defaultIndex={pin} contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => [money(v), "Acumulado"]} />
                   <Area type="monotone" dataKey="cumulative" stroke="var(--primary)" strokeWidth={2} fill="url(#evo-cum)" dot={{ r: 3, strokeWidth: 0, fill: "var(--primary)" }} activeDot={{ r: 5 }} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -87,11 +89,11 @@ export default function AnalysisEvolution() {
 
         <ChartCard title="Mês a mês" subtitle="Os números por trás dos gráficos">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[22rem] text-sm tabular-nums">
+            <table className="w-full text-[13px] tabular-nums">
               <thead><tr className="text-left text-xs text-muted-foreground"><th className="py-2 font-medium">Mês</th><th className="py-2 text-right font-medium">Receitas</th><th className="py-2 text-right font-medium">Despesas</th><th className="py-2 text-right font-medium">Sobrou</th></tr></thead>
               <tbody className="divide-y divide-border">
                 {[...data.months].reverse().map((m) => (
-                  <tr key={m.month}><td className="py-2 capitalize">{m.label}</td><td className="py-2 text-right">{money(m.income)}</td><td className="py-2 text-right">{money(m.expense)}</td><td className={"py-2 text-right font-semibold " + (m.net < 0 ? "text-expense" : "")}>{money(m.net)}</td></tr>
+                  <tr key={m.month}><td className="py-2.5 capitalize">{m.label}</td><td className="py-2.5 text-right text-income">{whole(m.income)}</td><td className="py-2.5 text-right text-expense">{whole(m.expense)}</td><td className={"py-2.5 text-right font-semibold " + (m.net < 0 ? "text-expense" : "")}>{whole(m.net)}</td></tr>
                 ))}
               </tbody>
             </table>

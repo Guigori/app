@@ -8,8 +8,8 @@ import { addMonths, categoryChanges } from "@/lib/analysisInsights";
 import { useRouteState } from "@/lib/routeState";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
-import { AnalysisHeader, ChartCard, Finding, StatTile } from "@/components/analytics/AnalysisKit";
-import { axisTick, pct, tooltipStyle, useMoney } from "@/lib/analysisFormat";
+import { AnalysisHeader, StatGrid, ChartCard, Finding, StatTile } from "@/components/analytics/AnalysisKit";
+import { axisTick, pct, tooltipStyle, tooltipItemStyle, tooltipLabelStyle, useMoney } from "@/lib/analysisFormat";
 
 const shortMonth = (m: string) => new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)) - 1, 1).toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
 
@@ -36,11 +36,11 @@ export default function AnalysisCategories() {
     <div className="mx-auto w-full max-w-5xl space-y-4 pb-8 animate-fade-up" data-testid="analysis-categories">
       <AnalysisHeader title="Categorias" month={month} onMonthChange={setMonth} />
       {current.isPending || previous.isPending ? <FinnosPageLoading title="Somando categorias" /> : <>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatGrid>
           <StatTile label="Gasto no mês" value={money(total)} tone="expense" note={prevTotal > 0 ? `${total >= prevTotal ? "▲" : "▼"} ${pct(Math.abs(((total - prevTotal) / prevTotal) * 100))} vs. ${monthLabel(addMonths(month, -1))}` : "sem mês anterior para comparar"} />
           <StatTile label="Categorias com gasto" value={String(spending.length)} />
           <StatTile label="Maior peso" value={spending[0] ? spending[0].name : "—"} note={spending[0] && total > 0 ? `${pct((spending[0].current / total) * 100)} do mês` : undefined} />
-        </div>
+        </StatGrid>
 
         {rising[0] ? <Finding tone="attention"><strong>{rising[0].name}</strong> subiu {money(rising[0].delta)}{rising[0].deltaPct !== null ? ` (${pct(rising[0].deltaPct)})` : " e não aparecia no mês anterior"} em relação a {monthLabel(addMonths(month, -1))}.</Finding>
           : falling[0] ? <Finding tone="good"><strong>{falling[0].name}</strong> caiu {money(Math.abs(falling[0].delta))} em relação ao mês anterior.</Finding> : null}
@@ -52,7 +52,7 @@ export default function AnalysisCategories() {
                 <BarChart data={top} layout="vertical" margin={{ top: 0, right: 64, left: 0, bottom: 0 }} barCategoryGap={8}>
                   <XAxis type="number" hide />
                   <YAxis type="category" dataKey="name" width={104} tickLine={false} axisLine={false} tick={{ ...axisTick, fill: "var(--foreground)" }} />
-                  <Tooltip active defaultIndex={0} contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number) => [`${money(v)}${total > 0 ? ` · ${pct((v / total) * 100)}` : ""}`, "Gasto"]} />
+                  <Tooltip active defaultIndex={0} contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} cursor={{ fill: "var(--muted)" }} formatter={(v: number) => [`${money(v)}${total > 0 ? ` · ${pct((v / total) * 100)}` : ""}`, "Gasto"]} />
                   <Bar dataKey="current" radius={[0, 4, 4, 0]} maxBarSize={22} label={hidden ? undefined : { position: "right", formatter: (v: unknown) => short(Number(v)), fill: "var(--muted-foreground)", fontSize: 12 }}>
                     {top.map((c) => <Cell key={c.id} fill={c.color} />)}
                   </Bar>
@@ -85,7 +85,7 @@ export default function AnalysisCategories() {
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={series} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
                           <XAxis dataKey="month" hide />
-                          <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [money(v), c.name]} labelFormatter={(l: string) => l} />
+                          <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} formatter={(v: number) => [money(v), c.name]} labelFormatter={(l: string) => l} />
                           <Area type="monotone" dataKey="value" stroke={c.color} strokeWidth={2} fill={c.color} fillOpacity={0.12} dot={false} activeDot={{ r: 4 }} />
                         </AreaChart>
                       </ResponsiveContainer>

@@ -149,11 +149,12 @@ export function BulletBar({ value, limit, max, color = FINNOS_COLOR.result, clas
 }
 
 /** Gauge: a half ring with the share used; turns the expense colour past 100%. Touch it to swap the centre for the detail, again to go back. */
-export function Gauge({ percent, children, detail, size = 168, className }: { percent: number; children?: React.ReactNode; detail?: React.ReactNode; size?: number; className?: string }) {
+/** `goal`: a target to reach (guardar, reserva) — full is good (income colour), not a limit passed. */
+export function Gauge({ percent, children, detail, size = 168, className, goal = false }: { percent: number; children?: React.ReactNode; detail?: React.ReactNode; size?: number; className?: string; goal?: boolean }) {
   const [open, setOpen] = useState(false);
   const [ref, seen] = useSeen<HTMLDivElement>();
   const p = Math.max(0, Math.min(1, percent));
-  const color = percent > 1 ? FINNOS_COLOR.expense : FINNOS_COLOR.result;
+  const color = goal ? (percent >= 1 ? FINNOS_COLOR.income : FINNOS_COLOR.result) : percent > 1 ? FINNOS_COLOR.expense : FINNOS_COLOR.result;
   const r = 70, c = Math.PI * r;
   return (
     <div ref={ref} className={cn("relative mx-auto", detail && "cursor-pointer", className)} style={{ width: size, height: size / 2 + 8 }}
