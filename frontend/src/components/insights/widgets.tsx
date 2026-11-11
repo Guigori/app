@@ -17,6 +17,9 @@ import { InstallmentsInsight } from "@/components/insights/InstallmentsInsight";
 import { InvoicesInsight } from "@/components/insights/InvoicesInsight";
 import { BalanceForecastInsight, NextInvoiceInsight, SpendTodayInsight, WeekAheadInsight } from "@/components/insights/StarInsights";
 import { BudgetInsight, GoalsInsight } from "@/components/insights/PlanInsights";
+import { CatalogInsight } from "@/components/insights/CatalogInsight";
+import { DiscoveriesInsight } from "@/components/insights/Discoveries";
+import { READERS } from "@/lib/insights/catalog";
 import { AccountsInsight, HabitsInsight, IncomeInsight, MonthsInsight } from "@/components/insights/MoreInsights";
 import { useCalendar, useCards } from "@/components/insights/useInsightData";
 import { Donut } from "@/components/charts/FinnosCharts";
@@ -168,6 +171,7 @@ export function InsightWidget({ id, size, config = {}, slots, className }: { id:
     case "contas-fixas": return <FixedBillsInsight size={size} to={to} {...monthRange(month)} flowLink={to} className={className} />;
     case "faturas": return <CardsGate>{(cards) => <InvoicesInsight size={size} to={to} cards={cards} cardId={config.cardId ?? null} className={className} />}</CardsGate>;
     case "parcelas": return <InstallmentsInsight size={size} to={to} cardId={config.cardId ?? null} className={className} />;
+    case "descobertas": return <DiscoveriesInsight size={size} to={to} className={className} />;
     case "habitos": return <HabitsInsight size={size} to={to} className={className} />;
     case "renda": return <IncomeInsight size={size} to={to} className={className} />;
     case "seis-meses": return <MonthsInsight size={size} to={to} className={className} />;
@@ -176,6 +180,6 @@ export function InsightWidget({ id, size, config = {}, slots, className }: { id:
     case "metas": return <GoalsInsight size={size} to={to} className={className} />;
     case "categorias": return <CategoriesWidget size={size} to={to} className={className} />;
     case "radar": return <RadarWidget size={size} to={to} className={className} />;
-    default: return null;
+    default: return READERS[id] ? <CatalogInsight id={id} size={size} to={to} className={className} /> : null;
   }
 }
