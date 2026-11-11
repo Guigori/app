@@ -336,7 +336,7 @@ export default function ChartSettings() {
           <div className="rounded-xl bg-muted/60 p-3"><strong>Limite</strong><span className="block text-muted-foreground">Bullet chart</span></div>
           <div className="rounded-xl bg-muted/60 p-3"><strong>Tendência rápida</strong><span className="block text-muted-foreground">Sparklines</span></div>
           <div className="rounded-xl bg-muted/60 p-3"><strong>Comparação</strong><span className="block text-muted-foreground">Barras</span></div>
-          <div className="rounded-xl border border-primary/25 bg-primary/[0.05] p-3 sm:col-span-2" data-testid="chart-rule-interactive"><strong>Todo gráfico é vivo</strong><span className="block text-muted-foreground">Entra com animação e responde ao toque: no donut e nas barras, tocar seleciona e tocar de novo volta ao normal; na linha de projeção, tocar mostra o valor daquele dia.</span></div>
+          <div className="rounded-xl border border-primary/25 bg-primary/[0.05] p-3 sm:col-span-2" data-testid="chart-rule-interactive"><strong>Todo gráfico é vivo</strong><span className="block text-muted-foreground">Anima quando aparece na tela (o donut cresce, as barras sobem, a linha se desenha, o gauge enche) e responde ao toque: no donut, nas barras e na barra segmentada, tocar seleciona e tocar de novo volta ao normal; no bullet chart, tocar mostra valor e limite; no gauge, mostra quanto foi de quanto; na linha de projeção, o valor daquele dia.</span></div>
         </CardContent>
       </Card>
     </div>

@@ -130,7 +130,7 @@ export function InstallmentsInsight({ cardId = null, compact = false, size, to, 
                     {pressure.map((m) => (
                       <li key={m.month} className="text-sm">
                         <div className="flex items-baseline justify-between gap-2"><span>{cap(short(m.month))}</span><span className={cn("font-semibold tabular-nums", (m.share ?? 0) > 1 ? "text-expense" : "text-foreground")}>{Math.round((m.share ?? 0) * 100)}% já comprometido</span></div>
-                        <BulletBar className="mt-2" value={m.committed} limit={planned} />
+                        <BulletBar className="mt-2" value={m.committed} limit={planned} format={money} />
                         <p className="mt-0.5 text-xs text-muted-foreground">{money(m.installments)} em parcelas{m.fixed > 0 ? ` + ${money(m.fixed)} fixos` : ""} · livre {money(Math.max(0, planned - m.committed))} de {money(planned)}</p>
                       </li>
                     ))}

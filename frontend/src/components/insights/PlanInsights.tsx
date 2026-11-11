@@ -58,7 +58,7 @@ export function BudgetInsight({ size, to, className }: Props) {
           <div className="mt-1"><VsLastMonth c={vs} label={`vs ${shortMonthName(prevMonth)}`} format={money} /></div>
           {over.length ? <p className="mt-1 truncate text-[13px] font-semibold text-expense">{over.length} {over.length === 1 ? "categoria passou" : "categorias passaram"}</p> : null}
         </div>
-        <Gauge percent={used} size={104}><span className="text-sm font-semibold tabular-nums">{Math.round(used * 100)}%</span></Gauge>
+        <Gauge percent={used} size={104} detail={<>{money(b.spent)}<br />de {money(b.planned)}</>}><span className="text-sm font-semibold tabular-nums">{Math.round(used * 100)}%</span></Gauge>
       </div>
     </Tile>
   );
@@ -82,13 +82,13 @@ export function BudgetInsight({ size, to, className }: Props) {
           <p className={cn(NOTE, "mt-2")}>de {money(b.planned)} · {money(b.spent)} gastos</p>
           <div className="mt-1">{vsLine}</div>
         </div>
-        <Gauge percent={used} size={112}><span className="text-sm font-semibold tabular-nums">{Math.round(used * 100)}%</span></Gauge>
+        <Gauge percent={used} size={112} detail={<>{money(b.spent)}<br />de {money(b.planned)}</>}><span className="text-sm font-semibold tabular-nums">{Math.round(used * 100)}%</span></Gauge>
       </div>
       <ul className="mt-5 space-y-3.5">
         {list.map((r) => (
           <li key={r.category_id}>
             <div className="flex items-baseline justify-between gap-3 text-sm"><span className="min-w-0 truncate font-medium">{r.name}</span><span className={cn("shrink-0 tabular-nums", r.spent > r.budget ? "font-semibold text-expense" : "text-muted-foreground")}>{money(r.spent)} <span className="text-muted-foreground">/ {money(r.budget)}</span></span></div>
-            <BulletBar className="mt-2" value={r.spent} limit={r.budget} />
+            <BulletBar className="mt-2" value={r.spent} limit={r.budget} format={money} />
           </li>
         ))}
       </ul>
@@ -124,7 +124,7 @@ export function GoalsInsight({ size, to, className }: Props) {
   const vsLine = <VsLastMonth c={vs} label={`guardado vs ${shortMonthName(prevMonth)}`} format={money} />;
   const saved = rows.reduce((s, r) => s + r.p.saved, 0), target = rows.reduce((s, r) => s + r.g.target, 0);
   const late = rows.filter((r) => r.p.status === "atrasada");
-  const bar = (r: (typeof rows)[number]) => <SegmentedBar segments={[{ value: r.p.saved, color: r.p.status === "atrasada" ? FINNOS_COLOR.expense : FINNOS_COLOR.result, label: "Guardado" }]} total={r.g.target} height={8} />;
+  const bar = (r: (typeof rows)[number]) => <SegmentedBar segments={[{ value: r.p.saved, color: r.p.status === "atrasada" ? FINNOS_COLOR.expense : FINNOS_COLOR.result, label: "Guardado" }]} total={r.g.target} height={8} format={money} />;
   const first = rows[0];
   if (size === "S") return (
     <Tile title={first.g.name} className={className} testId="goals-insight">
