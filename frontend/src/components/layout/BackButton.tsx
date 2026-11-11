@@ -25,12 +25,13 @@ export function useBack() {
 }
 
 /** The round control used everywhere: an arrow to go back, an X to close. */
-export function HeaderIconButton({ onClick, label, kind = "back", className, testId }: { onClick: () => void; label: string; kind?: "back" | "close"; className?: string; testId?: string }) {
+/** `custom` draws the given icon (an action on the right of a header) with the same round shape. */
+export function HeaderIconButton({ onClick, label, kind = "back", className, testId, children }: { onClick: () => void; label: string; kind?: "back" | "close" | "custom"; className?: string; testId?: string; children?: ReactNode }) {
   const Icon = kind === "close" ? X : ArrowLeft;
   return (
-    <button type="button" onClick={onClick} aria-label={label} title={kind === "close" ? "Fechar" : "Voltar"} data-testid={testId}
+    <button type="button" onClick={onClick} aria-label={label} title={kind === "close" ? "Fechar" : kind === "back" ? "Voltar" : label} data-testid={testId}
       className={cn("grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-muted", className)}>
-      <Icon className="h-5 w-5" aria-hidden="true" />
+      {kind === "custom" ? children : <Icon className="h-5 w-5" aria-hidden="true" />}
     </button>
   );
 }

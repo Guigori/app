@@ -2,7 +2,8 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { lazyRetry } from "@/lib/lazyRetry";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronRight, Clock3, FileText, Loader2, Mic, Plus, Send, Sparkles, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
+import { ArrowUp, Bell, ChartPie, Check, ChevronRight, Clock3, FileText, Lightbulb, Mic, PiggyBank, Plus, Sparkles, SquarePen, Wallet } from "lucide-react";
+import { ConversationHistory, MessageActions, RichText, Thinking } from "@/components/ai/AiThread";
 import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { getMode, isLocalMode } from "@/lib/mode";
@@ -14,11 +15,10 @@ import { ProposalCard } from "@/components/ai/ProposalCard";
 import { memoryCommand, notesFor, personalSuggestions, readMemory, rememberFeedback, rememberTopic, writeMemory, type FinnMemory } from "@/lib/finnMemory";
 import type { FinnAnswer } from "@/lib/finnAnalyst";
 import { fetchAccounts, fetchCategories, fetchRadar } from "@/lib/data";
-import { clearFinnConversations, newFinnConversation, readFinnConversations, upsertFinnConversation, type FinnConversation, type FinnMessage } from "@/lib/aiConversations";
+import { clearFinnConversations, deleteFinnConversation, newFinnConversation, readFinnConversations, upsertFinnConversation, type FinnConversation, type FinnMessage } from "@/lib/aiConversations";
 import type { AiAnswer, AiKey, AiProvider, CreditCard } from "@/types/finnos";
 import { HeaderIconButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useNavigationPreferences } from "@/lib/navigationPreferences";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 // Charts only load when an answer actually has one (keeps recharts out of the first download).
@@ -64,6 +64,11 @@ export function AiPanel() {
   const persist=(next:FinnConversation)=>{setConversation(next);upsertFinnConversation(next);setHistory(readFinnConversations())};
   const startNew=()=>{setConversation(newFinnConversation());setQuestion("");setError(null);setPendingContext(null);setHistoryOpen(false)};
   const [thinking,setThinking]=useState(false);
+  const threadRef=useRef<HTMLElement|null>(null), inputRef=useRef<HTMLTextAreaElement|null>(null);
+  // The newest message (and the "thinking" line) stays in view.
+  useEffect(()=>{const el=threadRef.current;if(el)el.scrollTo({top:el.scrollHeight,behavior:"smooth"})},[conversation.messages.length,thinking,historyOpen]);
+  // The box grows with the question, up to a few lines.
+  useEffect(()=>{const el=inputRef.current;if(!el)return;el.style.height="auto";el.style.height=`${Math.min(el.scrollHeight,144)}px`},[question]);
   // Proposal edits and their outcome live on the message, so the conversation keeps them.
   const patchMessage=(id:string,patch:Partial<FinnMessage>)=>setConversation(prev=>{const updated={...prev,messages:prev.messages.map(m=>m.id===id?{...m,...patch}:m)};upsertFinnConversation(updated);setHistory(readFinnConversations());return updated});
   const refresh=()=>queryClient.invalidateQueries();
@@ -121,10 +126,10 @@ export function AiPanel() {
         const options=simulation.scenarios.map(s=>`${s.installments}x de ${money(s.installment_value)} → projeção de ${money(s.projected_30d_after)}`).join("\n");
         const budgetLine=simulation.budget?`\nOrçamento da categoria: ${money(simulation.budget.available_before)} disponível antes e ${money(simulation.budget.available_after)} depois.`:"";
         return `Simulei **${money(amount)}** sem criar nenhum lançamento. Seu saldo projetado para os próximos 30 dias parte de **${money(simulation.projected_30d_before)}**. Cenário: **${simulation.level}**.${budgetLine}\n\nComparação:\n${options}\n\nIsso é uma simulação; nenhuma compra ou despesa foi registrada.`;
-      })():await askMutation.mutateAsync({q:contextualText,history:conversation.messages.slice(-12).map(({role,content})=>({role,content}))}).then(r=>r.answer).catch(()=>null));
+      })():activeProvider&&!local?await askMutation.mutateAsync({q:contextualText,history:conversation.messages.slice(-12).map(({role,content})=>({role,content}))}).then(r=>r.answer).catch(()=>null):null);
       if(reply===null){
         // No language model here (none configured, or calls not enabled): say what can be asked instead of failing.
-        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:"Ainda não sei responder essa pergunta com os seus dados. Eu entendo perguntas sobre gastos e receitas de um período, de uma categoria, conta, cartão ou estabelecimento, comparações, evolução por mês, orçamento, saldo, projeção do mês, contas a vencer, assinaturas e o Radar.",followUps:["Para onde foi meu dinheiro este mês?","Quanto gastei no mês passado comparado com este?","Vou fechar o mês no positivo?"],createdAt:new Date().toISOString()}]};persist(next);
+        next={...next,messages:[...next.messages,{id:crypto.randomUUID(),role:"assistant",content:"Não encontrei uma resposta para isso nos seus dados e prefiro não chutar.\n\nO que eu consigo responder com os seus números:\n• Gastos e receitas de um período, categoria, conta, cartão ou estabelecimento\n• Quando foi a última vez que você pagou algo\n• Comparações e evolução por mês\n• Orçamento, saldo, estimativa do mês e contas a vencer\n• Assinaturas, metas, Radar e qualquer análise da biblioteca\n\nTente perguntar de outro jeito, citando o nome como aparece no app.",steps:["Procurei nos seus lançamentos, categorias, contas e análises"],followUps:["Para onde foi meu dinheiro este mês?","Quanto gastei no mês passado comparado com este?","Vou fechar o mês no positivo?"],createdAt:new Date().toISOString()}]};persist(next);
         return;
       }
       setPendingContext(null);
@@ -133,43 +138,65 @@ export function AiPanel() {
     finally{setThinking(false)}
   };
 
+  const lastId=conversation.messages.at(-1)?.id;
   return <Sheet open={open} onOpenChange={setOpen}>
     {/* Phones open the assistant from the header (it no longer floats over content). */}
     {showTrigger&&!isMobile?<SheetTrigger className="fixed bottom-[5.75rem] right-4 z-40 flex lg:hidden h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg transition-all duration-200 dashboard:md:bottom-[6.25rem] dashboard:md:right-6" style={{opacity:triggerVisible?1:0,pointerEvents:triggerVisible?"auto":"none"}} aria-label="Abrir FINNOS IA"><Sparkles className="h-5 w-5"/></SheetTrigger>:null}
-    <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 data-[side=right]:w-full sm:max-w-xl data-[side=right]:sm:max-w-xl [&>button]:hidden">
-      <header className="flex items-center gap-3 border-b border-border px-5 py-4">
+    <SheetContent side="right" className="flex w-full flex-col gap-0 bg-background p-0 data-[side=right]:w-full sm:max-w-xl data-[side=right]:sm:max-w-xl [&>button]:hidden">
+      <header className="flex items-center gap-3 border-b border-border/70 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         {/* Padrão FINNOS: voltar/fechar à esquerda, título ao lado, ações à direita. */}
         {historyOpen?<HeaderIconButton onClick={()=>setHistoryOpen(false)} label="Voltar"/>:<HeaderIconButton kind="close" onClick={()=>setOpen(false)} label="Fechar"/>}
-        <div className="min-w-0 flex-1"><h2 className="flex items-center gap-1.5 font-heading text-lg font-bold">{historyOpen?null:<Sparkles className="h-4.5 w-4.5 text-primary" aria-hidden="true"/>}{historyOpen?"Conversas anteriores":"FINNOS IA"}</h2><p className="text-xs text-muted-foreground">{historyOpen?"Últimas conversas neste dispositivo":appMode==="demo"?"Assistente financeiro · Demonstração":appMode==="local"?"Assistente financeiro · Local":"Assistente financeiro contextual"}</p></div>
-        {!historyOpen?<><Button variant="ghost" size="icon" onClick={startNew} title="Nova conversa"><Plus/></Button><Button variant="ghost" size="icon" onClick={()=>setHistoryOpen(true)} title="Conversas anteriores"><Clock3/></Button></>:null}
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate font-heading text-lg font-bold">{historyOpen?"Conversas":conversation.messages.length?conversation.title:"FINNOS IA"}</h2>
+          <p className="truncate text-xs text-muted-foreground">{historyOpen?(n=>`${n} ${n===1?"guardada":"guardadas"} neste dispositivo`)(history.filter(c=>c.messages.length).length):appMode==="demo"?"Com os dados da demonstração":appMode==="local"?"Com os dados deste dispositivo":activeProvider?`Com os seus dados · ${activeProvider}`:"Com os seus dados do FINNOS"}</p>
+        </div>
+        {!historyOpen?<><HeaderIconButton kind="custom" onClick={()=>setHistoryOpen(true)} label="Conversas anteriores"><Clock3 className="size-5"/></HeaderIconButton><HeaderIconButton kind="custom" onClick={startNew} label="Nova conversa"><SquarePen className="size-5"/></HeaderIconButton></>:null}
       </header>
 
-      {historyOpen?<div className="flex-1 overflow-y-auto p-5">
-        <div className="mb-5 flex items-center justify-between"><p className="text-sm text-muted-foreground">O FINNOS guarda até 10 conversas recentes neste dispositivo.</p>{history.length?<Button variant="ghost" size="sm" onClick={()=>{clearFinnConversations();setHistory([]);startNew()}}><Trash2 className="mr-2 h-4 w-4"/>Limpar</Button>:null}</div>
-        <div className="space-y-3">{history.length?history.map(c=><button key={c.id} onClick={()=>{setConversation(c);setHistoryOpen(false)}} className="w-full rounded-2xl border border-border p-4 text-left hover:bg-muted"><strong className="block truncate">{c.title}</strong><span className="text-xs text-muted-foreground">{c.messages.filter(m=>m.role==="user").length} perguntas</span></button>):<p className="py-16 text-center text-sm text-muted-foreground">Nenhuma conversa anterior.</p>}</div>
-      </div>:<>
-        <main className="flex-1 space-y-4 overflow-y-auto p-5">
-          {!conversation.messages.length?<div className="space-y-5">
-            <div className="flex gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-5 w-5"/></div><div className="rounded-2xl border border-border bg-card p-4 text-sm leading-relaxed">Olá! Sou a FINNOS IA. Posso analisar seus gastos, orçamento, Radar e ajudar no seu planejamento financeiro. O que você quer entender hoje?</div></div>
-            {appMode==="local"?<div className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground">Se quiser conectar ChatGPT, Claude ou Gemini e guardar sua chave com segurança, <Link to="/cadastro" onClick={()=>setOpen(false)} className="font-semibold text-primary">crie sua conta preservando seus dados</Link>.</div>:null}
-            {appMode!=="local"&&appMode!=="demo"&&keysQuery.isSuccess&&!activeProvider?<div className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground" data-testid="ai-connect-hint">Para respostas além das análises do FINNOS, <Link to="/configuracoes/integracoes#sua-ia" onClick={()=>setOpen(false)} className="font-semibold text-primary">conecte sua IA</Link> (ChatGPT, Claude ou Gemini).</div>:null}
-            {noticed?<div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm" data-testid="ai-opening-noticed"><p className="text-xs font-semibold text-primary">Hoje eu notei</p><p className="mt-1 font-medium">{noticed.title}{noticed.metric?` · ${noticed.metric}`:""}</p><button type="button" onClick={()=>void ask("O que o Radar está vendo?")} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary">Me explique<ChevronRight className="h-3.5 w-3.5"/></button></div>:null}
-            <div className="grid gap-2">{suggestions.map(s=><button key={s} onClick={()=>void ask(s)} className="rounded-2xl bg-muted px-4 py-3 text-left text-sm font-medium hover:bg-accent">{s}</button>)}</div>
-          </div>:conversation.messages.map(m=><div key={m.id} className={m.role==="user"?"flex justify-end":"flex justify-start gap-3"}>{m.role==="assistant"?<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"><Sparkles className="h-4 w-4"/></div>:null}<div className={m.role==="user"?"max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground":"max-w-[88%] rounded-2xl border border-border bg-card px-4 py-3 text-sm leading-relaxed whitespace-pre-line"}>{m.role==="assistant"&&m.steps?.length?<ul className="mb-2 space-y-0.5 text-xs text-muted-foreground" data-testid="ai-steps">{m.steps.map(step=><li key={step} className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5" aria-hidden="true"/>{step}</li>)}</ul>:null}<span>{m.content.split("**").map((part,i)=>i%2?<strong key={i} className="font-semibold">{part}</strong>:part)}</span>
-            {m.role==="assistant"&&m.proposal&&m.proposalState?<ProposalCard proposal={m.proposal} state={m.proposalState} categories={categoriesQuery.data??[]} accounts={accountsQuery.data??[]}
-              onChange={proposal=>patchMessage(m.id,{proposal})}
-              onCancel={()=>patchMessage(m.id,{proposalState:{status:"cancelled"}})}
-              onApply={async()=>{try{const state=await applyProposal(m.proposal!);patchMessage(m.id,{proposalState:state});await refresh()}catch(e){setError(getApiErrorMessage(e,"Não foi possível salvar tudo agora. Confira no Fluxo o que já entrou antes de tentar de novo."))}}}
-              onUndo={async()=>{if(m.proposalState?.status!=="applied")return;try{await undoProposal(m.proposalState);patchMessage(m.id,{proposalState:{status:"undone"}});await refresh()}catch(e){setError(getApiErrorMessage(e,"Não foi possível desfazer agora."))}}}/>:null}{m.role==="assistant"&&m.visual?<Suspense fallback={null}><AiVisual visual={m.visual}/></Suspense>:null}
-            {m.role==="assistant"&&m.insight?<div className="mt-3 rounded-xl bg-primary/5 p-3 text-xs leading-relaxed" data-testid="ai-insight"><p className="font-semibold text-primary">Eu notei também</p><p className="mt-0.5 text-foreground">{m.insight}</p></div>:null}
-            {m.role==="assistant"&&m.links?.length?<div className="mt-3 flex flex-wrap gap-2">{m.links.map(l=><Link key={l.to} to={l.to} onClick={()=>setOpen(false)} className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">{l.label}<ChevronRight className="h-3.5 w-3.5"/></Link>)}</div>:null}
-            {m.role==="assistant"&&m.followUps?.length&&m.id===conversation.messages.at(-1)?.id?<div className="mt-3 flex flex-wrap gap-1.5" data-testid="ai-follow-ups">{m.followUps.map(f=><button key={f} type="button" onClick={()=>void ask(f)} className="rounded-full border border-border px-3 py-1.5 text-left text-xs font-medium hover:bg-muted">{f}</button>)}</div>:null}{m.role==="assistant"?<div className="mt-2 flex gap-1 text-muted-foreground"><button onClick={()=>feedback(m.id,"up")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta útil"><ThumbsUp className="h-3.5 w-3.5"/></button><button onClick={()=>feedback(m.id,"down")} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Resposta não útil"><ThumbsDown className="h-3.5 w-3.5"/></button></div>:null}</div></div>)}
-          {askMutation.isPending||thinking?<div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin"/>Analisando suas finanças…</div>:null}
-          {error?<p className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>:null}
+      {historyOpen?<ConversationHistory items={history} currentId={conversation.id}
+        onOpen={c=>{setConversation(c);setHistoryOpen(false)}}
+        onDelete={id=>{deleteFinnConversation(id);setHistory(readFinnConversations());if(id===conversation.id)setConversation(newFinnConversation())}}
+        onClear={()=>{clearFinnConversations();setHistory([]);startNew()}}
+        onNew={startNew}/>:<>
+        <main ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain px-4 py-5" data-testid="ai-thread">
+          {!conversation.messages.length?<div className="mx-auto max-w-lg space-y-6 pt-4">
+            <div className="text-center">
+              <span className="mx-auto grid size-14 place-items-center rounded-full bg-gradient-to-br from-primary to-[var(--finnos-violet)] text-primary-foreground shadow-lg shadow-primary/25"><Sparkles className="size-7"/></span>
+              <h3 className="mt-4 font-heading text-2xl font-bold">Como posso ajudar?</h3>
+              <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">Pergunte sobre gastos, orçamento, faturas, metas ou qualquer análise. Eu respondo com os seus números e aviso quando não encontrar algo.</p>
+            </div>
+            {noticed?<button type="button" onClick={()=>void ask("O que o Radar está vendo?")} className="flex w-full items-start gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-4 text-left" data-testid="ai-opening-noticed"><span className="mt-0.5 size-2 shrink-0 rounded-full bg-primary"/><span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-primary">Hoje eu notei</span><span className="mt-0.5 block text-sm font-medium">{noticed.title}{noticed.metric?` · ${noticed.metric}`:""}</span></span><ChevronRight className="mt-1 size-4 shrink-0 text-primary"/></button>:null}
+            <div className="grid grid-cols-2 gap-2">{suggestions.map((s,i)=>{const Icon=[Wallet,PiggyBank,ChartPie,Bell][i%4];return <button key={s} type="button" onClick={()=>void ask(s)} className="flex min-h-[5.5rem] flex-col justify-between rounded-2xl border border-border bg-card p-3.5 text-left text-sm font-medium transition hover:bg-muted"><Icon className="size-4 text-primary" aria-hidden="true"/><span className="mt-2 leading-snug">{s}</span></button>})}</div>
+            {appMode==="local"?<p className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground">Para conectar ChatGPT, Claude ou Gemini e guardar sua chave com segurança, <Link to="/cadastro" onClick={()=>setOpen(false)} className="font-semibold text-primary">crie sua conta preservando seus dados</Link>.</p>:null}
+            {appMode!=="local"&&appMode!=="demo"&&keysQuery.isSuccess&&!activeProvider?<p className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground" data-testid="ai-connect-hint">Para respostas além das análises do FINNOS, <Link to="/configuracoes/integracoes#sua-ia" onClick={()=>setOpen(false)} className="font-semibold text-primary">conecte sua IA</Link> (ChatGPT, Claude ou Gemini).</p>:null}
+          </div>:<div className="mx-auto max-w-2xl space-y-6">{conversation.messages.map(m=>m.role==="user"?
+            <div key={m.id} className="flex justify-end"><p className="max-w-[85%] whitespace-pre-line rounded-3xl rounded-br-lg bg-primary px-4 py-2.5 text-[15px] leading-relaxed text-primary-foreground">{m.content.length>600?`${m.content.slice(0,600)}…`:m.content}</p></div>:
+            <article key={m.id} className="min-w-0" data-testid="ai-answer">
+              <div className="mb-2 flex items-center gap-2"><span className="grid size-6 place-items-center rounded-full bg-gradient-to-br from-primary to-[var(--finnos-violet)] text-primary-foreground"><Sparkles className="size-3.5"/></span><span className="text-xs font-semibold">FINNOS IA</span><span className="text-[11px] text-muted-foreground">{new Date(m.createdAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</span></div>
+              {m.steps?.length?<ul className="mb-2.5 flex flex-wrap gap-1.5" data-testid="ai-steps">{m.steps.map(step=><li key={step} className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground"><Check className="size-3 text-income" aria-hidden="true"/>{step}</li>)}</ul>:null}
+              <RichText text={m.content}/>
+              {m.proposal&&m.proposalState?<ProposalCard proposal={m.proposal} state={m.proposalState} categories={categoriesQuery.data??[]} accounts={accountsQuery.data??[]}
+                onChange={proposal=>patchMessage(m.id,{proposal})}
+                onCancel={()=>patchMessage(m.id,{proposalState:{status:"cancelled"}})}
+                onApply={async()=>{try{const state=await applyProposal(m.proposal!);patchMessage(m.id,{proposalState:state});await refresh()}catch(e){setError(getApiErrorMessage(e,"Não foi possível salvar tudo agora. Confira no Fluxo o que já entrou antes de tentar de novo."))}}}
+                onUndo={async()=>{if(m.proposalState?.status!=="applied")return;try{await undoProposal(m.proposalState);patchMessage(m.id,{proposalState:{status:"undone"}});await refresh()}catch(e){setError(getApiErrorMessage(e,"Não foi possível desfazer agora."))}}}/>:null}
+              {m.visual?<Suspense fallback={<div className="mt-3 h-32 animate-pulse rounded-2xl bg-muted"/>}><AiVisual visual={m.visual}/></Suspense>:null}
+              {m.insight?<div className="mt-3 flex gap-2.5 rounded-2xl bg-primary/5 p-3 text-[13px] leading-relaxed" data-testid="ai-insight"><Lightbulb className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true"/><p><span className="font-semibold text-primary">Eu notei também: </span>{m.insight}</p></div>:null}
+              {m.links?.length?<div className="mt-3 flex flex-wrap gap-2">{m.links.map(l=><Link key={l.to} to={l.to} onClick={()=>setOpen(false)} className="inline-flex h-9 items-center gap-1 rounded-full border border-border bg-card px-3.5 text-xs font-semibold text-primary transition hover:bg-muted">{l.label}<ChevronRight className="size-3.5"/></Link>)}</div>:null}
+              <MessageActions text={m.content} onFeedback={rating=>feedback(m.id,rating)}/>
+              {m.followUps?.length&&m.id===lastId&&!thinking?<div className="mt-2 flex flex-wrap gap-2" data-testid="ai-follow-ups">{m.followUps.map(f=><button key={f} type="button" onClick={()=>void ask(f)} className="rounded-full border border-primary/25 bg-primary/5 px-3.5 py-2 text-left text-[13px] font-medium text-primary transition hover:bg-primary/10">{f}</button>)}</div>:null}
+            </article>)}
+            {askMutation.isPending||thinking?<Thinking/>:null}
+          </div>}
+          {error?<p className="mx-auto mt-4 max-w-2xl rounded-2xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>:null}
         </main>
-        <footer className="border-t border-border bg-background p-4">
-          <div className="relative"><form className="flex items-center gap-2 rounded-2xl border border-border bg-card p-1.5" onSubmit={e=>{e.preventDefault();void ask(question)}}><Button type="button" variant="ghost" size="icon" onClick={()=>setAttachOpen(v=>!v)} aria-label="Adicionar"><Plus className="h-5 w-5"/></Button><Input className="border-0 bg-transparent shadow-none focus-visible:ring-0" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Pergunte ao FINNOS…" maxLength={14000}/><Button type="button" variant="ghost" size="icon" onClick={speak} aria-label="Ditado por voz"><Mic className={listening?"h-5 w-5 text-primary":"h-5 w-5"}/></Button><Button type="submit" size="icon" disabled={!question.trim()||askMutation.isPending}><Send className="h-4 w-4"/></Button></form>{attachOpen?<div className="absolute bottom-14 left-0 z-20 w-64 rounded-2xl border border-border bg-popover p-2 shadow-xl"><button onClick={()=>fileRef.current?.click()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-muted"><FileText className="h-4 w-4"/>Enviar arquivo ou comprovante</button><p className="px-3 py-2 text-xs text-muted-foreground">CSV/TXT podem ser analisados agora. Outros arquivos entram no fluxo de confirmação.</p></div>:null}<input ref={fileRef} type="file" className="hidden" accept=".csv,.txt,.pdf,image/*" onChange={e=>{const file=e.target.files?.[0];if(file)void attachFile(file);e.currentTarget.value=""}}/></div>
-          <p className="mt-2 text-center text-xs text-muted-foreground">A FINNOS IA pode cometer erros. Confira informações financeiras importantes.</p>
+        <footer className="border-t border-border/70 bg-background px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+          <div className="relative mx-auto max-w-2xl"><form className="flex items-end gap-1 rounded-3xl border border-border bg-card p-1.5 shadow-sm focus-within:border-primary/50" onSubmit={e=>{e.preventDefault();void ask(question)}}>
+            <Button type="button" variant="ghost" size="icon" className="rounded-full" onClick={()=>setAttachOpen(v=>!v)} aria-label="Adicionar"><Plus className="h-5 w-5"/></Button>
+            <textarea ref={inputRef} rows={1} className="max-h-36 min-h-10 flex-1 resize-none bg-transparent px-1 py-2.5 text-[15px] leading-snug outline-none placeholder:text-muted-foreground" value={question} onChange={e=>setQuestion(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();void ask(question)}}} placeholder="Pergunte ao FINNOS…" maxLength={14000} aria-label="Pergunte ao FINNOS"/>
+            {question.trim()?<Button type="submit" size="icon" className="rounded-full" disabled={askMutation.isPending||thinking} aria-label="Enviar"><ArrowUp className="h-4.5 w-4.5"/></Button>:<Button type="button" variant="ghost" size="icon" className="rounded-full" onClick={speak} aria-label="Ditado por voz"><Mic className={listening?"h-5 w-5 text-primary":"h-5 w-5"}/></Button>}
+          </form>{attachOpen?<div className="absolute bottom-16 left-0 z-20 w-64 rounded-2xl border border-border bg-popover p-2 shadow-xl"><button onClick={()=>fileRef.current?.click()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-muted"><FileText className="h-4 w-4"/>Enviar arquivo ou comprovante</button><p className="px-3 py-2 text-xs text-muted-foreground">CSV/TXT podem ser analisados agora. Outros arquivos entram no fluxo de confirmação.</p></div>:null}<input ref={fileRef} type="file" className="hidden" accept=".csv,.txt,.pdf,image/*" onChange={e=>{const file=e.target.files?.[0];if(file)void attachFile(file);e.currentTarget.value=""}}/></div>
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">A FINNOS IA responde com os seus dados e pode errar. Confira valores importantes.</p>
         </footer>
       </>}
     </SheetContent>

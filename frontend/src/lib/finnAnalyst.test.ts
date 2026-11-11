@@ -149,3 +149,35 @@ describe("FINNOS IA explains how to spend less on what was asked", () => {
     expect(a.followUps[0]).toBe("Crie um limite para Transporte no orçamento");
   });
 });
+
+describe("FINNOS IA searches the data and says when something is not there", () => {
+  it("says it found nothing instead of answering about all expenses", () => {
+    const a = ask("quanto gastei com padaria este mês?");
+    expect(a.text).toContain("Não encontrei “padaria” nos seus dados");
+    expect(a.text).not.toContain("R$ 180");
+  });
+  it("understands plurals, typos and everyday words for a category", () => {
+    expect(ask("quanto gastei com restaurante?").query.entities[0]?.name).toBe("Restaurantes");
+    expect(ask("quanto gastei com restaurnte?").query.entities[0]?.name).toBe("Restaurantes");
+    expect(ask("quanto gastei com comida?").query.entities[0]?.name).toBe("Restaurantes");
+  });
+  it("finds the last time something was paid", () => {
+    const a = ask("quando foi a última vez que paguei uber?");
+    expect(a.query.op).toBe("find");
+    expect(a.text).toContain("A última vez foi em **03/11/2026**");
+    expect(a.visual?.items?.length).toBe(3);
+  });
+  it("does not treat ordinary words as unknown names", () => {
+    expect(ask("vou fechar o mês no positivo?").query.unknown).toEqual([]);
+    expect(ask("quanto gastei no mês passado?").query.unknown).toEqual([]);
+  });
+});
+
+describe("a new name after another question", () => {
+  it("is searched, not swapped for the previous subject", () => {
+    const first = parseQuestion("quanto gastei este mês?", ctx);
+    const q = parseQuestion("quanto gastei com padaria?", ctx, first);
+    expect(q.unknown).toEqual(["padaria"]);
+    expect(answer(q, data).text).toContain("Não encontrei “padaria”");
+  });
+});
