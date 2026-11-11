@@ -34,7 +34,7 @@ const chartSpecs: ChartSpec[] = [
     name: "Linha de projeção",
     purpose: "Unir saldo real até hoje com estimativa até o fim do período.",
     where: "Home e Análise.",
-    rule: "Realizado em linha sólida com pontos. Futuro em linha tracejada e linguagem de previsto.",
+    rule: "Realizado em linha sólida. O futuro é Estimativa: a mesma cor da série, em linha tracejada.",
     status: "Principal",
     preview: "projection",
   },
@@ -66,7 +66,7 @@ const chartSpecs: ChartSpec[] = [
     name: "Barras",
     purpose: "Comparar valores lado a lado entre meses ou itens.",
     where: "Evolução mês a mês, categoria nos últimos meses, compromissos e parcelas por mês.",
-    rule: "O mês ou item em foco em roxo, os outros em azul-escuro; meses que ainda vão acontecer em amarelo de previsto. Sempre começam do zero.",
+    rule: "O mês ou item em foco em roxo forte, os outros em roxo suave; meses estimados tracejados na mesma cor. Sempre começam do zero.",
     status: "Principal",
     preview: "bars",
   },
@@ -142,10 +142,10 @@ function ProjectionPreview() {
         const ys = [88,68,76,52,58];
         return <circle key={x} cx={x} cy={ys[i]} r="4.5" fill="var(--finnos-purple)" />;
       })}
-      <line x1="168" y1="58" x2="302" y2="36" stroke="var(--chart-3)" strokeWidth="4" strokeDasharray="8 8" strokeLinecap="round" />
-      <circle cx="302" cy="36" r="6" fill="var(--background)" stroke="var(--chart-3)" strokeWidth="4" />
+      <line x1="168" y1="58" x2="302" y2="36" stroke="var(--finnos-purple)" strokeOpacity="0.7" strokeWidth="4" strokeDasharray="8 8" strokeLinecap="round" />
+      <circle cx="302" cy="36" r="6" fill="var(--background)" stroke="var(--finnos-purple)" strokeWidth="4" />
       <text x="158" y="20" fill="var(--muted-foreground)" fontSize="11">hoje</text>
-      <text x="245" y="26" fill="var(--chart-3)" fontSize="11">previsto</text>
+      <text x="236" y="26" fill="var(--muted-foreground)" fontSize="11">estimativa</text>
     </svg>
   );
 }
@@ -228,7 +228,7 @@ function BarsPreview() {
     <div className="flex h-28 items-end gap-2" role="img" aria-label="Exemplo de barras por mês">
       {bars.map((b, i) => (
         <div key={labels[i]} className="flex flex-1 flex-col items-center gap-1">
-          <span className="block w-full rounded-lg" style={{ height: `${b.v}%`, backgroundColor: b.k === "focus" ? "var(--finnos-purple)" : b.k === "future" ? "var(--chart-3)" : "color-mix(in srgb, var(--finnos-purple) 28%, var(--background))", opacity: b.k === "future" ? 0.85 : 1 }} />
+          <span className="block w-full rounded-lg" style={{ height: `${b.v}%`, backgroundColor: b.k === "focus" ? "var(--finnos-purple)" : b.k === "future" ? "color-mix(in srgb, var(--finnos-purple) 18%, transparent)" : "color-mix(in srgb, var(--finnos-purple) 32%, var(--background))", outline: b.k === "future" ? "1.5px dashed color-mix(in srgb, var(--finnos-purple) 70%, transparent)" : undefined, outlineOffset: -1.5 }} />
           <span className="text-[11px] text-muted-foreground">{labels[i]}</span>
         </div>
       ))}
@@ -271,7 +271,7 @@ export default function ChartSettings() {
           {[
             { label: "Receita / entrada", color: "var(--income)" },
             { label: "Despesa / saída", color: "var(--expense)" },
-            { label: "Previsto / projeção", color: "var(--chart-3)" },
+            { label: "Estimativa: tracejado na cor da série", color: "var(--finnos-purple)" },
             { label: "Resultado / performance", color: "var(--finnos-purple)" },
             { label: "Institucional / estrutura", color: "var(--finnos-app)" },
             { label: "Destaque violeta", color: "var(--finnos-violet)" },

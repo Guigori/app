@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { BackupReminder } from "@/components/settings/BackupReminder";
 import { useRouteState } from "@/lib/routeState";
 import { Link, useNavigate } from "react-router-dom";
@@ -6,23 +5,21 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchOnboarding } from "@/lib/onboarding";
 import { getMode } from "@/lib/mode";
 import { useBalanceHidden } from "@/lib/balance";
-import { fetchAccounts, fetchDashboard, fetchMe, fetchRadar, fetchTransactions } from "@/lib/data";
+import { fetchAccounts, fetchDashboard, fetchMe } from "@/lib/data";
 import { WidgetBoard } from "@/components/insights/WidgetBoard";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 
 import { CHART_RANGES, pickMany, pickOne, useChartPreference } from "@/lib/chartPreferences";
-import type { CategorySlice, MetricKind } from "@/types/finnos";
+import type { MetricKind } from "@/types/finnos";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { BalanceHeroCard } from "@/components/dashboard/BalanceHeroCard";
 import { HomeFinancialChart } from "@/components/dashboard/HomeFinancialChart";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
-import { ExpensesDonutChart } from "@/components/dashboard/ExpensesDonutChart";
 
 import { FinnosVerticalMenu, type FinnosView, type FinnosSeries } from "@/components/shared/FinnosVerticalMenu";
 
 const CHART_VIEWS: FinnosView[] = ["Cards", "Projeção", "Linhas", "Pizza", "Barras"];
 const ALL_CHART_SERIES: FinnosSeries[] = ["Receitas", "Despesas", "Resultado"];
-import { RadarSection } from "@/components/dashboard/RadarSection";
 import { PendingCaptures } from "@/components/pending/PendingCaptures";
 import { HOME_LIMIT } from "@/lib/pendingCaptures";
 
@@ -52,7 +49,6 @@ export default function Dashboard() {
   const [menuView, setMenuView] = useChartPreference<FinnosView>("view", (v) => pickOne(v, CHART_VIEWS, "Projeção"));
   const [menuInterval, setMenuInterval] = useChartPreference<string>("interval", (v) => pickOne(v, CHART_RANGES, "1 mês"));
   const [menuSeries, setMenuSeries] = useChartPreference<FinnosSeries[]>("series", (v) => pickMany(v, ALL_CHART_SERIES, [...ALL_CHART_SERIES]));
-  const [selectedCategory, setSelectedCategory] = useState<CategorySlice | null>(null);
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", month],
     queryFn: () => fetchDashboard(month),
@@ -67,31 +63,6 @@ export default function Dashboard() {
   const error = dashboardQuery.error;
   const noAccounts = accountsQuery.isSuccess && accountsQuery.data.length === 0;
   const activeMonth = data?.month ?? currentMonth();
-  useEffect(() => {
-    setSelectedCategory(null);
-  }, [activeMonth]);
-  const radarQuery = useQuery({
-    queryKey: ["radar", activeMonth],
-    queryFn: fetchRadar,
-    staleTime: 60_000,
-  });
-  const categoryTransactionsQuery = useQuery({
-    queryKey: ["dashboard-category-transactions", activeMonth, selectedCategory?.category_id],
-    queryFn: () => fetchTransactions({ type: "despesa", category_id: selectedCategory?.category_id ?? undefined }),
-    enabled: Boolean(selectedCategory?.category_id),
-  });
-  const visibleRecent = selectedCategory
-    ? (categoryTransactionsQuery.data ?? [])
-        .filter((tx) => {
-          if (tx.status !== "pago") return false;
-          if (!tx.installment) return tx.date.slice(0, 7) === activeMonth;
-          const [startYear, startMonth] = tx.date.slice(0, 7).split("-").map(Number);
-          const [activeYear, activeMonthNumber] = activeMonth.split("-").map(Number);
-          const offset = (activeYear - startYear) * 12 + (activeMonthNumber - startMonth);
-          return offset >= 0 && offset < (tx.total_installments ?? 1);
-        })
-        .slice(0, 6)
-    : (data?.recent ?? []);
 
   // Every card/chart opens the full Fluxo screen (never a side panel), so the browser
   // back gesture returns to the Home exactly where it was.
@@ -188,32 +159,7 @@ export default function Dashboard() {
 
       {data ? (
         <div className="min-w-0 space-y-5 sm:space-y-6">
-          <WidgetBoard
-            surface="inicio"
-            header={<h2 className="font-heading text-lg font-semibold">Seu painel</h2>}
-            slots={{
-              radar: () => <RadarSection signals={radarQuery.data?.items ?? []} totalCount={radarQuery.data?.count ?? 0} loading={radarQuery.isPending} error={radarQuery.isError} onRetry={() => void radarQuery.refetch()} />,
-              categorias: () => (
-                <ExpensesDonutChart
-                  month={data.month}
-                  slices={data.categories}
-                  total={data.expense}
-                  transactions={visibleRecent}
-                  onOpenDetails={() => openFlow("expense")}
-                  onOpenAllTransactions={() =>
-                    navigate(
-                      selectedCategory?.category_id
-                        ? `/transacoes?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(selectedCategory.category_id)}`
-                        : `/transacoes?month=${activeMonth}`,
-                    )
-                  }
-                  selectedCategoryId={selectedCategory?.category_id ?? null}
-                  onSelectCategory={setSelectedCategory}
-                  onOpenCategory={(slice) => navigate(`/transacoes?month=${activeMonth}&metric=despesas&category_id=${encodeURIComponent(slice.category_id ?? "")}`)}
-                />
-              ),
-            }}
-          />
+          <WidgetBoard surface="inicio" header={<h2 className="font-heading text-lg font-semibold">Seu painel</h2>} />
         </div>
       ) : !error ? (
         <div className="space-y-6" aria-hidden="true">

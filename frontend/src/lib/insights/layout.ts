@@ -15,7 +15,7 @@ export const newKey = () => `w${Date.now().toString(36)}${(counter++).toString(3
 
 /** Default Início: today's room to spend, the next bill, the month's forecast, the week, fixed bills, categories, Radar. */
 export function defaultLayouts(): Layouts {
-  const home: Array<[string, WidgetSize]> = [["gastar-hoje", "S"], ["fatura-que-vem", "S"], ["previsao-saldo", "L"], ["semana-que-vem", "M"], ["contas-fixas", "M"], ["categorias", "L"], ["radar", "L"]];
+  const home: Array<[string, WidgetSize]> = [["gastar-hoje", "S"], ["fatura-que-vem", "S"], ["previsao-saldo", "L"], ["radar", "M"], ["semana-que-vem", "M"], ["contas-fixas", "M"], ["categorias", "L"]];
   let hidden: string[] = [];
   // People who hid Radar or the categories in the old "Modificar painel" keep them hidden.
   try { hidden = (JSON.parse(localStorage.getItem(OLD_HOME_KEY) ?? "{}").hidden ?? []) as string[]; } catch { hidden = []; }
@@ -33,7 +33,9 @@ function clean(list: unknown): PlacedWidget[] {
     const def = w && typeof w === "object" ? insightById((w as PlacedWidget).id) : undefined;
     if (!def) return [];
     const p = w as PlacedWidget;
-    return [{ key: typeof p.key === "string" ? p.key : newKey(), id: def.id, size: def.sizes.includes(p.size) ? p.size : def.defaultSize, config: p.config && typeof p.config === "object" ? p.config : undefined }];
+    // "Extra grande" was retired: it becomes Grande.
+    const size = p.size === "XL" ? "L" : p.size;
+    return [{ key: typeof p.key === "string" ? p.key : newKey(), id: def.id, size: def.sizes.includes(size) ? size : def.defaultSize, config: p.config && typeof p.config === "object" ? p.config : undefined }];
   });
 }
 
