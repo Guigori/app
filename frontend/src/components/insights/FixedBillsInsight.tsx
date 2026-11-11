@@ -47,7 +47,7 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
   if (compact && !r.bills.length && !size) return null;
   const late = r.bills.filter((b) => b.state === "atrasado").reduce((s2, b) => s2 + b.value, 0);
   // Barra segmentada: paid (income), still to pay (forecast, striped) and late (expense).
-  const bar = <SegmentedBar segments={[{ value: r.paidTotal, color: FINNOS_COLOR.income, label: "Pagas" }, { value: late, color: FINNOS_COLOR.expense, label: "Atrasadas" }, { value: Math.max(0, r.dueTotal - late), color: FINNOS_COLOR.forecast, striped: true, label: "A pagar" }]} total={r.total} height={8} />;
+  const bar = <SegmentedBar segments={[{ value: r.paidTotal, color: FINNOS_COLOR.income, label: "Pagas" }, { value: late, color: FINNOS_COLOR.expense, label: "Atrasadas" }, { value: Math.max(0, r.dueTotal - late), color: FINNOS_COLOR.forecast, striped: true, label: "A pagar" }]} total={r.total} height={8}  format={money} />;
   if (size === "S" || size === "M") return (
     <Tile title="Contas fixas" icon={<CalendarCheck className="size-3.5" />} className={className} testId="fixed-bills-insight">
       <p className={NUMBER_TILE}>{r.paidCount} de {r.bills.length} <span className="text-base font-semibold text-muted-foreground">pagas</span></p>

@@ -63,7 +63,7 @@ export function InvoicesInsight({ cards, cardId = null, compact: compactProp = f
   if (size === "M") return (
     <Tile title={tileTitle} icon={<CardIcon className="size-3.5" />} className={className} testId="invoices-insight">
       <div className="flex items-baseline justify-between gap-3"><p className={NUMBER_TILE}>{money(reading.present?.total ?? 0)}</p><span className="shrink-0 text-[13px]">{vs}</span></div>
-      {hidden ? null : <div className="mt-auto"><ProjectionLine points={points.map((p) => ({ value: p.total, kind: p.offset > 0 ? "previsto" as const : "real" as const }))} height={56} labels={false} ariaLabel="Fatura passada, atual e próximas" /></div>}
+      {hidden ? null : <div className="mt-auto"><ProjectionLine points={points.map((p) => ({ value: p.total, kind: p.offset > 0 ? "previsto" as const : "real" as const }))} height={56} labels={false} ariaLabel="Fatura passada, atual e próximas" format={money} /></div>}
     </Tile>
   );
 

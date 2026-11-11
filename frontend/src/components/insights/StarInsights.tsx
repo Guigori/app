@@ -64,7 +64,7 @@ export function SpendTodayInsight({ size, to, className }: Props) {
           <p className={cn(NOTE, "mt-2")}>{line}</p>
           {vs ? <div className="mt-1">{vsLine}</div> : <p className={NOTE}>{a.daysLeft} {a.daysLeft === 1 ? "dia" : "dias"} até o fim do mês</p>}
         </div>
-        <Gauge percent={a.used} size={104}><span className="text-sm font-semibold tabular-nums">{Math.round(a.used * 100)}%</span></Gauge>
+        <Gauge percent={a.used} size={104} detail={<>{money(a.spent)}<br />de {money(a.base)}</>}><span className="text-sm font-semibold tabular-nums">{Math.round(a.used * 100)}%</span></Gauge>
       </div>
     </Tile>
   );
@@ -88,7 +88,7 @@ export function SpendTodayInsight({ size, to, className }: Props) {
           <p className={cn(NOTE, "mt-2")}>{line}</p>
           <div className="mt-1">{vsLine}</div>
         </div>
-        <Gauge percent={a.used} size={120}><span className="text-sm font-semibold tabular-nums">{Math.round(a.used * 100)}%</span><span className="block text-[11px] text-muted-foreground">usado</span></Gauge>
+        <Gauge percent={a.used} size={120} detail={<>{money(a.spent)} gastos<br />de {money(a.base)}</>}><span className="text-sm font-semibold tabular-nums">{Math.round(a.used * 100)}%</span><span className="block text-[11px] text-muted-foreground">usado</span></Gauge>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3">
         <Stat label={a.source === "orcamento" ? "Orçamento" : "Renda"} value={money(a.base)} />
@@ -130,7 +130,7 @@ export function BalanceForecastInsight({ size, to, className }: Props) {
   if (size === "M") return (
     <Tile title="Estimativa de saldo" className={className} testId="forecast-insight">
       <div className="flex items-baseline justify-between gap-3"><p className={cn(NUMBER_TILE, endTone)}>{money(f.end)}</p><p className={cn(NOTE, "shrink-0")}>{change} até dia {f.series.at(-1)?.date.slice(8)}</p></div>
-      <div className="mt-auto">{hidden ? null : <ProjectionLine points={points} height={56} labels={false} ariaLabel="Saldo real e estimativa do mês" />}</div>
+      <div className="mt-auto">{hidden ? null : <ProjectionLine points={points} height={56} labels={false} ariaLabel="Saldo real e estimativa do mês" format={money} />}</div>
     </Tile>
   );
   const findings: Finding[] = [];
@@ -271,7 +271,7 @@ export function NextInvoiceInsight({ size, to, className }: Props) {
   const row = (i: NextInvoice) => (
     <div key={i.cardId}>
       <div className="flex items-baseline justify-between gap-3"><span className="min-w-0 truncate text-sm font-medium"><span className="mr-2 inline-block size-2 rounded-full align-middle" style={{ backgroundColor: i.color }} />{i.cardName}</span><span className="shrink-0 font-heading text-base font-semibold tabular-nums">{money(i.amount)}</span></div>
-      {i.balanceBefore != null ? <BulletBar className="mt-2.5" value={i.amount} limit={Math.max(0, i.balanceBefore)} /> : null}
+      {i.balanceBefore != null ? <BulletBar className="mt-2.5" value={i.amount} limit={Math.max(0, i.balanceBefore)} format={money} /> : null}
       <p className={cn(NOTE, "mt-2", alert(i) && "font-semibold text-expense")}>{whenDue(i.days)} · {dm(i.due)} · {cover(i)}</p>
     </div>
   );

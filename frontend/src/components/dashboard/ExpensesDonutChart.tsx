@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { useInView } from "motion/react";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,9 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
   const visibleSlices = selected ? [selected] : slices;
   const displayTotal = selected?.total ?? total;
   const displayPeriod = periodLabel ?? monthLabel(month);
+  // The ring grows when it comes into view, not while still below the fold.
+  const ringRef = useRef<HTMLDivElement>(null);
+  const seen = useInView(ringRef, { once: true, amount: 0.3 });
 
   return (
     <Card className={className}>
@@ -60,8 +65,8 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
         ) : (
           <div className="min-w-0">
             <div className="flex min-w-0 flex-col items-center gap-5 sm:flex-row sm:gap-6">
-            <div className="relative h-44 w-44 shrink-0 min-[390px]:h-48 min-[390px]:w-48" data-testid="expenses-donut-chart" onClick={(event) => { if (event.target === event.currentTarget) onSelectCategory?.(null); }}>
-              <ResponsiveContainer width="100%" height="100%">
+            <div ref={ringRef} className="relative h-44 w-44 shrink-0 min-[390px]:h-48 min-[390px]:w-48" data-testid="expenses-donut-chart" onClick={(event) => { if (event.target === event.currentTarget) onSelectCategory?.(null); }}>
+              {seen ? <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={slices}
@@ -72,6 +77,8 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                     paddingAngle={2}
                     cornerRadius={6}
                     strokeWidth={0}
+                    animationBegin={0}
+                    animationDuration={900}
                     onClick={(_, index) => {
                       const slice = slices[index];
                       if (slice) onSelectCategory?.(selected?.category_id === slice.category_id ? null : slice);
@@ -87,7 +94,7 @@ export function ExpensesDonutChart({ month, slices, total, onOpenDetails, select
                     ))}
                   </Pie>
                 </PieChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer> : null}
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <p className="text-xs text-muted-foreground">{selected ? selected.name : "Gasto líquido"}</p>
                 <p className="max-w-[9rem] overflow-hidden text-ellipsis whitespace-nowrap font-heading text-lg font-bold tabular-nums text-foreground min-[390px]:text-xl" data-testid="donut-total-value">

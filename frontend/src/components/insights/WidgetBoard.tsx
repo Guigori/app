@@ -163,12 +163,13 @@ function BoardItem({ widget: w, index, editing, slots, onHold, onRemove, onResiz
   return (
     <motion.div ref={ref} layout="position" data-widget-key={w.key} data-testid={`widget-${w.id}`}
       className={cn("relative", SIZE_CLASS[w.size], dragging && "z-50")}
+      initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.15 }}
       drag={editing} dragListener={false} dragControls={controls} dragSnapToOrigin dragElastic={0.9}
       whileDrag={{ scale: 1.05, boxShadow: "0 18px 40px rgba(0,0,0,0.25)" }}
       onDrag={(event) => { const p = "touches" in event ? (event as TouchEvent).touches[0] : (event as PointerEvent); if (!p) return; const over = overAt(p.clientX, p.clientY); const key = over?.dataset.widgetKey ?? null; if (key && key !== lastOver.current) { lastOver.current = key; onOver(key); } }}
       onDragEnd={() => { draggingRef.current = false; lastOver.current = null; setDragging(false); }}
       animate={editing && !dragging ? { rotate: [0, -0.6, 0.6, 0] } : { rotate: 0 }}
-      transition={editing && !dragging ? { rotate: { repeat: Infinity, duration: 0.45 + (index % 3) * 0.06 } } : { layout: { type: "spring", stiffness: 500, damping: 40 } }}
+      transition={editing && !dragging ? { rotate: { repeat: Infinity, duration: 0.45 + (index % 3) * 0.06 } } : { layout: { type: "spring", stiffness: 500, damping: 40 }, opacity: { duration: 0.35 }, y: { duration: 0.35, ease: "easeOut" } }}
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={cancel} onPointerCancel={cancel} onClick={open}
       role={editing ? undefined : "link"} aria-label={editing ? undefined : `Abrir ${def.title}`}
       style={{ touchAction: dragging ? "none" : "pan-y" }}>

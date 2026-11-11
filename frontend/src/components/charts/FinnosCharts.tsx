@@ -4,8 +4,8 @@
  * segmentada · Limite → Bullet chart · Tendência rápida → Sparkline ·
  * Comparação → Barras.
  */
-import { useState } from "react";
-import { motion } from "motion/react";
+import { useRef, useState } from "react";
+import { AnimatePresence, motion, useInView } from "motion/react";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +28,7 @@ export interface ProjectionPoint { value: number; kind: "real" | "previsto"; lab
 export function ProjectionLine({ points, height = 96, labels = true, className, ariaLabel, format }: { points: ProjectionPoint[]; height?: number; labels?: boolean; className?: string; ariaLabel?: string; format?: (v: number) => string }) {
   // Touch or hover a point to read it; touch the same point again to go back.
   const [pick, setPick] = useState<number | null>(null);
+  const [ref, seen] = useSeen<SVGSVGElement>();
   if (points.length < 2) return null;
   const w = 320, pad = 10, top = labels ? 18 : 8, bottom = 8;
   const values = points.map((p) => p.value);
@@ -47,7 +48,7 @@ export function ProjectionLine({ points, height = 96, labels = true, className, 
   };
   const picked = pick !== null ? points[pick] : null;
   return (
-    <svg viewBox={`0 0 ${w} ${height}`} className={cn("h-auto w-full touch-pan-y overflow-visible", format && "cursor-crosshair", className)} role="img" aria-label={ariaLabel}
+    <svg ref={ref} viewBox={`0 0 ${w} ${height}`} className={cn("h-auto w-full touch-pan-y overflow-visible", format && "cursor-crosshair", className)} role="img" aria-label={ariaLabel}
       {...(format ? {
         "data-chart-interactive": "",
         onClick: (e: React.MouseEvent) => e.stopPropagation(),
@@ -57,10 +58,10 @@ export function ProjectionLine({ points, height = 96, labels = true, className, 
       } : {})}>
       {min < 0 ? <line x1={pad} x2={w - pad} y1={y(0)} y2={y(0)} stroke={FINNOS_COLOR.expense} strokeOpacity="0.45" strokeDasharray="3 4" /> : null}
       <line x1={pad} x2={w - pad} y1={height - bottom} y2={height - bottom} stroke="var(--border)" strokeWidth="1.5" />
-      {real.length > 1 ? <motion.polyline initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.6 }} points={real.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.result} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /> : null}
-      {real.map(([px, py], i) => (dots || i === real.length - 1 ? <circle key={i} cx={px} cy={py} r="4.5" fill="var(--card)" stroke={FINNOS_COLOR.result} strokeWidth="2.5" /> : null))}
-      {future.length > 1 ? <motion.polyline initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45, duration: 0.4 }} points={future.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.result} strokeOpacity="0.7" strokeWidth="2.5" strokeDasharray="6 6" strokeLinecap="round" strokeLinejoin="round" /> : null}
-      {end && future.length > 1 ? <circle cx={end[0]} cy={end[1]} r="4.5" fill="var(--card)" stroke={FINNOS_COLOR.result} strokeWidth="2.5" /> : null}
+      {real.length > 1 ? <motion.polyline initial={{ pathLength: 0 }} animate={{ pathLength: seen ? 1 : 0 }} transition={{ duration: 0.8, ease: "easeOut" }} points={real.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.result} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /> : null}
+      {real.map(([px, py], i) => (dots || i === real.length - 1 ? <motion.circle initial={{ scale: 0 }} animate={{ scale: seen ? 1 : 0 }} transition={{ delay: 0.7, type: "spring", stiffness: 400, damping: 18 }} style={{ transformOrigin: `${px}px ${py}px` }} key={i} cx={px} cy={py} r="4.5" fill="var(--card)" stroke={FINNOS_COLOR.result} strokeWidth="2.5" /> : null))}
+      {future.length > 1 ? <motion.polyline initial={{ pathLength: 0, opacity: 0 }} animate={seen ? { pathLength: 1, opacity: 1 } : { pathLength: 0, opacity: 0 }} transition={{ delay: 0.75, duration: 0.7, ease: "easeOut" }} points={future.map((p) => p.join(",")).join(" ")} fill="none" stroke={FINNOS_COLOR.result} strokeOpacity="0.7" strokeWidth="2.5" strokeDasharray="6 6" strokeLinecap="round" strokeLinejoin="round" /> : null}
+      {end && future.length > 1 ? <motion.circle initial={{ scale: 0 }} animate={{ scale: seen ? 1 : 0 }} transition={{ delay: 1.4, type: "spring", stiffness: 400, damping: 18 }} style={{ transformOrigin: `${end[0]}px ${end[1]}px` }} cx={end[0]} cy={end[1]} r="4.5" fill="var(--card)" stroke={FINNOS_COLOR.result} strokeWidth="2.5" /> : null}
       {picked && format ? (() => {
         const px = x(pick!), py = y(picked.value);
         const label = `${picked.label ? `${picked.label} · ` : ""}${format(picked.value)}${picked.kind === "previsto" ? " (estimativa)" : ""}`;
@@ -83,47 +84,87 @@ export function ProjectionLine({ points, height = 96, labels = true, className, 
   );
 }
 
+/** Charts animate when they come into view (not while still below the fold), once. */
+function useSeen<T extends Element>() {
+  const ref = useRef<T>(null);
+  const seen = useInView(ref, { once: true, amount: 0.3 });
+  return [ref, seen] as const;
+}
+
+/** The bubble a touched chart shows over the part that was touched (bars, limits). */
+function Callout({ at, children }: { at: number; children: React.ReactNode }) {
+  const left = Math.max(14, Math.min(86, at));
+  return (
+    <motion.span initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} transition={{ duration: 0.15 }}
+      className="pointer-events-none absolute bottom-full z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-foreground px-2 py-1 text-[11px] font-semibold tabular-nums text-background shadow-md"
+      style={{ left: `${left}%` }} data-testid="chart-callout">{children}</motion.span>
+  );
+}
+const pct = (v: number, total: number) => `${Math.round((v / Math.max(total, 0.01)) * 100)}%`;
+
 export interface Segment { value: number; color: string; label?: string; striped?: boolean }
 
-/** Barra segmentada: parts of one whole side by side (used, committed, free…). */
-export function SegmentedBar({ segments, total, className, height = 10 }: { segments: Segment[]; total?: number; className?: string; height?: number }) {
+/** Barra segmentada: parts of one whole side by side (used, committed, free…). Touch a part to read it, touch again to go back. */
+export function SegmentedBar({ segments, total, className, height = 10, format }: { segments: Segment[]; total?: number; className?: string; height?: number; format?: (v: number) => string }) {
+  const [sel, setSel] = useState<number | null>(null);
+  const [ref, seen] = useSeen<HTMLDivElement>();
   const sum = total ?? segments.reduce((s, x) => s + x.value, 0);
+  const shown = segments.map((s, i) => ({ ...s, i })).filter((s) => s.value > 0);
+  let acc = 0;
+  const centers = shown.map((s) => { const c = acc + s.value / 2; acc += s.value; return (c / Math.max(sum, 0.01)) * 100; });
+  const picked = shown.findIndex((s) => s.i === sel);
   return (
-    <div className={cn("flex w-full gap-0.5 overflow-hidden rounded-full bg-muted", className)} style={{ height }} role="img"
-      aria-label={segments.filter((s) => s.label).map((s) => `${s.label}: ${Math.round((s.value / Math.max(sum, 0.01)) * 100)}%`).join(", ")}>
-      {segments.filter((s) => s.value > 0).map((s, i) => (
-        <motion.span key={i} className="h-full first:rounded-l-full last:rounded-r-full" initial={{ width: 0 }} animate={{ width: `${(s.value / Math.max(sum, 0.01)) * 100}%` }} transition={{ duration: 0.5, delay: i * 0.05 }}
-          style={{ backgroundColor: s.striped ? undefined : s.color, backgroundImage: s.striped ? `repeating-linear-gradient(45deg, ${s.color} 0 4px, transparent 4px 8px)` : undefined }} />
-      ))}
+    <div ref={ref} className={cn("relative w-full", className)} data-chart-interactive="" onClick={(e) => e.stopPropagation()}>
+      <AnimatePresence>{picked >= 0 ? <Callout key={sel} at={centers[picked]}>{shown[picked].label ? `${shown[picked].label} · ` : ""}{format ? `${format(shown[picked].value)} · ` : ""}{pct(shown[picked].value, sum)}</Callout> : null}</AnimatePresence>
+      <div className="flex w-full gap-0.5 overflow-hidden rounded-full bg-muted" style={{ height: Math.max(height, 8) }} role="img"
+        aria-label={segments.filter((s) => s.label).map((s) => `${s.label}: ${pct(s.value, sum)}`).join(", ")}>
+        {shown.map((s, k) => (
+          <motion.span key={s.i} className="h-full cursor-pointer first:rounded-l-full last:rounded-r-full" initial={{ width: 0 }} animate={{ width: seen ? `${(s.value / Math.max(sum, 0.01)) * 100}%` : "0%", opacity: sel !== null && sel !== s.i ? 0.3 : 1 }} transition={{ duration: 0.7, delay: k * 0.12, ease: "easeOut" }}
+            onClick={() => setSel(sel === s.i ? null : s.i)}
+            style={{ backgroundColor: s.striped ? undefined : s.color, backgroundImage: s.striped ? `repeating-linear-gradient(45deg, ${s.color} 0 4px, transparent 4px 8px)` : undefined }} />
+        ))}
+      </div>
     </div>
   );
 }
 
-/** Bullet chart: the value against a limit mark; what passes the limit turns into the expense colour. */
-export function BulletBar({ value, limit, max, color = FINNOS_COLOR.result, className }: { value: number; limit: number; max?: number; color?: string; className?: string }) {
+/** Bullet chart: the value against a limit mark; what passes the limit turns into the expense colour. Touch it to read value and limit. */
+export function BulletBar({ value, limit, max, color = FINNOS_COLOR.result, className, format }: { value: number; limit: number; max?: number; color?: string; className?: string; format?: (v: number) => string }) {
+  const [open, setOpen] = useState(false);
+  const [ref, seen] = useSeen<HTMLDivElement>();
   const scale = Math.max(max ?? 0, value, limit) * 1.08 || 1;
   const within = Math.min(value, limit), over = Math.max(0, value - limit);
+  const f = format ?? ((v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 0 }));
   return (
-    <div className={cn("relative h-3 w-full rounded-full bg-muted", className)} role="img" aria-label={`${Math.round((value / Math.max(limit, 0.01)) * 100)}% do limite`}>
-      <motion.div className="absolute inset-y-0 left-0 rounded-l-full" initial={{ width: 0 }} animate={{ width: `${(within / scale) * 100}%` }} style={{ backgroundColor: over > 0 ? FINNOS_COLOR.expense : color, borderRadius: over > 0 ? undefined : 9999 }} />
-      {over > 0 ? <motion.div className="absolute inset-y-0 rounded-r-full" initial={{ width: 0 }} animate={{ width: `${(over / scale) * 100}%` }} style={{ left: `${(limit / scale) * 100}%`, backgroundColor: FINNOS_COLOR.expense }} /> : null}
+    <div ref={ref} className={cn("relative h-3 w-full cursor-pointer rounded-full bg-muted", className)} role="img" aria-label={`${pct(value, limit)} do limite`}
+      data-chart-interactive="" onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}>
+      <AnimatePresence>{open ? <Callout at={(value / scale) * 100}>{f(value)} de {f(limit)} · {pct(value, limit)}{over > 0 ? ` · passou ${f(over)}` : ""}</Callout> : null}</AnimatePresence>
+      <motion.div className="absolute inset-y-0 left-0 rounded-l-full" initial={{ width: 0 }} animate={{ width: seen ? `${(within / scale) * 100}%` : "0%", scaleY: open ? 1.25 : 1 }} transition={{ duration: 0.7, ease: "easeOut" }} style={{ backgroundColor: over > 0 ? FINNOS_COLOR.expense : color, borderRadius: over > 0 ? undefined : 9999 }} />
+      {over > 0 ? <motion.div className="absolute inset-y-0 rounded-r-full" initial={{ width: 0 }} animate={{ width: seen ? `${(over / scale) * 100}%` : "0%", scaleY: open ? 1.25 : 1 }} transition={{ duration: 0.4, delay: 0.7, ease: "easeOut" }} style={{ left: `${(limit / scale) * 100}%`, backgroundColor: FINNOS_COLOR.expense }} /> : null}
       <span className="absolute -bottom-1.5 -top-1.5 w-1 -translate-x-1/2 rounded-full bg-foreground" style={{ left: `${(limit / scale) * 100}%` }} aria-hidden="true" />
     </div>
   );
 }
 
-/** Gauge: a half ring with the share used; turns the expense colour past 100%. */
-export function Gauge({ percent, children, size = 168, className }: { percent: number; children?: React.ReactNode; size?: number; className?: string }) {
+/** Gauge: a half ring with the share used; turns the expense colour past 100%. Touch it to swap the centre for the detail, again to go back. */
+export function Gauge({ percent, children, detail, size = 168, className }: { percent: number; children?: React.ReactNode; detail?: React.ReactNode; size?: number; className?: string }) {
+  const [open, setOpen] = useState(false);
+  const [ref, seen] = useSeen<HTMLDivElement>();
   const p = Math.max(0, Math.min(1, percent));
   const color = percent > 1 ? FINNOS_COLOR.expense : FINNOS_COLOR.result;
   const r = 70, c = Math.PI * r;
   return (
-    <div className={cn("relative mx-auto", className)} style={{ width: size, height: size / 2 + 8 }}>
-      <svg viewBox="0 0 168 92" className="h-full w-full" aria-hidden="true">
+    <div ref={ref} className={cn("relative mx-auto", detail && "cursor-pointer", className)} style={{ width: size, height: size / 2 + 8 }}
+      {...(detail ? { "data-chart-interactive": "", onClick: (e: React.MouseEvent) => { e.stopPropagation(); setOpen((o) => !o); } } : {})}>
+      <svg viewBox="0 0 168 92" className="h-full w-full overflow-visible" aria-hidden="true">
         <path d="M14 84a70 70 0 0 1 140 0" fill="none" stroke="var(--muted)" strokeWidth="16" strokeLinecap="round" />
-        <motion.path d="M14 84a70 70 0 0 1 140 0" fill="none" stroke={color} strokeWidth="16" strokeLinecap="round" strokeDasharray={c} initial={{ strokeDashoffset: c }} animate={{ strokeDashoffset: c * (1 - p) }} transition={{ duration: 0.7 }} />
+        <motion.path d="M14 84a70 70 0 0 1 140 0" fill="none" stroke={color} strokeLinecap="round" strokeDasharray={c} initial={{ strokeDashoffset: c, strokeWidth: 16 }} animate={{ strokeDashoffset: seen ? c * (1 - p) : c, strokeWidth: open ? 20 : 16 }} transition={{ duration: 0.9, ease: "easeOut" }} />
       </svg>
-      <div className="absolute inset-x-0 bottom-0 text-center">{children}</div>
+      <div className="absolute inset-x-0 bottom-0 text-center">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={open ? "d" : "c"} initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -3 }} transition={{ duration: 0.15 }}>{open && detail ? <span className="block text-[10px] font-semibold leading-tight tabular-nums">{detail}</span> : children}</motion.div>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -135,13 +176,14 @@ export function Bars({ data, height = 112, onPick, className }: { data: BarDatum
   const peak = Math.max(1, ...data.map((d) => d.value));
   // Without its own action, a bar is selected by touch (the others fade) and released by touching it again.
   const [sel, setSel] = useState<number | null>(null);
+  const [ref, seen] = useSeen<HTMLDivElement>();
   return (
-    <div className={cn("flex items-end gap-2", className)} style={{ height }}>
+    <div ref={ref} className={cn("flex items-end gap-2", className)} style={{ height }}>
       {data.map((d, i) => {
         const body = (
           <>
             <span className="text-[10px] tabular-nums text-muted-foreground">{d.valueLabel ?? ""}</span>
-            <motion.span className="block w-full rounded-lg" initial={{ height: 0 }} animate={{ height: Math.max(4, (d.value / peak) * (height - 36)), opacity: sel !== null && sel !== i ? 0.35 : 1 }} transition={{ delay: i * 0.04 }}
+            <motion.span className="block w-full rounded-lg" initial={{ height: 0 }} animate={{ height: seen ? Math.max(4, (d.value / peak) * (height - 36)) : 0, opacity: sel !== null && sel !== i ? 0.35 : 1 }} transition={{ delay: i * 0.07, type: "spring", stiffness: 160, damping: 20 }}
               style={d.future ? { backgroundColor: "color-mix(in srgb, var(--finnos-purple) 18%, transparent)", outline: "1.5px dashed color-mix(in srgb, var(--finnos-purple) 70%, transparent)", outlineOffset: -1.5 } : { backgroundColor: d.focus ? FINNOS_COLOR.result : "color-mix(in srgb, var(--finnos-purple) 32%, var(--background))" }} />
             <span className={cn("text-[11px]", d.focus ? "font-semibold text-foreground" : "text-muted-foreground")}>{d.label}</span>
           </>
@@ -168,23 +210,25 @@ export function Donut({ slices, size = 176, selectedId, onSelect, centerLabel = 
   const selected = selectedId ? slices.find((s) => s.id === selectedId) ?? null : null;
   const total = slices.reduce((s, x) => s + x.value, 0);
   const small = size < 120;
+  const [ref, seen] = useSeen<HTMLDivElement>();
   return (
     <div
+      ref={ref}
       className={cn("relative shrink-0", className)}
       style={{ width: size, height: size }}
       data-testid="finnos-donut"
       data-chart-interactive=""
       onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onSelect?.(null); }}
     >
-      <ResponsiveContainer width="100%" height="100%">
+      {seen ? <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie data={slices} dataKey="value" nameKey="name" innerRadius="68%" outerRadius="98%" paddingAngle={slices.length > 1 ? 2 : 0} cornerRadius={small ? 4 : 6} strokeWidth={0}
-            isAnimationActive animationDuration={700} animationEasing="ease-out"
+            isAnimationActive animationBegin={0} animationDuration={900} animationEasing="ease-out"
             onClick={(_, i) => { const s = slices[i]; if (s) onSelect?.(selected?.id === s.id ? null : s.id); }}>
             {slices.map((s) => <Cell key={s.id} fill={s.color} opacity={selected && s.id !== selected.id ? 0.22 : 1} style={{ transition: "opacity 200ms ease", cursor: onSelect ? "pointer" : undefined, outline: "none" }} />)}
           </Pie>
         </PieChart>
-      </ResponsiveContainer>
+      </ResponsiveContainer> : null}
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-[18%] text-center">
         {small ? (
           <p className="max-w-full truncate text-[12px] font-semibold tabular-nums">{selected ? `${Math.round((selected.value / Math.max(total, 0.01)) * 100)}%` : ""}</p>
