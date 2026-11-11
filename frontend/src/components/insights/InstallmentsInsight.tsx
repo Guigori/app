@@ -26,15 +26,17 @@ export function InstallmentsInsight({ cardId = null, compact = false, className 
   const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards, staleTime: 60_000 });
   const subscriptions = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions, staleTime: 60_000, enabled: open });
 
-  if (transactions.isPending) return <div className={cn("h-40 animate-pulse rounded-[24px] bg-muted", className)} aria-label="Carregando parcelas" />;
+  if (transactions.isPending || cards.isPending) return <div className={cn("h-40 animate-pulse rounded-[24px] bg-muted", className)} aria-label="Carregando parcelas" />;
   const cardName = new Map((cards.data ?? []).map((c) => [c.id, c.name]));
-  const plans = installmentPlans(transactions.data ?? [], month, cardId).map((p) => ({ ...p, where: (p.cardId && cardName.get(p.cardId)) || p.where }));
+  // Card installments follow each card's invoices (closing day), like the Faturas analysis.
+  const rules = new Map((cards.data ?? []).map((c) => [c.id, { closing_day: c.closing_day, next_closing: c.next_closing }]));
+  const plans = installmentPlans(transactions.data ?? [], month, cardId, rules).map((p) => ({ ...p, where: (p.cardId && cardName.get(p.cardId)) || p.where }));
   const summary = summarizeInstallments(plans, month);
   if (!plans.length && compact) return null;
   const schedule = installmentSchedule(plans, month, 6);
   const peak = Math.max(1, ...schedule.map((m) => m.total));
   // The budget question looks at everything the month already owes: installments of every card plus fixed costs.
-  const allPlans = cardId ? installmentPlans(transactions.data ?? [], month) : plans;
+  const allPlans = cardId ? installmentPlans(transactions.data ?? [], month, null, rules) : plans;
   const fixedMonthly = open && transactions.data ? commitments(transactions.data, subscriptions.data?.items ?? [], month, 1).fixedMonthly : 0;
   const planned = budget.data?.planned ?? 0;
   const pressure = budgetPressure(installmentSchedule(allPlans, month, 6), planned, fixedMonthly).slice(1);
@@ -63,8 +65,8 @@ export function InstallmentsInsight({ cardId = null, compact = false, className 
                   ))}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {p.current ? `parcela ${p.current} de ${p.count}` : `começa em ${short(p.startMonth)}`}{p.where ? ` · ${p.where}` : ""} · total {money(p.total)}
-                  {p.left ? ` · faltam ${p.left} (${money(p.remaining)}) até ${short(p.endMonth)}` : " · última parcela"}
+                  {p.current ? `parcela ${p.current} de ${p.count}${p.cardId && rules.get(p.cardId) ? ` na fatura de ${short(rules.get(p.cardId)!.next_closing.slice(0, 7))}` : ""}` : `começa ${p.cardId ? "na fatura de" : "em"} ${short(p.startMonth)}`}{p.where ? ` · ${p.where}` : ""} · total {money(p.total)}
+                  {p.left ? ` · faltam ${p.left} (${money(p.remaining)}) até ${p.cardId ? "a fatura de " : ""}${short(p.endMonth)}` : " · última parcela"}
                 </p>
               </li>
             ))}

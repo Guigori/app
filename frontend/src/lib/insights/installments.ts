@@ -23,24 +23,41 @@ export interface InstallmentPlan {
   startMonth: string;
 }
 
-/** Installment number that falls in a month for a purchase (null outside of it). */
-export function installmentNumberIn(tx: Pick<Transaction, "date" | "current_installment" | "total_installments">, month: string): number | null {
+/** A card's rule for what enters each invoice: purchases up to the closing day go to that month's invoice. */
+export interface CardRule { closing_day: number; next_closing: string }
+
+/** Invoice (closing month) a card purchase enters: on or before the closing day → this month, after it → next month. */
+export function invoiceMonthOf(date: string, closingDay: number): string {
+  const month = date.slice(0, 7);
+  const [y, m] = month.split("-").map(Number);
+  const closing = Math.min(closingDay, new Date(y, m, 0).getDate());
+  return Number(date.slice(8, 10)) <= closing ? month : addMonth(month, 1);
+}
+
+/** Installment number that falls in a month for a purchase whose first installment is in `startMonth` (null outside of it). */
+export function installmentNumberIn(tx: Pick<Transaction, "current_installment" | "total_installments">, startMonth: string, month: string): number | null {
   const count = tx.total_installments ?? 1;
-  const n = (tx.current_installment ?? 1) + monthsBetween(tx.date.slice(0, 7), month);
+  const n = (tx.current_installment ?? 1) + monthsBetween(startMonth, month);
   return n >= 1 && n <= count ? n : null;
 }
 
-export function installmentPlans(transactions: Transaction[], fromMonth: string, cardId?: string | null): InstallmentPlan[] {
+/**
+ * Installments still running. Card purchases follow the card's invoices: the first installment goes to the
+ * invoice the purchase entered (closing day rule) and "now" is the card's open invoice. Others follow the calendar month.
+ */
+export function installmentPlans(transactions: Transaction[], fromMonth: string, cardId?: string | null, cards?: Map<string, CardRule>): InstallmentPlan[] {
   return transactions
     .filter((t) => t.type === "despesa" && t.installment && (t.total_installments ?? 1) > 1 && (!cardId || t.card_id === cardId))
     .map((t) => {
       const count = t.total_installments ?? 1;
       const value = round2(t.installment_value ?? (t.adjusted_value ?? t.value) / count);
       const first = t.current_installment ?? 1;
-      const startMonth = t.date.slice(0, 7);
+      const rule = t.card_id ? cards?.get(t.card_id) : undefined;
+      const startMonth = rule ? invoiceMonthOf(t.date, rule.closing_day) : t.date.slice(0, 7);
+      const now = rule ? rule.next_closing.slice(0, 7) : fromMonth;
       const endMonth = addMonth(startMonth, count - first);
-      const inMonth = installmentNumberIn(t, fromMonth);
-      const notStarted = monthsBetween(fromMonth, startMonth) > 0;
+      const inMonth = installmentNumberIn(t, startMonth, now);
+      const notStarted = monthsBetween(now, startMonth) > 0;
       const current = inMonth ?? 0;
       const left = notStarted ? count - first + 1 : inMonth ? count - inMonth : 0;
       return {
