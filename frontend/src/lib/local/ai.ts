@@ -15,7 +15,7 @@ function priorCategory(history: FinnMessage[], categories: {name:string}[]) {
   return categories.find(c=>hay.includes(c.name.toLocaleLowerCase("pt-BR")))?.name;
 }
 
-export async function askLocalFinnos(question: string, month?: string, history: FinnMessage[] = []): Promise<LocalFinnAnswer> {
+export async function askLocalFinnos(question: string, month?: string, history: FinnMessage[] = []): Promise<LocalFinnAnswer | null> {
   const m=month??currentMonth(), dashboard=localDashboard(m), budget=localBudget(m), txs=localListTransactions({month:m});
   const q=question.toLocaleLowerCase("pt-BR"), demo=getMode()==="demo";
   const intro=demo?"Usando os dados da demonstração, ":"";
@@ -85,6 +85,6 @@ export async function askLocalFinnos(question: string, month?: string, history: 
     if(!pending.length)return{text:"Não encontrei contas pendentes ou agendadas neste mês."};
     return {text:"Encontrei estes próximos compromissos:",visual:{title:"Próximos vencimentos",items:pending.map(t=>({label:t.name,value:money(t.value),detail:new Date(t.date+"T12:00:00").toLocaleDateString("pt-BR")}))}};
   }
-  const top=dashboard.categories[0];
-  return {text:`${intro}entendi. Olhando o seu mês, você tem ${money(dashboard.income)} de receitas e ${money(dashboard.expense)} de despesas, com resultado de ${money(dashboard.month_balance)}.${top?` O maior gasto está em **${top.name}**.`:""} Me diga o que você quer aprofundar — posso cruzar categorias, orçamento, vencimentos e Radar.`};
+  // Not understood: say so (AiPanel explains what can be asked) instead of a summary about something else.
+  return null;
 }

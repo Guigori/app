@@ -13,7 +13,7 @@ export interface Period { start: string; end: string; label: string; months: str
 export type Operation =
   | "total" | "count" | "average" | "top" | "trend" | "compare"
   | "balance" | "forecast" | "upcoming" | "budget" | "subscriptions" | "save" | "radar"
-  | "unusual" | "runway" | "months" | "goals";
+  | "unusual" | "runway" | "months" | "goals" | "find";
 
 export interface Entity { kind: "category" | "account" | "card" | "merchant" | "goal"; id?: string; name: string; term: string }
 
@@ -30,6 +30,8 @@ export interface FinnQuery {
   single?: boolean;
   /** "Dura até o dia 15?": the day asked about. */
   day?: number;
+  /** Words the question asks about that match nothing in the data ("padaria" with no Padaria anywhere). */
+  unknown?: string[];
 }
 
 export interface QuestionContext {
@@ -120,6 +122,7 @@ export function previousPeriod(p: Period): Period {
 }
 
 function operation(q: string, entityCount: number): Operation | null {
+  if (/\b(quando (foi|paguei|comprei|gastei|recebi|pago|caiu)|ultima vez|ultim[oa] (gasto|pagamento|lancamento|compra|vez)|procur\w*|busc\w*|pesquis\w*|ache\b|achar|localiz\w*|mostre (os |as )?(lancamentos|compras|gastos)|lancamentos (de|do|da|com)|compras (de|do|da|no|na))\b/.test(q)) return "find";
   if (/\bcompar|\bversus\b|\bvs\b|\bcontra\b|diferenca entre/.test(q) || (entityCount >= 2 && /\b(ou|e)\b/.test(q))) return "compare";
   if (/\b(metas?|objetivos?)\b/.test(q)) return "goals";
   if (/\b(mais (do )?que o (normal|costume|habitual)|acima do (normal|habitual|costume)|fora do normal|mais que de costume)\b/.test(q)) return "unusual";
@@ -138,6 +141,52 @@ function operation(q: string, entityCount: number): Operation | null {
   if (/\b(maior|maiores|top|onde|quais|lista|listar|principais|ranking|mais gastei|gastei mais|gasto mais|mais caro)\b/.test(q)) return "top";
   if (/\b(quanto|total|gastei|gasto|paguei|recebi|entrou|ganhei|saiu)\b/.test(q)) return "total";
   return null;
+}
+
+/** Everyday words for a category ("remédio" → Saúde/Farmácia): tried when the category's own name is not in the question. */
+const SYNONYMS: Array<[RegExp, string[]]> = [
+  [/\b(comida|comer|almoco|jantar|lanche|lanches|refeic\w*)\b/, ["alimentacao", "restaurantes", "restaurante"]],
+  [/\b(delivery|ifood|rappi)\b/, ["restaurantes", "restaurante", "alimentacao", "delivery"]],
+  [/\b(supermercado|feira|compras do mes|hortifruti)\b/, ["mercado", "supermercado", "alimentacao"]],
+  [/\b(remedio|remedios|farmacia|drogaria|medico|consulta|exame|dentista|plano de saude)\b/, ["saude", "farmacia"]],
+  [/\b(gasolina|combustivel|uber|99|taxi|onibus|metro|estacionamento|pedagio|carro)\b/, ["transporte", "combustivel", "carro"]],
+  [/\b(aluguel|condominio|luz|energia|agua|gas|internet|iptu)\b/, ["moradia", "casa", "contas da casa"]],
+  [/\b(streaming|netflix|spotify|assinaturas?)\b/, ["assinaturas", "assinatura", "streaming"]],
+  [/\b(cinema|show|bar|balada|viagem|passeio|diversao)\b/, ["lazer", "entretenimento", "viagem"]],
+  [/\b(roupa|roupas|tenis|sapato|vestuario)\b/, ["vestuario", "compras", "roupas"]],
+  [/\b(escola|faculdade|curso|livro|livros)\b/, ["educacao", "cursos"]],
+  [/\b(salario|pagamento do trabalho)\b/, ["salario", "renda"]],
+  [/\b(academia|treino)\b/, ["saude", "academia", "esporte"]],
+];
+/** Words after a preposition that are not a thing to look up. */
+const NOT_SUBJECT = new Set(("positivo negativo vermelho azul normal costume habitual geral ritmo dinheiro reais real juros credito debito " +
+  "pix boleto vista prazo parcelado parcelada parcelas parcela fixo fixos fixas variavel variaveis compras gastos lancamento lancamentos " +
+  "novo nova primeiro primeira segunda terca quarta quinta sexta sabado domingo manha tarde noite fim inicio meio semanal mensal anual " +
+  "maneira forma jeito vida casa uma uns umas meta metas plano planos").split(" "));
+/** Plural and small typos still match ("farmacias", "suplementos", "restaurnte"). */
+const stem = (w: string) => w.replace(/(oes|aes)$/, "ao").replace(/(is)$/, "l").replace(/s$/, "");
+function close(x: string, y: string): boolean {
+  if (x === y) return true;
+  const a = stem(x), b = stem(y);
+  if (a === b) return true;
+  if (a.length < 5 || b.length < 5 || Math.abs(a.length - b.length) > 1) return false;
+  // One letter added, missing or changed.
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+/** The word right after "com", "de", "no"… is what the question is about. */
+export function askedSubjects(q: string): string[] {
+  const out: string[] = [];
+  for (const m of q.matchAll(/\b(?:com|de|do|da|dos|das|no|na|nos|nas|em|pelo|pela)\s+([a-z0-9][a-z0-9]{2,})/g)) {
+    const w = m[1];
+    if (!STOP.has(w) && !NOT_SUBJECT.has(w) && !/^\d/.test(w) && !Object.keys(NUMBERS).includes(w)) out.push(w);
+  }
+  return [...new Set(out)];
 }
 
 /** Recognises categories, accounts, cards and establishments named in the question. */
@@ -164,7 +213,21 @@ export function findEntities(q: string, ctx: QuestionContext): Entity[] {
   for (const w of words) {
     if (found.some((e) => e.kind === "merchant" && e.term === w)) continue;
     const hit = ctx.names.find((name) => name.split(" ").includes(w) || name === w);
-    if (hit) found.push({ kind: "merchant", name: w.charAt(0).toUpperCase() + w.slice(1), term: w });
+    if (hit) { found.push({ kind: "merchant", name: w.charAt(0).toUpperCase() + w.slice(1), term: w }); continue; }
+    // Plural or a typo of a category ("farmacias", "restaurnte").
+    const cat = ctx.categories.find((c) => norm(c.name).split(" ").some((cw) => close(w, cw)));
+    if (cat && !found.some((e) => e.id === cat.id)) { found.push({ kind: "category", id: cat.id, name: cat.name, term: w }); continue; }
+    // Plural or a typo of an establishment: the word of the name that is close is the term.
+    const near = ctx.names.flatMap((name) => name.split(" ")).find((nw) => nw.length >= 4 && close(w, nw));
+    if (near && !found.some((e) => e.term === near)) found.push({ kind: "merchant", name: near.charAt(0).toUpperCase() + near.slice(1), term: near });
+  }
+  // Nothing by name: everyday words for a category the person has.
+  if (!found.some((e) => e.kind === "category")) {
+    for (const [re, names] of SYNONYMS) {
+      if (!re.test(q)) continue;
+      const cat = ctx.categories.find((c) => names.includes(norm(c.name)));
+      if (cat && !found.some((e) => e.id === cat.id) && !found.some((e) => e.kind === "merchant" && re.test(e.term))) { found.push({ kind: "category", id: cat.id, name: cat.name, term: norm(cat.name) }); break; }
+    }
   }
   return found;
 }
@@ -181,7 +244,9 @@ export function parseQuestion(text: string, ctx: QuestionContext, previousQuery?
   let type: FinnQuery["type"] = income ? "receita" : "despesa";
   let op = operation(q, entities.length);
   // Only a question that still asks something ("e no mês passado?", "e a média?") inherits the subject.
-  const followUp = Boolean(previousQuery) && !entities.length && (/^e\b/.test(q) || ((explicit || Boolean(op)) && q.split(" ").length <= 6));
+  // A new name ("e com padaria?") is a new subject, even when nothing matched it.
+  const named = askedSubjects(q).length > 0;
+  const followUp = Boolean(previousQuery) && !entities.length && !named && (/^e\b/.test(q) || ((explicit || Boolean(op)) && q.split(" ").length <= 6));
   if (followUp && previousQuery) {
     entities = previousQuery.entities;
     if (!income && !/\bgast|\bdespes/.test(q)) type = previousQuery.type;
@@ -193,13 +258,19 @@ export function parseQuestion(text: string, ctx: QuestionContext, previousQuery?
   // "Quais meses custaram mais?" looks at the year unless a period is named.
   if (op === "months" && !explicit) current = parsePeriod("este ano", ctx.today).period;
   const resolved = op ?? (entities.length ? "total" : "total");
+  // "Quando comprei…" looks back two years unless a period is named.
+  if (resolved === "find" && !explicit) current = period(monthStart(addMonth(ctx.today.slice(0, 7), -23)), shiftDays(ctx.today, 60), "últimos 24 meses");
+  const matched = new Set(entities.flatMap((e) => e.term.split(" ")));
+  const lookup = ["total", "count", "average", "top", "trend", "compare", "find", "save", "unusual"].includes(resolved);
+  const unknown = followUp || !lookup ? [] : askedSubjects(q).filter((w) => !matched.has(w) && !entities.some((e) => close(w, e.term) || norm(e.name).split(" ").some((x) => close(w, x))) && !SYNONYMS.some(([re]) => re.test(w) && entities.some((e) => e.kind === "category")));
   return {
     op: resolved === "compare" && entities.length < 2 ? "compare" : resolved,
     type,
     period: current,
     previous: previousPeriod(current),
     entities,
-    vague: !op && !entities.length && !explicit,
+    vague: !op && !entities.length && !explicit && !unknown.length,
+    unknown,
     day: Number(q.match(/\bdia (\d{1,2})\b/)?.[1]) || undefined,
     single: /\b(maior|mais cara?) (gasto|compra|despesa|lancamento|receita|entrada)\b/.test(q) && !/\bcategoria/.test(q),
   };

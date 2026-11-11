@@ -603,10 +603,72 @@ function spelled(e: Entity, data: AnalystData): Entity {
   return e;
 }
 
+/** Names in the data that look like what was asked ("padar" → "Padaria Real"), to suggest instead of guessing. */
+function lookalikes(word: string, data: AnalystData): string[] {
+  const pool = new Map<string, string>();
+  for (const c of data.categories) pool.set(norm(c.name), c.name);
+  for (const a of data.accounts) pool.set(norm(a.name), a.name);
+  for (const tx of data.transactions) pool.set(norm(tx.name), tx.name);
+  const w = word.slice(0, Math.max(3, Math.min(5, word.length - 1)));
+  return [...pool.entries()].filter(([k]) => k.split(" ").some((x) => x.startsWith(w) || (x.length >= 4 && word.startsWith(x.slice(0, 4))))).map(([, v]) => v).slice(0, 3);
+}
+
+/** Says plainly what was not found, instead of answering about something else. */
+function notFoundAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
+  const words = q.unknown ?? [];
+  const asked = words.map((w) => `“${w}”`).join(" e ");
+  const like = [...new Set(words.flatMap((w) => lookalikes(w, data)))];
+  return {
+    text: `Não encontrei ${asked} nos seus dados. Procurei nos lançamentos ${inP(q.period)}, nas categorias, contas e cartões, e nada tem esse nome.${like.length ? ` Talvez você quis dizer: ${like.map((x) => `**${x}**`).join(", ")}?` : " Se o gasto existe, ele pode estar com outro nome ou sem categoria."}`,
+    followUps: like.length ? like.slice(0, 2).map((x) => `Quanto gastei com ${x} ${q.period.label}?`) : ["Para onde foi meu dinheiro este mês?", "Quais foram meus maiores gastos este mês?"],
+    links: [{ label: "Buscar nos lançamentos", to: `/transacoes?month=${q.period.end.slice(0, 7)}` }],
+    query: q,
+    steps: [`Procurei ${asked} em lançamentos, categorias, contas e cartões`],
+  };
+}
+
+/** "Quando foi a última vez que paguei o IPVA?", "procure Netflix": the lançamentos themselves, newest first. */
+function findAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
+  const rows = data.transactions.filter((tx) => tx.type !== "transferencia" && !tx.invoice_payment && inPeriod(tx, q.period) && matchesAll(tx, q.entities))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const subject = q.entities.length ? q.entities.map((e) => e.name).join(" e ") : "o que você pediu";
+  if (!rows.length) return { text: `Não encontrei lançamentos de **${subject}** ${inP(q.period)}.`, followUps: ["Para onde foi meu dinheiro este mês?"], links: linksFor(q), query: q, steps: [`Procurei ${subject} ${inP(q.period)}`] };
+  const past = rows.filter((tx) => tx.date <= data.today);
+  const next = rows.filter((tx) => tx.date > data.today).at(-1);
+  const last = past[0];
+  const paid = rows.filter((tx) => tx.status === "pago");
+  const total = round(paid.reduce((s, tx) => s + tx.value, 0));
+  const parts: string[] = [];
+  if (last) parts.push(`A última vez foi em **${formatDate(last.date)}**: ${last.name}, ${money(last.value)} (${last.card_name ?? last.account_name}${last.status !== "pago" ? `, ${last.status}` : ""}).`);
+  if (next) parts.push(`O próximo está previsto para ${formatDate(next.date)} (${money(next.value)}).`);
+  parts.push(`Encontrei ${plural(rows.length, "lançamento", "lançamentos")} ${inP(q.period)}${paid.length ? `, somando ${money(total)} pagos` : ""}.`);
+  if (paid.length >= 3) {
+    const months = new Set(paid.map((tx) => tx.date.slice(0, 7))).size;
+    parts.push(`Em média, ${money(round(total / Math.max(1, months)))} por mês em que aparece.`);
+  }
+  return {
+    text: parts.join(" "),
+    visual: { title: "Lançamentos encontrados", items: rows.slice(0, 8).map((tx) => ({ label: tx.name, value: money(tx.value), detail: `${formatDate(tx.date)} · ${tx.category_name ?? "sem categoria"} · ${tx.card_name ?? tx.account_name}${tx.status !== "pago" ? " · previsto" : ""}` })) },
+    followUps: q.entities[0] ? [`Evolução de ${q.entities[0].name} por mês`, `Quanto gastei com ${q.entities[0].name} este mês?`] : [],
+    links: linksFor(q),
+    query: q,
+    steps: [`Procurei ${subject} ${inP(q.period)}`],
+  };
+}
+
 /** Answers a parsed question with the user's data. */
 export function answer(parsed: FinnQuery, data: AnalystData): FinnAnswer {
   const q = { ...parsed, entities: parsed.entities.map((e) => spelled(e, data)) };
+  if (q.unknown?.length && !q.entities.length) return notFoundAnswer(q, data);
+  const result = answerFor(q, data);
+  // Part of the question was not found: say so instead of quietly leaving it out.
+  if (q.unknown?.length) result.text += `\n\nNão encontrei ${q.unknown.map((w) => `“${w}”`).join(" e ")} nos seus dados, então ficou de fora.`;
+  return result;
+}
+
+function answerFor(q: FinnQuery, data: AnalystData): FinnAnswer {
   switch (q.op) {
+    case "find": return findAnswer(q, data);
     case "top": return topAnswer(q, data);
     case "save": return q.entities.length ? saveAnswer({ ...q, type: "despesa" }, data) : topAnswer({ ...q, type: "despesa" }, data, true);
     case "trend": return trendAnswer(q, data);

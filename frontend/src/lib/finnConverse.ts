@@ -143,9 +143,12 @@ function fromReading(def: InsightDef, r: Reading, followUp: boolean, question: s
   const over = overLimits(r, ctx);
   const actions = over.length ? [] : [...bad, ...info].slice(0, 3);
   const advice = [...actions, ...(actions.length >= 2 ? [] : (THEME_ADVICE[def.theme] ?? []).slice(0, 2))];
-  const visual: FinnVisual | undefined = r.rows?.length
-    ? { title: def.title, items: r.rows.slice(0, 6).map((row) => ({ label: row.label, value: row.value, detail: row.sub })) }
-    : { title: def.title, metrics: [{ label: r.tile, value: r.value, tone: r.tone === "expense" ? "negative" : r.tone === "income" ? "positive" : "neutral" }] };
+  const visual: FinnVisual = {
+    title: def.title,
+    metrics: [{ label: r.tile, value: r.value, tone: r.tone === "expense" ? "negative" : r.tone === "income" ? "positive" : "neutral" }],
+    finnos: r.chart,
+    items: r.rows?.length ? r.rows.slice(0, 6).map((row) => ({ label: row.label, value: row.value, detail: row.sub })) : undefined,
+  };
   const wantsWhy = /\b(por que|porque|pq|motivo|causa)\b/.test(norm(question));
   if (followUp) {
     // Same subject, new angle: what to do (or why), not the whole explanation again.
