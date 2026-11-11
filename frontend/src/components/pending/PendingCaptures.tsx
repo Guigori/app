@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { lazyRetry } from "@/lib/lazyRetry";
 import { Link } from "react-router-dom";
 import { createPortal } from "react-dom";
 import type { RegisterController } from "@/pages/SmartRegister";
@@ -22,7 +23,7 @@ import type { Account, AutoRegisteredCapture, Category, CreditCard as Card_, Pay
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 
-const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
+const SmartRegister = lazyRetry(() => import("@/pages/SmartRegister"));
 
 /** Keys that change when a purchase becomes a lançamento (or goes away). */
 const REFRESH = ["pending-captures", "notifications", "transactions", "accounts", "dashboard", "cards", "flow", "calendar", "radar"];

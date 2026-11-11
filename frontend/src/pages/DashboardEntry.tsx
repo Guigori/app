@@ -1,6 +1,7 @@
-import { lazy, Suspense, useEffect, useState } from "react";
-const Dashboard = lazy(() => import("@/pages/Dashboard"));
-const DashboardWeb = lazy(() => import("@/pages/DashboardWeb"));
+import { Suspense, useEffect, useState } from "react";
+import { lazyRetry } from "@/lib/lazyRetry";
+const Dashboard = lazyRetry(() => import("@/pages/Dashboard"));
+const DashboardWeb = lazyRetry(() => import("@/pages/DashboardWeb"));
 
 const DESKTOP_QUERY = "(min-width: 1024px)";
 

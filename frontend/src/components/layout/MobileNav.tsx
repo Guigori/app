@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { lazyRetry } from "@/lib/lazyRetry";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { RegisterFab } from "@/components/layout/RegisterFab";
@@ -6,7 +7,7 @@ import { toast } from "sonner";
 import { onRegisterSheet, type RegisterSheetRequest } from "@/lib/registerSheet";
 import { DiscardRegisterDialog } from "@/components/layout/DiscardRegisterDialog";
 import type { RegisterController } from "@/pages/SmartRegister";
-const SmartRegister = lazy(() => import("@/pages/SmartRegister"));
+const SmartRegister = lazyRetry(() => import("@/pages/SmartRegister"));
 import { cn } from "@/lib/utils";
 import { type NavItem } from "@/components/layout/nav";
 import { navItemsFor, useNavigationPreferences } from "@/lib/navigationPreferences";
