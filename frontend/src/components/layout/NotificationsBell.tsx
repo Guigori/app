@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bell, CalendarClock, CreditCard, Radar as RadarIcon, ReceiptText, X } from "lucide-react";
+import { AlertTriangle, Bell, CalendarClock, CreditCard, LayoutGrid, Radar as RadarIcon, ReceiptText, X } from "lucide-react";
+import { useWidgetAlerts } from "@/components/insights/useWidgetAlerts";
 import { useLocation, useNavigate } from "react-router-dom";
 import { clearNotifications, dismissNotification, fetchNotifications, fetchRadar, updateRadarSignal } from "@/lib/data";
 import { formatBRL, formatDate } from "@/lib/format";
@@ -54,8 +55,9 @@ export function NotificationsBell() {
   const radarItems = (radar?.items ?? [])
     .filter((item) => item.severity === "critical" || item.severity === "high")
     .slice(0, 3);
-  const totalItems = items.length + radarItems.length;
-  const overdue = items.some((item) => item.kind === "atrasado") || radarItems.some((item) => item.severity === "critical");
+  const { alerts: widgetAlerts, dismiss: dismissWidgetAlerts } = useWidgetAlerts();
+  const totalItems = items.length + radarItems.length + widgetAlerts.length;
+  const overdue = items.some((item) => item.kind === "atrasado") || radarItems.some((item) => item.severity === "critical") || widgetAlerts.some((a) => a.critical);
 
   const dismissMutation = useMutation({
     mutationFn: async (entry: { kind: "notification" | "radar"; id: string }) => {
@@ -72,6 +74,7 @@ export function NotificationsBell() {
 
   const clearMutation = useMutation({
     mutationFn: async () => {
+      dismissWidgetAlerts(widgetAlerts.map((a) => a.id));
       await Promise.all([
         clearNotifications(items.map((item) => item.id)),
         ...radarItems.map((item) => updateRadarSignal(item.id, "dismiss")),
@@ -109,7 +112,7 @@ export function NotificationsBell() {
         <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <p className="font-heading text-sm font-semibold text-foreground">Avisos</p>
-            <p className="text-xs text-muted-foreground">Vencimentos, faturas, compras pendentes e Radar.</p>
+            <p className="text-xs text-muted-foreground">Vencimentos, faturas, análises críticas e Radar.</p>
           </div>
           {totalItems > 0 ? (
             <button
@@ -129,6 +132,34 @@ export function NotificationsBell() {
           </p>
         ) : (
           <ul className="max-h-80 divide-y divide-border overflow-y-auto" data-testid="notifications-list">
+            {widgetAlerts.map((alert) => (
+              <li
+                key={alert.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => openNotificationTarget(alert.target)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openNotificationTarget(alert.target); } }}
+                className="flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                data-testid={`notification-widget-${alert.insight}`}
+              >
+                <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl", alert.critical ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary")} aria-hidden="true">
+                  {alert.insight === "fatura-que-vem" ? <CreditCard className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">{alert.title}</p>
+                  <p className="text-xs text-muted-foreground">{alert.description}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-primary">Abrir análise</p>
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Dispensar aviso"
+                  onClick={(event) => { event.stopPropagation(); dismissWidgetAlerts([alert.id]); }}
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
             {radarItems.map((item) => (
               <li
                 key={`radar-${item.id}`}

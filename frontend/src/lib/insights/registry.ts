@@ -6,8 +6,8 @@ export type WidgetSize = "S" | "M" | "L" | "XL";
 export const SIZE_LABEL: Record<WidgetSize, string> = { S: "Pequeno", M: "Médio", L: "Grande", XL: "Grande" };
 export const SIZE_ORDER: WidgetSize[] = ["S", "M", "L"];
 
-export type InsightTheme = "Cartões" | "Compromissos" | "Orçamento" | "Renda" | "Gastos" | "Alertas";
-export const THEMES: InsightTheme[] = ["Orçamento", "Renda", "Compromissos", "Cartões", "Gastos", "Alertas"];
+export type InsightTheme = "Cartões" | "Compromissos" | "Orçamento" | "Renda" | "Gastos" | "Metas" | "Alertas";
+export const THEMES: InsightTheme[] = ["Orçamento", "Renda", "Compromissos", "Cartões", "Gastos", "Metas", "Alertas"];
 
 export interface WidgetConfig { cardId?: string | null }
 
@@ -37,6 +37,12 @@ export const INSIGHTS: InsightDef[] = [
   { id: "gastar-hoje", title: "Quanto posso gastar hoje", description: "O que sobra do mês por dia, depois do que já saiu e do que está agendado.", theme: "Orçamento", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/orcamento", toLabel: "Ver orçamento", star: true,
     how: "Pegamos o orçamento do mês (ou a renda, se não houver orçamento), tiramos o que já saiu e o que está agendado até o fim do mês e dividimos pelos dias que faltam, contando hoje.",
     questions: ["Por que hoje passei do ritmo?", "Onde posso cortar para fechar o mês?", "Como fica se eu gastar R$ 100 hoje?"] },
+  { id: "orcamento", title: "Orçamento do mês", description: "Quanto do orçamento já foi, o que sobra e quais categorias passaram do limite.", theme: "Orçamento", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/orcamento", toLabel: "Ver orçamento",
+    how: "Somamos o que foi gasto no mês em cada categoria com limite e comparamos com o limite dela. O total é a soma dos limites; o ritmo compara o que você gastou até hoje com o mesmo dia do mês passado.",
+    questions: ["Em que categoria devo segurar os gastos?", "Meu orçamento está realista?", "Como fecho o mês dentro do orçamento?"] },
+  { id: "metas", title: "Metas", description: "Quanto já foi guardado em cada meta, se está no ritmo e quanto falta por mês.", theme: "Metas", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/patrimonio", toLabel: "Ver metas",
+    how: "Para cada meta usamos o valor guardado (ou o saldo da conta ligada a ela) e comparamos com o plano: o que já deveria estar guardado até hoje. O valor por mês é o que falta dividido pelos meses até o prazo.",
+    questions: ["Qual meta devo priorizar?", "Como chego mais rápido na minha meta?", "Quanto posso guardar por mês?"] },
   { id: "previsao-saldo", title: "Estimativa de saldo", description: "Saldo das contas até hoje e a estimativa até o fim do mês, com o dia mais apertado.", theme: "Renda", sizes: ["S", "M", "L"], defaultSize: "L", to: () => `/transacoes?aba=caixa&month=${currentMonth()}&metric=caixa`, toLabel: "Ver no Caixa", star: true,
     how: "Até hoje é o saldo real das contas. Daqui para frente somamos as entradas agendadas e tiramos as contas agendadas, as faturas que vencem no mês e as assinaturas fora do cartão. Compras no cartão só saem da conta quando a fatura é paga.",
     questions: ["Por que o saldo cai nesse dia?", "Vou conseguir pagar tudo este mês?", "Quanto posso guardar este mês?"] },

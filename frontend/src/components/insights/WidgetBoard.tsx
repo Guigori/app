@@ -156,7 +156,7 @@ function BoardItem({ widget: w, index, editing, slots, onHold, onRemove, onResiz
     if (editing || held.current) return;
     // Buttons and links inside a widget (pay a bill, open a signal) keep their own action.
     const target = e.target as HTMLElement;
-    if (target.closest("button, a, input") && ref.current?.contains(target.closest("button, a, input"))) return;
+    if (target.closest("button, a, input, [data-chart-interactive]") && ref.current?.contains(target.closest("button, a, input, [data-chart-interactive]"))) return;
     navigate(detailPath(w.id, w.config));
   };
 

@@ -1,9 +1,9 @@
 /** Draws any analysis of the library in a given size; the board and the gallery use this one entry point. */
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchDashboard, fetchRadar } from "@/lib/data";
-import { currentMonth, formatBRL, formatHiddenBRL } from "@/lib/format";
+import { addMonth, currentMonth, formatBRL, formatHiddenBRL, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { needsAttention, radarTarget, sortSignals } from "@/lib/radarUi";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,11 @@ import { FixedBillsInsight } from "@/components/insights/FixedBillsInsight";
 import { InstallmentsInsight } from "@/components/insights/InstallmentsInsight";
 import { InvoicesInsight } from "@/components/insights/InvoicesInsight";
 import { BalanceForecastInsight, NextInvoiceInsight, SpendTodayInsight, WeekAheadInsight } from "@/components/insights/StarInsights";
-import { useCards } from "@/components/insights/useInsightData";
+import { BudgetInsight, GoalsInsight } from "@/components/insights/PlanInsights";
+import { useCalendar, useCards } from "@/components/insights/useInsightData";
+import { Donut } from "@/components/charts/FinnosCharts";
+import { FinnSummary, VsLastMonth } from "@/components/insights/FinnSummary";
+import { compare, expenseUntilDay, shortMonthName } from "@/lib/insights/compare";
 
 /** A screen can draw one analysis its own way (Início keeps its interactive donut). */
 export type WidgetSlots = Partial<Record<string, (size: WidgetSize) => ReactNode>>;
@@ -28,32 +32,59 @@ function CategoriesWidget({ size, to, className }: { size: WidgetSize; to?: stri
   const money = (v: number) => (hidden ? formatHiddenBRL() : formatBRL(v));
   const month = currentMonth();
   const dashboard = useQuery({ queryKey: ["dashboard", month], queryFn: () => fetchDashboard(month), staleTime: 60_000 });
+  const [picked, setPicked] = useState<string | null>(null);
+  const prevMonth = addMonth(month, -1);
+  const calendar = useCalendar(month);
+  const prevCalendar = useCalendar(prevMonth);
   if (!dashboard.data) return <div className={cn("h-full min-h-40 animate-pulse rounded-3xl bg-muted", className)} />;
   const slices = dashboard.data.categories;
   const total = dashboard.data.expense;
   const open = (id: string | null | undefined) => navigate(`/transacoes?month=${month}&metric=despesas&category_id=${encodeURIComponent(id ?? "")}`);
-  if (size === "XL") return <ExpensesDonutChart className={className} month={dashboard.data.month} slices={slices} total={total} onOpenCategory={(slice) => open(slice.category_id)} />;
+  const day = Number(todayISO().slice(8, 10));
+  const vs = calendar.data && prevCalendar.data ? compare(expenseUntilDay(calendar.data.days, day), expenseUntilDay(prevCalendar.data.days, day), "lower") : null;
+  const vsLine = <VsLastMonth c={vs} label={`vs dia ${day} de ${shortMonthName(prevMonth)}`} format={money} />;
+  if (size === "XL") {
+    const top3 = slices.slice(0, 3);
+    const summary = [
+      slices[0] ? `${slices[0].name} é onde mais foi dinheiro: ${money(slices[0].total)}, ${Math.round(slices[0].percent)}% dos ${money(total)} gastos no mês.` : "Ainda não há gastos neste mês.",
+      top3.length > 1 ? `Junto com ${top3.slice(1).map((s) => s.name).join(" e ")}, as três maiores somam ${Math.round(top3.reduce((a, s) => a + s.percent, 0))}% do total.` : "",
+      vs ? `Até hoje você gastou ${vs.same ? "o mesmo que" : vs.better ? `${money(-vs.delta)} a menos que` : `${money(vs.delta)} a mais que`} até o dia ${day} de ${shortMonthName(prevMonth)}.` : "",
+    ].filter(Boolean);
+    return (
+      <>
+        <FinnSummary title="Gastos por categoria" sentences={summary} context={{ total, categorias: slices.map((s) => ({ nome: s.name, valor: s.total, pct: Math.round(s.percent) })) }} />
+        <ExpensesDonutChart className={className} month={dashboard.data.month} slices={slices} total={total} selectedCategoryId={picked} onSelectCategory={(slice) => setPicked(slice?.category_id ?? null)} onOpenCategory={(slice) => open(slice.category_id)} />
+      </>
+    );
+  }
   const top = slices[0];
   if (!top) return <Tile title="Gastos por categoria" className={className}><p className={NOTE}>Nenhuma despesa no mês.</p></Tile>;
-  // Donut (composição), drawn as a ring of conic segments in each category's colour.
-  let acc = 0;
-  const ring = `conic-gradient(${slices.map((s) => { const a = acc; acc += s.percent; return `${s.color} ${a}% ${acc}%`; }).join(", ")})`;
-  const donut = (px: number) => (
-    <div className="relative shrink-0 rounded-full" style={{ width: px, height: px, background: ring, WebkitMask: "radial-gradient(circle, transparent 0 56%, #000 57%)", mask: "radial-gradient(circle, transparent 0 56%, #000 57%)" }} role="img" aria-label={slices.slice(0, 4).map((s) => `${s.name} ${Math.round(s.percent)}%`).join(", ")} />
-  );
+  // Donut FINNOS (composição): the same interactive chart as Pra onde foi o dinheiro — tap a slice to focus it, again to go back.
+  const donutSlices = slices.map((s) => ({ id: s.category_id ?? s.name, name: s.name, value: s.total, color: s.color }));
+  const focus = slices.find((s) => (s.category_id ?? s.name) === picked) ?? null;
+  const donut = (px: number) => <Donut slices={donutSlices} size={px} selectedId={picked} onSelect={setPicked} centerLabel="Gasto no mês" format={money} />;
   const list = (n: number) => (
-    <ul className="min-w-0 flex-1 space-y-2">
-      {slices.slice(0, n).map((s) => (
-        <li key={s.category_id ?? s.name}>
-          <button type="button" onClick={(e) => { e.stopPropagation(); open(s.category_id); }} className="block w-full text-left text-[13px]">
-            <span className="flex items-baseline justify-between gap-3">
-              <span className="flex min-w-0 items-center gap-2"><span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} /><span className="truncate">{s.name}</span></span>
-              <b className="shrink-0 font-semibold tabular-nums">{Math.round(s.percent)}%</b>
-            </span>
-            {n > 3 ? <span className="block pl-4 text-[12px] tabular-nums text-muted-foreground">{money(s.total)}</span> : null}
-          </button>
+    <ul className="min-w-0 flex-1 space-y-1">
+      {(focus ? [focus] : slices.slice(0, n)).map((s) => {
+        const id = s.category_id ?? s.name;
+        return (
+          <li key={id}>
+            <button type="button" onClick={(e) => { e.stopPropagation(); setPicked(picked === id ? null : id); }} className="block w-full rounded-lg px-1 py-1 text-left text-[13px] transition-colors active:bg-muted/60">
+              <span className="flex items-baseline justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-2"><span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} /><span className="truncate">{s.name}</span></span>
+                <b className="shrink-0 font-semibold tabular-nums">{Math.round(s.percent)}%</b>
+              </span>
+              {n > 3 || focus ? <span className="block pl-4 text-[12px] tabular-nums text-muted-foreground">{money(s.total)}</span> : null}
+            </button>
+          </li>
+        );
+      })}
+      {focus ? (
+        <li className="flex flex-wrap gap-x-3 px-1 pt-1">
+          <button type="button" onClick={(e) => { e.stopPropagation(); open(focus.category_id); }} className="text-[12px] font-semibold text-primary">Ver {focus.name}</button>
+          <button type="button" onClick={(e) => { e.stopPropagation(); setPicked(null); }} className="text-[12px] font-semibold text-muted-foreground">Ver todas</button>
         </li>
-      ))}
+      ) : null}
     </ul>
   );
   if (size === "S") return (
@@ -64,12 +95,13 @@ function CategoriesWidget({ size, to, className }: { size: WidgetSize; to?: stri
   );
   if (size === "M") return (
     <Tile title="Gastos por categoria" className={className} testId="categories-insight">
-      <div className="flex min-h-0 flex-1 items-center gap-4">{donut(88)}{list(3)}</div>
+      <div className="flex min-h-0 flex-1 items-center gap-4">{donut(92)}{list(3)}</div>
     </Tile>
   );
   return (
     <InsightShell title="Gastos por categoria" subtitle={`${money(total)} no mês · ${slices.length} ${slices.length === 1 ? "categoria" : "categorias"}`} to={to} className={className} testId="categories-insight">
-      <div className="flex items-center gap-5">{donut(116)}{list(5)}</div>
+      <div className="-mt-1 mb-3">{vsLine}</div>
+      <div className="flex items-center gap-5">{donut(148)}{list(5)}</div>
     </InsightShell>
   );
 }
@@ -135,6 +167,8 @@ export function InsightWidget({ id, size, config = {}, slots, className }: { id:
     case "contas-fixas": return <FixedBillsInsight size={size} to={to} {...monthRange(month)} flowLink={to} className={className} />;
     case "faturas": return <CardsGate>{(cards) => <InvoicesInsight size={size} to={to} cards={cards} cardId={config.cardId ?? null} className={className} />}</CardsGate>;
     case "parcelas": return <InstallmentsInsight size={size} to={to} cardId={config.cardId ?? null} className={className} />;
+    case "orcamento": return <BudgetInsight size={size} to={to} className={className} />;
+    case "metas": return <GoalsInsight size={size} to={to} className={className} />;
     case "categorias": return <CategoriesWidget size={size} to={to} className={className} />;
     case "radar": return <RadarWidget size={size} to={to} className={className} />;
     default: return null;

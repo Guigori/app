@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { Donut } from "@/components/charts/FinnosCharts";
+import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { ArrowLeft, BarChart3 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +21,7 @@ const chartSpecs: ChartSpec[] = [
     name: "Pizza / Donut",
     purpose: "Mostrar composição e participação dentro de um total.",
     where: "Home, categorias, composição de gastos e orçamento por grupos.",
-    rule: "Use para composição. Não use para tendência no tempo.",
+    rule: "Use para composição. Sempre o donut FINNOS: fatias arredondadas com espaço entre elas, animação ao abrir e seleção — tocar numa fatia destaca ela (as outras ficam apagadas e o centro mostra o valor), tocar de novo volta ao total. Não use para tendência no tempo.",
     status: "Principal",
     preview: "donut",
   },
@@ -72,21 +75,25 @@ const chartSpecs: ChartSpec[] = [
   },
 ];
 
+const PREVIEW_SLICES = [
+  { id: "moradia", name: "Moradia", value: 52, color: "var(--finnos-purple)" },
+  { id: "compras", name: "Compras", value: 22, color: "var(--finnos-violet)" },
+  { id: "mercado", name: "Mercado", value: 14, color: "var(--finnos-lilac)" },
+  { id: "outros", name: "Outros", value: 12, color: "var(--finnos-app)" },
+];
+
 function DonutPreview() {
+  const [picked, setPicked] = useState<string | null>(null);
   return (
     <div className="flex items-center gap-5">
-      <div
-        className="h-24 w-24 rounded-full"
-        style={{
-          background: "conic-gradient(var(--finnos-purple) 0 52%, var(--finnos-violet) 52% 74%, var(--finnos-lilac) 74% 88%, var(--finnos-app) 88% 100%)",
-          WebkitMask: "radial-gradient(circle, transparent 0 48%, #000 50%)",
-          mask: "radial-gradient(circle, transparent 0 48%, #000 50%)",
-        }}
-      />
-      <div className="space-y-2 text-xs text-muted-foreground">
-        <div><span className="font-semibold text-foreground">52%</span> principal</div>
-        <div><span className="font-semibold text-foreground">22%</span> secundário</div>
-        <div><span className="font-semibold text-foreground">14%</span> apoio</div>
+      <Donut slices={PREVIEW_SLICES} size={112} selectedId={picked} onSelect={setPicked} centerLabel="Total" format={(v) => `${v}%`} />
+      <div className="space-y-1 text-xs text-muted-foreground">
+        {PREVIEW_SLICES.map((s) => (
+          <button key={s.id} type="button" onClick={() => setPicked(picked === s.id ? null : s.id)} className={cn("block text-left transition-opacity", picked && picked !== s.id && "opacity-40")}>
+            <span className="font-semibold text-foreground">{s.value}%</span> {s.name}
+          </button>
+        ))}
+        <p className="pt-1 text-[11px]">Toque numa fatia para destacar; toque de novo para voltar.</p>
       </div>
     </div>
   );
@@ -329,6 +336,7 @@ export default function ChartSettings() {
           <div className="rounded-xl bg-muted/60 p-3"><strong>Limite</strong><span className="block text-muted-foreground">Bullet chart</span></div>
           <div className="rounded-xl bg-muted/60 p-3"><strong>Tendência rápida</strong><span className="block text-muted-foreground">Sparklines</span></div>
           <div className="rounded-xl bg-muted/60 p-3"><strong>Comparação</strong><span className="block text-muted-foreground">Barras</span></div>
+          <div className="rounded-xl border border-primary/25 bg-primary/[0.05] p-3 sm:col-span-2" data-testid="chart-rule-interactive"><strong>Todo gráfico é vivo</strong><span className="block text-muted-foreground">Entra com animação e responde ao toque: no donut e nas barras, tocar seleciona e tocar de novo volta ao normal; na linha de projeção, tocar mostra o valor daquele dia.</span></div>
         </CardContent>
       </Card>
     </div>

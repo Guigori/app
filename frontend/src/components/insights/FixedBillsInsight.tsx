@@ -11,6 +11,10 @@ import { cn } from "@/lib/utils";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { BigMoney, InsightShell, NOTE, NUMBER_TILE, Tile } from "@/components/insights/InsightShell";
 import { FINNOS_COLOR, SegmentedBar } from "@/components/charts/FinnosCharts";
+import { FinnSummary, VsLastMonth } from "@/components/insights/FinnSummary";
+import { compare, shortMonthName } from "@/lib/insights/compare";
+import { addMonth } from "@/lib/format";
+import { monthRange } from "@/lib/insights/fixedBills";
 import type { WidgetSize } from "@/lib/insights/registry";
 
 type Filter = "todas" | "pagas" | "apagar";
@@ -30,9 +34,16 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
   const [paying, setPaying] = useState<string | null>(null);
   const query = useQuery({ queryKey: ["transactions", "fixed-bills", start, end], queryFn: () => fetchTransactions({ start_date: start, end_date: end, type: "despesa" }), staleTime: 30_000 });
   const today = todayISO();
+  // Last month's fixed bills, for "vs mês passado" (only when the period is a whole month).
+  const wholeMonth = start.endsWith("-01") && start.slice(0, 7) === end.slice(0, 7);
+  const prev = wholeMonth ? monthRange(addMonth(start.slice(0, 7), -1)) : null;
+  const prevQuery = useQuery({ queryKey: ["transactions", "fixed-bills", prev?.start, prev?.end], queryFn: () => fetchTransactions({ start_date: prev!.start, end_date: prev!.end, type: "despesa" }), enabled: Boolean(prev), staleTime: 60_000 });
 
   if (query.isPending) return <div className={cn("h-48 animate-pulse rounded-[24px] bg-muted", className)} aria-label="Carregando contas fixas" />;
   const r = readFixedBills(query.data ?? [], start, end, today);
+  const prevTotal = prev && prevQuery.data ? readFixedBills(prevQuery.data, prev.start, prev.end, today).total : null;
+  const vs = compare(r.total, prevTotal, "lower");
+  const vsLine = <VsLastMonth c={vs} label={prev ? `vs ${shortMonthName(prev.start.slice(0, 7))}` : ""} format={money} />;
   if (compact && !r.bills.length && !size) return null;
   const late = r.bills.filter((b) => b.state === "atrasado").reduce((s2, b) => s2 + b.value, 0);
   // Barra segmentada: paid (income), still to pay (forecast, striped) and late (expense).
@@ -42,6 +53,7 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
       <p className={NUMBER_TILE}>{r.paidCount} de {r.bills.length} <span className="text-base font-semibold text-muted-foreground">pagas</span></p>
       <p className="mt-1 text-xs text-muted-foreground">{r.dueTotal > 0 ? <>falta <b className="text-foreground">{money(r.dueTotal)}</b></> : r.bills.length ? "tudo pago" : "nenhuma no mês"}{r.lateCount ? <span className="font-semibold text-expense"> · {r.lateCount} atrasada{r.lateCount > 1 ? "s" : ""}</span> : null}</p>
       <div className="mt-2">{bar}</div>
+      {size === "M" ? <div className="mt-1.5">{vsLine}</div> : null}
       {size === "M" ? (
         <ul className="mt-auto space-y-0.5 text-xs">
           {r.bills.filter((b) => b.state !== "pago").slice(0, 2).map((b) => <li key={b.tx.id} className="flex justify-between gap-2"><span className={cn("min-w-0 truncate", b.state === "atrasado" && "text-expense")}>{b.tx.name} · {b.state === "atrasado" ? "venceu" : "vence"} {dm(b.tx.date)}</span><span className="shrink-0 tabular-nums">{money(b.value)}</span></li>)}
@@ -67,7 +79,14 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
   const stateText = (state: FixedBillState, date: string, where: string) =>
     state === "pago" ? `pago · ${dm(date)}${where ? ` · ${where}` : ""}` : state === "atrasado" ? `venceu ${dm(date)}${where ? ` · ${where}` : ""}` : `vence ${dm(date)}${where ? ` · ${where}` : ""}`;
 
+  const lateBills = r.bills.filter((b) => b.state === "atrasado");
+  const summary = r.bills.length ? [
+    `${r.paidCount} de ${r.bills.length} contas fixas pagas${r.dueTotal > 0 ? `; falta ${money(r.dueTotal)}` : ", tudo em dia"}.`,
+    lateBills.length ? `${lateBills.map((b) => b.tx.name).join(", ")} ${lateBills.length === 1 ? "está atrasada" : "estão atrasadas"}.` : r.next ? `A próxima é ${r.next.tx.name}, ${money(r.next.value)} em ${dm(r.next.tx.date)}.` : "",
+    vs && prevTotal != null ? `No total, as contas fixas do mês somam ${money(r.total)}, ${vs.same ? "o mesmo que" : vs.better ? `${money(-vs.delta)} a menos que` : `${money(vs.delta)} a mais que`} no mês passado.` : "",
+  ].filter(Boolean) : [];
   return (
+    <>{size === "XL" ? <FinnSummary title="Contas fixas" sentences={summary} context={{ total: r.total, pagas: r.paidCount, contas: r.bills.length, falta: r.dueTotal, atrasadas: lateBills.map((b) => b.tx.name) }} /> : null}
     <InsightShell
       className={className}
       testId="fixed-bills-insight"
@@ -83,6 +102,7 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
             {r.lateCount ? <> · <span className="font-semibold text-expense">{r.lateCount} {r.lateCount === 1 ? "atrasada" : "atrasadas"}</span></> : null}
           </p>
           <div className="mt-2">{bar}</div>
+          <div className="mt-1.5">{vsLine}</div>
 
           {r.days.length > 1 && !compact ? (
             <div className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Dias de vencimento">
@@ -130,6 +150,6 @@ export function FixedBillsInsight({ start, end, title = "Contas fixas", periodLa
           ) : null}
         </>
       )}
-    </InsightShell>
+    </InsightShell></>
   );
 }
