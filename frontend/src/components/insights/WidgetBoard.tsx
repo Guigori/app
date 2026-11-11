@@ -98,7 +98,7 @@ export function WidgetBoard({ surface, slots, header, emptyText }: { surface: Su
         </AnimatePresence>,
         document.body,
       ) : null}
-      <WidgetGallery open={gallery} onClose={() => setGallery(false)} onAdd={add} />
+      <WidgetGallery open={gallery} onClose={() => setGallery(false)} onAdd={add} placedIds={saved.map((w) => w.id)} />
     </section>
   );
 }
@@ -154,7 +154,7 @@ function BoardItem({ widget: w, index, editing, slots, onHold, onRemove, onResiz
       if (!editing) { onHold(); return; }
       draggingRef.current = true; setDragging(true); navigator.vibrate?.(8);
       controls.start(native);
-    }, editing ? 220 : HOLD_MS);
+    }, editing ? 320 : HOLD_MS);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const s = startPoint.current;
@@ -176,7 +176,7 @@ function BoardItem({ widget: w, index, editing, slots, onHold, onRemove, onResiz
 
   return (
     <motion.div ref={ref} layout="position" data-widget-key={w.key} data-testid={`widget-${w.id}`}
-      className={cn("relative", SIZE_CLASS[w.size], dragging && "z-50")}
+      className={cn("relative select-none", SIZE_CLASS[w.size], dragging && "z-50")}
       initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.15 }}
       drag={editing} dragListener={false} dragControls={controls} dragSnapToOrigin dragElastic={0.9}
       whileDrag={{ scale: 1.05, boxShadow: "0 18px 40px rgba(0,0,0,0.25)" }}
@@ -186,7 +186,8 @@ function BoardItem({ widget: w, index, editing, slots, onHold, onRemove, onResiz
       transition={editing && !dragging ? { rotate: { repeat: Infinity, duration: 0.45 + (index % 3) * 0.06 } } : { layout: { type: "spring", stiffness: 500, damping: 40 }, opacity: { duration: 0.35 }, y: { duration: 0.35, ease: "easeOut" } }}
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={cancel} onPointerCancel={cancel} onClick={open}
       role={editing ? undefined : "link"} aria-label={editing ? undefined : `Abrir ${def.title}`}
-      style={{ touchAction: dragging ? "none" : "pan-y", gridRowEnd: span ? `span ${span}` : undefined }}>
+      // manipulation: the page scrolls and the swipeable widgets (Descobertas) still swipe sideways.
+      style={{ touchAction: dragging ? "none" : "manipulation", gridRowEnd: span ? `span ${span}` : undefined, WebkitTouchCallout: "none" }}>
       <div ref={inner} className={cn("h-full dashboard:flex dashboard:h-auto dashboard:flex-col", w.size === "L" || w.size === "XL" ? "dashboard:min-h-[23rem]" : "dashboard:min-h-[11rem]", editing ? "pointer-events-none" : "cursor-pointer transition-transform active:scale-[0.985]")}>
         <InsightWidget id={w.id} size={w.size} config={w.config} slots={slots} className="h-full dashboard:flex-1" />
       </div>

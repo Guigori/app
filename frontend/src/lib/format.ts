@@ -93,4 +93,5 @@ export const ACCOUNT_TYPE_LABEL: Record<AccountType, string> = {
   digital: "Conta digital",
   poupanca: "Poupança",
   carteira: "Carteira",
+  beneficio: "Benefício (VR, VA, Pluxee, Alelo)",
 };

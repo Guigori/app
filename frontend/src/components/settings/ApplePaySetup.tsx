@@ -242,7 +242,7 @@ export function ApplePaySetup() {
         </Step>
 
         <Step n={3} title="Escolha o cartão e execute na hora">
-          <p className="text-muted-foreground">Marque o cartão da Carteira, ligue <strong>Executar Imediatamente</strong>, toque em Próximo e em <strong>Nova Automação em Branco</strong>.</p>
+          <p className="text-muted-foreground">Marque <strong>todos os cartões</strong> da Carteira que você usa, inclusive os de benefício (VR, Pluxee, Alelo): o iPhone só avisa o FINNOS dos cartões marcados. Ligue <strong>Executar Imediatamente</strong>, toque em Próximo e em <strong>Nova Automação em Branco</strong>.</p>
           <StepPicture n={3} alt="Escolher o cartão e Executar Imediatamente"><MockTrigger /></StepPicture>
         </Step>
 

@@ -1,6 +1,6 @@
 /** Draws any analysis of the catalog (lib/insights/catalog.ts) in P/M/G and on its page, always with the Gráficos FINNOS. */
 import { useQuery } from "@tanstack/react-query";
-import { fetchDashboard, fetchFlow, fetchSubscriptions, fetchTransactions } from "@/lib/data";
+import { fetchBudget, fetchBudgetCycleProgress, fetchBudgetSuggestion, fetchCategories, fetchCurrentBudgetCycle, fetchDashboard, fetchFlow, fetchSubscriptions, fetchTransactions } from "@/lib/data";
 import { addMonth, currentMonth, formatBRL, formatHiddenBRL, todayISO } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { monthRange } from "@/lib/insights/fixedBills";
@@ -11,7 +11,7 @@ import { Bars, BulletBar, Donut, Gauge, ProjectionLine, SegmentedBar } from "@/c
 import { FindingList, InsightShell, LABEL, NOTE, NUMBER_HERO, NUMBER_TILE, Tile } from "@/components/insights/InsightShell";
 import { FinnSummary, VsLastMonth } from "@/components/insights/FinnSummary";
 import { useAccounts, useBalanceHistory, useCards } from "@/components/insights/useInsightData";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 const stale = { staleTime: 60_000 };
 
@@ -33,15 +33,26 @@ export function useCatalogCtx(needList: string[]): Ctx | null {
   const cards = useCards();
   const accounts = useAccounts();
   const prevHistory = useBalanceHistory(prevMonth);
+  const history = useBalanceHistory(month);
+  const budget = useQuery({ queryKey: ["budget", month], queryFn: () => fetchBudget(month), ...stale, enabled: needs.has("budget") });
+  const cycle = useQuery({
+    queryKey: ["budget-cycle-current-progress"], ...stale, enabled: needs.has("cycle"),
+    queryFn: async () => { const c = await fetchCurrentBudgetCycle(); if (!c) return null; try { return { cycle: c, progress: await fetchBudgetCycleProgress(c.id) }; } catch { return { cycle: c, progress: null }; } },
+  });
+  const suggestion = useQuery({ queryKey: ["budget-suggestion"], queryFn: async () => { try { return await fetchBudgetSuggestion(); } catch { return null; } }, ...stale, enabled: needs.has("suggestion") });
+  const categories = useQuery({ queryKey: ["categories"], queryFn: fetchCategories, ...stale, enabled: needs.has("categories") });
   const wait = (n: string, q: { data?: unknown; isError: boolean }) => needs.has(n as never) && q.data === undefined && !q.isError;
-  if (wait("tx", tx) || wait("prevTx", prevTx) || wait("allTx", allTx) || wait("dashboard", dashboard) || wait("prevDashboard", prevDashboard) || wait("subs", subs) || wait("flow", flow) || wait("cards", cards) || wait("accounts", accounts) || wait("prevHistory", prevHistory)) return null;
+  const loading = wait("tx", tx) || wait("prevTx", prevTx) || wait("allTx", allTx) || wait("dashboard", dashboard) || wait("prevDashboard", prevDashboard) || wait("subs", subs) || wait("flow", flow) || wait("cards", cards) || wait("accounts", accounts) || wait("prevHistory", prevHistory) || wait("history", history) || wait("budget", budget) || wait("cycle", cycle) || wait("suggestion", suggestion) || wait("categories", categories);
   const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
-  return {
+  // Same data → same object, so whoever reads it (Descobertas, avisos) does not recompute on every render.
+  return useMemo(() => loading ? null : ({
     today, month, prevMonth, money: (v: number) => (hidden ? formatHiddenBRL() : formatBRL(v)),
     tx: arr(tx.data), prevTx: arr(prevTx.data), allTx: arr(allTx.data),
     dashboard: dashboard.data ?? null, prevDashboard: prevDashboard.data ?? null, subs: subs.data ?? null,
     cards: arr(cards.data), accounts: arr(accounts.data), flow: flow.data ?? null, prevHistory: prevHistory.data ?? null,
-  };
+    history: history.data ?? null, budget: budget.data ?? null, cycle: cycle.data ?? null, suggestion: suggestion.data ?? null, categories: arr(categories.data),
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }), [loading, hidden, today, month, tx.data, prevTx.data, allTx.data, dashboard.data, prevDashboard.data, subs.data, flow.data, cards.data, accounts.data, prevHistory.data, history.data, budget.data, cycle.data, suggestion.data, categories.data]);
 }
 
 export function ChartView({ chart, size, money }: { chart: Chart; size: WidgetSize; money: (v: number) => string }) {

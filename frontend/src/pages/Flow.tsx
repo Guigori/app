@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useRouteState } from "@/lib/routeState";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { ChartReveal, finnosAnimation, finnosAxisTick, finnosEstimate, finnosGrid, finnosReal, finnosTooltip } from "@/components/charts/rechartsFinnos";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { pinIndex } from "@/lib/chartPin";
 import { ArrowDownLeft, ArrowUpRight, ChartColumn, ChartLine, ChevronRight, Eye, EyeOff, Wallet, X } from "lucide-react";
@@ -246,7 +247,7 @@ export default function Flow({ month: sharedMonth, onMonthChange }: { month?: st
                 <h2 className="font-heading text-base font-semibold text-foreground">
                   {TABS.find((t) => t.key === tab)?.label} por mês
                 </h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">{monthLabel(flow.from_month)} a {monthLabel(flow.to_month)} · meses futuros mais claros</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{monthLabel(flow.from_month)} a {monthLabel(flow.to_month)} · meses futuros tracejados (estimativa)</p>
               </div>
               <div className="flex gap-1 rounded-full border border-border bg-muted/60 p-1" role="group" aria-label="Tipo de gráfico">
                 {([
@@ -327,19 +328,25 @@ export default function Flow({ month: sharedMonth, onMonthChange }: { month?: st
               </div>
             ) : null}
 
-            <div className="mt-4 h-60 w-full" data-testid="flow-chart">
+            <ChartReveal className="mt-4 h-60 w-full">
+            <div className="h-full w-full" data-testid="flow-chart">
               <ResponsiveContainer width="100%" height="100%">
                 {chartKind === "barras" ? (
                   <BarChart data={chartData} margin={{ top: 8, right: 4, left: 4, bottom: 0 }} onClick={(state) => focusMonth(chartData[Number(state?.activeTooltipIndex)]?.month)}>
-                    <CartesianGrid vertical={false} stroke="var(--border)" />
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                    <Tooltip active defaultIndex={pinIndex(chartData, (m) => m.month === flow.month)} cursor={{ fill: "var(--muted)" }} contentStyle={tooltipStyle} formatter={(value: number) => [hidden ? formatHiddenBRL() : formatBRL(value), TABS.find((t) => t.key === tab)?.label ?? ""]} />
-                    <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={30} className="cursor-pointer">
+                    <CartesianGrid {...finnosGrid} />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" tick={finnosAxisTick} />
+                    <Tooltip active defaultIndex={pinIndex(chartData, (m) => m.month === flow.month)} cursor={{ fill: "var(--muted)" }} {...finnosTooltip} formatter={(value: number) => [hidden ? formatHiddenBRL() : formatBRL(value), TABS.find((t) => t.key === tab)?.label ?? ""]} />
+                    <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={30} className="cursor-pointer" {...finnosAnimation}>
+                      {/* Estimativa (months ahead): the same colour, light and dashed — the Gráficos FINNOS rule. */}
                       {chartData.map((entry, index) => (
                         <Cell
                           key={`${entry.label}-${index}`}
                           fill={barColor(entry.value)}
-                          fillOpacity={entry.month === flow.month ? 1 : entry.future && tab !== "projecao" ? 0.3 : 0.55}
+                          fillOpacity={entry.month === flow.month ? 1 : entry.future ? 0.18 : 0.45}
+                          stroke={entry.future ? barColor(entry.value) : undefined}
+                          strokeOpacity={entry.future ? 0.75 : undefined}
+                          strokeWidth={entry.future ? 1.5 : 0}
+                          strokeDasharray={entry.future ? "4 3" : undefined}
                         />
                       ))}
                     </Bar>
@@ -348,18 +355,19 @@ export default function Flow({ month: sharedMonth, onMonthChange }: { month?: st
                   <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 4, bottom: 0 }} onClick={(state) => focusMonth(chartData[Number(state?.activeTooltipIndex)]?.month)}>
                     <defs>
                       <linearGradient id="flow-area" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={tone} stopOpacity={0.25} />
+                        <stop offset="0%" stopColor={tone} stopOpacity={0.14} />
                         <stop offset="100%" stopColor={tone} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid vertical={false} stroke="var(--border)" />
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                    <Tooltip active defaultIndex={pinIndex(chartData, (m) => m.month === flow.month)} contentStyle={tooltipStyle} formatter={(value: number) => [hidden ? formatHiddenBRL() : formatBRL(value), TABS.find((t) => t.key === tab)?.label ?? ""]} />
-                    <Area type="monotone" dataKey="value" stroke={tone} strokeWidth={2} fill="url(#flow-area)" dot={false} activeDot={{ r: 4 }} />
+                    <CartesianGrid {...finnosGrid} />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" tick={finnosAxisTick} />
+                    <Tooltip active defaultIndex={pinIndex(chartData, (m) => m.month === flow.month)} {...finnosTooltip} formatter={(value: number) => [hidden ? formatHiddenBRL() : formatBRL(value), TABS.find((t) => t.key === tab)?.label ?? ""]} />
+                    <Area type="monotone" dataKey="value" {...finnosReal(tone)} fill="url(#flow-area)" {...finnosAnimation} />
                   </AreaChart>
                 )}
               </ResponsiveContainer>
             </div>
+            </ChartReveal>
             <p className="mt-2 hidden text-xs text-muted-foreground sm:block">Toque em um mês para ver o resumo dele.</p>
           </section>
 
@@ -372,7 +380,7 @@ export default function Flow({ month: sharedMonth, onMonthChange }: { month?: st
                 </div>
                 <ul className="flex items-center gap-3 text-xs text-muted-foreground" aria-label="Legenda">
                   <li className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full bg-primary" aria-hidden="true" />Real</li>
-                  <li className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-primary" aria-hidden="true" />Previsto</li>
+                  <li className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-primary" aria-hidden="true" />Estimativa</li>
                 </ul>
               </div>
               {endOfFocus && !isPast ? (
@@ -381,19 +389,21 @@ export default function Flow({ month: sharedMonth, onMonthChange }: { month?: st
                   {lowest && (lowest.forecast ?? 0) < (endOfFocus.forecast ?? 0) ? <> O ponto mais baixo previsto é {monthLabel(lowest.month)}: {money(lowest.forecast ?? 0)}.</> : null}
                 </p>
               ) : null}
-              <div className="mt-3 h-52 w-full" data-testid="flow-balance-chart">
+              <ChartReveal className="mt-3 h-52 w-full">
+              <div className="h-full w-full" data-testid="flow-balance-chart">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={timeline} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid vertical={false} stroke="var(--border)" />
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                    <YAxis hide={hidden} width={44} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} tickFormatter={axisMoney} />
+                    <CartesianGrid {...finnosGrid} />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" tick={finnosAxisTick} />
+                    <YAxis hide={hidden} width={44} tickLine={false} axisLine={false} tick={finnosAxisTick} tickFormatter={axisMoney} />
                     <ReferenceLine y={0} stroke="var(--expense)" strokeOpacity={0.4} />
-                    <Tooltip active defaultIndex={pinIndex(timeline, (p) => p.month === month)} contentStyle={tooltipStyle} formatter={(v: number, name: string) => [hidden ? formatHiddenBRL() : formatBRL(v), name === "real" ? "Saldo" : "Previsto"]} />
-                    <Line type="monotone" dataKey="real" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3, strokeWidth: 0, fill: "var(--primary)" }} activeDot={{ r: 5 }} connectNulls={false} />
-                    <Line type="monotone" dataKey="forecast" stroke="var(--primary)" strokeWidth={2} strokeDasharray="5 4" dot={{ r: 3, strokeWidth: 0, fill: "var(--primary)" }} activeDot={{ r: 5 }} connectNulls={false} />
+                    <Tooltip active defaultIndex={pinIndex(timeline, (p) => p.month === month)} {...finnosTooltip} formatter={(v: number, name: string) => [hidden ? formatHiddenBRL() : formatBRL(v), name === "real" ? "Saldo" : "Estimativa"]} />
+                    <Line type="monotone" dataKey="real" {...finnosReal("var(--finnos-purple)")} connectNulls={false} {...finnosAnimation} />
+                    <Line type="monotone" dataKey="forecast" {...finnosEstimate("var(--finnos-purple)")} connectNulls={false} {...finnosAnimation} animationBegin={500} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+              </ChartReveal>
             </section>
           ) : null}
 
@@ -488,13 +498,6 @@ export default function Flow({ month: sharedMonth, onMonthChange }: { month?: st
   );
 }
 
-const tooltipStyle = {
-  background: "var(--popover)",
-  border: "1px solid var(--border)",
-  borderRadius: 12,
-  color: "var(--popover-foreground)",
-  fontSize: 13,
-};
 
 const KIND_LABEL: Record<UpcomingKind, string> = {
   agendado: "Agendado", pendente: "Pendente", parcela: "Parcela", fixa: "Fixa · todo mês", assinatura: "Assinatura",

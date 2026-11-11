@@ -25,7 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const ACCOUNT_COLORS = ["#070F52", "#8A05BE", "#FF7A00", "#EC7000", "#10B981", "#06B6D4", "#F43F5E", "#64748B"];
-const ACCOUNT_TYPES: AccountType[] = ["corrente", "salario", "digital", "poupanca", "carteira"];
+const ACCOUNT_TYPES: AccountType[] = ["corrente", "salario", "digital", "poupanca", "carteira", "beneficio"];
 
 interface AccountDialogProps {
   open: boolean;

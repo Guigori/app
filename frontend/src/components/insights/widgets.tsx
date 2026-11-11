@@ -19,6 +19,7 @@ import { BalanceForecastInsight, NextInvoiceInsight, SpendTodayInsight, WeekAhea
 import { BudgetInsight, GoalsInsight } from "@/components/insights/PlanInsights";
 import { CatalogInsight } from "@/components/insights/CatalogInsight";
 import { DiscoveriesInsight } from "@/components/insights/Discoveries";
+import { DailyInsight } from "@/components/insights/DailyInsight";
 import { READERS } from "@/lib/insights/catalog";
 import { AccountsInsight, HabitsInsight, IncomeInsight, MonthsInsight } from "@/components/insights/MoreInsights";
 import { useCalendar, useCards } from "@/components/insights/useInsightData";
@@ -171,6 +172,7 @@ export function InsightWidget({ id, size, config = {}, slots, className }: { id:
     case "contas-fixas": return <FixedBillsInsight size={size} to={to} {...monthRange(month)} flowLink={to} className={className} />;
     case "faturas": return <CardsGate>{(cards) => <InvoicesInsight size={size} to={to} cards={cards} cardId={config.cardId ?? null} className={className} />}</CardsGate>;
     case "parcelas": return <InstallmentsInsight size={size} to={to} cardId={config.cardId ?? null} className={className} />;
+    case "analise-do-dia": return <DailyInsight size={size} className={className} />;
     case "descobertas": return <DiscoveriesInsight size={size} to={to} className={className} />;
     case "habitos": return <HabitsInsight size={size} to={to} className={className} />;
     case "renda": return <IncomeInsight size={size} to={to} className={className} />;

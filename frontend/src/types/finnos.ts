@@ -4,7 +4,7 @@
 export type TxType = "receita" | "despesa" | "transferencia";
 export type TxStatus = "pago" | "pendente" | "agendado";
 export type CategoryGroup = "necessidades" | "desejos" | "metas";
-export type AccountType = "corrente" | "salario" | "digital" | "poupanca" | "carteira";
+export type AccountType = "corrente" | "salario" | "digital" | "poupanca" | "carteira" | "beneficio";
 export type RuleStatus = "dentro" | "proximo" | "acima";
 
 export interface User {

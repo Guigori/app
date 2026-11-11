@@ -1,7 +1,7 @@
 /** How the person arranged Início and Análise: which analyses, in which size and order. Synced to the account. */
 import { useMemo, useSyncExternalStore } from "react";
 import { insightById, type WidgetConfig, type WidgetSize } from "@/lib/insights/registry";
-import { ANALYSIS_RELEASE, ANALYSIS_TOP, FEATURED, FEATURED_RELEASE } from "@/lib/insights/catalogDefs";
+import { ANALYSIS_RELEASE, ANALYSIS_TOP, DAILY_RELEASE, FEATURED, FEATURED_RELEASE } from "@/lib/insights/catalogDefs";
 
 export type Surface = "inicio" | "analise";
 export interface PlacedWidget { key: string; id: string; size: WidgetSize; config?: WidgetConfig }
@@ -16,7 +16,7 @@ export const newKey = () => `w${Date.now().toString(36)}${(counter++).toString(3
 
 /** Default Início: today's room to spend, the next bill, the month's forecast, the week, fixed bills, categories, Radar. */
 export function defaultLayouts(): Layouts {
-  const home: Array<[string, WidgetSize]> = [["descobertas", "M"], ["gastar-hoje", "S"], ["fatura-que-vem", "S"], ["ate-salario", "S"], ["em-aberto", "S"], ["previsao-saldo", "L"], ["resultado-mes", "M"], ["radar", "M"], ["orcamento", "M"], ["semana-que-vem", "M"], ["contas-fixas", "M"], ["metas", "M"], ["categorias", "L"]];
+  const home: Array<[string, WidgetSize]> = [["descobertas", "M"], ["analise-do-dia", "M"], ["gastar-hoje", "S"], ["fatura-que-vem", "S"], ["ate-salario", "S"], ["em-aberto", "S"], ["previsao-saldo", "L"], ["resultado-mes", "M"], ["radar", "M"], ["orcamento", "M"], ["semana-que-vem", "M"], ["contas-fixas", "M"], ["metas", "M"], ["categorias", "L"]];
   let hidden: string[] = [];
   // People who hid Radar or the categories in the old "Modificar painel" keep them hidden.
   try { hidden = (JSON.parse(localStorage.getItem(OLD_HOME_KEY) ?? "{}").hidden ?? []) as string[]; } catch { hidden = []; }
@@ -60,6 +60,13 @@ export function offerAnalysisTop(layouts: Layouts): Layouts {
   return { ...layouts, analise: [...fresh, ...layouts.analise] };
 }
 
+export function offerDaily(layouts: Layouts): Layouts {
+  if (layouts.inicio.some((w) => w.id === "analise-do-dia")) return layouts;
+  const at = layouts.inicio.findIndex((w) => w.id === "descobertas") + 1;
+  const item = { key: newKey(), id: "analise-do-dia", size: "M" as WidgetSize };
+  return { ...layouts, inicio: [...layouts.inicio.slice(0, at), item, ...layouts.inicio.slice(at)] };
+}
+
 export function readLayouts(): Layouts {
   const base = defaultLayouts();
   try {
@@ -70,8 +77,9 @@ export function readLayouts(): Layouts {
     let next = layouts;
     if (!offered.includes(FEATURED_RELEASE)) next = offerFeatured(next);
     if (!offered.includes(ANALYSIS_RELEASE)) next = offerAnalysisTop(next);
-    if (offered.includes(FEATURED_RELEASE) && offered.includes(ANALYSIS_RELEASE)) return layouts;
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...next, offered: [FEATURED_RELEASE, ANALYSIS_RELEASE] }));
+    if (!offered.includes(DAILY_RELEASE)) next = offerDaily(next);
+    if ([FEATURED_RELEASE, ANALYSIS_RELEASE, DAILY_RELEASE].every((r) => offered.includes(r))) return layouts;
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...next, offered: [FEATURED_RELEASE, ANALYSIS_RELEASE, DAILY_RELEASE] }));
     return next;
   } catch { return base; }
 }
@@ -87,7 +95,7 @@ function subscribe(cb: () => void) {
 
 export function saveLayout(surface: Surface, widgets: PlacedWidget[]) {
   const next = { ...readLayouts(), [surface]: widgets };
-  localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...next, offered: [FEATURED_RELEASE, ANALYSIS_RELEASE] }));
+  localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...next, offered: [FEATURED_RELEASE, ANALYSIS_RELEASE, DAILY_RELEASE] }));
   snapshot = JSON.stringify(next);
   window.dispatchEvent(new Event(LAYOUT_EVENT));
 }

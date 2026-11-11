@@ -175,25 +175,34 @@ export function Gauge({ percent, children, detail, size = 168, className, goal =
 export interface BarDatum { label: string; value: number; focus?: boolean; future?: boolean; valueLabel?: string }
 
 /** Barras: values side by side from zero; the one in focus in purple, estimated months dashed in the same purple. */
-export function Bars({ data, height = 112, onPick, className }: { data: BarDatum[]; height?: number; onPick?: (d: BarDatum) => void; className?: string }) {
+export function Bars({ data, height = 112, onPick, className, format }: { data: BarDatum[]; height?: number; onPick?: (d: BarDatum) => void; className?: string; format?: (v: number) => string }) {
   const peak = Math.max(1, ...data.map((d) => d.value));
-  // Without its own action, a bar is selected by touch (the others fade) and released by touching it again.
+  // Like the donut: touching a bar highlights it (strong colour, a little taller, its value on top) and fades the
+  // others; touching it again goes back to the whole.
   const [sel, setSel] = useState<number | null>(null);
   const [ref, seen] = useSeen<HTMLDivElement>();
+  const strong = (d: BarDatum, i: number) => (sel === null ? d.focus : sel === i);
   return (
-    <div ref={ref} className={cn("flex items-end gap-2", className)} style={{ height }}>
+    <div ref={ref} className={cn("relative flex select-none items-end gap-2", className)} style={{ height }} data-chart-interactive={onPick ? undefined : ""}>
       {data.map((d, i) => {
+        const picked = sel === i;
+        const value = d.valueLabel || (format ? format(d.value) : "");
         const body = (
           <>
-            <span className="text-[10px] tabular-nums text-muted-foreground">{d.valueLabel ?? ""}</span>
-            <motion.span className="block w-full rounded-lg" initial={{ height: 0 }} animate={{ height: seen ? Math.max(4, (d.value / peak) * (height - 36)) : 0, opacity: sel !== null && sel !== i ? 0.35 : 1 }} transition={{ delay: i * 0.07, type: "spring", stiffness: 160, damping: 20 }}
-              style={d.future ? { backgroundColor: "color-mix(in srgb, var(--finnos-purple) 18%, transparent)", outline: "1.5px dashed color-mix(in srgb, var(--finnos-purple) 70%, transparent)", outlineOffset: -1.5 } : { backgroundColor: d.focus ? FINNOS_COLOR.result : "color-mix(in srgb, var(--finnos-purple) 32%, var(--background))" }} />
-            <span className={cn("text-[11px]", d.focus ? "font-semibold text-foreground" : "text-muted-foreground")}>{d.label}</span>
+            <span className={cn("whitespace-nowrap text-[10px] tabular-nums transition-colors", picked ? "text-[11px] font-semibold text-foreground" : "text-muted-foreground")}>{picked ? value || d.value.toLocaleString("pt-BR") : d.valueLabel ?? ""}</span>
+            <motion.span className="block w-full origin-bottom rounded-lg"
+              initial={{ height: 0 }}
+              animate={{ height: seen ? Math.max(4, (d.value / peak) * (height - 36)) : 0, opacity: sel !== null && !picked ? 0.45 : 1, scaleX: picked ? 1.06 : 1 }}
+              transition={{ delay: seen && sel === null ? i * 0.07 : 0, type: "spring", stiffness: 220, damping: 22 }}
+              style={d.future
+                ? { backgroundColor: `color-mix(in srgb, var(--finnos-purple) ${picked ? 34 : 18}%, transparent)`, outline: "1.5px dashed color-mix(in srgb, var(--finnos-purple) 75%, transparent)", outlineOffset: -1.5 }
+                : { backgroundColor: strong(d, i) ? FINNOS_COLOR.result : "color-mix(in srgb, var(--finnos-purple) 32%, var(--background))" }} />
+            <span className={cn("text-[11px]", strong(d, i) ? "font-semibold text-foreground" : "text-muted-foreground")}>{d.label}</span>
           </>
         );
         return onPick ? (
-          <button key={d.label + i} type="button" onClick={() => onPick(d)} aria-pressed={d.focus} aria-label={`${d.label}: ${d.valueLabel ?? d.value}`} className="flex flex-1 flex-col items-center gap-1">{body}</button>
-        ) : <button key={d.label + i} type="button" data-chart-interactive="" onClick={(e) => { e.stopPropagation(); setSel(sel === i ? null : i); }} aria-pressed={sel === i} aria-label={`${d.label}: ${d.valueLabel ?? d.value}`} className="flex flex-1 flex-col items-center gap-1">{body}</button>;
+          <button key={d.label + i} type="button" onClick={() => onPick(d)} aria-pressed={d.focus} aria-label={`${d.label}: ${d.valueLabel ?? d.value}`} className="flex min-w-0 flex-1 flex-col items-center gap-1">{body}</button>
+        ) : <button key={d.label + i} type="button" onClick={(e) => { e.stopPropagation(); setSel(picked ? null : i); }} aria-pressed={picked} aria-label={`${d.label}: ${value || d.value}`} className="flex min-w-0 flex-1 flex-col items-center gap-1">{body}</button>;
       })}
     </div>
   );
