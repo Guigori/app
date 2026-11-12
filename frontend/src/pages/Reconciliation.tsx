@@ -222,7 +222,7 @@ function UploadCard({ accountId, account, card, cycle, onCreated }: { accountId:
       {bankName ? (
         <div className="mt-3.5 rounded-[20px] border border-border bg-card px-4 py-3.5">
           <p className="text-[13px] font-bold">Como baixar no {bankName}</p>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{tip ?? (card ? "No app do banco, abra a fatura e procure “Baixar PDF” ou “Exportar”." : "No app do banco: Extrato → Exportar. Escolha até 90 dias e envie o arquivo aqui.")}</p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{card ? "No app do banco, abra a fatura do mês e procure “Baixar PDF” ou “Exportar”." : (tip ?? "No app do banco: Extrato → Exportar. Escolha até 90 dias e envie o arquivo aqui.")}</p>
         </div>
       ) : null}
       {!card && account ? (
