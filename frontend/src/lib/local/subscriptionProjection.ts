@@ -21,7 +21,7 @@ function monthCharge(sub: SubscriptionItem, month: string): string | null {
 }
 
 function matchingBill(sub: SubscriptionItem, tx: Transaction): boolean {
-  if (tx.type !== "despesa" || tx.invoice_payment || tx.invoice_refund) return false;
+  if (tx.type !== "despesa" || (tx.invoice_payment || tx.balance_adjustment) || tx.invoice_refund) return false;
   // Legacy FINNOS transaction type does not contain subscription_id; use
   // conservative billing identity and exact cents instead.
   return tx.name.trim().toLowerCase() === sub.name.trim().toLowerCase()

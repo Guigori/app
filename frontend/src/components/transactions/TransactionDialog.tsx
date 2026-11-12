@@ -43,9 +43,13 @@ interface TransactionDialogProps {
   syncOperationId?: string;
   syncPayload?: TransactionInput;
   firstAttemptAt?: string;
+  /** New record already filled in (e.g. a statement line from a conferência). */
+  prefill?: Partial<TransactionInput>;
+  /** Called with the saved record (online saves only). */
+  onSaved?: (transaction: Transaction) => void;
 }
 
-export function TransactionDialog({ open, onOpenChange, initialType, initialDate, transaction, syncOperationId, syncPayload }: TransactionDialogProps) {
+export function TransactionDialog({ open, onOpenChange, initialType, initialDate, transaction, syncOperationId, syncPayload, prefill, onSaved }: TransactionDialogProps) {
   const queryClient = useQueryClient();
   const [type, setType] = useState<TxType>("despesa");
   const [name, setName] = useState("");
@@ -185,6 +189,18 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     },
   });
 
+  // Prefill runs after the reset above, only for a new record.
+  useEffect(() => {
+    if (!open || transaction || syncPayload || !prefill) return;
+    if (prefill.type) setType(prefill.type);
+    if (prefill.name) setName(prefill.name);
+    if (prefill.value) setValueRaw(String(prefill.value));
+    if (prefill.date) setDate(prefill.date);
+    if (prefill.status) setStatus(prefill.status);
+    if (prefill.account_id) setAccountId(prefill.account_id);
+    if (prefill.notes) setNotes(prefill.notes);
+  }, [open, prefill, transaction, syncPayload]);
+
   const mutation = useMutation({
     mutationFn: async (input: TransactionInput) => {
       if (syncOperationId) {
@@ -194,7 +210,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       }
       return transaction ? updateTransaction(transaction.id, input, "manual", transaction.version) : createTransaction(input);
     },
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
+      if (saved && onSaved) onSaved(saved);
       if (syncOperationId) {
         const remaining = await getSyncOperation(syncOperationId);
         if (remaining) {

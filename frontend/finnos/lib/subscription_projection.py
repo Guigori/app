@@ -13,7 +13,7 @@ from finnos.lib.money import cents
 
 
 def _matches_billing(tx: dict, sub: dict) -> bool:
-    if tx.get("type") != "despesa" or tx.get("invoice_payment") or tx.get("invoice_refund"):
+    if tx.get("type") != "despesa" or (tx.get("invoice_payment") or tx.get("balance_adjustment")) or tx.get("invoice_refund"):
         return False
     if tx.get("subscription_id") and tx["subscription_id"] == sub.get("id"):
         return True

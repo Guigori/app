@@ -42,6 +42,7 @@ const BudgetSettings = lazyRetry(() => import("@/pages/BudgetSettings"));
 const FinanceHistory = lazyRetry(() => import("@/pages/FinanceHistory"));
 const Subscriptions = lazyRetry(() => import("@/pages/Subscriptions"));
 const CardInvoice = lazyRetry(() => import("@/pages/CardInvoice"));
+const ReconciliationPage = lazyRetry(() => import("@/pages/Reconciliation"));
 const Radar = lazyRetry(() => import("@/pages/Radar"));
 const RadarDetail = lazyRetry(() => import("@/pages/RadarDetail"));
 const Onboarding = lazyRetry(() => import("@/pages/Onboarding"));
@@ -109,6 +110,7 @@ export default function App() {
             <Route path="/configuracoes/graficos" element={<ChartSettings />} />
             <Route path="/cartoes" element={<Navigate to="/contas?aba=cartoes" replace />} />
             <Route path="/cartoes/:cardId" element={<CardInvoice />} />
+            <Route path="/contas/:accountId/conferencia" element={<ReconciliationPage />} />
             <Route path="/orcamento" element={<Budget />} />
             <Route path="/orcamento/configuracoes" element={<BudgetSettings />} />
             <Route path="/historico" element={<FinanceHistory />} />

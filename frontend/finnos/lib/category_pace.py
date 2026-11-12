@@ -21,7 +21,7 @@ def monthly_pace(limit, transactions, category_id, month, as_of=None, credits=No
     day = 0 if target_index > current_index else days if target_index < current_index else as_of.day
     cumulative = [0] * (days + 1)
     for tx in transactions:
-        if tx.get("category_id") != category_id or tx.get("type") != "despesa" or tx.get("invoice_payment"):
+        if tx.get("category_id") != category_id or tx.get("type") != "despesa" or (tx.get("invoice_payment") or tx.get("balance_adjustment")):
             continue
         value = month_portion(tx, month)
         if value is None:

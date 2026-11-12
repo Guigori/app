@@ -95,3 +95,27 @@ test("an account opens its own cash flow, which can go back to every account", a
   await page.getByTestId("flow-account-clear").click();
   await expect(page.getByTestId("flow-account-filter")).toHaveCount(0);
 });
+
+test("conferência: a statement line is registered from the register and the account becomes conferida", async ({ page }) => {
+  await createCheckingAccount(page);
+  await page.locator("[data-testid^=wallet-account-]").first().click();
+  await page.getByTestId("account-detail-reconcile").click();
+  await expect(page).toHaveURL(/\/contas\/.+\/conferencia/);
+  const day = new Date(Date.now() - 2 * 86_400_000);
+  const ymd = `${day.getFullYear()}${String(day.getMonth() + 1).padStart(2, "0")}${String(day.getDate()).padStart(2, "0")}`;
+  const ofx = `OFXHEADER:100\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><BANKTRANLIST>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>${ymd}120000<TRNAMT>-29.90<FITID>SINT-1<MEMO>TARIFA PACOTE</STMTTRN>
+</BANKTRANLIST><LEDGERBAL><BALAMT>320.25<DTASOF>${ymd}</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
+  await page.getByTestId("recon-file-input").setInputFiles({ name: "extrato-sintetico.ofx", mimeType: "application/x-ofx", buffer: Buffer.from(ofx) });
+  await expect(page.getByTestId("recon-bank")).toContainText("320,25");
+  await expect(page.getByTestId("recon-finnos")).toContainText("350,15");
+  const line = page.getByTestId("recon-line-0");
+  await expect(line).toHaveAttribute("data-state", "open");
+  await line.getByRole("button", { name: "Registrar" }).click();
+  await expect(page.getByTestId("tx-name-input")).toHaveValue("TARIFA PACOTE");
+  await page.getByTestId("tx-submit-button").click();
+  await expect(line).toHaveAttribute("data-state", "matched");
+  await expect(page.getByTestId("recon-diff")).toContainText("0,00");
+  await page.getByTestId("recon-complete").click();
+  await expect(page.getByTestId("recon-done")).toContainText("conferida até");
+});

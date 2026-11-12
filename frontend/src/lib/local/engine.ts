@@ -2,6 +2,7 @@
 // the browser. Keep the two in sync — a rule change belongs in both places.
 
 import { checkFunds } from "@/lib/funds";
+import { matchLines, originKey, type MatchLine } from "@/lib/statementMatching";
 import { institutionIdentity } from "@/lib/institutionCatalog";
 import { accountScope, effectiveDefaults } from "@/lib/walletDefaults";
 import { institutionKey } from "@/lib/institutionGroups";
@@ -47,6 +48,7 @@ import type {
   Transaction,
   TransactionInput,
   Trends,
+  Reconciliation, ReconciliationInput, ReconResolveInput, ReconEvent, BalanceAdjustment, BalanceAdjustmentInput,
 } from "@/types/finnos";
 
 import { spendingPace } from "@/lib/budgetPace";
@@ -162,7 +164,7 @@ function monthBounds(month: string): [string, string] {
 
 /** Positive amount the transaction contributes to `month`'s income/expense stats. */
 function monthPortion(tx: Transaction, month: string): number | null {
-  if (tx.invoice_payment || tx.invoice_refund || tx.type === "transferencia" || tx.status !== "pago") return null;
+  if ((tx.invoice_payment || tx.balance_adjustment) || tx.invoice_refund || tx.type === "transferencia" || tx.status !== "pago") return null;
   if (tx.installment) {
     const n = tx.total_installments ?? 1;
     const offset = monthsBetween(tx.date.slice(0, 7), month);
@@ -549,7 +551,7 @@ export function localCreateTransaction(input: TransactionInput): Transaction {
 
 /** A paid invoice locks its purchase breakdown until an audited refund exists. */
 function assertPurchaseNotSettled(db: LocalDb, transaction: Transaction): void {
-  if (transaction.invoice_payment || transaction.invoice_refund) throw new Error("Movimento de fatura não pode ser alterado manualmente.");
+  if ((transaction.invoice_payment || transaction.balance_adjustment) || transaction.invoice_refund) throw new Error("Movimento de fatura não pode ser alterado manualmente.");
   if (!transaction.card_id) return;
   const card = db.cards.find(c => c.id === transaction.card_id);
   if (!card) return;
@@ -942,7 +944,7 @@ export function localFlow(params: FlowParams): Flow {
     const present = new Set<string>();
     const latest = new Map<string, Transaction>();
     for (const tx of txs) {
-      if (tx.invoice_payment || tx.type === "transferencia") continue;
+      if ((tx.invoice_payment || tx.balance_adjustment) || tx.type === "transferencia") continue;
       const key = recurrenceKey(tx);
       const txMonth = tx.date.slice(0, 7);
       if (txMonth === month) present.add(key);
@@ -953,7 +955,7 @@ export function localFlow(params: FlowParams): Flow {
     return [...latest.entries()].filter(([key]) => !present.has(key)).map(([, tx]) => tx);
   };
   const projection = (t: Transaction, month: string): number | null => {
-    if (t.type === "transferencia" || t.invoice_payment) return null;
+    if (t.type === "transferencia" || (t.invoice_payment || t.balance_adjustment)) return null;
     return t.installment ? unpaidPortion(t, month) : t.status !== "pago" && t.date.slice(0, 7) === month ? amount(t) : null;
   };
 
@@ -1106,7 +1108,7 @@ export function localCalendar(month: string, categoryId?: string): CalendarMonth
       buckets.get(tx.date) ??
       { date: tx.date, income: 0, expense: 0, projected_income: 0, projected_expense: 0, count: 0, active_count: 0 };
     day.count += 1;
-    if (tx.type !== "transferencia" && !tx.invoice_payment && !tx.invoice_refund) {
+    if (tx.type !== "transferencia" && !(tx.invoice_payment || tx.balance_adjustment) && !tx.invoice_refund) {
       const value = occurrenceAmount(tx);
       if (tx.status === "pago") {
         if (tx.type === "receita") day.income = round2(day.income + value);
@@ -1124,7 +1126,7 @@ export function localCalendar(month: string, categoryId?: string): CalendarMonth
   for (const source of transactions) {
     if (!source.installment || source.date.slice(0, 7) === month
         || (source.type !== "receita" && source.type !== "despesa")
-        || source.invoice_payment || source.invoice_refund) continue;
+        || (source.invoice_payment || source.balance_adjustment) || source.invoice_refund) continue;
     const paid = source.status === "pago";
     const portion = paid ? monthPortion(source, month) : unpaidPortion(source, month);
     if (portion === null) continue;
@@ -1808,4 +1810,236 @@ export function localSubscriptions(): Subscriptions {
     items, monthly_total: monthly, yearly_total: yearly,
     income_percent: income ? round2(monthly / income * 100) : 0,
   };
+}
+
+
+// --- Conferência da conta com o extrato (etapa 3) — mirror of routers/reconciliations.py ---
+
+const centsOf = (value: number) => Math.round(value * 100);
+
+function balanceUntil(db: LocalDb, accountId: string, until: string): number {
+  const account = db.accounts.find(a => a.id === accountId);
+  let total = centsOf(account?.initial_balance ?? 0);
+  for (const tx of db.transactions) {
+    if (tx.date > until) continue;
+    for (const [id, amount] of balanceEffects(tx, until)) if (id === accountId) total += centsOf(amount);
+  }
+  return total;
+}
+
+function reconSummary(doc: Reconciliation): Reconciliation {
+  const counts: Record<string, number> = {};
+  for (const line of doc.lines) counts[line.state] = (counts[line.state] ?? 0) + 1;
+  const finnosOpen = doc.finnos.filter(f => f.state === "open").length;
+  return { ...doc, counts, pending: (counts.review ?? 0) + (counts.open ?? 0) + finnosOpen };
+}
+
+function protectedTx(tx: Transaction | undefined): Transaction {
+  if (!tx) throw new Error("Lançamento não encontrado; ele pode ter sido excluído.");
+  if (tx.invoice_payment || tx.invoice_refund || tx.reversed_by || tx.reversal_of || tx.balance_adjustment)
+    throw new Error("Este lançamento só muda pelo próprio fluxo (fatura, estorno ou ajuste).");
+  return tx;
+}
+
+export function localCreateReconciliation(accountId: string, input: ReconciliationInput): Reconciliation {
+  const db = readDb();
+  const start = input.period_start, end = input.period_end;
+  const span = (Date.parse(end) - Date.parse(start)) / 86_400_000;
+  if (span < 0 || span > 90) throw new Error("O extrato pode ter no máximo 90 dias.");
+  if (end > todayISO()) throw new Error("O período não pode terminar no futuro.");
+  if (!db.accounts.some(a => a.id === accountId)) throw new Error("Conta não encontrada.");
+  const lines: MatchLine[] = input.lines.map((l, index) => {
+    if (l.date < start || l.date > end) throw new Error(`Linha ${index + 1} fora do período do extrato.`);
+    const base = { date: l.date, description: l.description.trim(), cents: centsOf(l.value), direction: l.direction, fitid: l.fitid ?? null };
+    return { ...base, index, origin_key: originKey("local", accountId, base) };
+  });
+  const windowStart = addDays(start, -3), windowEnd = addDays(end, 3);
+  const inWindow = db.transactions.filter(t => t.date >= windowStart && t.date <= windowEnd);
+  const links: Record<string, string> = {};
+  for (const [key, txId] of Object.entries(db.reconciliation_links ?? {})) if (key.startsWith(`${accountId}:`)) links[key.slice(accountId.length + 1)] = txId;
+  const matched = matchLines(lines, inWindow, accountId, links);
+  const doc: Reconciliation = {
+    id: newId(), account_id: accountId, period_start: start, period_end: end, file_name: input.file_name, source: input.source,
+    status: "pronta", bank_closing_cents: input.bank_closing_balance == null ? null : centsOf(input.bank_closing_balance),
+    finnos_closing_cents: balanceUntil(db, accountId, end), counts: {}, pending: 0, created_at: new Date().toISOString(),
+    lines: lines.map(line => {
+      const r = matched.lines.get(line.index)!;
+      const already = Boolean(r.tx_id) && [line.fitid, line.origin_key].some(k => k && links[k] === r.tx_id);
+      const state = r.level === "strong" ? "matched" : r.level === "probable" || r.level === "value_diff" ? "review" : "open";
+      return { ...line, level: already ? "already" : r.level, tx_id: r.tx_id, reasons: r.reasons, state };
+    }),
+    finnos: matched.onlyFinnos
+      .filter(id => { const t = db.transactions.find(x => x.id === id); return Boolean(t && t.date >= start && t.date <= end); })
+      .map(id => ({ tx_id: id, state: "open" as const, repeated_of: matched.repeated[id] ?? null })),
+  };
+  db.reconciliations = [...(db.reconciliations ?? []), doc];
+  writeDb(db);
+  return reconSummary(doc);
+}
+
+export function localListReconciliations(accountId: string): Reconciliation[] {
+  return (readDb().reconciliations ?? []).filter(r => r.account_id === accountId).map(reconSummary).sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+export function localGetReconciliation(id: string): Reconciliation {
+  const db = readDb();
+  const doc = (db.reconciliations ?? []).find(r => r.id === id);
+  if (!doc) throw new Error("Conferência não encontrada.");
+  const history = (db.reconciliation_events ?? []).filter(e => e.reconciliation_id === id).sort((a, b) => a.seq - b.seq);
+  // Live: decisions and adjustments change the FINNOS side until it is concluded.
+  const live = doc.status === "concluida" ? doc.finnos_closing_cents : balanceUntil(db, doc.account_id, doc.period_end);
+  return { ...reconSummary(doc), finnos_closing_cents: live, history };
+}
+
+function saveRecon(db: LocalDb, doc: Reconciliation, event: Omit<ReconEvent, "id" | "seq" | "created_at" | "undone_by" | "undo_of"> & { before: unknown; after: unknown; effects: Record<string, unknown>; undo_of?: string | null }) {
+  const seq = (db.reconciliation_events ?? []).filter(e => e.reconciliation_id === doc.id).length + 1;
+  db.reconciliation_events = [...(db.reconciliation_events ?? []), {
+    ...event, id: newId(), seq, created_at: new Date().toISOString(), undone_by: null, undo_of: event.undo_of ?? null, reconciliation_id: doc.id,
+  }];
+  db.reconciliations = (db.reconciliations ?? []).map(r => r.id === doc.id ? doc : r);
+}
+
+export function localResolveReconciliation(id: string, input: ReconResolveInput): Reconciliation {
+  const db = readDb();
+  const found = (db.reconciliations ?? []).find(r => r.id === id);
+  if (!found) throw new Error("Conferência não encontrada.");
+  if (found.status === "concluida") throw new Error("Conferência concluída; abra uma nova para mudar algo.");
+  const doc: Reconciliation = JSON.parse(JSON.stringify(found));
+  const effects: Record<string, unknown> = {};
+  let target: string, before: unknown, after: unknown;
+  if (input.line != null) {
+    const line = doc.lines[input.line];
+    if (!line) throw new Error("Linha não encontrada.");
+    target = `line:${input.line}`; before = { ...line };
+    const allowed: Record<string, string[]> = { review: ["confirm", "separate", "use_bank_value", "keep_value"], open: ["link", "ignore"] };
+    if (!(allowed[line.state] ?? []).includes(input.action)) throw new Error("Esta linha já foi decidida; desfaça a decisão para mudar.");
+    if (input.action === "confirm") line.state = "matched";
+    else if (input.action === "separate") { doc.finnos.push({ tx_id: line.tx_id!, state: "open", repeated_of: null }); Object.assign(line, { state: "open", tx_id: null, level: "only_statement" }); }
+    else if (input.action === "keep_value") Object.assign(line, { state: "matched", kept_difference: true });
+    else if (input.action === "use_bank_value") {
+      const tx = protectedTx(db.transactions.find(t => t.id === line.tx_id));
+      effects.tx_updated = { id: tx.id, before_cents: centsOf(tx.value) };
+      const updated = { ...tx, value: line.cents / 100, version: (tx.version ?? 1) + 1, updated_at: new Date().toISOString() };
+      db.transactions = db.transactions.map(t => t.id === tx.id ? updated : t);
+      localAudit(db, "transactions", "updated", tx, updated);
+      line.state = "matched";
+    } else if (input.action === "link") {
+      if (!input.tx_id) throw new Error("Informe o lançamento a ligar.");
+      if (doc.lines.some(l => l.tx_id === input.tx_id && l.state === "matched")) throw new Error("Este lançamento já está ligado a outra linha.");
+      protectedTx(db.transactions.find(t => t.id === input.tx_id));
+      Object.assign(line, { state: "matched", tx_id: input.tx_id, level: "linked" });
+      doc.finnos = doc.finnos.filter(f => f.tx_id !== input.tx_id);
+      effects.linked = input.tx_id;
+    } else if (input.action === "ignore") line.state = "ignored";
+    after = { ...line };
+  } else {
+    if (!input.tx_id) throw new Error("Informe a linha ou o lançamento.");
+    const item = doc.finnos.find(f => f.tx_id === input.tx_id);
+    if (!item || item.state !== "open") throw new Error("Este lançamento já foi decidido; desfaça a decisão para mudar.");
+    target = `finnos:${input.tx_id}`; before = { ...item };
+    if (input.action === "keep") item.state = "kept";
+    else if (input.action === "keep_pending" || input.action === "delete") {
+      const tx = protectedTx(db.transactions.find(t => t.id === input.tx_id));
+      if (input.action === "keep_pending") {
+        effects.tx_updated = { id: tx.id, before_status: tx.status };
+        const updated = { ...tx, status: "pendente" as const, version: (tx.version ?? 1) + 1, updated_at: new Date().toISOString() };
+        db.transactions = db.transactions.map(t => t.id === tx.id ? updated : t);
+        localAudit(db, "transactions", "updated", tx, updated);
+        item.state = "pending";
+      } else {
+        effects.tx_deleted = tx;
+        db.transactions = db.transactions.filter(t => t.id !== tx.id);
+        localAudit(db, "transactions", "deleted", tx, null);
+        item.state = "deleted";
+      }
+    } else throw new Error("Ação inválida.");
+    after = { ...item };
+  }
+  saveRecon(db, doc, { action: input.action, target, before, after, effects, note: input.note ?? "" });
+  writeDb(db);
+  return reconSummary(doc);
+}
+
+export function localUndoReconciliationEvent(id: string, eventId: string): Reconciliation {
+  const db = readDb();
+  const found = (db.reconciliations ?? []).find(r => r.id === id);
+  if (!found) throw new Error("Conferência não encontrada.");
+  if (found.status === "concluida") throw new Error("Conferência concluída; abra uma nova para mudar algo.");
+  const events = (db.reconciliation_events ?? []).filter(e => e.reconciliation_id === id);
+  const event = events.find(e => e.id === eventId);
+  if (!event) throw new Error("Decisão não encontrada.");
+  if (event.undone_by || event.undo_of) throw new Error("Esta decisão já foi desfeita.");
+  const linked = event.effects.linked as string | undefined;
+  if (events.some(e => e.seq > event.seq && !e.undone_by && !e.undo_of && (e.target === event.target || (linked && e.target === `finnos:${linked}`))))
+    throw new Error("Uma decisão posterior depende desta; desfaça aquela primeiro.");
+  const doc: Reconciliation = JSON.parse(JSON.stringify(found));
+  const updatedFx = event.effects.tx_updated as { id: string; before_cents?: number; before_status?: Transaction["status"] } | undefined;
+  if (updatedFx) {
+    const tx = protectedTx(db.transactions.find(t => t.id === updatedFx.id));
+    const restored = { ...tx, version: (tx.version ?? 1) + 1, updated_at: new Date().toISOString(),
+      ...(updatedFx.before_cents != null ? { value: updatedFx.before_cents / 100 } : {}),
+      ...(updatedFx.before_status ? { status: updatedFx.before_status } : {}) };
+    db.transactions = db.transactions.map(t => t.id === tx.id ? restored : t);
+    localAudit(db, "transactions", "updated", tx, restored);
+  }
+  const deleted = event.effects.tx_deleted as Transaction | undefined;
+  if (deleted) {
+    if (db.transactions.some(t => t.id === deleted.id)) throw new Error("O lançamento excluído já existe de novo.");
+    db.transactions = [...db.transactions, deleted];
+    localAudit(db, "transactions", "created", null, deleted);
+  }
+  const [kind, key] = [event.target.slice(0, event.target.indexOf(":")), event.target.slice(event.target.indexOf(":") + 1)];
+  if (kind === "line") {
+    const previous = event.before as Reconciliation["lines"][number];
+    doc.lines[Number(key)] = previous;
+    if (event.action === "separate") doc.finnos = doc.finnos.filter(f => f.tx_id !== previous.tx_id);
+    if (event.action === "link" && linked) doc.finnos.push({ tx_id: linked, state: "open", repeated_of: null });
+  } else doc.finnos = doc.finnos.map(f => f.tx_id === key ? event.before as Reconciliation["finnos"][number] : f);
+  saveRecon(db, doc, { action: "undo", target: event.target, before: event.after, after: event.before, effects: {}, note: "", undo_of: eventId });
+  const undoEvent = db.reconciliation_events!.at(-1)!;
+  db.reconciliation_events = db.reconciliation_events!.map(e => e.id === eventId ? { ...e, undone_by: undoEvent.id } : e);
+  writeDb(db);
+  return reconSummary(doc);
+}
+
+export function localCompleteReconciliation(id: string): Reconciliation {
+  const db = readDb();
+  const found = (db.reconciliations ?? []).find(r => r.id === id);
+  if (!found) throw new Error("Conferência não encontrada.");
+  if (found.status === "concluida") return reconSummary(found);
+  const summary = reconSummary(found);
+  if (summary.pending) throw new Error(`Ainda há ${summary.pending} item(ns) para decidir.`);
+  const finnosClosing = balanceUntil(db, found.account_id, found.period_end);
+  if (found.bank_closing_cents != null && finnosClosing !== found.bank_closing_cents)
+    throw new Error("Os saldos ainda não batem. Corrija o saldo ou revise as linhas.");
+  const links = { ...(db.reconciliation_links ?? {}) };
+  for (const line of found.lines) if (line.state === "matched" && line.tx_id)
+    for (const key of [line.fitid, line.origin_key]) if (key) links[`${found.account_id}:${key}`] = line.tx_id;
+  db.reconciliation_links = links;
+  db.accounts = db.accounts.map(a => a.id === found.account_id && (!a.reconciled_until || a.reconciled_until < found.period_end) ? { ...a, reconciled_until: found.period_end } : a);
+  const done: Reconciliation = { ...found, status: "concluida", finnos_closing_cents: finnosClosing };
+  db.reconciliations = (db.reconciliations ?? []).map(r => r.id === id ? done : r);
+  writeDb(db);
+  return reconSummary(done);
+}
+
+export function localAdjustBalance(accountId: string, input: BalanceAdjustmentInput): BalanceAdjustment {
+  const db = readDb();
+  if (input.date > todayISO()) throw new Error("O ajuste não pode ter data futura.");
+  if (input.reason.trim().length < 3) throw new Error("Explique o motivo do ajuste.");
+  if (!db.accounts.some(a => a.id === accountId)) throw new Error("Conta não encontrada.");
+  const before = balanceUntil(db, accountId, input.date);
+  const target = centsOf(input.target_balance);
+  const diff = target - before;
+  if (diff === 0) throw new Error("O saldo já é este; nada a ajustar.");
+  const tx = buildTransaction(db, {
+    name: "Ajuste de saldo", value: Math.abs(diff) / 100, type: diff > 0 ? "receita" : "despesa", status: "pago", date: input.date,
+    account_id: accountId, card_id: null, to_account_id: null, category_id: null, fixed: false, recurrence: null, installment: false,
+    total_installments: null, current_installment: null, adjusted_value: null, attachment: null, notes: input.reason.trim(),
+  });
+  tx.balance_adjustment = true;
+  db.transactions = [...db.transactions, tx];
+  localAudit(db, "transactions", "created", null, tx);
+  writeDb(db);
+  return { id: tx.id, type: tx.type as "receita" | "despesa", value: tx.value, date: tx.date, previous_balance: before / 100, new_balance: target / 100, difference: diff / 100 };
 }

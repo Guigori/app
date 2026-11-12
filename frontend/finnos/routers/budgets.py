@@ -35,7 +35,7 @@ async def _out(cycle: dict) -> BudgetCycleOut:
     return BudgetCycleOut(**payload, allocations=allocations, status=_status(cycle, date.fromisoformat(today_iso())))
 
 def _occurrences_in_cycle(tx: dict, start: date, end: date):
-    if tx.get('invoice_payment') or tx.get('invoice_refund') or tx.get('type') == 'transferencia':
+    if (tx.get('invoice_payment') or tx.get('balance_adjustment')) or tx.get('invoice_refund') or tx.get('type') == 'transferencia':
         return []
     import calendar
     tx_date = date.fromisoformat(tx['date'])

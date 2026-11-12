@@ -63,6 +63,8 @@ export interface Account {
   is_default?: boolean;
   /** Cheque especial: how far below zero a confirmed payment/transfer may go. */
   overdraft_limit?: number | null;
+  /** Last statement date that closed with the FINNOS balance (conferência). */
+  reconciled_until?: string | null;
   balance: number;
   total_income: number;
   total_expense: number;
@@ -185,6 +187,8 @@ export interface Transaction {
   capture_unusual?: boolean;
   recurrence_id?: string | null;
   invoice_payment?: boolean;
+  /** Auditable balance correction (conferência): out of spending and income. */
+  balance_adjustment?: boolean;
   /** Set on the reversal that undid an invoice payment. */
   invoice_reversal_of?: string | null;
   /** Transfer undo: the inverse transfer points to the original and back. */
@@ -847,3 +851,33 @@ export interface ConfirmAllResult {
   skipped: number;
   failed: { id: string; name: string; detail: string }[];
 }
+
+/** Conferência da conta com o extrato (etapa 3). Money in cents. */
+export type ReconLineState = "matched" | "review" | "open" | "ignored";
+export interface ReconLine {
+  index: number; date: string; description: string; cents: number; direction: "in" | "out";
+  fitid?: string | null; origin_key: string;
+  level: "strong" | "probable" | "value_diff" | "only_statement" | "already" | "linked";
+  tx_id: string | null; reasons: string[]; state: ReconLineState; kept_difference?: boolean;
+}
+export interface ReconFinnosItem { tx_id: string; state: "open" | "kept" | "pending" | "deleted"; repeated_of: string | null }
+export interface ReconEvent {
+  id: string; seq: number; action: string; target: string; note?: string; created_at: string;
+  undone_by: string | null; undo_of: string | null;
+}
+export interface Reconciliation {
+  id: string; account_id: string; period_start: string; period_end: string; file_name: string;
+  source: "ofx" | "csv" | "pdf" | "ocr"; status: "pronta" | "concluida";
+  bank_closing_cents: number | null; finnos_closing_cents: number;
+  lines: ReconLine[]; finnos: ReconFinnosItem[]; counts: Record<string, number>; pending: number;
+  history?: ReconEvent[]; created_at: string;
+}
+export interface ReconciliationInput {
+  period_start: string; period_end: string; file_name: string; file_hash: string; source: Reconciliation["source"];
+  bank_closing_balance: number | null;
+  lines: { date: string; description: string; value: number; direction: "in" | "out"; fitid?: string | null }[];
+}
+export interface ReconResolveInput { line?: number; tx_id?: string; action: string; note?: string }
+export interface BalanceAdjustmentInput { target_balance: number; reason: string; date: string; reconciliation_id?: string | null }
+export interface BalanceAdjustment { id: string; type: "receita" | "despesa"; value: number; date: string; previous_balance: number; new_balance: number; difference: number }
+

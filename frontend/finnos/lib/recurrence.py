@@ -36,7 +36,7 @@ def monthly_projection_sources(txs: list[dict], month: str) -> list[tuple[dict, 
     latest: dict[tuple, dict] = {}
     present: set[tuple] = set()
     for tx in txs:
-        if tx.get("invoice_payment") or tx.get("type") == "transferencia":
+        if (tx.get("invoice_payment") or tx.get("balance_adjustment")) or tx.get("type") == "transferencia":
             continue
         key = series_key(tx)
         tx_month = str(tx.get("date") or "")[:7]

@@ -45,6 +45,10 @@ export interface LocalDb {
   cards: LocalCard[];
   subscriptions: SubscriptionItem[];
   audit_events: FinanceHistoryEvent[];
+  /** Conferências da conta com o extrato (etapa 3). */
+  reconciliations?: import("@/types/finnos").Reconciliation[];
+  reconciliation_events?: (import("@/types/finnos").ReconEvent & { reconciliation_id: string; before: unknown; after: unknown; effects: Record<string, unknown> })[];
+  reconciliation_links?: Record<string, string>; // `${accountId}:${key}` -> tx id
   /** Monotonic write counter; the higher copy wins on startup (AUD-08). */
   revision?: number;
 }

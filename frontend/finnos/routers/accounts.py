@@ -49,6 +49,7 @@ async def _enriched_accounts(user_id: str) -> list[AccountOut]:
                 active=a.get("active", True),
                 is_default=a["id"] in defaults,
                 overdraft_limit=a.get("overdraft_limit"),
+                reconciled_until=a.get("reconciled_until"),
                 balance=balance,
                 total_income=total_income,
                 total_expense=total_expense,

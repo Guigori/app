@@ -8,7 +8,7 @@
   ],
   "routes": [
     {
-      "src": "/api/(auth/(me|firebase-session|logout|firestore-smoke)|accounts(?:/.*)?|institutions(?:/.*)?|onboarding(?:/.*)?|categories(?:/.*)?|transactions(?:/.*)?|dashboard|analytics(?:/.*)?|cards(?:/.*)?|notifications(?:/.*)?|push(?:/.*)?|subscriptions(?:/.*)?|budgets(?:/.*)?|goals(?:/.*)?|investments(?:/.*)?|preferences|radar(?:/.*)?|ai(?:/.*)?|integrations/(shortcut-tokens(?:/[^/]+)?|shortcut-activity)|shortcuts/pendentes|pending-captures(?:/.*)?|simulate(?:/.*)?|finance/(integrity|history|fiint|backup|backups(?:/.*)?|backups-run|restore|reconciliation/preview)|validation/finance(?:/.*)?)",
+      "src": "/api/(auth/(me|firebase-session|logout|firestore-smoke)|accounts(?:/.*)?|institutions(?:/.*)?|onboarding(?:/.*)?|categories(?:/.*)?|transactions(?:/.*)?|dashboard|analytics(?:/.*)?|cards(?:/.*)?|notifications(?:/.*)?|push(?:/.*)?|subscriptions(?:/.*)?|budgets(?:/.*)?|goals(?:/.*)?|investments(?:/.*)?|preferences|radar(?:/.*)?|ai(?:/.*)?|integrations/(shortcut-tokens(?:/[^/]+)?|shortcut-activity)|shortcuts/pendentes|pending-captures(?:/.*)?|reconciliations(?:/.*)?|simulate(?:/.*)?|finance/(integrity|history|fiint|backup|backups(?:/.*)?|backups-run|restore|reconciliation/preview)|validation/finance(?:/.*)?)",
       "dest": "/api"
     },
     {

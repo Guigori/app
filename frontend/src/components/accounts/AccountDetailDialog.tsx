@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChartNoAxesCombined, ChevronRight, Pencil, Star, Trash2, Wallet } from "lucide-react";
+import { useState } from "react";
+import { ChartNoAxesCombined, ChevronRight, FileCheck2, Pencil, Scale, Star, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { fetchAccount, setDefaultAccount } from "@/lib/data";
@@ -20,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AdjustBalanceDialog } from "@/components/accounts/AdjustBalanceDialog";
 
 interface AccountDetailDialogProps {
   open: boolean;
@@ -33,6 +35,7 @@ interface AccountDetailDialogProps {
 export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDelete, onPaymentMethods }: AccountDetailDialogProps) {
   const dialogs = useDialogs();
   const { hidden } = useBalanceHidden();
+  const [adjusting, setAdjusting] = useState(false);
   const detailQuery = useQuery({
     queryKey: ["account", account?.id],
     queryFn: () => fetchAccount(account?.id ?? ""),
@@ -97,6 +100,19 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
               </div>
             </div>
 
+            {account.reconciled_until ? (
+              <p className="text-xs text-muted-foreground" data-testid="account-detail-reconciled">Conferida com o extrato até {formatDate(account.reconciled_until)}</p>
+            ) : null}
+            <div className="grid grid-cols-2 gap-2">
+              <Link to={`/contas/${encodeURIComponent(account.id)}/conferencia`} onClick={() => onOpenChange(false)}
+                className={cn(buttonVariants({ variant: "outline" }), "h-11 justify-start rounded-2xl")} data-testid="account-detail-reconcile">
+                <FileCheck2 className="h-4 w-4" aria-hidden="true" />Conferir com extrato
+              </Link>
+              <Button variant="outline" className="h-11 justify-start rounded-2xl" onClick={() => setAdjusting(true)} data-testid="account-detail-adjust">
+                <Scale className="h-4 w-4" aria-hidden="true" />Corrigir saldo
+              </Button>
+            </div>
+
             <Link to={`/transacoes?aba=caixa&account_id=${encodeURIComponent(account.id)}`} onClick={() => onOpenChange(false)} className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full justify-between rounded-2xl")} data-testid="account-detail-cashflow">
               <span className="flex items-center gap-2"><ChartNoAxesCombined className="h-4 w-4" aria-hidden="true" />Caixa desta conta</span><ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Link>
@@ -152,6 +168,8 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
           </Button>
         </DialogFooter>
       </DialogContent>
+      <AdjustBalanceDialog open={adjusting} onOpenChange={setAdjusting} account={detail?.account ?? account}
+        suggested={detail?.account.balance ?? account.balance} />
     </Dialog>
   );
 }

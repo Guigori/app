@@ -129,7 +129,7 @@ function overLimits(r: Reading, ctx: Ctx): string[] {
   const over = r.chart.items.filter((i) => i.limit > 0 && i.value > i.limit).sort((a, b) => (b.value - b.limit) - (a.value - a.limit)).slice(0, 2);
   return over.map((i) => {
     const key = norm(i.label);
-    const top = ctx.tx.filter((t) => t.type === "despesa" && !t.invoice_payment && norm(t.category_name ?? "") === key).sort((a, b) => (b.adjusted_value ?? b.value) - (a.adjusted_value ?? a.value)).slice(0, 3);
+    const top = ctx.tx.filter((t) => t.type === "despesa" && !(t.invoice_payment || t.balance_adjustment) && norm(t.category_name ?? "") === key).sort((a, b) => (b.adjusted_value ?? b.value) - (a.adjusted_value ?? a.value)).slice(0, 3);
     const list = top.map((t) => `${t.name} (${ctx.money(t.adjusted_value ?? t.value)}, ${t.date.slice(8, 10)}/${t.date.slice(5, 7)})`).join(", ");
     return `${i.label} passou **${ctx.money(i.value - i.limit)}** do limite (${ctx.money(i.value)} de ${ctx.money(i.limit)})${list ? `. O que mais pesou: ${list}` : ""}`;
   });

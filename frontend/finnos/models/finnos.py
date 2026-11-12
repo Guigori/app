@@ -36,6 +36,8 @@ class AccountOut(BaseModel):
     is_default: bool = False
     # Cheque especial: how far below zero a confirmed payment/transfer may go.
     overdraft_limit: Optional[Money] = None
+    # Last statement date that closed with the FINNOS balance.
+    reconciled_until: Optional[str] = None
     balance: Money = 0.0
     total_income: Money = 0.0
     total_expense: Money = 0.0

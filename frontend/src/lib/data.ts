@@ -51,6 +51,8 @@ import {
   localPayInvoice,
   localUndoInvoicePayment,
   localReverseTransfer,
+  localCreateReconciliation, localListReconciliations, localGetReconciliation, localResolveReconciliation,
+  localUndoReconciliationEvent, localCompleteReconciliation, localAdjustBalance,
   localCreditInvoice,
   localBankRefund,
   localSubscriptions,
@@ -62,6 +64,7 @@ import {
   type LocalTxFilters,
 } from "@/lib/local/engine";
 import type {
+  Reconciliation, ReconciliationInput, ReconResolveInput, BalanceAdjustment, BalanceAdjustmentInput,
   ConfirmAllResult,
   PendingCaptureConfirm,
   PendingCaptures,
@@ -833,6 +836,36 @@ export async function fetchInvoice(cardId: string, cycle?: string): Promise<Invo
 export async function payInvoice(cardId: string, input: PayInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
   if (isLocalMode()) return localPayInvoice(cardId, input);
   return apiPost<Invoice>(`/cards/${cardId}/pay`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+
+// --- Conferência da conta com o extrato (etapa 3) ---
+export async function createReconciliation(accountId: string, input: ReconciliationInput, operationId = crypto.randomUUID()): Promise<Reconciliation> {
+  if (isLocalMode()) return localCreateReconciliation(accountId, input);
+  return apiPost<Reconciliation>(`/accounts/${encodeURIComponent(accountId)}/reconciliations`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+export async function fetchAccountReconciliations(accountId: string): Promise<Reconciliation[]> {
+  if (isLocalMode()) return localListReconciliations(accountId);
+  return apiGet<Reconciliation[]>(`/accounts/${encodeURIComponent(accountId)}/reconciliations`);
+}
+export async function fetchReconciliation(id: string): Promise<Reconciliation> {
+  if (isLocalMode()) return localGetReconciliation(id);
+  return apiGet<Reconciliation>(`/reconciliations/${encodeURIComponent(id)}`);
+}
+export async function resolveReconciliation(id: string, input: ReconResolveInput, operationId = crypto.randomUUID()): Promise<Reconciliation> {
+  if (isLocalMode()) return localResolveReconciliation(id, input);
+  return apiPost<Reconciliation>(`/reconciliations/${encodeURIComponent(id)}/resolve`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+export async function undoReconciliationEvent(id: string, eventId: string, operationId = crypto.randomUUID()): Promise<Reconciliation> {
+  if (isLocalMode()) return localUndoReconciliationEvent(id, eventId);
+  return apiPost<Reconciliation>(`/reconciliations/${encodeURIComponent(id)}/events/${encodeURIComponent(eventId)}/undo`, {}, { "X-FINNOS-Operation-ID": operationId });
+}
+export async function completeReconciliation(id: string): Promise<Reconciliation> {
+  if (isLocalMode()) return localCompleteReconciliation(id);
+  return apiPost<Reconciliation>(`/reconciliations/${encodeURIComponent(id)}/complete`, {});
+}
+export async function adjustAccountBalance(accountId: string, input: BalanceAdjustmentInput, operationId = crypto.randomUUID()): Promise<BalanceAdjustment> {
+  if (isLocalMode()) return localAdjustBalance(accountId, input);
+  return apiPost<BalanceAdjustment>(`/accounts/${encodeURIComponent(accountId)}/adjustments`, input, { "X-FINNOS-Operation-ID": operationId });
 }
 
 /** Undo a transfer with an inverse transfer linked to it; the original stays in the history. */
