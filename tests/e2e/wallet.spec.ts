@@ -119,3 +119,42 @@ test("conferência: a statement line is registered from the register and the acc
   await page.getByTestId("recon-complete").click();
   await expect(page.getByTestId("recon-done")).toContainText("conferida até");
 });
+
+test("benefit card: two benefits with separate balances, chosen at registration, split when one runs short", async ({ page }) => {
+  await page.goto("/contas");
+  await page.getByTestId("accounts-empty-create-button").click();
+  const form = page.getByTestId("account-form");
+  await form.getByTestId("account-name-input").fill("Caju");
+  await form.getByTestId("account-type-select").click();
+  await page.getByRole("option", { name: "Benefício" }).click();
+  await form.locator("#wallet-institution-name").fill("Caju Benefícios");
+  await form.getByTestId("wallet-name-0").fill("Refeição");
+  await form.getByTestId("wallet-initial-0").fill("100");
+  await form.getByTestId("wallet-add").click();
+  await form.getByTestId("wallet-name-1").fill("Mercado");
+  await form.getByTestId("wallet-initial-1").fill("50");
+  await form.getByTestId("account-submit-button").click();
+  await expect(page.getByTestId("wallet-balance")).toContainText("150,00");
+
+  await page.goto("/registro-inteligente");
+  await expect(page.getByTestId("quick-entry")).toBeVisible();
+  const wallets = page.getByTestId("quick-entry-wallets");
+  await expect(wallets.getByRole("radio", { checked: true })).toContainText("Refeição");
+  await wallets.getByRole("radio", { name: /Mercado/ }).click();
+  for (const key of ["8", "0"]) await page.keyboard.press(key);
+  await page.getByRole("textbox", { name: "Nome" }).fill("Feira");
+  await page.getByRole("radiogroup", { name: "Categoria" }).getByRole("radio").nth(1).click();
+  await page.getByTestId("quick-entry-save").click();
+  const split = page.getByTestId("quick-entry-benefit-split");
+  await expect(split).toContainText("Mercado tem R$ 50,00");
+  await split.getByRole("button", { name: "Resto em Refeição" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Salvo" })).toBeVisible();
+
+  await page.goto("/contas");
+  await page.locator("[data-testid^=wallet-account-]").first().click();
+  const list = page.getByTestId("account-detail-wallets");
+  await expect(list).toContainText("Refeição");
+  await expect(list.locator("li").filter({ hasText: "Refeição" })).toContainText("70,00");
+  await expect(list.locator("li").filter({ hasText: "Mercado" })).toContainText("0,00");
+  await expect(page.getByTestId("account-detail-balance")).toContainText("70,00");
+});

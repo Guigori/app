@@ -70,6 +70,9 @@ def enrich_transaction(
         invoice_refund=doc.get("invoice_refund", False),
         reversal_of=doc.get("reversal_of"),
         reversed_by=doc.get("reversed_by"),
+        wallet_id=doc.get("wallet_id"),
+        to_wallet_id=doc.get("to_wallet_id"),
+        benefit_recharge=bool(doc.get("benefit_recharge")),
         id=doc["id"],
         name=doc["name"],
         value=D(doc["value"]),
@@ -122,7 +125,9 @@ async def _validate(user_id: str, payload: TransactionIn) -> None:
     if payload.type == "transferencia":
         if payload.card_id or payload.installment:
             raise HTTPException(400, "Transferência não pode ter cartão ou parcelas.")
-        if not payload.to_account_id or payload.to_account_id == payload.account_id:
+        same_card_move = (payload.to_account_id == payload.account_id and payload.wallet_id
+                          and payload.to_wallet_id and payload.wallet_id != payload.to_wallet_id)
+        if not payload.to_account_id or (payload.to_account_id == payload.account_id and not same_card_move):
             raise HTTPException(
                 status_code=400,
                 detail="Escolha contas diferentes para a transferência.",
@@ -191,6 +196,9 @@ def _document(user_id: str, payload: TransactionIn) -> dict:
         "notes": payload.notes,
         "origin": (payload.origin or "").strip() or None,
         "notify_enabled": payload.notify_enabled,
+        # Benefit cards (etapa 5): which of its benefits pays; the default one when absent.
+        "wallet_id": payload.wallet_id,
+        "to_wallet_id": payload.to_wallet_id if payload.type == "transferencia" else None,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }

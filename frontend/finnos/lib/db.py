@@ -34,6 +34,7 @@ MONEY_FIELDS = {
     "monthly_budget",
     "monthly_goal",
     "limit",
+    "monthly_amount",
     "amount", "planned", "expected_income", "target", "saved", "contribution",
 }
 
@@ -258,6 +259,49 @@ def _check_transfer_funds(db, uid, doc, transaction, original_tx, today, allow_o
     ensure_funds(balance, cents(doc["value"]), account, allow_overdraft=allow_overdraft)
 
 
+_WALLET_KEYS = ("value", "account_id", "wallet_id", "to_account_id", "to_wallet_id", "status", "date", "type",
+                "installment", "total_installments")
+
+
+def _check_benefit_wallet(db, uid, doc, transaction, original_tx, today):
+    """Benefit cards (etapa 5): the wallet must belong to the card and, unless it
+    may go negative, a paid expense or move cannot spend more than it holds."""
+    if doc.get("card_id"):
+        doc["wallet_id"] = doc["to_wallet_id"] = None  # a credit card purchase does not touch a benefit
+        return
+    account_ids = {doc.get("account_id"), doc.get("to_account_id")} - {None}
+    accounts = {}
+    for account_id in account_ids:
+        snapshot = root(db, uid).collection("accounts").document(resource_id(account_id)).get(transaction=transaction)
+        if snapshot.exists:
+            accounts[account_id] = dict(decode(snapshot.to_dict()), id=account_id)
+    source = accounts.get(doc.get("account_id")) or {}
+    target = accounts.get(doc.get("to_account_id")) or {}
+    from finnos.lib import benefits
+
+    for side, account, field in (("source", source, "wallet_id"), ("target", target, "to_wallet_id")):
+        ids = {w["id"] for w in account.get("wallets") or []}
+        if doc.get(field) and doc[field] not in ids:
+            raise HTTPException(422, "Esse benefício não pertence ao cartão escolhido.")
+        if ids and not doc.get(field) and (side == "source" or doc.get("type") == "transferencia"):
+            doc[field] = benefits.default_wallet_id(account)
+    if not source.get("wallets") or doc.get("card_id") or doc.get("status") != "pago" or str(doc.get("date", "")) > today:
+        return
+    if doc.get("type") not in {"despesa", "transferencia"} or doc.get("benefit_recharge"):
+        return
+    if original_tx is not None and all(original_tx.get(k) == doc.get(k) for k in _WALLET_KEYS):
+        return  # renaming is not a new movement
+    wallet = next(w for w in source["wallets"] if w["id"] == doc["wallet_id"])
+    from finnos.lib.money import cents
+    from finnos.lib.stats import balance_effects
+
+    movements = account_movement_rows(db, uid, source["id"], transaction)
+    balance = benefits.wallet_balances(source, movements, today, exclude_id=(original_tx or {}).get("id"))[wallet["id"]]
+    spent = -sum(cents(a) for acc, a in balance_effects({**doc, "to_account_id": None}, today)
+                 if acc == source["id"])
+    benefits.check_wallet_funds(balance, spent, wallet)
+
+
 def validate_refs(db, uid, name, doc, transaction, original_tx=None):
     from finnos.lib.institutions import institution_key
     fields = []
@@ -288,6 +332,7 @@ def validate_refs(db, uid, name, doc, transaction, original_tx=None):
         if original_tx is not None and (original_tx.get("reversed_by") or original_tx.get("reversal_of")):
             raise HTTPException(409, "Transferência desfeita fica no histórico como está; não pode ser editada nem excluída.")
         from finnos.lib.dates import today_iso
+        _check_benefit_wallet(db, uid, doc, transaction, original_tx, today_iso())
         _check_transfer_funds(db, uid, doc, transaction, original_tx, today_iso(), allow_overdraft)
         from finnos.lib.invoices import purchase_write_conflict
         cards = rows(db, uid, "cards", transaction)

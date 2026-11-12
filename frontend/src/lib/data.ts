@@ -52,7 +52,7 @@ import {
   localUndoInvoicePayment,
   localReverseTransfer,
   localCreateReconciliation, localListReconciliations, localGetReconciliation, localResolveReconciliation,
-  localUndoReconciliationEvent, localCompleteReconciliation, localAdjustBalance,
+  localUndoReconciliationEvent, localCompleteReconciliation, localAdjustBalance, localRechargeBenefits,
   localCreateCardReconciliation, localListCardReconciliations,
   localCreditInvoice,
   localBankRefund,
@@ -875,6 +875,12 @@ export async function fetchCardReconciliations(cardId: string): Promise<Reconcil
 export async function adjustAccountBalance(accountId: string, input: BalanceAdjustmentInput, operationId = crypto.randomUUID()): Promise<BalanceAdjustment> {
   if (isLocalMode()) return localAdjustBalance(accountId, input);
   return apiPost<BalanceAdjustment>(`/accounts/${encodeURIComponent(accountId)}/adjustments`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+
+/** Benefit cards: credit the monthly recharges that are due (idempotent; safe on every app open). */
+export async function rechargeBenefits(): Promise<{ created: { id: string }[] }> {
+  if (isLocalMode()) return { created: localRechargeBenefits() };
+  return apiPost<{ created: { id: string }[] }>("/accounts/benefits/recharge", {});
 }
 
 /** Undo a transfer with an inverse transfer linked to it; the original stays in the history. */

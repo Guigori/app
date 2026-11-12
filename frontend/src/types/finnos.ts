@@ -65,6 +65,8 @@ export interface Account {
   overdraft_limit?: number | null;
   /** Last statement date that closed with the FINNOS balance (conferência). */
   reconciled_until?: string | null;
+  /** Benefit cards (etapa 5): up to 8 benefits, each with its own balance. */
+  wallets?: BenefitWallet[];
   balance: number;
   total_income: number;
   total_expense: number;
@@ -84,6 +86,31 @@ export interface AccountInput {
   is_default?: boolean;
   /** Omit to keep the current limit; 0 removes it. */
   overdraft_limit?: number | null;
+  /** Omit to keep the stored benefits. */
+  wallets?: BenefitWalletInput[];
+}
+
+export interface BenefitWalletInput {
+  id?: string | null;
+  name: string;
+  monthly_amount: number;
+  /** Recharge day, 1–31; 31 falls on the last day of short months. */
+  day: number;
+  allow_negative: boolean;
+  is_default: boolean;
+  initial_balance: number;
+}
+
+export interface BenefitWallet extends BenefitWalletInput {
+  id: string;
+  /** Recharges start in the month the benefit was created. */
+  start?: string | null;
+  balance: number;
+  next_recharge?: string | null;
+  /** What can be spent per day until the next recharge. */
+  daily_allowance: number;
+  /** At the last 30 days' pace, the balance ends before the next recharge on this day. */
+  runs_out_on?: string | null;
 }
 
 export interface AccountDetail {
@@ -194,6 +221,11 @@ export interface Transaction {
   /** Transfer undo: the inverse transfer points to the original and back. */
   reversal_of?: string | null;
   reversed_by?: string | null;
+  /** Benefit cards: which benefit paid (and, for a move, which received). */
+  wallet_id?: string | null;
+  to_wallet_id?: string | null;
+  benefit_recharge?: boolean;
+  recharge_competence?: string | null;
   invoice_refund?: boolean;
   version?: number;
   id: string;
@@ -254,6 +286,9 @@ export interface TransactionInput {
   notify_enabled?: boolean;
   /** The person confirmed using the cheque especial for this transfer. */
   allow_overdraft?: boolean;
+  /** Benefit cards: the benefit that pays; the default one when absent. */
+  wallet_id?: string | null;
+  to_wallet_id?: string | null;
 }
 
 export interface CategorySlice {

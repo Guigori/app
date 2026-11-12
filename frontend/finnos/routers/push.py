@@ -207,6 +207,12 @@ async def dispatch_push(
             continue
         token = active_uid.set(uid)
         try:
+            if daily:
+                from finnos.lib.benefits import run_recharges
+                try:
+                    await run_in_threadpool(run_recharges, uid)
+                except Exception:  # a recharge failure must not stop the reminders
+                    failures += 1
             prefs = await db.notification_preferences.find_one({
                 "user_id": uid, "id": "prefs",
             })

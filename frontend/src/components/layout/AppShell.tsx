@@ -17,6 +17,8 @@ import { ConnectivityStatus } from "@/components/sync/ConnectivityStatus";
 import { StatementImportHost } from "@/components/import/StatementImportHost";
 import { InstallAppPrompt } from "@/components/layout/InstallAppPrompt";
 import { startPreferencesSync } from "@/lib/preferencesSync";
+import { rechargeBenefits } from "@/lib/data";
+import { queryClient } from "@/lib/queryClient";
 import { useTheme } from "next-themes";
 
 export function AppShell() {
@@ -32,6 +34,16 @@ export function AppShell() {
   const navigationType = useNavigationType();
   // Dock shortcuts, Início panel and the "+" default follow the account to every device.
   useEffect(() => startPreferencesSync(), []);
+  // Benefit recharges that came due (each one exists once, so running it again is harmless).
+  useEffect(() => {
+    const run = () => {
+      if (document.visibilityState !== "visible" || !navigator.onLine) return;
+      rechargeBenefits().then((r) => { if (r.created.length) void queryClient.invalidateQueries(); }).catch(() => {});
+    };
+    run();
+    document.addEventListener("visibilitychange", run);
+    return () => document.removeEventListener("visibilitychange", run);
+  }, []);
   // Light/dark follows the account too: tell the sync when it changes here, and apply it
   // when the account copy arrives (next-themes only reads its storage on start).
   const { theme, setTheme } = useTheme();

@@ -24,6 +24,7 @@ import { confirmBody, type CaptureChoice } from "@/lib/pendingCaptures";
 import { addTransactionPhoto, editRecurrence, settleTransaction, type RecurrenceEditScope, confirmPendingCapture, createTransaction, fetchTransactionById, updateTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
 import { getAccountPaymentMethods } from "@/lib/accountPaymentPreferences";
 import { addMonth, formatBRL, isISODate, todayISO } from "@/lib/format";
+import { benefitFundsIssue } from "@/lib/benefits";
 import { useBalanceHidden } from "@/lib/balance";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/shared/CategoryIcon";
@@ -114,6 +115,13 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [category, setCategory] = useState(() => (existing ?? template)?.category_id ?? capture?.choice.categoryId ?? "");
   const [account, setAccount] = useState(() => (existing ?? template)?.account_id ?? capture?.choice.accountId ?? "");
   const selectedAccount = accounts.find(a => a.id === account);
+  // Benefit card (etapa 5): the benefit that pays; empty = the card's default. Changing the account resets it.
+  const [wallet, setWallet] = useState(() => existing?.wallet_id ?? "");
+  const walletAccount = useRef(account);
+  useEffect(() => { if (walletAccount.current !== account) { walletAccount.current = account; setWallet(""); } }, [account]);
+  const benefitWallets = selectedAccount?.wallets ?? [];
+  const chosenWallet = wallet || benefitWallets.find(w => w.is_default)?.id || "";
+  const [benefitPrompt, setBenefitPrompt] = useState<{ message: string; available: number; input: TransactionInput } | null>(null);
   const [destination, setDestination] = useState(() => (existing ?? template)?.to_account_id ?? "");
   const [installments, setInstallments] = useState(1);
   const [date, setDate] = useState(() => existing?.date ?? capture?.item.date ?? todayISO());
@@ -193,17 +201,29 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     const edited = input.name !== capture.item.name || input.value !== capture.item.value || input.date !== capture.item.date || Boolean(input.origin);
     await queryClient.invalidateQueries({ queryKey: ["pending-captures"] });
     return edited ? updateTransaction(id, { ...input, installment: false, total_installments: null, current_installment: null }, "manual") : fetchTransactionById(id);
-  }, onSettled: () => { scopeRef.current = null; }, onSuccess: async (transaction) => { setSaveStatus("synced"); await refreshFinancialData(); finishSave(transaction); }, onError: async (error: Error) => { if (error.message.includes("FINNOS_OFFLINE_QUEUED")) { setSaveStatus("pending"); await refreshFinancialData(); finishSave(null); toast.info("Registro salvo neste dispositivo. Sincronização pendente."); return; } toast.error(error.message && !/^(HTTP\b|Failed to fetch|NetworkError)/i.test(error.message) ? `Não foi possível salvar: ${error.message}` : "Não foi possível salvar. O registro não foi confirmado; tente novamente."); } });
+  }, onSettled: () => { scopeRef.current = null; }, onSuccess: async (transaction) => { setSaveStatus("synced"); await refreshFinancialData(); finishSave(transaction); }, onError: async (error: Error, input) => { const benefit = benefitFundsIssue(error); if (benefit && !existing && !capture) { setBenefitPrompt({ message: benefit.message, available: benefit.available, input }); return; } if (error.message.includes("FINNOS_OFFLINE_QUEUED")) { setSaveStatus("pending"); await refreshFinancialData(); finishSave(null); toast.info("Registro salvo neste dispositivo. Sincronização pendente."); return; } toast.error(error.message && !/^(HTTP\b|Failed to fetch|NetworkError)/i.test(error.message) ? `Não foi possível salvar: ${error.message}` : "Não foi possível salvar. O registro não foi confirmado; tente novamente."); } });
   const save = () => {
     if (!canSave) return;
     // Saving an edit to a monthly series asks which months it applies to first.
     if (isSeries && !scopeRef.current) { setScopeOpen(true); return; }
     const amount = Number(value);
     if (!Number.isFinite(amount) || amount <= 0 || !account || !isISODate(date) || (kind !== "Transferência" && !category) || (kind === "Transferência" && (!destination || destination === account))) return;
-    const input: TransactionInput = { name: displayName, value: amount, type: kind === "Despesa" ? "despesa" : kind === "Receita" ? "receita" : "transferencia", status: date > todayISO() ? "agendado" : "pago", date, account_id: account, card_id: kind === "Despesa" ? selectedCardId : null, to_account_id: kind === "Transferência" ? destination : null, category_id: kind === "Transferência" ? null : category, fixed: recurring, recurrence: recurring ? "mensal" : null, installment: kind === "Despesa" && !!selectedCardId && installments > 1, total_installments: kind === "Despesa" && !!selectedCardId && installments > 1 ? installments : null, current_installment: kind === "Despesa" && !!selectedCardId && installments > 1 ? 1 : null, adjusted_value: null, attachment: null, notes: [note.trim(), payment && kind !== "Transferência" ? `Forma de pagamento: ${payment}` : "", project.trim() ? `Projeto: ${project.trim()}` : "", tags.trim() ? `Tags: ${tags.trim()}` : ""].filter(Boolean).join("\n") || null, origin: origin.trim() || null, notify_enabled: reminder };
+    const input: TransactionInput = { name: displayName, value: amount, type: kind === "Despesa" ? "despesa" : kind === "Receita" ? "receita" : "transferencia", status: date > todayISO() ? "agendado" : "pago", date, account_id: account, card_id: kind === "Despesa" ? selectedCardId : null, to_account_id: kind === "Transferência" ? destination : null, category_id: kind === "Transferência" ? null : category, fixed: recurring, recurrence: recurring ? "mensal" : null, installment: kind === "Despesa" && !!selectedCardId && installments > 1, total_installments: kind === "Despesa" && !!selectedCardId && installments > 1 ? installments : null, current_installment: kind === "Despesa" && !!selectedCardId && installments > 1 ? 1 : null, adjusted_value: null, attachment: null, notes: [note.trim(), payment && kind !== "Transferência" ? `Forma de pagamento: ${payment}` : "", project.trim() ? `Projeto: ${project.trim()}` : "", tags.trim() ? `Tags: ${tags.trim()}` : ""].filter(Boolean).join("\n") || null, origin: origin.trim() || null, notify_enabled: reminder, wallet_id: kind !== "Transferência" && !selectedCardId && benefitWallets.length ? chosenWallet || null : null };
+    setBenefitPrompt(null);
     saveMutation.mutate(input);
   };
   
+  // Not enough in the benefit: what it holds is paid from it and the rest from the chosen one.
+  const splitBenefit = async (rest: Partial<TransactionInput>) => {
+    const prompt = benefitPrompt; if (!prompt) return;
+    const first = Math.round(prompt.available * 100) / 100;
+    const second = Math.round((prompt.input.value - first) * 100) / 100;
+    setBenefitPrompt(null);
+    try {
+      if (first > 0) await createTransaction({ ...prompt.input, value: first }, "manual");
+      saveMutation.mutate({ ...prompt.input, value: second, ...rest });
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível dividir agora."); }
+  };
   useEffect(() => { if (categoriesQuery.isSuccess && category && !categories.some(c => c.id === category)) setCategory(""); }, [categories, category, categoriesQuery.isSuccess]);
   useEffect(() => { if (accountsQuery.isSuccess && account && !accounts.some(a => a.id === account)) setAccount(""); }, [accounts, account, accountsQuery.isSuccess]);
   // The default account comes first (changeable in the chip); without one, the oldest active.
@@ -535,6 +555,33 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         </button> : null}
         <button type="button" onClick={() => { setKeypadOpen(false); setDateOpen(true); }} className={cn("h-12 shrink-0 rounded-full bg-muted px-5 text-[15px] font-bold", kind === "Transferência" && "flex-1")} data-testid="quick-entry-date">{dateLabel}</button>
       </div>
+
+      {!selectedCard && kind !== "Transferência" && benefitWallets.length ? (
+        <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto [scrollbar-width:none]" role="radiogroup" aria-label="Benefício" data-testid="quick-entry-wallets">
+          {benefitWallets.map((w) => (
+            <button key={w.id} type="button" role="radio" aria-checked={chosenWallet === w.id} onClick={() => { setWallet(w.id); setBenefitPrompt(null); }}
+              data-testid={`quick-entry-wallet-${w.id}`}
+              className={cn("h-8 shrink-0 rounded-full px-3 text-[13px] font-semibold transition-colors", chosenWallet === w.id ? "bg-primary text-primary-foreground" : "bg-muted")}>
+              {w.name} <span className="font-normal opacity-80 tabular-nums">{formatBRL(w.balance)}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {benefitPrompt ? (
+        <div role="alert" className="shrink-0 space-y-2 rounded-2xl bg-amber-500/10 p-3 text-sm" data-testid="quick-entry-benefit-split">
+          <p>{benefitPrompt.message}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {benefitWallets.filter(w => w.id !== benefitPrompt.input.wallet_id && w.balance > 0).map(w => (
+              <button key={w.id} type="button" className="rounded-full bg-card px-3 py-1.5 text-xs font-semibold" data-testid={`quick-entry-split-wallet-${w.id}`}
+                onClick={() => void splitBenefit({ wallet_id: w.id })}>Resto em {w.name}</button>
+            ))}
+            {accounts.filter(a => a.type !== "beneficio" && a.active).map(a => (
+              <button key={a.id} type="button" className="rounded-full bg-card px-3 py-1.5 text-xs font-semibold" data-testid={`quick-entry-split-account-${a.id}`}
+                onClick={() => void splitBenefit({ account_id: a.id, wallet_id: null, card_id: null })}>Resto em {a.name}</button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {selectedCard && kind === "Despesa" && !existing ? (
         <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto [scrollbar-width:none]" role="radiogroup" aria-label="Parcelas" data-testid="quick-entry-installments">

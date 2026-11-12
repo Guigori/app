@@ -2,6 +2,7 @@
 // the browser. Keep the two in sync — a rule change belongs in both places.
 
 import { checkFunds } from "@/lib/funds";
+import { checkWalletFunds, defaultWalletId, dueRecharges, normalizeWallets, pace as walletPace, rechargeId, walletBalances, type StoredWallet } from "@/lib/benefits";
 import { matchLines, originKey, type MatchLine } from "@/lib/statementMatching";
 import { parseFinancialFile } from "@/lib/importFinancial";
 import { statementLinesToCsv } from "@/lib/pdfStatement";
@@ -188,6 +189,7 @@ function balanceEffects(tx: Transaction, today: string): [string, number][] {
   }
   if (tx.type === "receita") return [[tx.account_id, round2(v)]];
   if (tx.type === "despesa") return [[tx.account_id, round2(-v)]];
+  if (tx.to_account_id === tx.account_id) return []; // between two benefits of the same card
   const effects: [string, number][] = [[tx.account_id, round2(-v)]];
   if (tx.to_account_id && tx.to_account_id !== tx.account_id) effects.push([tx.to_account_id, round2(v)]);
   return effects;
@@ -217,6 +219,82 @@ function assertTransferFunds(db: LocalDb, tx: Transaction, allowOverdraft: boole
   const account = db.accounts.find(a => a.id === tx.account_id);
   if (!account) return;
   checkFunds(accountBalance(db, account.id, original?.id), tx.value, account, allowOverdraft);
+}
+
+const WALLET_KEYS = ["value", "account_id", "wallet_id", "to_account_id", "to_wallet_id", "status", "date", "type", "installment", "total_installments"] as const;
+
+const storedWallets = (account?: Account) => (account?.wallets ?? []) as unknown as StoredWallet[];
+
+/** Benefit cards (etapa 5): same rule as lib/db._check_benefit_wallet. */
+function assertBenefitWallet(db: LocalDb, tx: Transaction, original?: Transaction): void {
+  if (tx.card_id) { tx.wallet_id = null; tx.to_wallet_id = null; return; }
+  const source = db.accounts.find((a) => a.id === tx.account_id);
+  const target = tx.to_account_id ? db.accounts.find((a) => a.id === tx.to_account_id) : undefined;
+  for (const [account, field, applies] of [[source, "wallet_id", true], [target, "to_wallet_id", tx.type === "transferencia"]] as const) {
+    const ids = new Set(storedWallets(account).map((w) => w.id));
+    if (tx[field] && !ids.has(tx[field]!)) throw new Error("Esse benefício não pertence ao cartão escolhido.");
+    if (ids.size && !tx[field] && applies) tx[field] = defaultWalletId({ wallets: storedWallets(account) });
+  }
+  if (!source || !storedWallets(source).length || tx.status !== "pago" || tx.date > todayISO()) return;
+  if ((tx.type !== "despesa" && tx.type !== "transferencia") || tx.benefit_recharge) return;
+  if (original && WALLET_KEYS.every((k) => original[k] === tx[k])) return;
+  const wallet = storedWallets(source).find((w) => w.id === tx.wallet_id)!;
+  const balances = walletBalances({ id: source.id, wallets: storedWallets(source) }, db.transactions, todayISO(), balanceEffects, original?.id);
+  const spent = -balanceEffects({ ...tx, to_account_id: null }, todayISO()).reduce((sum, [, amount]) => sum + amount, 0);
+  checkWalletFunds(balances.get(wallet.id) ?? 0, round2(spent), wallet);
+}
+
+function walletViews(db: LocalDb, account: Account) {
+  const wallets = storedWallets(account);
+  if (!wallets.length) return undefined;
+  const today = todayISO();
+  const balances = walletBalances({ id: account.id, wallets }, db.transactions, today, balanceEffects);
+  const fallback = defaultWalletId({ wallets });
+  return wallets.map((w) => ({ ...w, balance: (balances.get(w.id) ?? 0) / 100,
+    ...walletPace(w, balances.get(w.id) ?? 0, db.transactions, account.id, fallback, today) }));
+}
+
+/** Benefit cards: credit each monthly amount on its day, once per benefit and month. */
+export function localRechargeBenefits(today = todayISO()): Transaction[] {
+  const db = readDb();
+  const existing = new Set(db.transactions.map((t) => t.id));
+  const created: Transaction[] = [];
+  for (const account of db.accounts) {
+    if (account.type !== "beneficio" || account.active === false) continue;
+    for (const { wallet, competence, date } of dueRecharges({ wallets: storedWallets(account) }, today)) {
+      const id = rechargeId(account.id, wallet.id, competence);
+      if (existing.has(id)) continue;
+      const tx: Transaction = {
+        id, name: `Recarga ${wallet.name}`, value: wallet.monthly_amount, type: "receita", status: "pago", date,
+        account_id: account.id, account_name: "", card_id: null, card_name: null, to_account_id: null, to_account_name: null,
+        category_id: null, category_name: null, category_color: null, category_icon: null, fixed: false, recurrence: null,
+        installment: false, total_installments: null, current_installment: null, installment_value: null, adjusted_value: null,
+        attachment: null, notes: `Recarga de ${competence.slice(5)}/${competence.slice(0, 4)} do benefício ${wallet.name}.`,
+        wallet_id: wallet.id, benefit_recharge: true, recharge_competence: competence, created_at: new Date().toISOString(),
+      };
+      existing.add(id);
+      db.transactions.push(tx);
+      localAudit(db, "transactions", "created", null, tx);
+      created.push(tx);
+    }
+  }
+  if (created.length) writeDb(db);
+  return created;
+}
+
+function withWallets(db: LocalDb, input: AccountInput, existing?: Account): Partial<Account> {
+  if (input.wallets === undefined) return {};
+  if (input.type !== "beneficio" && input.wallets.length) throw new Error("Só cartão de benefício tem sub-benefícios.");
+  const inUse = new Set<string>();
+  if (existing) {
+    const fallback = defaultWalletId({ wallets: storedWallets(existing) });
+    for (const t of db.transactions) {
+      if (t.account_id !== existing.id && t.to_account_id !== existing.id) continue;
+      for (const id of [t.wallet_id ?? fallback, t.to_wallet_id]) if (id) inUse.add(id);
+    }
+  }
+  const wallets = normalizeWallets(input.wallets, storedWallets(existing), todayISO(), inUse, newId);
+  return { wallets: wallets as unknown as Account["wallets"], ...(wallets.length ? { initial_balance: round2(wallets.reduce((s, w) => s + w.initial_balance, 0)) } : {}) };
 }
 
 function enrich(db: LocalDb, tx: Transaction): Transaction {
@@ -253,6 +331,7 @@ function enrichedAccounts(db: LocalDb): Account[] {
     institution: institutions.get(a.institution_id ?? "")?.name ?? a.institution,
     color: institutions.get(a.institution_id ?? "")?.color ?? a.color,
     is_default: defaults.has(a.id),
+    wallets: walletViews(db, a),
     balance: round2(balance.get(a.id) ?? 0),
     total_income: round2(Math.max(income.get(a.id) ?? 0, 0)),
     total_expense: round2(Math.max(expense.get(a.id) ?? 0, 0)),
@@ -369,8 +448,10 @@ export function localCreateAccount(raw: AccountInput): Account {
   const input = localResolveInstitution(raw, false);
   const db = readDb();
   if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
+  const { wallets: _wallets, ...base } = input;
   const account: Account = {
-    ...input,
+    ...base,
+    ...withWallets(db, input),
     id: newId(),
     balance: input.initial_balance,
     total_income: 0,
@@ -389,8 +470,9 @@ export function localUpdateAccount(id: string, raw: AccountInput): Account {
   const index = db.accounts.findIndex((a) => a.id === id);
   if (index < 0) throw new Error("Conta não encontrada.");
   if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
-  const { is_default, ...fields } = input;
-  db.accounts[index] = { ...db.accounts[index], ...fields, ...(is_default === undefined ? {} : { is_default }) };
+  const { is_default, wallets: _wallets, ...fields } = input;
+  const wallets = withWallets(db, input, db.accounts[index]);
+  db.accounts[index] = { ...db.accounts[index], ...fields, ...wallets, ...(is_default === undefined ? {} : { is_default }) };
   if (is_default) db.accounts = applyDefault(db.accounts, id, (a) => accountScope(a.type) === accountScope(input.type));
   writeDb(db);
   return enrichedAccounts(db).find((a) => a.id === id)!;
@@ -494,7 +576,8 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
     throw new Error("Conta inválida: selecione uma conta cadastrada.");
   }
   if (input.type === "transferencia") {
-    if (!input.to_account_id || input.to_account_id === input.account_id) {
+    const sameCardMove = input.to_account_id === input.account_id && input.wallet_id && input.to_wallet_id && input.wallet_id !== input.to_wallet_id;
+    if (!input.to_account_id || (input.to_account_id === input.account_id && !sameCardMove)) {
       throw new Error("Escolha contas diferentes para a transferência.");
     }
   }
@@ -537,6 +620,8 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
     notes: input.notes,
     origin: input.origin?.trim() || null,
     notify_enabled: input.notify_enabled ?? true,
+    wallet_id: input.wallet_id ?? null,
+    to_wallet_id: input.type === "transferencia" ? input.to_wallet_id ?? null : null,
     created_at: existing?.created_at ?? new Date().toISOString(),
   };
 }
@@ -544,6 +629,7 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
 export function localCreateTransaction(input: TransactionInput): Transaction {
   const db = readDb();
   const tx = buildTransaction(db, input);
+  assertBenefitWallet(db, tx);
   assertTransferFunds(db, tx, Boolean(input.allow_overdraft));
   db.transactions.push(tx);
   localAudit(db, "transactions", "created", null, tx);
@@ -576,6 +662,7 @@ export function localUpdateTransaction(id: string, input: TransactionInput): Tra
   assertPurchaseNotSettled(db, db.transactions[index]);
   assertNotReversed(db.transactions[index]);
   const tx = buildTransaction(db, input, db.transactions[index]);
+  assertBenefitWallet(db, tx, db.transactions[index]);
   assertTransferFunds(db, tx, Boolean(input.allow_overdraft), db.transactions[index]);
   const before = { ...db.transactions[index] };
   db.transactions[index] = tx;
@@ -826,7 +913,7 @@ export function localLoadDemo(): void {
   const m0 = currentMonth();
   const m1 = addMonth(m0, -1);
 
-  db.accounts = DEMO_ACCOUNTS.map((a) => ({
+  db.accounts = DEMO_ACCOUNTS.map(({ wallets: _wallets, ...a }) => ({
     ...a,
     id: newId(),
     balance: a.initial_balance,

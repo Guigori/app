@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { createAccount, fetchInstitutions, updateAccount } from "@/lib/data";
 import { resolveInstitutionChoice, type InstitutionChoice } from "@/lib/institutionSelection";
 import { InstitutionPicker } from "@/components/accounts/InstitutionPicker";
+import { BenefitWalletsEditor, emptyWallet, type WalletDraft } from "@/components/accounts/BenefitWalletsEditor";
 import { getApiErrorMessage } from "@/lib/errors";
 import { parseAmount, ACCOUNT_TYPE_LABEL } from "@/lib/format";
 import type { Account, AccountInput, AccountType } from "@/types/finnos";
@@ -60,6 +61,7 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
   const [initialRaw, setInitialRaw] = useState("0");
   const [overdraftRaw, setOverdraftRaw] = useState("");
   const [active, setActive] = useState(true);
+  const [wallets, setWallets] = useState<WalletDraft[]>([emptyWallet(0)]);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -75,7 +77,12 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
       setOverdraftRaw(account.overdraft_limit ? String(account.overdraft_limit) : "");
       setActive(account.active);
       setIsDefault(Boolean(account.is_default));
+      setWallets(account.wallets?.length
+        ? account.wallets.map((w) => ({ id: w.id, name: w.name, monthlyRaw: String(w.monthly_amount).replace(".", ","),
+          dayRaw: String(w.day), initialRaw: String(w.initial_balance ?? 0).replace(".", ","), allow_negative: w.allow_negative, is_default: w.is_default }))
+        : [{ ...emptyWallet(0), name: "Benefício", initialRaw: String(account.initial_balance).replace(".", ",") }]);
     } else {
+      setWallets([emptyWallet(0)]);
       setName(initialName ?? "");
       setOverdraftRaw("");
       setInstitution("");
@@ -128,7 +135,23 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
 
   const submit = () => {
     setFormError(null);
-    const initial = parseAmount(initialRaw);
+    let walletPayload: AccountInput["wallets"];
+    if (type === "beneficio") {
+      walletPayload = [];
+      for (const w of wallets) {
+        const label = w.name.trim() || "benefício";
+        const monthly = w.monthlyRaw.trim() ? parseAmount(w.monthlyRaw) : 0;
+        const start = w.initialRaw.trim() ? parseAmount(w.initialRaw) : 0;
+        const day = Number(w.dayRaw);
+        if (!w.name.trim()) return setFormError("Dê um nome a cada benefício.");
+        if (monthly === null || monthly < 0) return setFormError(`Informe o valor por mês de ${label}.`);
+        if (start === null) return setFormError(`Informe o saldo de hoje de ${label}.`);
+        if (!(day >= 1 && day <= 31)) return setFormError(`O dia da recarga de ${label} precisa ser de 1 a 31.`);
+        walletPayload.push({ id: w.id ?? null, name: w.name.trim(), monthly_amount: monthly, day, initial_balance: start,
+          allow_negative: w.allow_negative, is_default: w.is_default });
+      }
+    }
+    const initial = type === "beneficio" ? (walletPayload ?? []).reduce((sum, w) => sum + w.initial_balance, 0) : parseAmount(initialRaw);
     if (!name.trim()) return setFormError("Dê um nome à conta.");
     if (type !== "carteira" && institutionChoice === "new" && institution.trim().length < 2 && !account)
       return setFormError(type === "beneficio" ? "Escolha a empresa do benefício." : "Escolha o banco da conta.");
@@ -147,6 +170,7 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
       // 0 removes the limit; only bank accounts have cheque especial.
       overdraft_limit: type === "corrente" || type === "digital" ? overdraft : 0,
       active,
+      ...(walletPayload ? { wallets: walletPayload } : {}),
       // Only send the flag when it is turned on or changed, so editing keeps the current default.
       ...(isDefault || account?.is_default ? { is_default: isDefault } : {}),
     });
@@ -194,11 +218,11 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            {type !== "beneficio" ? <div className="space-y-2">
               <Label htmlFor="account-initial">Saldo inicial (R$)</Label>
               <Input id="account-initial" inputMode="decimal" value={initialRaw} onChange={(e) => setInitialRaw(e.target.value)} data-testid="account-initial-input" />
               <p className="text-xs text-muted-foreground">Use um valor negativo se a conta já estiver no cheque especial (ex.: -500,00).</p>
-            </div>
+            </div> : null}
             {type === "corrente" || type === "digital" ? (
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="account-overdraft">Limite do cheque especial (R$)</Label>
@@ -208,6 +232,7 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
               </div>
             ) : null}
           </div>
+          {type === "beneficio" ? <BenefitWalletsEditor wallets={wallets} onChange={setWallets} /> : null}
           <div className="flex items-start gap-3 rounded-2xl bg-muted/50 p-3">
             <Checkbox id="account-default" checked={isDefault} onCheckedChange={(checked) => setIsDefault(checked === true)} data-testid="account-default-checkbox" />
             <Label htmlFor="account-default" className="flex flex-col items-start gap-0.5 font-normal">

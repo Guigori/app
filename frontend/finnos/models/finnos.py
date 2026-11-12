@@ -38,6 +38,8 @@ class AccountOut(BaseModel):
     overdraft_limit: Optional[Money] = None
     # Last statement date that closed with the FINNOS balance.
     reconciled_until: Optional[str] = None
+    # Benefit cards (etapa 5): up to 8 benefits with their own balance.
+    wallets: List["BenefitWalletOut"] = Field(default_factory=list)
     balance: Money = 0.0
     total_income: Money = 0.0
     total_expense: Money = 0.0
@@ -56,6 +58,33 @@ class AccountIn(BaseModel):
     # None keeps the current flag (older clients do not send it).
     is_default: Optional[bool] = None
     overdraft_limit: Optional[Money] = Field(default=None, ge=0)
+    # None keeps the stored benefits (older clients do not send them).
+    wallets: Optional[List["BenefitWalletIn"]] = Field(default=None, max_length=8)
+
+
+class BenefitWalletIn(BaseModel):
+    id: Optional[str] = Field(default=None, max_length=40)
+    name: str = Field(min_length=1, max_length=40)
+    monthly_amount: Money = Field(default=0.0, ge=0)
+    day: int = Field(default=1, ge=1, le=31)
+    allow_negative: bool = False
+    is_default: bool = False
+    initial_balance: Money = 0.0
+
+
+class BenefitWalletOut(BaseModel):
+    id: str
+    name: str
+    monthly_amount: Money = 0.0
+    day: int = 1
+    allow_negative: bool = False
+    is_default: bool = False
+    start: Optional[str] = None
+    initial_balance: Money = 0.0
+    balance: Money = 0.0
+    next_recharge: Optional[str] = None
+    daily_allowance: Money = 0.0
+    runs_out_on: Optional[str] = None
 
 
 class AccountDetailOut(BaseModel):
@@ -96,6 +125,10 @@ class TransactionOut(BaseModel):
     # Transfer undo (etapa 2): the inverse points to the original and back.
     reversal_of: Optional[str] = None
     reversed_by: Optional[str] = None
+    # Benefit cards (etapa 5).
+    wallet_id: Optional[str] = None
+    to_wallet_id: Optional[str] = None
+    benefit_recharge: bool = False
     version: int = 1
     id: str
     name: str
@@ -156,6 +189,9 @@ class TransactionIn(BaseModel):
     notify_enabled: bool = True
     # The person confirmed using the cheque especial for this transfer.
     allow_overdraft: bool = False
+    # Benefit cards: which benefit pays (source) and, for a move, which receives.
+    wallet_id: Optional[str] = Field(default=None, max_length=40)
+    to_wallet_id: Optional[str] = Field(default=None, max_length=40)
 
 
 # --- Dashboard --------------------------------------------------------------

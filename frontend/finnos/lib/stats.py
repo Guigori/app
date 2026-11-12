@@ -92,6 +92,8 @@ def balance_effects(tx: dict, today: str) -> list[tuple[str, float]]:
         return [(tx["account_id"], quantize_brl(v))]
     if tx["type"] == "despesa":
         return [(tx["account_id"], quantize_brl(-v))]
+    if tx.get("to_account_id") == tx["account_id"]:
+        return []  # between two benefits of the same card: the account total does not move
     effects = [(tx["account_id"], quantize_brl(-v))]
     if tx.get("to_account_id") and tx["to_account_id"] != tx["account_id"]:
         effects.append((tx["to_account_id"], quantize_brl(v)))

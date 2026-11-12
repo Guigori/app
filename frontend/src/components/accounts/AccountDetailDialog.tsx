@@ -100,6 +100,23 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
               </div>
             </div>
 
+            {detail.account.wallets?.length ? (
+              <ul className="space-y-2" data-testid="account-detail-wallets">
+                {detail.account.wallets.map((w) => (
+                  <li key={w.id} className="rounded-xl border p-3" data-testid={`account-wallet-${w.id}`}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-semibold">{w.name}{w.is_default ? <span className="ml-1 text-xs font-normal text-muted-foreground">padrão</span> : null}</span>
+                      <span className="font-heading font-bold tabular-nums">{hidden ? formatHiddenBRL() : formatBRL(w.balance)}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {w.monthly_amount > 0 && w.next_recharge ? `Recarga de ${formatBRL(w.monthly_amount)} em ${formatDate(w.next_recharge)}. ` : ""}
+                      {w.balance > 0 ? `Dá ${formatBRL(w.daily_allowance)} por dia até lá.` : "Sem saldo."}
+                      {w.runs_out_on ? ` No ritmo atual acaba em ${formatDate(w.runs_out_on)}.` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {account.reconciled_until ? (
               <p className="text-xs text-muted-foreground" data-testid="account-detail-reconciled">Conferida com o extrato até {formatDate(account.reconciled_until)}</p>
             ) : null}
