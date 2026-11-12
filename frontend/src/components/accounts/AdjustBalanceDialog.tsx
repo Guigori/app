@@ -11,9 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /** "Só corrigir o saldo": an auditable adjustment with a required reason (etapa 3). */
-export function AdjustBalanceDialog({ open, onOpenChange, account, suggested, date, reconciliationId, onDone }: {
+export function AdjustBalanceDialog({ open, onOpenChange, account, suggested, date, reconciliationId, walletId, onDone }: {
   open: boolean; onOpenChange: (open: boolean) => void; account: Account;
-  suggested?: number | null; date?: string; reconciliationId?: string | null; onDone?: (result: BalanceAdjustment) => void;
+  suggested?: number | null; date?: string; reconciliationId?: string | null;
+  /** Benefit cards: correct this benefit's balance. */
+  walletId?: string | null;
+  onDone?: (result: BalanceAdjustment) => void;
 }) {
   const queryClient = useQueryClient();
   const [targetRaw, setTargetRaw] = useState("");
@@ -30,7 +33,7 @@ export function AdjustBalanceDialog({ open, onOpenChange, account, suggested, da
 
   const mutation = useMutation({
     mutationFn: (target: number) => adjustAccountBalance(account.id, {
-      target_balance: target, reason: reason.trim(), date: date ?? todayISO(), reconciliation_id: reconciliationId ?? null,
+      target_balance: target, reason: reason.trim(), date: date ?? todayISO(), reconciliation_id: reconciliationId ?? null, wallet_id: walletId ?? null,
     }, operationId),
     onSuccess: async (result) => {
       toast.success(`Saldo ajustado: ${formatBRL(result.previous_balance)} → ${formatBRL(result.new_balance)}.`);

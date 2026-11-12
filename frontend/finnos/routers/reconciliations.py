@@ -83,6 +83,8 @@ class AdjustmentIn(BaseModel):
     reason: str = Field(min_length=3, max_length=300)
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     reconciliation_id: Optional[str] = None
+    # Benefit cards: the benefit whose balance is corrected (default one when absent).
+    wallet_id: Optional[str] = Field(default=None, max_length=40)
 
 
 def _now():
@@ -731,7 +733,15 @@ async def adjust_balance(account_id: str, payload: AdjustmentIn, user: dict = De
                 return dict(store.decode(existing.to_dict()), id=tx_id)
             account = _account(owner, tr, account_id)
             movements = store.account_movement_rows(instance, uid, account_id, tr)
-            before = balance_until(movements, account, payload.date)
+            wallet_id = None
+            if account.get("wallets"):
+                from finnos.lib import benefits as benefit_lib
+                wallet_id = payload.wallet_id or benefit_lib.default_wallet_id(account)
+                if wallet_id not in {w["id"] for w in account["wallets"]}:
+                    raise HTTPException(422, "Esse benefício não pertence ao cartão.")
+                before = benefit_lib.wallet_balances(dict(account, id=account_id), movements, payload.date)[wallet_id]
+            else:
+                before = balance_until(movements, account, payload.date)
             target = _cents(payload.target_balance) if payload.target_balance >= 0 else -_cents(-payload.target_balance)
             diff = target - before
             if diff == 0:
@@ -742,6 +752,7 @@ async def adjust_balance(account_id: str, payload: AdjustmentIn, user: dict = De
                 "type": "receita" if diff > 0 else "despesa", "status": "pago", "date": payload.date,
                 "account_id": account_id, "card_id": None, "to_account_id": None, "category_id": None,
                 "fixed": False, "installment": False, "notes": payload.reason, "balance_adjustment": True,
+                "wallet_id": wallet_id,
                 "adjustment": {"previous_cents": before, "new_cents": target, "difference_cents": diff,
                                "reason": payload.reason, "author": uid,
                                "reconciliation_id": payload.reconciliation_id},

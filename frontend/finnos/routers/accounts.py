@@ -52,6 +52,9 @@ async def _enriched_accounts(user_id: str) -> list[AccountOut]:
                 active=a.get("active", True),
                 is_default=a["id"] in defaults,
                 overdraft_limit=a.get("overdraft_limit"),
+                low_balance_alert=a.get("low_balance_alert"),
+                benefit_runout_alert=bool(a.get("benefit_runout_alert")),
+                benefit_recharge_alert=bool(a.get("benefit_recharge_alert")),
                 reconciled_until=a.get("reconciled_until"),
                 wallets=wallet_views.get(a["id"], []),
                 balance=balance,
@@ -117,7 +120,7 @@ async def _one_enriched(user_id: str, account_id: str) -> AccountOut | None:
 def _payload(payload: AccountIn) -> dict:
     """The stored fields; an absent default flag leaves the current one untouched."""
     # Absent optional fields (older clients) keep what is stored; 0 clears the overdraft limit.
-    skip = {name for name in ("is_default", "overdraft_limit", "wallets") if getattr(payload, name) is None}
+    skip = {name for name in ("is_default", "overdraft_limit", "low_balance_alert", "benefit_runout_alert", "benefit_recharge_alert", "wallets") if getattr(payload, name) is None}
     return payload.model_dump(exclude=skip)
 
 

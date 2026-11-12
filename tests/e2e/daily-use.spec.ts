@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createFirstAccount } from "./walletHelpers";
 
 // Local mode with an empty device: nothing here touches a server or real data.
 test.beforeEach(async ({ page }) => {
@@ -14,14 +15,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function createAccount(page: Page) {
-  await page.goto("/contas");
-  await page.getByTestId("accounts-empty-create-button").click();
-  const form = page.getByTestId("account-form");
-  await form.getByTestId("account-name-input").fill("Conta Teste");
-  await form.locator("#wallet-institution-name").fill("Banco Teste");
-  await form.getByTestId("account-initial-input").fill("1000");
-  await form.getByTestId("account-submit-button").click();
-  await expect(page.getByTestId("wallet-institutions")).toBeVisible();
+  await createFirstAccount(page, { bank: "Banco Teste", nickname: "Conta Teste", balance: "1000" });
 }
 
 const isoDaysAgo = (n: number) => {

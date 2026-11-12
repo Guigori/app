@@ -26,6 +26,11 @@ class CardIn(BaseModel):
     is_default: Optional[bool] = None
     # Last 4 digits shown on the card art (never the full number). None keeps what is stored; "" clears it.
     last_digits: Optional[str] = Field(default=None, pattern=r"^(\d{4})?$")
+    # Carteira settings (etapa 6). None keeps what is stored.
+    network: Optional[Literal["visa", "master", "elo", "amex", ""]] = None  # only to identify; never drawn on the card
+    limit_alert: Optional[bool] = None  # notify at 80% of the limit
+    invoice_reminder: Optional[bool] = None  # remind before the due date
+    remind_days: Optional[int] = Field(default=None, ge=1, le=10)
 
 
 class CardOut(BaseModel):
@@ -43,6 +48,10 @@ class CardOut(BaseModel):
     active: bool
     is_default: bool = False
     last_digits: Optional[str] = None
+    network: Optional[str] = None
+    limit_alert: bool = False
+    invoice_reminder: bool = True
+    remind_days: Optional[int] = None
     invoice_paid: bool = False
     # Derived, never stored:
     current_invoice: Money
@@ -61,7 +70,7 @@ class CardOut(BaseModel):
     created_at: datetime
 
 
-NotificationKind = Literal["vencimento", "atrasado", "fatura", "captura"]
+NotificationKind = Literal["vencimento", "atrasado", "fatura", "captura", "saldo"]
 
 
 class NotificationItem(BaseModel):

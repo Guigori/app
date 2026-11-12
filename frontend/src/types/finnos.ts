@@ -67,6 +67,11 @@ export interface Account {
   reconciled_until?: string | null;
   /** Benefit cards (etapa 5): up to 8 benefits, each with its own balance. */
   wallets?: BenefitWallet[];
+  /** Notify when the balance falls below this (etapa 6). */
+  low_balance_alert?: number | null;
+  /** Benefit cards: warn before a benefit runs out / when a recharge lands. */
+  benefit_runout_alert?: boolean;
+  benefit_recharge_alert?: boolean;
   balance: number;
   total_income: number;
   total_expense: number;
@@ -88,6 +93,10 @@ export interface AccountInput {
   overdraft_limit?: number | null;
   /** Omit to keep the stored benefits. */
   wallets?: BenefitWalletInput[];
+  /** Omit to keep; 0 turns the low balance alert off. */
+  low_balance_alert?: number | null;
+  benefit_runout_alert?: boolean;
+  benefit_recharge_alert?: boolean;
 }
 
 export interface BenefitWalletInput {
@@ -574,7 +583,14 @@ export interface CardInput {
   is_default?: boolean;
   /** Last 4 digits for the card art; "" clears; omit to keep. */
   last_digits?: string;
+  /** Only to identify the card; never drawn on the card art. "" clears. */
+  network?: CardNetwork | "";
+  limit_alert?: boolean;
+  invoice_reminder?: boolean;
+  remind_days?: number;
 }
+
+export type CardNetwork = "visa" | "master" | "elo" | "amex";
 
 export interface CreditCard {
   version?: number;
@@ -592,6 +608,13 @@ export interface CreditCard {
   /** The preselected credit card. */
   is_default?: boolean;
   last_digits?: string | null;
+  network?: CardNetwork | null;
+  /** Notify at 80% of the limit. */
+  limit_alert?: boolean;
+  /** Remind before the due date (on unless turned off). */
+  invoice_reminder?: boolean;
+  /** Days before the due date; unset = the app default (7). */
+  remind_days?: number | null;
   invoice_paid: boolean;
   current_invoice: number;
   payable_invoice?: number;
@@ -610,7 +633,7 @@ export interface CreditCard {
 
 // --- Notificações (mirror: backend/models/cards.py NotificationItem) ---
 
-export type NotificationKind = "vencimento" | "atrasado" | "fatura" | "captura";
+export type NotificationKind = "vencimento" | "atrasado" | "fatura" | "captura" | "saldo";
 
 export interface NotificationItem {
   id: string;
@@ -931,6 +954,6 @@ export interface CardReconciliationInput {
   lines?: ReconciliationInput["lines"];
 }
 export interface ReconResolveInput { line?: number; tx_id?: string; action: string; note?: string }
-export interface BalanceAdjustmentInput { target_balance: number; reason: string; date: string; reconciliation_id?: string | null }
+export interface BalanceAdjustmentInput { target_balance: number; reason: string; date: string; reconciliation_id?: string | null; /** Benefit cards: which benefit. */ wallet_id?: string | null }
 export interface BalanceAdjustment { id: string; type: "receita" | "despesa"; value: number; date: string; previous_balance: number; new_balance: number; difference: number }
 

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createFirstAccount, fillBankWizard, openFirstBank, pickCardBank } from "./walletHelpers";
 
 // The notifications invitation would sit over the screens under test.
 test.beforeEach(async ({ page }) => {
@@ -14,28 +15,23 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function createCheckingAccount(page: import("@playwright/test").Page) {
-  await page.goto("/contas");
-  await expect(page.getByTestId("accounts-empty-create-button")).toBeVisible();
-  await page.getByTestId("accounts-empty-create-button").click();
-  const form = page.getByTestId("account-form");
-  await form.getByTestId("account-name-input").fill("Conta Inter");
-  await form.locator("#wallet-institution-name").fill("Banco Inter");
-  await form.getByTestId("account-initial-input").fill("350,15");
-  await form.getByTestId("account-submit-button").click();
-  await expect(page.getByTestId("wallet-institutions")).toBeVisible();
-  await expect(page.getByTestId("wallet-institutions").getByText("Banco Inter", { exact: true })).toBeVisible();
+  await createFirstAccount(page, { bank: "Banco Inter", nickname: "Conta Inter", balance: "350,15" });
+  await expect(page.getByTestId("wallet-single-bank-card")).toContainText("Banco Inter");
 }
 
 test("creates an institution-linked account and hides all balance figures", async ({ page }) => {
   await createCheckingAccount(page);
-  await expect(page.getByTestId("wallet-balance")).toContainText("350,15");
-  // Etapa 6 (prototype): one row per bank.
-  await expect(page.locator("[data-testid^=wallet-bank-]")).toHaveCount(1);
+  // Tela 15 (prototype "Com 1 banco"): the Carteira is that bank's card, the month and the invite to add more.
+  const bankCard = page.getByTestId("wallet-single-bank-card");
+  await expect(bankCard).toContainText("350,15");
+  await expect(page.getByTestId("wallet-counts")).toContainText("1 banco");
+  await expect(page.getByTestId("wallet-single-month")).toBeVisible();
+  await expect(page.getByTestId("wallet-single-add-banco")).toBeVisible();
   await page.getByRole("button", { name: "Ocultar valores" }).click();
-  await expect(page.getByTestId("wallet-balance")).toContainText("••••••");
-  await expect(page.locator("[data-testid^=wallet-bank-]")).not.toContainText("350,15");
+  await expect(bankCard).toContainText("••••");
+  await expect(bankCard).not.toContainText("350,15");
   await page.getByRole("button", { name: "Mostrar valores" }).click();
-  await expect(page.getByTestId("wallet-balance")).toContainText("350,15");
+  await expect(bankCard).toContainText("350,15");
 });
 
 test("card issuer stays distinct from the account's bank and the card has no paying account", async ({ page }) => {
@@ -44,8 +40,8 @@ test("card issuer stays distinct from the account's bank and the card has no pay
   await page.getByTestId("wallet-add").click();
   await page.getByTestId("wallet-add-cartao").click();
   const form = page.getByTestId("card-form");
+  await pickCardBank(page, "Nubank");
   await form.getByTestId("card-name-input").fill("Cartão Nubank");
-  await form.locator("#wallet-institution-name").fill("Nubank");
   await form.getByTestId("card-limit-input").fill("1000");
   // Etapa 2: the paying account is chosen when paying the invoice.
   await expect(form.getByTestId("card-account-select")).toHaveCount(0);
@@ -92,8 +88,8 @@ test("cards live inside Carteira and Assinaturas stays its own screen", async ({
 
 test("an account opens its own cash flow, which can go back to every account", async ({ page }) => {
   await createCheckingAccount(page);
-  // Etapa 6: the bank row opens the bank screen; the account is listed there.
-  await page.locator("[data-testid^=wallet-bank-]").first().click();
+  // Etapa 6: the bank opens the bank screen; the account is listed there.
+  await openFirstBank(page);
   await page.locator("[data-testid^=wallet-account-]").first().click();
   await page.getByTestId("account-detail-cashflow").click();
   await expect(page).toHaveURL(/\/transacoes\?aba=caixa&account_id=/);
@@ -106,8 +102,8 @@ test("an account opens its own cash flow, which can go back to every account", a
 
 test("conferência: a statement line is registered from the register and the account becomes conferida", async ({ page }) => {
   await createCheckingAccount(page);
-  // Etapa 6: the bank row opens the bank screen; the account is listed there.
-  await page.locator("[data-testid^=wallet-bank-]").first().click();
+  // Etapa 6: the bank opens the bank screen; the account is listed there.
+  await openFirstBank(page);
   await page.locator("[data-testid^=wallet-account-]").first().click();
   await page.getByTestId("account-detail-reconcile").click();
   await expect(page).toHaveURL(/\/contas\/.+\/conferencia/);
@@ -128,22 +124,23 @@ test("conferência: a statement line is registered from the register and the acc
   await expect(page.getByTestId("recon-diff")).toContainText("0,00");
   await page.getByTestId("recon-complete").click();
   await expect(page.getByTestId("recon-done")).toContainText("conferida até");
+  // Prototype: every decision stays in the history, opened from the header.
+  await page.getByTestId("recon-history-open").click();
+  await expect(page.getByTestId("recon-history")).toContainText("TARIFA PACOTE");
 });
 
 test("benefit card: two benefits with separate balances, chosen at registration, split when one runs short", async ({ page }) => {
   await page.goto("/contas");
-  await page.getByTestId("accounts-empty-create-button").click();
-  const form = page.getByTestId("account-form");
-  await form.getByTestId("account-name-input").fill("Caju");
-  await form.getByTestId("account-type-select").click();
-  await page.getByRole("option", { name: "Benefício" }).click();
-  await form.locator("#wallet-institution-name").fill("Caju Benefícios");
+  await page.getByTestId("wallet-first-beneficio").click();
+  const form = page.getByTestId("benefit-form");
+  await form.getByTestId("benefit-wizard-issuer-Caju").click();
+  await form.getByTestId("benefit-wizard-purpose-multi").click();
   await form.getByTestId("wallet-name-0").fill("Refeição");
   await form.getByTestId("wallet-initial-0").fill("100");
-  await form.getByTestId("benefit-wallet-add").click();
   await form.getByTestId("wallet-name-1").fill("Mercado");
   await form.getByTestId("wallet-initial-1").fill("50");
   await form.getByTestId("account-submit-button").click();
+  await expect(form).toHaveCount(0);
   // Etapa 6: benefits have their own indicator, apart from the money in accounts.
   await expect(page.getByTestId("wallet-ind-benefits")).toContainText("150,00");
 
@@ -162,13 +159,12 @@ test("benefit card: two benefits with separate balances, chosen at registration,
   await expect(page.getByRole("status").filter({ hasText: "Salvo" })).toBeVisible();
 
   await page.goto("/contas");
-  // Etapa 6: benefit cards live in their own section of the Carteira.
+  // Etapa 6: each benefit tile opens the benefit screen (prototype "9 · Benefício").
   await page.locator("[data-testid^=wallet-benefit-mini-]").first().click();
-  const list = page.getByTestId("account-detail-wallets");
-  await expect(list).toContainText("Refeição");
-  await expect(list.locator("li").filter({ hasText: "Refeição" })).toContainText("70,00");
-  await expect(list.locator("li").filter({ hasText: "Mercado" })).toContainText("0,00");
-  await expect(page.getByTestId("account-detail-balance")).toContainText("70,00");
+  await expect(page.getByTestId("benefit-page")).toBeVisible();
+  const chips = page.getByRole("tablist", { name: "Benefícios do cartão" });
+  await expect(chips.getByRole("tab", { name: /Refeição/ })).toContainText("70,00");
+  await expect(chips.getByRole("tab", { name: /Mercado/ })).toContainText("0,00");
 });
 
 test("nova Carteira: as in the prototype — summary, stacked cards, one row per bank, benefit tiles, invoices and the + sheet", async ({ page }) => {
@@ -184,21 +180,15 @@ test("nova Carteira: as in the prototype — summary, stacked cards, one row per
   await page.getByTestId("wallet-add").click();
   await expect(page.getByTestId("wallet-add-sheet")).toContainText("O que você quer adicionar?");
   await page.getByTestId("wallet-add-banco").click();
-  const bank = page.getByTestId("account-form");
-  await bank.getByTestId("account-name-input").fill("Conta Inter");
-  await bank.locator("#wallet-institution-name").fill("Banco Inter");
-  await bank.getByTestId("account-initial-input").fill("350,15");
-  await bank.getByTestId("account-submit-button").click();
-  await expect(bank).toHaveCount(0);
+  await fillBankWizard(page, { bank: "Banco Inter", nickname: "Conta Inter", balance: "350,15" });
 
   await page.getByTestId("wallet-add").click();
   await page.getByTestId("wallet-add-beneficio").click();
-  const form = page.getByTestId("account-form");
-  await form.getByTestId("account-name-input").fill("Caju");
-  await form.locator("#wallet-institution-name").fill("Caju Benefícios");
+  const form = page.getByTestId("benefit-form");
+  await form.getByTestId("benefit-wizard-issuer-Caju").click();
+  await form.getByTestId("benefit-wizard-purpose-multi").click();
   await form.getByTestId("wallet-name-0").fill("Refeição");
   await form.getByTestId("wallet-initial-0").fill("120");
-  await form.getByTestId("benefit-wallet-add").click();
   await form.getByTestId("wallet-name-1").fill("Mercado");
   await form.getByTestId("wallet-initial-1").fill("80");
   await form.getByTestId("account-submit-button").click();
@@ -207,8 +197,8 @@ test("nova Carteira: as in the prototype — summary, stacked cards, one row per
     await page.getByTestId("wallet-add").click();
     await page.getByTestId("wallet-add-cartao").click();
     const card = page.getByTestId("card-form");
+    await pickCardBank(page, bankName);
     await card.getByTestId("card-name-input").fill(name);
-    await card.locator("#wallet-institution-name").fill(bankName);
     await card.getByTestId("card-last-digits-input").fill(digits);
     await expect(card.getByTestId("card-preview")).toContainText(`•••• ${digits}`);
     await card.getByTestId("card-limit-input").fill("1000");

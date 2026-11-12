@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { defaultAccount } from "@/lib/walletDefaults";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ScreenHeader } from "@/components/layout/BackButton";
+import { useOwnHeader } from "@/components/layout/BackButton";
+import { CardAnalysis } from "@/components/wallet/CardAnalysis";
+import { PayInvoiceSheet, type PaidSummary } from "@/components/wallet/PayInvoiceSheet";
+import { askAbout } from "@/lib/askAi";
+import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Loader2, Search, RotateCcw } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, Loader2, Paperclip, Search, RotateCcw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { fetchAccounts, fetchCards, fetchInvoice, payInvoice, undoInvoicePayment, creditInvoice, refundInvoiceToBank } from "@/lib/data";
 import { fundsIssue } from "@/lib/funds";
@@ -29,12 +32,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export default function CardInvoice() {
   const { cardId = "" } = useParams();
   const queryClient = useQueryClient();
-  const { hidden } = useBalanceHidden();
+  const { hidden, toggle: toggleHidden } = useBalanceHidden();
+  useOwnHeader();
   const [search, setSearch] = useState("");
+  const [showAll, setShowAll] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
-  const [accountId, setAccountId] = useState("");
-  const [payDate, setPayDate] = useState("");
-  const [valueRaw, setValueRaw] = useState("");
+  const [paidDone, setPaidDone] = useState<PaidSummary | null>(null);
+  const [paidPaymentId, setPaidPaymentId] = useState<string | null>(null);
+  // One operation id per opening of "Pagar fatura": a retry or the cheque especial confirmation reuses it.
+  useEffect(() => { if (payOpen) setOperationId(crypto.randomUUID()); }, [payOpen]);
   const [operationId, setOperationId] = useState(() => crypto.randomUUID());
   const [formError, setFormError] = useState<string | null>(null);
   // Cheque especial needs an explicit "yes" from the person (approved 12/11/2026).
@@ -80,19 +86,6 @@ export default function CardInvoice() {
     openedPay.current = true;
     if ((invoice.outstanding ?? 0) > 0) setPayOpen(true);
   }, [invoice, searchParams]);
-
-  // Defaults the user can change: the invoice due date and the first account.
-  useEffect(() => {
-    if (!payOpen || !invoice) return;
-    setFormError(null);
-    setPayDate(new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }));
-    setValueRaw(String(invoice.outstanding ?? invoice.total - invoice.paid_amount));
-    setOperationId(crypto.randomUUID());
-    setOverdraftPrompt(null);
-    // The card's old "conta de pagamento" is only a suggestion now.
-    const suggested = accounts.find((a) => a.id === card?.payment_account_id)?.id;
-    setAccountId((current) => current || suggested || defaultAccount(accounts)?.id || accounts[0]?.id || "");
-  }, [payOpen, invoice, accounts, card?.payment_account_id]);
 
   useEffect(() => {
     if (!creditOpen || !invoice) return;
@@ -152,15 +145,12 @@ export default function CardInvoice() {
 
   const payMutation = useMutation({
     mutationFn: (input: PayInvoiceInput) => payInvoice(cardId, input, operationId),
-    onSuccess: async (result) => {
+    onSuccess: async (result, input) => {
       const carried = result.carried_amount ?? 0;
       const paymentId = result.last_payment_id;
-      toast.success(carried > 0
-        ? `Pagamento registrado. ${formatBRL(carried)} vai para a próxima fatura.`
-        : "Pagamento registrado e débito lançado na conta.", paymentId ? {
-        action: { label: "Desfazer", onClick: () => undoMutation.mutate(paymentId) },
-      } : undefined);
-      setPayOpen(false);
+      if (carried > 0) toast.info(`${formatBRL(carried)} vai para a próxima fatura como “Saldo da fatura anterior”.`);
+      setPaidPaymentId(paymentId ?? null);
+      setPaidDone({ value: input.value ?? 0, accountId: input.account_id, scheduled: false });
       setOverdraftPrompt(null);
       await refreshMoney();
     },
@@ -227,60 +217,43 @@ export default function CardInvoice() {
     );
   }
 
+  const owed = invoice.outstanding ?? invoice.total - invoice.paid_amount;
+  const shown = showAll ? items : items.slice(0, 6);
   return (
-    <div className="space-y-6">
-      <ScreenHeader title={<>Fatura · {invoice.card_name}</>} titleTestId="invoice-card-name" keepSubtitle
-        subtitle={<span data-keep data-testid="invoice-cycle">Ciclo de {formatDate(invoice.cycle_start)} a {formatDate(invoice.cycle_end)} · vence {formatDate(invoice.due_date)}</span>} />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Label htmlFor="invoice-cycle-month" className="text-xs text-muted-foreground">
-              Consultar histórico (mês de fechamento)
-            </Label>
-            <Input id="invoice-cycle-month" type="month" className="w-44"
-              value={cycleMonth} disabled={!card} onChange={event => setCycleMonth(event.target.value)}
-              data-testid="invoice-cycle-month" />
-            {cycleMonth && <Button size="sm" variant="ghost" onClick={() => setCycleMonth("")}>Fatura padrão</Button>}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {invoice.paid ? (
-            <>
-              <Badge className="gap-1.5 bg-income/15 text-income" data-testid="invoice-paid-badge">
-                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                Paga em {invoice.paid_at ? formatDate(invoice.paid_at) : "—"}
-              </Badge>
-              <Button size="sm" variant="outline" onClick={() => setRefundOpen(true)}
-                data-testid="bank-refund-button">
-                <RotateCcw className="h-4 w-4" aria-hidden="true" /> Registrar reembolso
-              </Button>
-            </>
-          ) : (
-            <Button onClick={() => setPayOpen(true)} disabled={(invoice.outstanding ?? 0) <= 0} data-testid="pay-invoice-button">
-              Registrar pagamento
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            onClick={() => setCreditOpen(true)}
-            disabled={(invoice.outstanding ?? 0) <= 0 || invoice.items.length === 0}
-            data-testid="credit-invoice-button"
-          >
-            <RotateCcw className="h-4 w-4" aria-hidden="true" />
-            Registrar estorno
-          </Button>
-        </div>
-      </div>
+    <div className="mx-auto w-full max-w-[560px] space-y-3.5" data-testid="card-invoice-page">
+      <header className="flex items-center gap-3">
+        <Link to="/contas?aba=cartoes" aria-label="Voltar" className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card"><ArrowLeft className="size-5" /></Link>
+        <h1 className="min-w-0 flex-1 truncate font-heading text-xl font-bold" data-testid="invoice-card-name">{card ? `${card.institution || card.name} · Crédito` : invoice.card_name}</h1>
+        <button type="button" aria-label="Perguntar à FINNOS IA" className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card text-primary"
+          onClick={() => askAbout(`Me ajude a entender a fatura do ${invoice.card_name}: total, o que mais pesou e as parcelas.`,
+            { cartao: invoice.card_name, total: invoice.total, em_aberto: owed, vence: invoice.due_date, compras: invoice.items.slice(0, 30).map((i) => ({ nome: i.name, valor: i.value, categoria: i.category_name })) })}>
+          <Sparkles className="size-[18px]" />
+        </button>
+        <button type="button" onClick={toggleHidden} aria-label={hidden ? "Mostrar valores" : "Ocultar valores"} className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card">
+          {hidden ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+        </button>
+      </header>
 
-      <div className="rounded-3xl border border-border bg-card p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Total da fatura</p>
-        <p className="mt-1 font-heading text-3xl font-bold tabular-nums text-foreground" data-testid="invoice-total">
-          {money(invoice.total)}
-        </p>
+      {card ? <CardAnalysis card={card} selectedCycle={invoice.cycle_end} onPick={(closing) => setCycleMonth(closing.slice(0, 7))} hidden={hidden} /> : null}
+
+      <section className="rounded-3xl border border-border bg-card p-4" data-testid="invoice-selected">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Fatura selecionada</p>
+            <p className="mt-1 text-[13px] text-muted-foreground" data-testid="invoice-cycle">Ciclo de {formatDate(invoice.cycle_start)} a {formatDate(invoice.cycle_end)} · vence {formatDate(invoice.due_date)}</p>
+          </div>
+          <p className="shrink-0 font-heading text-2xl font-bold tabular-nums" data-testid="invoice-total">{money(invoice.total)}</p>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {invoice.paid ? (
+            <Badge className="gap-1.5 bg-income/15 text-income" data-testid="invoice-paid-badge">
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />Paga em {invoice.paid_at ? formatDate(invoice.paid_at) : "—"}
+            </Badge>
+          ) : null}
+          {invoice.reconciled ? <Badge variant="secondary" data-testid="invoice-reconciled">Conferida</Badge> : null}
+        </div>
         {invoice.paid_amount > 0 ? (
-          <p className="mt-1 text-sm text-muted-foreground" data-testid="invoice-paid-amount">
-            Pago: {money(invoice.paid_amount)} · Em aberto: {money(invoice.outstanding ?? invoice.total - invoice.paid_amount)}
-          </p>
+          <p className="mt-2 text-sm text-muted-foreground" data-testid="invoice-paid-amount">Pago: {money(invoice.paid_amount)} · Em aberto: {money(owed)}</p>
         ) : null}
         {(invoice.carried_amount ?? 0) > 0 ? (
           <p className="mt-1 text-sm text-muted-foreground" data-testid="invoice-carried">
@@ -288,70 +261,76 @@ export default function CardInvoice() {
             {invoice.carried_to ? formatDate(invoice.carried_to) : "—"} como “Saldo da fatura anterior”.
           </p>
         ) : null}
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Link to={`/cartoes/${encodeURIComponent(cardId)}/conferencia?cycle=${invoice.cycle_end}`} className="text-sm font-semibold text-primary underline-offset-4 hover:underline" data-testid="invoice-reconcile-link">
-            Conferir com a fatura do banco
-          </Link>
-          {invoice.reconciled ? <Badge variant="secondary" data-testid="invoice-reconciled">Conferida</Badge> : null}
-        </div>
-        {invoice.last_payment_id && invoice.paid_amount > 0 ? (
-          <Button size="sm" variant="ghost" className="mt-2 -ml-2" disabled={undoMutation.isPending}
-            onClick={() => undoMutation.mutate(invoice.last_payment_id!)} data-testid="undo-payment-button">
-            <RotateCcw className="h-4 w-4" aria-hidden="true" /> Desfazer último pagamento
-          </Button>
-        ) : null}
         {(invoice.adjustment_total ?? 0) > 0 ? (
-          <p className="mt-1 text-sm text-muted-foreground" data-testid="invoice-credits-total">
-            Créditos auditados nesta fatura: {money(invoice.adjustment_total ?? 0)}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground" data-testid="invoice-credits-total">Créditos auditados nesta fatura: {money(invoice.adjustment_total ?? 0)}</p>
         ) : null}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {invoice.last_payment_id && invoice.paid_amount > 0 ? (
+            <Button size="sm" variant="outline" className="rounded-full" disabled={undoMutation.isPending}
+              onClick={() => undoMutation.mutate(invoice.last_payment_id!)} data-testid="undo-payment-button">
+              <RotateCcw className="h-4 w-4" aria-hidden="true" /> Desfazer último pagamento
+            </Button>
+          ) : null}
+          <Button size="sm" variant="outline" className="rounded-full" onClick={() => setCreditOpen(true)}
+            disabled={owed <= 0 || invoice.items.length === 0} data-testid="credit-invoice-button">
+            <RotateCcw className="h-4 w-4" aria-hidden="true" /> Registrar estorno
+          </Button>
+          {invoice.paid ? (
+            <Button size="sm" variant="outline" className="rounded-full" onClick={() => setRefundOpen(true)} data-testid="bank-refund-button">
+              <RotateCcw className="h-4 w-4" aria-hidden="true" /> Registrar reembolso
+            </Button>
+          ) : null}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Label htmlFor="invoice-cycle-month" className="text-xs text-muted-foreground">Outro mês (fechamento)</Label>
+          <Input id="invoice-cycle-month" type="month" className="h-9 w-40" value={cycleMonth} disabled={!card} onChange={event => setCycleMonth(event.target.value)} data-testid="invoice-cycle-month" />
+          {cycleMonth ? <Button size="sm" variant="ghost" onClick={() => setCycleMonth("")}>Fatura atual</Button> : null}
+        </div>
         {invoice.paid ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Para estornar compras de faturas já quitadas, será necessário registrar um reembolso bancário em fluxo específico.
-          </p>
+          <p className="mt-2 text-xs text-muted-foreground">Para estornar compras de faturas já quitadas, registre um reembolso bancário.</p>
         ) : null}
-      </div>
+      </section>
 
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar compra nesta fatura…"
-          className="pl-9"
-          aria-label="Buscar compra nesta fatura"
-          data-testid="invoice-search-input"
-        />
-      </div>
-
-      <ul className="space-y-2" data-testid="invoice-items">
-        {items.map((item) => (
-          <li key={`${item.id}-${item.date}`} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: item.category_color ?? "#94A3B8" }}
-              aria-hidden="true"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">
-                {item.name}
-                {item.installment_label ? (
-                  <span className="ml-2 text-xs text-muted-foreground">parcela {item.installment_label}</span>
-                ) : null}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {formatDate(item.date)} · {item.category_name ?? "Sem categoria"}
-              </p>
-            </div>
-            <p className="shrink-0 font-heading text-sm font-bold tabular-nums text-foreground">{money(item.value)}</p>
-          </li>
-        ))}
-        {items.length === 0 ? (
-          <li className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground" data-testid="invoice-empty">
-            {invoice.items.length === 0 ? "Nenhuma compra neste ciclo." : "Nenhuma compra com esse nome."}
-          </li>
+      <section className="overflow-hidden rounded-3xl border border-border bg-card" data-testid="invoice-items-section">
+        <h2 className="px-4 pb-1.5 pt-4 text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Lançamentos neste cartão</h2>
+        {invoice.items.length > 6 ? (
+          <div className="relative mx-4 my-2">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar compra nesta fatura…" className="h-10 rounded-full pl-9"
+              aria-label="Buscar compra nesta fatura" data-testid="invoice-search-input" />
+          </div>
         ) : null}
-      </ul>
+        <ul data-testid="invoice-items">
+          {shown.map((item, i) => (
+            <li key={`${item.id}-${item.date}`} className={cn("flex items-center gap-3 px-4 py-2.5", i > 0 && "border-t border-border/60")}>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{item.name}{item.installment_label ? ` · ${item.installment_label}` : ""}</span>
+                <span className="block text-xs text-muted-foreground">{formatDate(item.date).slice(0, 5)} · {item.category_name ?? "Sem categoria"}</span>
+              </span>
+              <strong className="shrink-0 text-sm tabular-nums">{money(item.value)}</strong>
+            </li>
+          ))}
+          {items.length === 0 ? (
+            <li className="px-4 py-8 text-center text-sm text-muted-foreground" data-testid="invoice-empty">
+              {invoice.items.length === 0 ? "Nenhuma compra neste ciclo." : "Nenhuma compra com esse nome."}
+            </li>
+          ) : null}
+        </ul>
+        {items.length > shown.length ? (
+          <button type="button" onClick={() => setShowAll(true)} className="block w-full border-t border-border/60 px-4 py-3.5 text-left text-sm font-semibold text-primary" data-testid="invoice-show-all">
+            Ver todos os {items.length} lançamentos
+          </button>
+        ) : null}
+      </section>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        <Button className="h-[50px] rounded-full text-sm font-bold" onClick={() => setPayOpen(true)} disabled={owed <= 0} data-testid="pay-invoice-button">Pagar fatura</Button>
+        <Link to={`/cartoes/${encodeURIComponent(cardId)}/configurar`} className="grid h-[50px] place-items-center rounded-full border border-border bg-card text-sm font-bold" data-testid="card-configure-link">Configurar cartão</Link>
+      </div>
+      <Link to={`/cartoes/${encodeURIComponent(cardId)}/conferencia?cycle=${invoice.cycle_end}`} className="flex h-12 items-center justify-center gap-2 rounded-full bg-primary/10 text-sm font-bold text-primary" data-testid="invoice-reconcile-link">
+        <Paperclip className="size-4" aria-hidden="true" />Conferir com a fatura do banco
+      </Link>
+      <p className="px-2 text-center text-xs text-muted-foreground">Ao pagar, você escolhe de qual conta sai. O pagamento não conta como gasto de novo.</p>
 
       {(invoice.adjustments ?? []).length > 0 ? (
         <section className="rounded-3xl border border-border bg-card p-5" data-testid="invoice-credits-history">
@@ -532,117 +511,16 @@ export default function CardInvoice() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={payOpen} onOpenChange={setPayOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-heading">Pagar fatura</DialogTitle>
-            <DialogDescription>
-              Lançamos uma despesa “Fatura {invoice.card_name}” na conta escolhida, já como paga. Ela não volta para a
-              fatura.
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setFormError(null);
-              const value = parseAmount(valueRaw);
-              if (!accountId) return setFormError("Selecione a conta que vai pagar.");
-              if (!value || value <= 0) return setFormError("Informe o valor pago.");
-              setOverdraftPrompt(null);
-              payMutation.mutate({ account_id: accountId, date: payDate, value, cycle: invoice.cycle_end });
-            }}
-            data-testid="pay-invoice-form"
-          >
-            <div className="space-y-2">
-              <Label htmlFor="pay-account">Conta de pagamento</Label>
-              <Select value={accountId} onValueChange={setAccountId}>
-                <SelectTrigger id="pay-account" className="w-full" aria-label="Conta de pagamento" data-testid="pay-account-select">
-                  <SelectValue>{accounts.find((a) => a.id === accountId)?.name ?? "Selecione"}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {accounts.map((a) => {
-                    const after = a.balance - (parseAmount(valueRaw) ?? 0);
-                    const blocked = after < -(a.overdraft_limit ?? 0) - 1e-9;
-                    return (
-                      <SelectItem key={a.id} value={a.id} disabled={blocked} data-testid={`pay-account-${a.id}`}>
-                        {a.name} · fica {money(after)}{blocked ? " (sem saldo)" : after < 0 ? " (cheque especial)" : ""}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" data-testid="pay-full-button"
-                onClick={() => setValueRaw(String(invoice.outstanding ?? invoice.total - invoice.paid_amount))}>
-                Fatura inteira
-              </Button>
-              {invoice.minimum_payment ? (
-                <Button type="button" size="sm" variant="outline" data-testid="pay-minimum-button"
-                  onClick={() => setValueRaw(String(invoice.minimum_payment))}>
-                  Mínimo ({money(invoice.minimum_payment)})
-                </Button>
-              ) : null}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="pay-date">Data do pagamento</Label>
-                <Input id="pay-date" type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} data-testid="pay-date-input" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="pay-value">Valor pago (R$)</Label>
-                <Input
-                  id="pay-value"
-                  inputMode="decimal"
-                  value={valueRaw}
-                  onChange={(e) => setValueRaw(e.target.value)}
-                  data-testid="pay-value-input"
-                />
-              </div>
-            </div>
-            {(() => {
-              const value = parseAmount(valueRaw) ?? 0;
-              const open = invoice.outstanding ?? invoice.total - invoice.paid_amount;
-              const rest = Math.round((open - value) * 100) / 100;
-              if (value <= 0 || rest <= 0) return null;
-              return payDate > invoice.cycle_end ? (
-                <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm text-foreground" data-testid="pay-partial-warning">
-                  Pagando menos que o total: {money(rest)} vai para a próxima fatura como “Saldo da fatura anterior”.
-                  O banco pode cobrar juros sobre esse valor.
-                </p>
-              ) : (
-                <p className="rounded-xl bg-muted px-3 py-2 text-sm text-muted-foreground" data-testid="pay-advance-note">
-                  A fatura ainda não fechou: este valor conta como adiantamento e {money(rest)} continua em aberto.
-                </p>
-              );
-            })()}
-            {overdraftPrompt ? (
-              <div className="space-y-2 rounded-xl bg-amber-500/10 px-3 py-2 text-sm" role="alert" data-testid="pay-overdraft-prompt">
-                <p>{overdraftPrompt.message}</p>
-                <Button type="button" size="sm" disabled={payMutation.isPending} data-testid="pay-overdraft-confirm"
-                  onClick={() => payMutation.mutate({ ...overdraftPrompt.input, allow_overdraft: true })}>
-                  Usar cheque especial e pagar
-                </Button>
-              </div>
-            ) : null}
-            {formError ? (
-              <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert" data-testid="pay-invoice-error">
-                {formError}
-              </p>
-            ) : null}
-            <DialogFooter className="gap-2">
-              <Button type="button" variant="outline" onClick={() => setPayOpen(false)} data-testid="pay-cancel-button">
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={payMutation.isPending} data-testid="pay-confirm-button">
-                {payMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-                Confirmar pagamento
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <PayInvoiceSheet open={payOpen} onOpenChange={(open) => { setPayOpen(open); if (!open) { setPaidDone(null); setOverdraftPrompt(null); setFormError(null); } }}
+        invoice={invoice} card={card} accounts={accounts} pending={payMutation.isPending} error={formError}
+        overdraftMessage={overdraftPrompt?.message ?? null} done={paidDone}
+        onPay={(input, scheduled) => {
+          setFormError(null);
+          if (scheduled) { setPaidDone({ value: input.value ?? 0, accountId: input.account_id, scheduled: true }); return; }
+          payMutation.mutate({ ...input, allow_overdraft: Boolean(overdraftPrompt) });
+        }}
+        onUndo={() => { if (paidPaymentId) undoMutation.mutate(paidPaymentId); setPayOpen(false); setPaidDone(null); }}
+        onDoneClose={() => { setPayOpen(false); setPaidDone(null); }} />
     </div>
   );
 }

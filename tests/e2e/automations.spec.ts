@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createFirstAccount } from "./walletHelpers";
 
 // The notifications invitation would sit over the screens under test.
 test.beforeEach(async ({ page }) => {
@@ -12,14 +13,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function createAccount(page: Page) {
-  await page.goto("/contas");
-  await page.getByTestId("accounts-empty-create-button").click();
-  const form = page.getByTestId("account-form");
-  await form.getByTestId("account-name-input").fill("Conta Teste");
-  await form.locator("#wallet-institution-name").fill("Banco Teste");
-  await form.getByTestId("account-initial-input").fill("1000");
-  await form.getByTestId("account-submit-button").click();
-  await expect(page.getByTestId("wallet-institutions")).toBeVisible();
+  await createFirstAccount(page, { bank: "Banco Teste", nickname: "Conta Teste", balance: "1000" });
 }
 
 test("Integrações shows only Apple Pay and the AI", async ({ page }) => {

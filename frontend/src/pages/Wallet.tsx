@@ -21,7 +21,10 @@ import { BankList } from "@/components/wallet/BankList";
 import { BenefitList } from "@/components/wallet/BenefitList";
 import { UpcomingInvoices } from "@/components/wallet/UpcomingInvoices";
 import { AddToWalletDialog, type AddKind } from "@/components/wallet/AddToWalletDialog";
-import { CardDialog } from "@/components/cards/CardDialog";
+import { SingleBank } from "@/components/wallet/SingleBank";
+import { BankWizard, type BankChoice } from "@/components/wallet/BankWizard";
+import { NewCardSheet } from "@/components/wallet/NewCardSheet";
+import { BenefitWizard } from "@/components/wallet/BenefitWizard";
 import { InstitutionManagerDialog } from "@/components/accounts/InstitutionManagerDialog";
 import { AccountDetailDialog } from "@/components/accounts/AccountDetailDialog";
 import { AdjustBalanceDialog } from "@/components/accounts/AdjustBalanceDialog";
@@ -29,7 +32,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { Account, CreditCard } from "@/types/finnos";
+import type { Account } from "@/types/finnos";
 
 type Tab = "tudo" | "contas" | "cartoes" | "beneficios";
 const TABS: { key: Tab; label: string }[] = [
@@ -86,8 +89,12 @@ export default function Wallet() {
   const banks = bankRows(accounts, cards, institutions);
   const benefitCount = accounts.filter((a) => a.type === "beneficio" && a.active).length;
   const cash = accounts.find((a) => a.type === "carteira" && a.active);
+  // Prototype "15 · Com 1 banco": one bank, at most one card, nothing else yet.
+  const single = tab === "tudo" && banks.length === 1 && !benefitCount && !cash && investedCents === 0 && cards.filter((c) => c.active).length <= 1 ? banks[0] : null;
 
-  const [cardDialog, setCardDialog] = useState<{ open: boolean; card?: CreditCard }>({ open: false });
+  const [cardSheet, setCardSheet] = useState<{ open: boolean; preset?: BankChoice | null }>({ open: false });
+  const [bankOpen, setBankOpen] = useState(false);
+  const [benefitOpen, setBenefitOpen] = useState(false);
   const [addOpen, setAddOpenRaw] = useState(false);
   const [cashFirst, setCashFirst] = useState(false);
   const setAddOpen = (open: boolean, cash = false) => { setCashFirst(cash); setAddOpenRaw(open); };
@@ -95,8 +102,9 @@ export default function Wallet() {
   const [adjusting, setAdjusting] = useState<{ account: Account; suggested: number; reconciliationId: string } | null>(null);
   const [adjusted, setAdjusted] = useState<{ name: string; value: number } | null>(null);
   const add = (kind: Exclude<AddKind, "dinheiro">) => {
-    if (kind === "cartao") setCardDialog({ open: true });
-    else dialogs.openAccount(undefined, { type: kind === "beneficio" ? "beneficio" : "corrente" });
+    if (kind === "cartao") setCardSheet({ open: true });
+    else if (kind === "beneficio") setBenefitOpen(true);
+    else setBankOpen(true);
   };
   const saveCash = async (value: number) => {
     if (cash) {
@@ -163,7 +171,7 @@ export default function Wallet() {
             </p>
           ) : !empty ? (
             <p data-keep="" className="text-[13px] text-muted-foreground" data-testid="wallet-counts">
-              {[plural(banks.length, "banco", "bancos"), plural(cards.filter((c) => c.active).length, "cartão", "cartões"), plural(benefitCount, "benefício", "benefícios")].join(" · ")}
+              {[plural(banks.length, "banco", "bancos"), ...[[cards.filter((c) => c.active).length, "cartão", "cartões"], [benefitCount, "benefício", "benefícios"]].filter(([n]) => n).map(([n, one, many]) => plural(n as number, one as string, many as string))].join(" · ")}
             </p>
           ) : null}
         </div>
@@ -221,6 +229,8 @@ export default function Wallet() {
         </CardContent></Card>
       ) : empty && tab === "tudo" ? (
         <FirstUse onPick={(kind) => (kind === "dinheiro" ? setAddOpen(true, true) : add(kind))} onManageInstitutions={() => setInstitutionManagerOpen(true)} />
+      ) : single ? (
+        <SingleBank bank={single} hidden={hidden} onAdd={add} />
       ) : (
         <>
           {tab === "tudo" ? <WalletIndicators ind={indicators} investedCents={investedCents} hidden={hidden} /> : null}
@@ -242,7 +252,7 @@ export default function Wallet() {
               hidden={hidden} onOpenCash={setSelected} onManageInstitutions={() => setInstitutionManagerOpen(true)} />
           ) : null}
           {tab === "tudo" || tab === "beneficios" ? (
-            benefitCount ? <BenefitList accounts={accounts} hidden={hidden} onOpen={setSelected} /> : tab === "beneficios" ? (
+            benefitCount ? <BenefitList accounts={accounts} hidden={hidden} /> : tab === "beneficios" ? (
               <EmptyBlock title="Nenhum benefício cadastrado" text="VR, VA ou um cartão multi com até 8 benefícios, cada um com saldo e recarga." action="Adicionar benefício" onClick={() => add("beneficio")} testId="wallet-benefits-empty" />
             ) : null
           ) : null}
@@ -251,7 +261,9 @@ export default function Wallet() {
       )}
 
       <AddToWalletDialog open={addOpen} onOpenChange={setAddOpen} onPick={add} onSaveCash={saveCash} cashNow={cash?.balance ?? null} startOnCash={cashFirst} />
-      <CardDialog open={cardDialog.open} card={cardDialog.card} onOpenChange={(open) => setCardDialog((prev) => ({ ...prev, open }))} />
+      <BankWizard open={bankOpen} onOpenChange={setBankOpen} institutions={institutions} onCard={(bank) => setCardSheet({ open: true, preset: bank })} />
+      <NewCardSheet open={cardSheet.open} onOpenChange={(open) => setCardSheet((prev) => ({ ...prev, open }))} institutions={institutions} preset={cardSheet.preset} />
+      <BenefitWizard open={benefitOpen} onOpenChange={setBenefitOpen} />
       <InstitutionManagerDialog open={institutionManagerOpen} onOpenChange={setInstitutionManagerOpen} institutions={institutions} />
       {adjusting ? (
         <AdjustBalanceDialog open onOpenChange={(open) => { if (!open) setAdjusting(null); }} account={adjusting.account} suggested={adjusting.suggested}

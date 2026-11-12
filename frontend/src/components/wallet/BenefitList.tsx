@@ -1,21 +1,13 @@
+import { Link } from "react-router-dom";
 import { formatBRL, formatHiddenBRL } from "@/lib/format";
 import { benefitTiles } from "@/lib/walletSummary";
 import type { Account } from "@/types/finnos";
+import { BENEFIT_GRADIENTS as GRADIENTS } from "@/lib/benefitColors";
 
-const GRADIENTS = [
-  "linear-gradient(150deg, #00A86B, #00694A)",
-  "linear-gradient(150deg, #F59E0B, #C2410C)",
-  "linear-gradient(150deg, #0EA5E9, #1D4ED8)",
-  "linear-gradient(150deg, #EC4899, #9D174D)",
-  "linear-gradient(150deg, #8B5CF6, #5B21B6)",
-  "linear-gradient(150deg, #14B8A6, #0F766E)",
-  "linear-gradient(150deg, #EF4444, #991B1B)",
-  "linear-gradient(150deg, #64748B, #1E293B)",
-];
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
 /** Prototype "Benefícios": a coloured tile per benefit, with what is left of the month and the pace. */
-export function BenefitList({ accounts, hidden, onOpen }: { accounts: Account[]; hidden: boolean; onOpen: (a: Account) => void }) {
+export function BenefitList({ accounts, hidden }: { accounts: Account[]; hidden: boolean }) {
   const tiles = benefitTiles(accounts);
   if (!tiles.length) return null;
   const money = (cents: number) => (hidden ? formatHiddenBRL() : formatBRL(cents / 100).replace(/,00$/, ""));
@@ -28,7 +20,7 @@ export function BenefitList({ accounts, hidden, onOpen }: { accounts: Account[];
       </div>
       <div className="grid grid-cols-2 gap-2.5">
         {tiles.map((t, i) => (
-          <button key={t.key} type="button" onClick={() => onOpen(t.account)} data-testid={`wallet-benefit-mini-${t.key.split(":")[1]}`}
+          <Link key={t.key} to={`/contas/beneficio/${encodeURIComponent(t.account.id)}?b=${encodeURIComponent(t.key.split(":")[1])}`} data-testid={`wallet-benefit-mini-${t.key.split(":")[1]}`}
             className="flex h-[150px] flex-col justify-between rounded-[22px] p-3.5 text-left text-white" style={{ background: GRADIENTS[i % GRADIENTS.length] }}>
             <span className="min-w-0">
               <span className="block truncate text-[13px] font-semibold">{t.name}</span>
@@ -43,7 +35,7 @@ export function BenefitList({ accounts, hidden, onOpen }: { accounts: Account[];
                 {t.left !== null ? `${Math.round(t.left * 100)}% restante · ` : ""}{t.runsOut ? `acaba ~${ddmm(t.runsOut)}` : t.cents > 0 ? "no ritmo" : "sem saldo"}
               </span>
             </span>
-          </button>
+          </Link>
         ))}
       </div>
     </section>

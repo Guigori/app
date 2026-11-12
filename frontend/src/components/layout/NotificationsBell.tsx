@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bell, CalendarClock, CreditCard, LayoutGrid, Radar as RadarIcon, ReceiptText, X } from "lucide-react";
+import { AlertTriangle, Bell, CalendarClock, CreditCard, LayoutGrid, Wallet, Radar as RadarIcon, ReceiptText, X } from "lucide-react";
 import { useWidgetAlerts } from "@/components/insights/useWidgetAlerts";
 import { useLocation, useNavigate } from "react-router-dom";
 import { clearNotifications, dismissNotification, fetchNotifications, fetchRadar, updateRadarSignal } from "@/lib/data";
@@ -14,6 +14,7 @@ const ICON: Record<NotificationKind, typeof Bell> = {
   atrasado: AlertTriangle,
   fatura: CreditCard,
   captura: ReceiptText,
+  saldo: Wallet,
 };
 
 /** Bell with a live badge: scheduled/pending entries coming due, overdue ones and card

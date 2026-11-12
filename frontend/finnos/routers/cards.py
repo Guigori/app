@@ -20,10 +20,11 @@ router = APIRouter(prefix="/cards", tags=["cards"])
 
 def _payload(payload: CardIn) -> dict:
     """The stored fields; an absent default flag leaves the current one untouched."""
-    skip = {name for name in ("is_default", "last_digits") if getattr(payload, name) is None}
+    skip = {name for name in ("is_default", "last_digits", "network", "limit_alert", "invoice_reminder", "remind_days") if getattr(payload, name) is None}
     data = payload.model_dump(exclude=skip)
-    if data.get("last_digits") == "":
-        data["last_digits"] = None
+    for key in ("last_digits", "network"):
+        if data.get(key) == "":
+            data[key] = None
     return data
 
 
@@ -63,6 +64,10 @@ async def _build(doc: dict, txs: List[dict], accounts: dict, institutions: dict 
         active=doc.get("active", True),
         is_default=bool(doc.get("is_default")) if is_default is None else is_default,
         last_digits=doc.get("last_digits"),
+        network=doc.get("network"),
+        limit_alert=bool(doc.get("limit_alert")),
+        invoice_reminder=doc.get("invoice_reminder", True) is not False,
+        remind_days=doc.get("remind_days"),
         invoice_paid=invoice_state(doc, txs, closing.isoformat())["paid"],
         current_invoice=round(invoice, 2),
         payable_invoice=D(max(0, payable_state["total_cents"] - payable_state["paid_cents"])) / 100,

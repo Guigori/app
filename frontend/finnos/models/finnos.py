@@ -36,6 +36,11 @@ class AccountOut(BaseModel):
     is_default: bool = False
     # Cheque especial: how far below zero a confirmed payment/transfer may go.
     overdraft_limit: Optional[Money] = None
+    # Carteira (etapa 6): notify when the balance falls below this; None = off.
+    low_balance_alert: Optional[Money] = None
+    # Benefit cards: warn if a benefit will run out before its recharge / when a recharge lands.
+    benefit_runout_alert: bool = False
+    benefit_recharge_alert: bool = False
     # Last statement date that closed with the FINNOS balance.
     reconciled_until: Optional[str] = None
     # Benefit cards (etapa 5): up to 8 benefits with their own balance.
@@ -58,6 +63,10 @@ class AccountIn(BaseModel):
     # None keeps the current flag (older clients do not send it).
     is_default: Optional[bool] = None
     overdraft_limit: Optional[Money] = Field(default=None, ge=0)
+    # None keeps what is stored; 0 turns the low balance alert off.
+    low_balance_alert: Optional[Money] = Field(default=None, ge=0)
+    benefit_runout_alert: Optional[bool] = None
+    benefit_recharge_alert: Optional[bool] = None
     # None keeps the stored benefits (older clients do not send them).
     wallets: Optional[List["BenefitWalletIn"]] = Field(default=None, max_length=8)
 

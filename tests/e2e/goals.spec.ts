@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createFirstAccount } from "./walletHelpers";
 
 // The notifications invitation would sit over the screens under test.
 test.beforeEach(async ({ page }) => {
@@ -21,14 +22,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("a goal asks where the money comes from, shows its whole history and lets money go back to an account", async ({ page }) => {
-  await page.goto("/contas");
-  await page.getByTestId("accounts-empty-create-button").click();
-  const form = page.getByTestId("account-form");
-  await form.getByTestId("account-name-input").fill("Conta Teste");
-  await form.locator("#wallet-institution-name").fill("Banco Teste");
-  await form.getByTestId("account-initial-input").fill("1000");
-  await form.getByTestId("account-submit-button").click();
-  await expect(page.getByTestId("wallet-institutions")).toBeVisible();
+  await createFirstAccount(page, { bank: "Banco Teste", nickname: "Conta Teste", balance: "1000" });
 
   await page.goto("/metas");
   const card = page.getByTestId("goal-g-trip");

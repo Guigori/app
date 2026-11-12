@@ -1376,6 +1376,7 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
   const account = accounts.find((a) => a.id === doc.payment_account_id);
   return {
     ...doc,
+    network: doc.network || null,
     payment_account_name: account?.name ?? null,
     invoice_paid: (totals.get(closing) ?? 0) > 0 && invoice === 0,
     current_invoice: invoice,
@@ -1409,8 +1410,13 @@ function cardDigits(input: CardInput): CardInput {
   return { ...input, last_digits: input.last_digits || undefined };
 }
 
+function cardSettings(input: CardInput): CardInput {
+  const out = cardDigits(input);
+  return { ...out, network: out.network === "" ? undefined : out.network };
+}
+
 export function localCreateCard(raw: CardInput): CreditCard {
-  const input = cardDigits(localResolveInstitution(raw, true));
+  const input = cardSettings(localResolveInstitution(raw, true));
   const db = readDb();
   if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
   const card: LocalCard = { ...input, id: newId(), created_at: new Date().toISOString() };
@@ -1421,7 +1427,7 @@ export function localCreateCard(raw: CardInput): CreditCard {
 }
 
 export function localUpdateCard(id: string, raw: CardInput): CreditCard {
-  const input = cardDigits(localResolveInstitution(raw, true));
+  const input = cardSettings(localResolveInstitution(raw, true));
   const db = readDb();
   const existing = db.cards.find((c) => c.id === id);
   if (!existing) throw new Error("Cartão não encontrado.");
@@ -1482,13 +1488,14 @@ export function localNotifications(windowDays = 7): Notifications {
   }
   // Reminder only: invoices with money owed, due in the window or overdue (≤ 30 days).
   for (const card of db.cards) {
-    if (!card.active) continue;
+    if (!card.active || (card as { invoice_reminder?: boolean }).invoice_reminder === false) continue;
+    const cardWindow = (card as { remind_days?: number | null }).remind_days || windowDays;
     const [start, current] = cycleBounds(today, card.closing_day);
     const [, previous] = cycleBounds(addDays(start, -1), card.closing_day);
     for (const closing of [previous, current]) {
       const due = dueDate(closing, card.closing_day, card.due_day);
       const daysLeft = dayDiff(due);
-      if (daysLeft > windowDays || daysLeft < -30) continue;
+      if (daysLeft > cardWindow || daysLeft < -30) continue;
       const state = invoiceForCycle(db, card, closing);
       const owed = state.outstanding ?? 0;
       const closed = closing < today;
@@ -1508,6 +1515,40 @@ export function localNotifications(windowDays = 7): Notifications {
         target_url: `/cartoes/${card.id}?cycle=${closing}`,
       });
     }
+  }
+  // Carteira (etapa 6): 80% of the limit (mirror of _limit_alerts).
+  for (const card of localListCards()) {
+    if (!card.active || !card.limit_alert || card.used_percent < 80) continue;
+    items.push({
+      id: `limit-${card.id}-${card.next_closing}`, kind: "fatura", title: `${card.name}: ${Math.floor(card.used_percent)}% do limite`,
+      description: "O limite está quase no fim. Confira a fatura antes de novas compras.", date: today, value: card.available, days_left: 0,
+      target_url: `/cartoes/${card.id}`,
+    });
+  }
+  // Carteira (etapa 6): low balance alert, one per account and day (mirror of _low_balance_alerts).
+  for (const account of localListAccounts()) {
+    if (account.type === "beneficio" && account.active) {
+      for (const w of account.wallets ?? []) {
+        if (account.benefit_runout_alert && w.runs_out_on && w.next_recharge) {
+          items.push({ id: `runout-${account.id}-${w.id}-${w.next_recharge}`, kind: "saldo", title: `${w.name} pode acabar antes da recarga`,
+            description: `No ritmo atual acaba por volta de ${w.runs_out_on.slice(8, 10)}/${w.runs_out_on.slice(5, 7)}; a recarga cai em ${w.next_recharge.slice(8, 10)}/${w.next_recharge.slice(5, 7)}.`,
+            date: today, value: w.balance, days_left: 0, target_url: `/contas/beneficio/${account.id}?b=${w.id}` });
+        }
+      }
+      if (account.benefit_recharge_alert) {
+        for (const tx of db.transactions.filter((t) => t.account_id === account.id && t.benefit_recharge && t.date === today)) {
+          items.push({ id: `recharge-${tx.id}`, kind: "saldo", title: `${tx.name} caiu`, description: `A recarga de ${account.name} entrou hoje.`,
+            date: today, value: tx.value, days_left: 0, target_url: `/contas/beneficio/${account.id}?b=${tx.wallet_id ?? ""}` });
+        }
+      }
+    }
+    const threshold = account.low_balance_alert ?? 0;
+    if (!account.active || !threshold || account.balance >= threshold) continue;
+    items.push({
+      id: `low-${account.id}-${today}`, kind: "saldo", title: `Saldo baixo em ${account.name}`,
+      description: `Ficou abaixo de ${threshold.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/\u00a0/g, " ")}.`,
+      date: today, value: account.balance, days_left: 0, target_url: "/contas",
+    });
   }
   items.sort((a, b) => a.days_left - b.days_left || a.title.localeCompare(b.title));
   return { items, count: items.length };
@@ -2168,8 +2209,14 @@ export function localAdjustBalance(accountId: string, input: BalanceAdjustmentIn
   const db = readDb();
   if (input.date > todayISO()) throw new Error("O ajuste não pode ter data futura.");
   if (input.reason.trim().length < 3) throw new Error("Explique o motivo do ajuste.");
-  if (!db.accounts.some(a => a.id === accountId)) throw new Error("Conta não encontrada.");
-  const before = balanceUntil(db, accountId, input.date);
+  const acct = db.accounts.find(a => a.id === accountId);
+  if (!acct) throw new Error("Conta não encontrada.");
+  const wallets = storedWallets(acct);
+  const walletId = wallets.length ? input.wallet_id || defaultWalletId({ wallets }) : null;
+  if (walletId && !wallets.some(w => w.id === walletId)) throw new Error("Esse benefício não pertence ao cartão.");
+  const before = walletId
+    ? walletBalances({ id: accountId, wallets }, db.transactions, input.date, balanceEffects).get(walletId) ?? 0
+    : balanceUntil(db, accountId, input.date);
   const target = centsOf(input.target_balance);
   const diff = target - before;
   if (diff === 0) throw new Error("O saldo já é este; nada a ajustar.");
@@ -2177,6 +2224,7 @@ export function localAdjustBalance(accountId: string, input: BalanceAdjustmentIn
     name: "Ajuste de saldo", value: Math.abs(diff) / 100, type: diff > 0 ? "receita" : "despesa", status: "pago", date: input.date,
     account_id: accountId, card_id: null, to_account_id: null, category_id: null, fixed: false, recurrence: null, installment: false,
     total_installments: null, current_installment: null, adjusted_value: null, attachment: null, notes: input.reason.trim(),
+    wallet_id: walletId,
   });
   tx.balance_adjustment = true;
   db.transactions = [...db.transactions, tx];

@@ -36,6 +36,10 @@ const Transactions = lazyRetry(() => import("@/pages/Transactions"));
 const Accounts = lazyRetry(() => import("@/pages/Accounts"));
 const Wallet = lazyRetry(() => import("@/pages/Wallet"));
 const WalletBank = lazyRetry(() => import("@/pages/WalletBank"));
+const WalletAccountConfig = lazyRetry(() => import("@/pages/WalletAccountConfig"));
+const WalletCardConfig = lazyRetry(() => import("@/pages/WalletCardConfig"));
+const WalletBenefit = lazyRetry(() => import("@/pages/WalletBenefit"));
+const WalletBenefitConfig = lazyRetry(() => import("@/pages/WalletBenefitConfig"));
 const Categories = lazyRetry(() => import("@/pages/Categories"));
 const Settings = lazyRetry(() => import("@/pages/Settings"));
 const SettingsIntegrations = lazyRetry(() => import("@/pages/SettingsIntegrations"));
@@ -113,6 +117,10 @@ export default function App() {
             <Route path="/configuracoes/graficos" element={<ChartSettings />} />
             <Route path="/cartoes" element={<Navigate to="/contas?aba=cartoes" replace />} />
             <Route path="/cartoes/:cardId" element={<CardInvoice />} />
+            <Route path="/cartoes/:cardId/configurar" element={<WalletCardConfig />} />
+            <Route path="/contas/:accountId/configurar" element={<WalletAccountConfig />} />
+            <Route path="/contas/beneficio/:accountId" element={<WalletBenefit />} />
+            <Route path="/contas/beneficio/:accountId/configurar" element={<WalletBenefitConfig />} />
             <Route path="/contas/banco/:bankKey" element={walletV2Enabled() ? <WalletBank /> : <Navigate to="/contas" replace />} />
             <Route path="/contas/:accountId/conferencia" element={<ReconciliationPage />} />
             <Route path="/cartoes/:cardId/conferencia" element={<ReconciliationPage />} />

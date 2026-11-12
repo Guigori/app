@@ -77,7 +77,7 @@ export default function WalletBank() {
             {hidden ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
           </button>
           {primary ? (
-            <button type="button" onClick={() => dialogs.openAccount(primary)} aria-label="Configurar conta" className="grid size-11 place-items-center rounded-full bg-white/15"><Pencil className="size-[18px]" /></button>
+            <Link to={`/contas/${encodeURIComponent(primary.id)}/configurar`} aria-label="Configurar conta" className="grid size-11 place-items-center rounded-full bg-white/15"><Pencil className="size-[18px]" /></Link>
           ) : null}
         </div>
         <div className="mt-5 grid grid-cols-2 gap-2.5">
@@ -91,7 +91,7 @@ export default function WalletBank() {
 
       <div className="relative mx-5 -mt-[22px] grid grid-cols-4 gap-2">
         {primary ? (
-          <button type="button" className={shortcut} onClick={() => dialogs.openAccount(primary)} data-testid="wallet-bank-configure">{icon(<Settings className="size-[18px]" />)}Configurar</button>
+          <Link to={`/contas/${encodeURIComponent(primary.id)}/configurar`} className={shortcut} data-testid="wallet-bank-configure">{icon(<Settings className="size-[18px]" />)}Configurar</Link>
         ) : <span className={cn(shortcut, "opacity-40")}>{icon(<Settings className="size-[18px]" />)}Configurar</span>}
         <button type="button" className={cn(shortcut, !primary && "opacity-40")} disabled={!primary} data-testid="wallet-bank-transfer"
           onClick={() => primary && dialogs.openTransaction({ type: "transferencia", prefill: { type: "transferencia", account_id: primary.id } })}>{icon(<ArrowLeftRight className="size-[18px]" />)}Transferir</button>
