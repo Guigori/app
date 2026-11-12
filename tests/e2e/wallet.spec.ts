@@ -37,20 +37,21 @@ test("creates an institution-linked account and hides all balance figures", asyn
   await expect(page.getByTestId("wallet-balance")).toContainText("350,15");
 });
 
-test("card issuer stays distinct from the linked payment account's bank", async ({ page }) => {
+test("card issuer stays distinct from the account's bank and the card has no paying account", async ({ page }) => {
   await createCheckingAccount(page);
   await page.getByRole("button", { name: "Novo cartão" }).click();
   const form = page.getByTestId("card-form");
   await form.getByTestId("card-name-input").fill("Cartão Nubank");
   await form.locator("#wallet-institution-name").fill("Nubank");
   await form.getByTestId("card-limit-input").fill("1000");
-  await form.getByTestId("card-account-select").click();
-  await page.getByRole("option", { name: "Conta Inter" }).click();
+  // Etapa 2: the paying account is chosen when paying the invoice.
+  await expect(form.getByTestId("card-account-select")).toHaveCount(0);
+  await expect(form.getByTestId("card-pay-note")).toBeVisible();
   await form.getByTestId("card-submit-button").click();
   await expect(page.locator("[data-testid^=wallet-card-]")).toHaveCount(1);
   const card = page.locator("[data-testid^=wallet-card-]").first();
   await expect(card).toContainText("Cartão Nubank");
-  await expect(card).toContainText("Conta Inter");
+  await expect(card).not.toContainText("Conta Inter");
   await expect(page.locator("[data-testid^=wallet-group-]")).toHaveCount(2);
 });
 

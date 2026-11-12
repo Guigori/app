@@ -73,6 +73,8 @@ class InvoiceItem(BaseModel):
     category_name: Optional[str] = None
     category_color: Optional[str] = None
     installment_label: Optional[str] = None
+    # Set on the "Saldo da fatura anterior" line: the cycle it came from.
+    carry_from: Optional[str] = None
 
 
 class InvoiceAdjustment(BaseModel):
@@ -121,6 +123,10 @@ class Invoice(BaseModel):
     outstanding: Money = 0
     paid_amount: Money
     paid_at: Optional[str] = None
+    # Partial payment of a closed invoice: the rest moved to ``carried_to``.
+    carried_amount: Money = 0
+    carried_to: Optional[str] = None
+    last_payment_id: Optional[str] = None
     items: List[InvoiceItem]
     adjustments: List[InvoiceAdjustment] = Field(default_factory=list)
     adjustment_total: Money = 0
@@ -133,3 +139,5 @@ class PayInvoiceIn(BaseModel):
     account_id: str
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     value: Optional[Money] = Field(default=None, gt=0)
+    # The person confirmed using the account's cheque especial.
+    allow_overdraft: bool = False

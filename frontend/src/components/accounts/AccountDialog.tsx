@@ -58,6 +58,7 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
   const [color, setColor] = useState(CASH_COLOR);
   const [isDefault, setIsDefault] = useState(false);
   const [initialRaw, setInitialRaw] = useState("0");
+  const [overdraftRaw, setOverdraftRaw] = useState("");
   const [active, setActive] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -71,10 +72,12 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
       setType(account.type);
       setColor(account.color);
       setInitialRaw(String(account.initial_balance));
+      setOverdraftRaw(account.overdraft_limit ? String(account.overdraft_limit) : "");
       setActive(account.active);
       setIsDefault(Boolean(account.is_default));
     } else {
       setName(initialName ?? "");
+      setOverdraftRaw("");
       setInstitution("");
       setInstitutionChoice("new");
       setType("corrente");
@@ -131,6 +134,9 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
       return setFormError(type === "beneficio" ? "Escolha a empresa do benefício." : "Escolha o banco da conta.");
     if (initial === null || !Number.isSafeInteger(Math.round(initial * 100)) || Math.abs(initial * 100 - Math.round(initial * 100)) > 1e-6)
       return setFormError("Informe um saldo inicial válido, com até duas casas decimais.");
+    const overdraft = overdraftRaw.trim() ? parseAmount(overdraftRaw) : 0;
+    if (overdraft === null || overdraft < 0 || Math.abs(overdraft * 100 - Math.round(overdraft * 100)) > 1e-6)
+      return setFormError("Informe um limite de cheque especial válido (ou deixe em branco).");
     mutation.mutate({
       name: name.trim(),
       institution: type === "carteira" ? "" : institution.trim(),
@@ -138,6 +144,8 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
       type,
       color: type === "carteira" ? CASH_COLOR : color,
       initial_balance: initial,
+      // 0 removes the limit; only bank accounts have cheque especial.
+      overdraft_limit: type === "corrente" || type === "digital" ? overdraft : 0,
       active,
       // Only send the flag when it is turned on or changed, so editing keeps the current default.
       ...(isDefault || account?.is_default ? { is_default: isDefault } : {}),
@@ -191,6 +199,14 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
               <Input id="account-initial" inputMode="decimal" value={initialRaw} onChange={(e) => setInitialRaw(e.target.value)} data-testid="account-initial-input" />
               <p className="text-xs text-muted-foreground">Use um valor negativo se a conta já estiver no cheque especial (ex.: -500,00).</p>
             </div>
+            {type === "corrente" || type === "digital" ? (
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="account-overdraft">Limite do cheque especial (R$)</Label>
+                <Input id="account-overdraft" inputMode="decimal" placeholder="Sem cheque especial" value={overdraftRaw}
+                  onChange={(e) => setOverdraftRaw(e.target.value)} data-testid="account-overdraft-input" />
+                <p className="text-xs text-muted-foreground">Com limite, pagar ou transferir sem saldo pede sua confirmação.</p>
+              </div>
+            ) : null}
           </div>
           <div className="flex items-start gap-3 rounded-2xl bg-muted/50 p-3">
             <Checkbox id="account-default" checked={isDefault} onCheckedChange={(checked) => setIsDefault(checked === true)} data-testid="account-default-checkbox" />

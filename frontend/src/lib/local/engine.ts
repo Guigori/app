@@ -1,11 +1,12 @@
 // Local-mode data engine: the same business rules as backend/lib/stats.py, run in
 // the browser. Keep the two in sync — a rule change belongs in both places.
 
+import { checkFunds } from "@/lib/funds";
 import { institutionIdentity } from "@/lib/institutionCatalog";
 import { accountScope, effectiveDefaults } from "@/lib/walletDefaults";
 import { institutionKey } from "@/lib/institutionGroups";
 import { addMonth, currentMonth, todayISO, toLocalISO } from "@/lib/format";
-import { newId, readDb, writeDb, freshDb, wipeDb, type LocalCard, type LocalDb } from "@/lib/local/store";
+import { newId, readDb, writeDb, freshDb, wipeDb, type LocalCard, type LocalDb, type LocalPaidCycle } from "@/lib/local/store";
 import type {
   Account,
   AccountDetail,
@@ -186,6 +187,28 @@ function balanceEffects(tx: Transaction, today: string): [string, number][] {
   const effects: [string, number][] = [[tx.account_id, round2(-v)]];
   if (tx.to_account_id && tx.to_account_id !== tx.account_id) effects.push([tx.to_account_id, round2(v)]);
   return effects;
+}
+
+function accountBalance(db: LocalDb, accountId: string, excludeId?: string): number {
+  const today = todayISO();
+  const account = db.accounts.find(a => a.id === accountId);
+  let total = account?.initial_balance ?? 0;
+  for (const tx of db.transactions) {
+    if (tx.id === excludeId) continue;
+    for (const [id, amount] of balanceEffects(tx, today)) if (id === accountId) total += amount;
+  }
+  return round2(total);
+}
+
+const TRANSFER_KEYS = ["value", "account_id", "to_account_id", "status", "date", "type"] as const;
+
+/** Same rule as the server: a paid transfer may not overdraw the source. */
+function assertTransferFunds(db: LocalDb, tx: Transaction, allowOverdraft: boolean, original?: Transaction): void {
+  if (tx.type !== "transferencia" || tx.status !== "pago" || tx.date > todayISO()) return;
+  if (original && TRANSFER_KEYS.every(key => original[key] === tx[key])) return;
+  const account = db.accounts.find(a => a.id === tx.account_id);
+  if (!account) return;
+  checkFunds(accountBalance(db, account.id, original?.id), tx.value, account, allowOverdraft);
 }
 
 function enrich(db: LocalDb, tx: Transaction): Transaction {
@@ -513,6 +536,7 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
 export function localCreateTransaction(input: TransactionInput): Transaction {
   const db = readDb();
   const tx = buildTransaction(db, input);
+  assertTransferFunds(db, tx, Boolean(input.allow_overdraft));
   db.transactions.push(tx);
   localAudit(db, "transactions", "created", null, tx);
   writeDb(db);
@@ -543,6 +567,7 @@ export function localUpdateTransaction(id: string, input: TransactionInput): Tra
   if (index < 0) throw new Error("Transação não encontrada.");
   assertPurchaseNotSettled(db, db.transactions[index]);
   const tx = buildTransaction(db, input, db.transactions[index]);
+  assertTransferFunds(db, tx, Boolean(input.allow_overdraft), db.transactions[index]);
   const before = { ...db.transactions[index] };
   db.transactions[index] = tx;
   localAudit(db, "transactions", "updated", before, tx);
@@ -1213,6 +1238,12 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
     if (!purchaseLines.has(cycle)) purchaseLines.set(cycle, new Map());
     for (const item of paid.items ?? []) purchaseLines.get(cycle)!.set(item.id, item.value);
   }
+  for (const [cycle, paid] of Object.entries(paidCycles)) {
+    if (!paid.carried || !paid.carried_to) continue;
+    if (!purchaseLines.has(paid.carried_to)) purchaseLines.set(paid.carried_to, new Map());
+    purchaseLines.get(paid.carried_to)!.set(`carry:${cycle}`, paid.carried);
+  }
+  const settled = (cycle: string) => round2((paidCycles[cycle]?.amount ?? 0) + (paidCycles[cycle]?.carried ?? 0));
   const totals = new Map([...purchaseLines].map(([cycle, purchases]) => [
     cycle, round2([...purchases.values()].reduce((sum, value) => sum + value, 0)),
   ]));
@@ -1222,14 +1253,14 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
   }
   let used = 0, future = 0;
   for (const [cycle, total] of totals) {
-    const outstanding = round2(Math.max(0, total - (paidCycles[cycle]?.amount ?? 0)));
+    const outstanding = round2(Math.max(0, total - settled(cycle)));
     used = round2(used + outstanding);
     if (cycle > closing) future = round2(future + outstanding);
   }
-  const invoice = round2(Math.max(0, (totals.get(closing) ?? 0) - (paidCycles[closing]?.amount ?? 0)));
+  const invoice = round2(Math.max(0, (totals.get(closing) ?? 0) - settled(closing)));
   // The invoice that already closed (the cycle before the open one) and what is still owed on it.
   const previousClosing = addDays(start, -1);
-  const payable = round2(Math.max(0, (totals.get(previousClosing) ?? 0) - (paidCycles[previousClosing]?.amount ?? 0)));
+  const payable = round2(Math.max(0, (totals.get(previousClosing) ?? 0) - settled(previousClosing)));
   const account = accounts.find((a) => a.id === doc.payment_account_id);
   return {
     ...doc,
@@ -1376,6 +1407,11 @@ function cycleItems(card: LocalCard, txs: Transaction[], start: string, closing:
       installment_label: total > 1 ? `${first + offset + 1}/${total}` : null,
     });
   }
+  for (const [source, paid] of Object.entries(card.paid_cycles ?? {})) {
+    if (paid.carried_to !== closing || !paid.carried) continue;
+    items.push({ id: `carry:${source}`, name: "Saldo da fatura anterior", date: source, value: paid.carried,
+      category_name: null, category_color: null, installment_label: null, carry_from: source });
+  }
   const seen = new Set(frozen.map(item => item.id));
   return [...frozen, ...items.filter(item => !seen.has(item.id))]
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -1392,6 +1428,7 @@ function invoiceForCycle(db: LocalDb, card: LocalCard, closing: string): Invoice
   const adjustmentTotal = round2(adjustments.reduce((sum, item) => sum + item.value, 0));
   const total = round2(items.reduce((sum, item) => sum + item.value, 0) - adjustmentTotal);
   const paidAmount = round2(payment?.amount ?? 0);
+  const carried = round2(payment?.carried ?? 0);
   return {
     card_id: card.id,
     card_name: card.name,
@@ -1400,9 +1437,12 @@ function invoiceForCycle(db: LocalDb, card: LocalCard, closing: string): Invoice
     due_date: dueDate(closing, card.closing_day, card.due_day),
     total,
     paid: total > 0 && paidAmount === total,
-    outstanding: round2(Math.max(0, total - paidAmount)),
+    outstanding: round2(Math.max(0, total - paidAmount - carried)),
     paid_amount: paidAmount,
     paid_at: payment?.paid_at ?? null,
+    carried_amount: carried,
+    carried_to: carried ? payment?.carried_to ?? null : null,
+    last_payment_id: payment?.last_payment_id ?? null,
     items,
     adjustments,
     adjustment_total: adjustmentTotal,
@@ -1444,7 +1484,8 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   const db = readDb();
   const card = db.cards.find((c) => c.id === cardId);
   if (!card) throw new Error("Cartão não encontrado.");
-  if (!db.accounts.some((a) => a.id === input.account_id)) throw new Error("Conta inválida.");
+  const account = db.accounts.find((a) => a.id === input.account_id);
+  if (!account) throw new Error("Conta inválida.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || Number.isNaN(Date.parse(input.date + "T12:00:00")) || input.date > todayISO()) {
     throw new Error("A data do pagamento precisa ser válida e não pode estar no futuro.");
   }
@@ -1453,12 +1494,14 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   const first = configuredDayInMonth(closing, -1, card.closing_day);
   const start = addDays(first, 1);
   const items = cycleItems(card, db.transactions, start, closing, db.categories);
-  const total = invoiceForCycle(db, card, closing).total;
-  const previous = card.paid_cycles?.[closing]?.amount ?? 0;
-  const outstanding = round2(total - previous);
+  const state = invoiceForCycle(db, card, closing);
+  const saved = card.paid_cycles?.[closing];
+  const previous = saved?.amount ?? 0;
+  const outstanding = state.outstanding ?? 0;
   const amount = round2(input.value ?? outstanding);
   if (outstanding <= 0) throw new Error("Esta fatura já foi quitada ou não possui compras.");
   if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding) throw new Error("Pagamento deve ser positivo e não ultrapassar o saldo da fatura.");
+  checkFunds(accountBalance(db, account.id), amount, account, Boolean(input.allow_overdraft));
 
   // A settlement is a bank debit; never add a duplicate category expense.
   const debit = buildTransaction(db, {
@@ -1471,10 +1514,60 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   });
   debit.invoice_payment = true;
   db.transactions = [...db.transactions, debit];
+  // Paying after the closing carries the rest; before it, it is an advance.
+  const carried = closing < input.date && amount < outstanding ? round2(outstanding - amount) : 0;
   card.paid_cycles = {
     ...card.paid_cycles,
-    [closing]: { amount: round2(previous + amount), paid_at: input.date, items },
+    [closing]: {
+      ...saved,
+      amount: round2(previous + amount), paid_at: input.date, items,
+      payments: [...(saved?.payments ?? []), { id: debit.id, amount, carried, date: input.date }],
+      last_payment_id: debit.id,
+      ...(carried ? { carried, carried_to: configuredDayInMonth(closing, 1, card.closing_day) } : {}),
+    },
   };
+  db.cards = db.cards.map((c) => c.id === cardId ? card : c);
+  writeDb(db);
+  return localInvoice(cardId, closing);
+}
+
+/** Undo the last payment of a cycle with a linked reversal; the original stays. */
+export function localUndoInvoicePayment(cardId: string, paymentId: string): Invoice {
+  const db = readDb();
+  const card = db.cards.find((c) => c.id === cardId);
+  if (!card) throw new Error("Cartão não encontrado.");
+  const entry = Object.entries(card.paid_cycles ?? {}).find(([, cycle]) => cycle.payments?.some(p => p.id === paymentId));
+  if (!entry) throw new Error("Pagamento não encontrado.");
+  const [closing, saved] = entry;
+  if (saved.reconciled) throw new Error("Fatura já conferida: o pagamento não pode ser desfeito.");
+  if (saved.last_payment_id !== paymentId) throw new Error("Só o último pagamento desta fatura pode ser desfeito.");
+  const payments = [...(saved.payments ?? [])];
+  const last = payments.pop()!;
+  const next = last.carried ? saved.carried_to : undefined;
+  if (next && card.paid_cycles?.[next]?.amount) throw new Error("A fatura seguinte já tem pagamento com o saldo levado; desfaça aquele primeiro.");
+  const debit = db.transactions.find(t => t.id === paymentId);
+  if (!debit) throw new Error("Lançamento do pagamento não encontrado.");
+  const reversal = buildTransaction(db, {
+    name: `Estorno do pagamento ${card.name}`, value: last.amount, type: "receita", status: "pago", date: todayISO(),
+    account_id: debit.account_id, card_id: null, to_account_id: null, category_id: null, fixed: false, recurrence: null,
+    installment: false, total_installments: null, current_installment: null, adjusted_value: null, attachment: null,
+    notes: `Desfaz o pagamento da fatura fechada em ${closing}.`,
+  });
+  reversal.invoice_payment = true;
+  reversal.invoice_reversal_of = paymentId;
+  db.transactions = [...db.transactions, reversal];
+  const updated: LocalPaidCycle = {
+    ...saved, amount: round2(saved.amount - last.amount), payments,
+    last_payment_id: payments.at(-1)?.id ?? null, paid_at: payments.at(-1)?.date ?? null,
+  };
+  const cycles = { ...card.paid_cycles, [closing]: updated };
+  if (next) {
+    delete updated.carried;
+    delete updated.carried_to;
+    const following = cycles[next];
+    if (following?.items) cycles[next] = { ...following, items: following.items.filter(i => i.id !== `carry:${closing}`) };
+  }
+  card.paid_cycles = cycles;
   db.cards = db.cards.map((c) => c.id === cardId ? card : c);
   writeDb(db);
   return localInvoice(cardId, closing);

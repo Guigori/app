@@ -350,6 +350,7 @@ async def create_transaction(
             (x_finnos_operation_id or doc["id"]),
         ))
     doc["source"] = normalized_operation_source(x_finnos_source)
+    doc["_allow_overdraft"] = payload.allow_overdraft
     await db.transactions.insert_one(doc)
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
     return enrich_transaction(
@@ -384,6 +385,7 @@ async def update_transaction(
     doc["operation_id"] = x_finnos_operation_id
     doc["_expected_version"] = x_finnos_base_version
     doc["source"] = normalized_operation_source(x_finnos_source)
+    doc["_allow_overdraft"] = payload.allow_overdraft
     await db.transactions.replace_one({"id": tx_id, "user_id": user["id"]}, doc)
     doc = await db.transactions.find_one({"id":tx_id,"user_id":user["id"]})
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])

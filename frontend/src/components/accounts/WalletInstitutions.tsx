@@ -52,7 +52,7 @@ export function WalletInstitutions({
           {group.cards.map(card => <div key={card.id} className="flex items-center gap-3 px-4 py-3.5" data-testid={"wallet-card-" + card.id}>
             <Link to={"/cartoes/" + card.id} className="flex min-w-0 flex-1 items-center gap-3">
               <span className="grid size-10 shrink-0 place-items-center rounded-full" style={{ backgroundColor: card.color + "1F", color: card.color }}><CreditCard className="h-5 w-5"/></span>
-              <span className="min-w-0 flex-1"><span className="block truncate font-medium">{card.name}{card.is_default ? <span className="ml-1.5 inline-flex rounded-full bg-primary px-1.5 py-0.5 align-middle text-[10px] font-bold text-primary-foreground">Padrão</span> : null}</span><span className="block truncate text-xs text-muted-foreground">Fatura {money(card.current_invoice)} · paga com {card.payment_account_name ?? "conta não definida"}</span></span>
+              <span className="min-w-0 flex-1"><span className="block truncate font-medium">{card.name}{card.is_default ? <span className="ml-1.5 inline-flex rounded-full bg-primary px-1.5 py-0.5 align-middle text-[10px] font-bold text-primary-foreground">Padrão</span> : null}</span><span className="block truncate text-xs text-muted-foreground">Fatura {money(card.current_invoice)}</span></span>
             </Link>
             <Button size="icon-sm" variant="ghost" onClick={() => onEditCard(card)} aria-label={"Editar " + card.name}><Pencil className="h-4 w-4"/></Button>
           </div>)}

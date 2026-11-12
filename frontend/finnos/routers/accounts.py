@@ -48,6 +48,7 @@ async def _enriched_accounts(user_id: str) -> list[AccountOut]:
                 initial_balance=D(a.get("initial_balance") or D("0.0")),
                 active=a.get("active", True),
                 is_default=a["id"] in defaults,
+                overdraft_limit=a.get("overdraft_limit"),
                 balance=balance,
                 total_income=total_income,
                 total_expense=total_expense,
@@ -66,7 +67,9 @@ async def _one_enriched(user_id: str, account_id: str) -> AccountOut | None:
 
 def _payload(payload: AccountIn) -> dict:
     """The stored fields; an absent default flag leaves the current one untouched."""
-    return payload.model_dump(exclude={"is_default"} if payload.is_default is None else set())
+    # Absent optional fields (older clients) keep what is stored; 0 clears the overdraft limit.
+    skip = {name for name in ("is_default", "overdraft_limit") if getattr(payload, name) is None}
+    return payload.model_dump(exclude=skip)
 
 
 @router.get("", response_model=List[AccountOut])

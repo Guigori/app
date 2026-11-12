@@ -61,6 +61,8 @@ export interface Account {
   active: boolean;
   /** Preselected for its kind: bank account, benefit or cash. */
   is_default?: boolean;
+  /** Cheque especial: how far below zero a confirmed payment/transfer may go. */
+  overdraft_limit?: number | null;
   balance: number;
   total_income: number;
   total_expense: number;
@@ -78,6 +80,8 @@ export interface AccountInput {
   active: boolean;
   /** Omit to keep the current flag. */
   is_default?: boolean;
+  /** Omit to keep the current limit; 0 removes it. */
+  overdraft_limit?: number | null;
 }
 
 export interface AccountDetail {
@@ -181,6 +185,8 @@ export interface Transaction {
   capture_unusual?: boolean;
   recurrence_id?: string | null;
   invoice_payment?: boolean;
+  /** Set on the reversal that undid an invoice payment. */
+  invoice_reversal_of?: string | null;
   invoice_refund?: boolean;
   version?: number;
   id: string;
@@ -239,6 +245,8 @@ export interface TransactionInput {
   notes: string | null;
   origin?: string | null;
   notify_enabled?: boolean;
+  /** The person confirmed using the cheque especial for this transfer. */
+  allow_overdraft?: boolean;
 }
 
 export interface CategorySlice {
@@ -650,6 +658,8 @@ export interface InvoiceItem {
   category_name: string | null;
   category_color: string | null;
   installment_label: string | null;
+  /** Set on the "Saldo da fatura anterior" line: the cycle the balance came from. */
+  carry_from?: string | null;
 }
 
 export interface InvoiceAdjustment {
@@ -695,6 +705,10 @@ export interface Invoice {
   paid_amount: number;
   outstanding?: number;
   paid_at: string | null;
+  /** Partial payment of a closed invoice: the rest moved to `carried_to`. */
+  carried_amount?: number;
+  carried_to?: string | null;
+  last_payment_id?: string | null;
   items: InvoiceItem[];
   adjustments?: InvoiceAdjustment[];
   adjustment_total?: number;
@@ -707,6 +721,8 @@ export interface PayInvoiceInput {
   account_id: string;
   date: string;
   value: number | null;
+  /** The person confirmed using the account's cheque especial. */
+  allow_overdraft?: boolean;
 }
 
 

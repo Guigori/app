@@ -171,9 +171,16 @@ async def register_capture(uid: str, capture: dict, body: ConfirmIn, learn: bool
         raise HTTPException(422, "Escolha de onde saiu o dinheiro: um cartão ou uma conta cadastrada.")
 
     if card:
+        # The card no longer has a paying account (etapa 2): the old value is a
+        # suggestion; otherwise the default bank account carries the record.
         account = next((a for a in accounts if a["id"] == card.get("payment_account_id")), None)
         if not account:
-            raise HTTPException(422, f"O cartão {card['name']} está sem conta de pagamento. Defina em Carteira → Cartões.")
+            from finnos.lib.wallet_defaults import default_scope, effective_defaults
+            banks = [a for a in accounts if default_scope("accounts", a) == "account"]
+            chosen = effective_defaults("accounts", banks)
+            account = next((a for a in banks if a["id"] in chosen), None)
+        if not account:
+            raise HTTPException(422, "Cadastre uma conta bancária para registrar compras no cartão.")
     installments = body.installments
     if installments > 1 and not card:
         raise HTTPException(422, "Parcelamento só no cartão de crédito.")

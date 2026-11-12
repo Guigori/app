@@ -30,7 +30,7 @@ def fixture(monkeypatch):
         "id": "card", "name": "Cartão",
         "closing_day": 29, "due_day": 7, "invoice_cycles": {},
     })
-    bank = Ref("accounts:bank", {"id": "bank"})
+    bank = Ref("accounts:bank", {"id": "bank", "name": "Banco", "initial_balance": Decimal("1000.00")})
     receipts = {}
     payments = {}
     events = []
@@ -80,6 +80,10 @@ def fixture(monkeypatch):
         return purchases
 
     monkeypatch.setattr(store, "card_purchase_rows", card_rows)
+    monkeypatch.setattr(store, "account_movement_rows", lambda db, uid, account_id, transaction: [])
+    # The scenario happens while the 29/10 cycle is still open.
+    import finnos.routers.cards as cards_router
+    monkeypatch.setattr(cards_router, "today_iso", lambda: "2026-10-26")
     monkeypatch.setattr(store, "rows", lambda db, uid, kind, transaction: []
                        if kind == "categories" else (_ for _ in ()).throw(
                            AssertionError("global transaction scan used")

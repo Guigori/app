@@ -5,7 +5,8 @@ import { ScreenHeader } from "@/components/layout/BackButton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Search, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { fetchAccounts, fetchCards, fetchInvoice, payInvoice, creditInvoice, refundInvoiceToBank } from "@/lib/data";
+import { fetchAccounts, fetchCards, fetchInvoice, payInvoice, undoInvoicePayment, creditInvoice, refundInvoiceToBank } from "@/lib/data";
+import { fundsIssue } from "@/lib/funds";
 import { useBalanceHidden } from "@/lib/balance";
 import { getApiErrorMessage } from "@/lib/errors";
 import { formatBRL, formatDate, formatHiddenBRL, parseAmount } from "@/lib/format";
@@ -36,6 +37,8 @@ export default function CardInvoice() {
   const [valueRaw, setValueRaw] = useState("");
   const [operationId, setOperationId] = useState(() => crypto.randomUUID());
   const [formError, setFormError] = useState<string | null>(null);
+  // Cheque especial needs an explicit "yes" from the person (approved 12/11/2026).
+  const [overdraftPrompt, setOverdraftPrompt] = useState<{ message: string; input: PayInvoiceInput } | null>(null);
   const [creditOpen, setCreditOpen] = useState(false);
   const [creditPurchaseId, setCreditPurchaseId] = useState("");
   const [creditAmountRaw, setCreditAmountRaw] = useState("");
@@ -75,8 +78,11 @@ export default function CardInvoice() {
     setPayDate(new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }));
     setValueRaw(String(invoice.outstanding ?? invoice.total - invoice.paid_amount));
     setOperationId(crypto.randomUUID());
-    setAccountId((current) => current || defaultAccount(accounts)?.id || accounts[0]?.id || "");
-  }, [payOpen, invoice, accounts]);
+    setOverdraftPrompt(null);
+    // The card's old "conta de pagamento" is only a suggestion now.
+    const suggested = accounts.find((a) => a.id === card?.payment_account_id)?.id;
+    setAccountId((current) => current || suggested || defaultAccount(accounts)?.id || accounts[0]?.id || "");
+  }, [payOpen, invoice, accounts, card?.payment_account_id]);
 
   useEffect(() => {
     if (!creditOpen || !invoice) return;
@@ -114,23 +120,50 @@ export default function CardInvoice() {
     return (invoice?.items ?? []).filter((item) => !term || item.name.toLowerCase().includes(term));
   }, [invoice, search]);
 
+  const refreshMoney = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["invoice", cardId] }),
+    queryClient.invalidateQueries({ queryKey: ["cards"] }),
+    queryClient.invalidateQueries({ queryKey: ["transactions"] }),
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+    queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+    queryClient.invalidateQueries({ queryKey: ["calendar"] }),
+    queryClient.invalidateQueries({ queryKey: ["flow"] }),
+    queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  ]);
+
+  const undoMutation = useMutation({
+    mutationFn: (paymentId: string) => undoInvoicePayment(cardId, paymentId),
+    onSuccess: async () => {
+      toast.success("Pagamento desfeito. O valor voltou para a conta com um estorno.");
+      await refreshMoney();
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+
   const payMutation = useMutation({
     mutationFn: (input: PayInvoiceInput) => payInvoice(cardId, input, operationId),
-    onSuccess: async () => {
-      toast.success("Pagamento registrado e débito lançado na conta.");
+    onSuccess: async (result) => {
+      const carried = result.carried_amount ?? 0;
+      const paymentId = result.last_payment_id;
+      toast.success(carried > 0
+        ? `Pagamento registrado. ${formatBRL(carried)} vai para a próxima fatura.`
+        : "Pagamento registrado e débito lançado na conta.", paymentId ? {
+        action: { label: "Desfazer", onClick: () => undoMutation.mutate(paymentId) },
+      } : undefined);
       setPayOpen(false);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["invoice", cardId] }),
-        queryClient.invalidateQueries({ queryKey: ["cards"] }),
-        queryClient.invalidateQueries({ queryKey: ["transactions"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
-        queryClient.invalidateQueries({ queryKey: ["calendar"] }),
-        queryClient.invalidateQueries({ queryKey: ["flow"] }),
-        queryClient.invalidateQueries({ queryKey: ["notifications"] }),
-      ]);
+      setOverdraftPrompt(null);
+      await refreshMoney();
     },
-    onError: (error) => setFormError(getApiErrorMessage(error)),
+    onError: (error, input) => {
+      const issue = fundsIssue(error);
+      if (issue?.code === "confirmar_cheque_especial") {
+        setFormError(null);
+        setOverdraftPrompt({ message: issue.message, input });
+        return;
+      }
+      setOverdraftPrompt(null);
+      setFormError(getApiErrorMessage(error));
+    },
   });
 
   const creditMutation = useMutation({
@@ -238,6 +271,18 @@ export default function CardInvoice() {
           <p className="mt-1 text-sm text-muted-foreground" data-testid="invoice-paid-amount">
             Pago: {money(invoice.paid_amount)} · Em aberto: {money(invoice.outstanding ?? invoice.total - invoice.paid_amount)}
           </p>
+        ) : null}
+        {(invoice.carried_amount ?? 0) > 0 ? (
+          <p className="mt-1 text-sm text-muted-foreground" data-testid="invoice-carried">
+            Pago parcialmente: {money(invoice.carried_amount ?? 0)} foi para a fatura que fecha em{" "}
+            {invoice.carried_to ? formatDate(invoice.carried_to) : "—"} como “Saldo da fatura anterior”.
+          </p>
+        ) : null}
+        {invoice.last_payment_id && invoice.paid_amount > 0 ? (
+          <Button size="sm" variant="ghost" className="mt-2 -ml-2" disabled={undoMutation.isPending}
+            onClick={() => undoMutation.mutate(invoice.last_payment_id!)} data-testid="undo-payment-button">
+            <RotateCcw className="h-4 w-4" aria-hidden="true" /> Desfazer último pagamento
+          </Button>
         ) : null}
         {(invoice.adjustment_total ?? 0) > 0 ? (
           <p className="mt-1 text-sm text-muted-foreground" data-testid="invoice-credits-total">
@@ -488,6 +533,7 @@ export default function CardInvoice() {
               const value = parseAmount(valueRaw);
               if (!accountId) return setFormError("Selecione a conta que vai pagar.");
               if (!value || value <= 0) return setFormError("Informe o valor pago.");
+              setOverdraftPrompt(null);
               payMutation.mutate({ account_id: accountId, date: payDate, value, cycle: invoice.cycle_end });
             }}
             data-testid="pay-invoice-form"
@@ -499,13 +545,23 @@ export default function CardInvoice() {
                   <SelectValue>{accounts.find((a) => a.id === accountId)?.name ?? "Selecione"}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name}
-                    </SelectItem>
-                  ))}
+                  {accounts.map((a) => {
+                    const after = a.balance - (parseAmount(valueRaw) ?? 0);
+                    const blocked = after < -(a.overdraft_limit ?? 0) - 1e-9;
+                    return (
+                      <SelectItem key={a.id} value={a.id} disabled={blocked} data-testid={`pay-account-${a.id}`}>
+                        {a.name} · fica {money(after)}{blocked ? " (sem saldo)" : after < 0 ? " (cheque especial)" : ""}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" data-testid="pay-full-button"
+                onClick={() => setValueRaw(String(invoice.outstanding ?? invoice.total - invoice.paid_amount))}>
+                Fatura inteira
+              </Button>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -523,6 +579,31 @@ export default function CardInvoice() {
                 />
               </div>
             </div>
+            {(() => {
+              const value = parseAmount(valueRaw) ?? 0;
+              const open = invoice.outstanding ?? invoice.total - invoice.paid_amount;
+              const rest = Math.round((open - value) * 100) / 100;
+              if (value <= 0 || rest <= 0) return null;
+              return payDate > invoice.cycle_end ? (
+                <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm text-foreground" data-testid="pay-partial-warning">
+                  Pagando menos que o total: {money(rest)} vai para a próxima fatura como “Saldo da fatura anterior”.
+                  O banco pode cobrar juros sobre esse valor.
+                </p>
+              ) : (
+                <p className="rounded-xl bg-muted px-3 py-2 text-sm text-muted-foreground" data-testid="pay-advance-note">
+                  A fatura ainda não fechou: este valor conta como adiantamento e {money(rest)} continua em aberto.
+                </p>
+              );
+            })()}
+            {overdraftPrompt ? (
+              <div className="space-y-2 rounded-xl bg-amber-500/10 px-3 py-2 text-sm" role="alert" data-testid="pay-overdraft-prompt">
+                <p>{overdraftPrompt.message}</p>
+                <Button type="button" size="sm" disabled={payMutation.isPending} data-testid="pay-overdraft-confirm"
+                  onClick={() => payMutation.mutate({ ...overdraftPrompt.input, allow_overdraft: true })}>
+                  Usar cheque especial e pagar
+                </Button>
+              </div>
+            ) : null}
             {formError ? (
               <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert" data-testid="pay-invoice-error">
                 {formError}

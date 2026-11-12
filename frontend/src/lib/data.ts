@@ -49,6 +49,7 @@ import {
   localNotifications,
   localInvoice,
   localPayInvoice,
+  localUndoInvoicePayment,
   localCreditInvoice,
   localBankRefund,
   localSubscriptions,
@@ -831,6 +832,12 @@ export async function fetchInvoice(cardId: string, cycle?: string): Promise<Invo
 export async function payInvoice(cardId: string, input: PayInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
   if (isLocalMode()) return localPayInvoice(cardId, input);
   return apiPost<Invoice>(`/cards/${cardId}/pay`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+
+/** Undo the last payment of an invoice: a linked reversal returns the money; the original stays. */
+export async function undoInvoicePayment(cardId: string, paymentId: string, operationId = crypto.randomUUID()): Promise<Invoice> {
+  if (isLocalMode()) return localUndoInvoicePayment(cardId, paymentId);
+  return apiPost<Invoice>(`/cards/${encodeURIComponent(cardId)}/payments/${encodeURIComponent(paymentId)}/undo`, {}, { "X-FINNOS-Operation-ID": operationId });
 }
 
 /** Paid invoice refund creates one bank receipt; the original invoice remains paid. */

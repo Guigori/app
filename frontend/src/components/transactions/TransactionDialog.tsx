@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createTransaction, fetchAccounts, fetchCards, fetchCategories, fetchOrigins, updateTransaction } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
+import { fundsIssue } from "@/lib/funds";
 import { updateQueuedTransaction, flushSyncQueue, queueTransaction, getSyncOperation, discardConflictedOperation } from "@/lib/sync/queue";
 import { formatBRL, parseAmount, todayISO, TX_STATUS_LABEL, TX_TYPE_LABEL } from "@/lib/format";
 import { TransferPreview } from "@/components/transactions/TransferPreview";
@@ -64,6 +65,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   const [origin, setOrigin] = useState("");
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
+  // Transfer beyond the balance: only with cheque especial and an explicit yes.
+  const [overdraftPrompt, setOverdraftPrompt] = useState<{ message: string; input: TransactionInput } | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [recurrenceScopeOpen, setRecurrenceScopeOpen] = useState(false);
 
@@ -206,7 +209,13 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       await refreshFinancialViews();
       onOpenChange(false);
     },
-    onError: async (error) => {
+    onError: async (error, input) => {
+      const issue = fundsIssue(error);
+      if (issue?.code === "confirmar_cheque_especial") {
+        setFormError(null);
+        setOverdraftPrompt({ message: issue.message, input });
+        return;
+      }
       if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
         onOpenChange(false);
         toast.info("Salvo neste aparelho", {
@@ -222,6 +231,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
 
   const submit = () => {
     setFormError(null);
+    setOverdraftPrompt(null);
     const value = parseAmount(valueRaw);
     if (lockedSyncAttempt) {
       return setFormError("Operação já enviada. Confira o histórico e resolva o conflito antes de criar outro lançamento.");
@@ -641,6 +651,15 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
               />
             </div>
 
+            {overdraftPrompt ? (
+              <div className="space-y-2 rounded-xl bg-amber-500/10 px-3 py-2 text-sm" role="alert" data-testid="transfer-overdraft-prompt">
+                <p>{overdraftPrompt.message}</p>
+                <Button type="button" size="sm" disabled={mutation.isPending} data-testid="transfer-overdraft-confirm"
+                  onClick={() => mutation.mutate({ ...overdraftPrompt.input, allow_overdraft: true })}>
+                  Usar cheque especial e transferir
+                </Button>
+              </div>
+            ) : null}
             {formError ? (
               <p role="alert" className="text-sm font-medium text-destructive" data-testid="tx-form-error">
                 {formError}

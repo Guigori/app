@@ -223,8 +223,17 @@ async def card_invoice(card_id: str, cycle: str | None = Query(None), user: dict
 
 @router.post("/{card_id}/pay", response_model=Invoice)
 async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(require_user), x_finnos_operation_id: str = Header(...)):
+    """Pay an invoice, fully or partially, from the account chosen now.
+
+    Effects (approved 12/11/2026): the account is debited by an immutable
+    "Fatura X" movement kept out of spending; the cycle records the payment.
+    A partial payment of a *closed* invoice moves the rest to the next invoice
+    as "Saldo da fatura anterior" (no automatic interest). The account must
+    cover the amount, or its cheque especial with the person's confirmation.
+    """
     from finnos.lib import db as store
-    from finnos.lib.invoices import invoice_state, output, default_invoice_cycle
+    from finnos.lib.account_funds import balance_in_transaction, ensure_funds
+    from finnos.lib.invoices import invoice_state, output, default_invoice_cycle, next_cycle
     from finnos.lib.invoice_payments import allocate_payment, to_cents
     from finnos.lib.history import record_event
     from starlette.concurrency import run_in_threadpool
@@ -235,7 +244,8 @@ async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(
         paid_on = date.fromisoformat(payload.date)
     except ValueError:
         raise HTTPException(422, "Data inválida.")
-    if paid_on > date.fromisoformat(today_iso()):
+    today = today_iso()
+    if paid_on > date.fromisoformat(today):
         raise HTTPException(422, "Pagamento realizado não pode ter data futura.")
     uid = store.scoped({"user_id":user["id"]})
     request_key = {"card_id":card_id, "account_id":payload.account_id, "date":payload.date, "cycle":payload.cycle, "value_cents":None if payload.value is None else to_cents(payload.value)}
@@ -243,6 +253,7 @@ async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(
     def execute():
         instance = store.client()
         def action(tr):
+            # Reads first (Firestore transactions), writes at the end.
             owner = store.root(instance,uid)
             card_ref = owner.collection("cards").document(store.resource_id(card_id))
             snapshot = card_ref.get(transaction=tr)
@@ -259,19 +270,35 @@ async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(
             acc = owner.collection("accounts").document(store.resource_id(payload.account_id)).get(transaction=tr)
             if not acc.exists:
                 raise HTTPException(400,"Conta de pagamento inválida.")
+            account = dict(store.decode(acc.to_dict()), id=payload.account_id)
             txs = store.card_purchase_rows(instance, uid, card_id, tr)
             cats = {c['id']:c for c in store.rows(instance,uid,"categories",tr)}
-            cycle = payload.cycle or default_invoice_cycle(card,txs,date.fromisoformat(today_iso()))
+            cycle = payload.cycle or default_invoice_cycle(card,txs,date.fromisoformat(today))
             try:
                 state = invoice_state(card,txs,cycle,cats)
-                allocation = allocate_payment(state['total_cents'],[state['paid_cents']] if state['paid_cents'] else [],None if payload.value is None else to_cents(payload.value))
+                settled_before = [v for v in (state['paid_cents'], state['carried_cents']) if v]
+                allocation = allocate_payment(state['total_cents'],settled_before,None if payload.value is None else to_cents(payload.value))
             except ValueError as exc:
                 raise HTTPException(400,str(exc))
+            balance = balance_in_transaction(instance, uid, account, tr, today)
+            ensure_funds(balance, allocation['payment_cents'], account, allow_overdraft=payload.allow_overdraft)
             now = datetime.now(timezone.utc)
             # Immutable bank debit; excluded from expense analytics to avoid counting the purchase twice.
             debit = dict(id=identifier,user_id=uid,name=f"Fatura {card['name']}",value=D(allocation['payment_cents'])/100,type='despesa',status='pago',date=payload.date,account_id=payload.account_id,card_id=None,to_account_id=None,category_id=None,fixed=False,installment=False,invoice_payment=True,invoice_card_id=card_id,invoice_cycle=cycle,created_at=now,updated_at=now)
-            state.update(paid_cents=allocation['paid_cents'],paid=allocation['settled'],paid_at=payload.date)
-            card.setdefault('invoice_cycles',{})[cycle] = dict(items=state['items'],paid_cents=state['paid_cents'],paid_at=payload.date)
+            # Only a payment made after the invoice closed carries the rest;
+            # paying part of an open invoice is an advance.
+            closed = cycle < payload.date
+            carried = allocation['outstanding_cents'] if closed and not allocation['settled'] else 0
+            cycles = card.setdefault('invoice_cycles',{})
+            entry = dict(cycles.get(cycle) or {})
+            entry.update(items=state['items'], paid_cents=allocation['paid_cents'], paid_at=payload.date,
+                         last_payment_id=identifier)
+            entry['payments'] = list(entry.get('payments') or []) + [
+                dict(id=identifier, cents=allocation['payment_cents'], carried_cents=carried, date=payload.date)]
+            if carried:
+                entry.update(carried_cents=carried, carried_to=next_cycle(card, cycle))
+            cycles[cycle] = entry
+            state = invoice_state(card,txs,cycle,cats)
             response = output(state)
             tr.create(owner.collection('transactions').document(identifier),store.encode(debit))
             record_event(tr, owner, "transactions", "created", None, debit)
@@ -283,6 +310,106 @@ async def pay_invoice(card_id: str, payload: PayInvoiceIn, user: dict = Depends(
             tr.create(receipt_ref,dict(request=request_key,state=state,created_at=now))
             return response
         return store.atomic(instance,uid,action)
+    return await run_in_threadpool(execute)
+
+
+@router.post("/{card_id}/payments/{payment_id}/undo", response_model=Invoice)
+async def undo_invoice_payment(card_id: str, payment_id: str, user: dict = Depends(require_user),
+                               x_finnos_operation_id: str = Header(...)):
+    """Undo the last payment of a cycle with a linked reversal (the original stays).
+
+    Allowed only for the cycle's latest payment, before the invoice is
+    reconciled, and while the next invoice has no payment that already
+    included the carried balance. Idempotent by operation id.
+    """
+    from finnos.lib import db as store
+    from finnos.lib.invoices import invoice_state, output
+    from finnos.lib.history import record_event
+    from starlette.concurrency import run_in_threadpool
+    import hashlib
+    if not 1 <= len(x_finnos_operation_id) <= 200:
+        raise HTTPException(422, "Identificador de operação inválido.")
+    uid = store.scoped({"user_id": user["id"]})
+    store.resource_id(payment_id)
+    reversal_id = hashlib.sha256(("undo:" + x_finnos_operation_id).encode()).hexdigest()
+    today = today_iso()
+
+    def execute():
+        instance = store.client()
+
+        def action(tr):
+            owner = store.root(instance, uid)
+            card_ref = owner.collection("cards").document(store.resource_id(card_id))
+            snapshot = card_ref.get(transaction=tr)
+            if not snapshot.exists:
+                raise HTTPException(404, "Cartão não encontrado.")
+            card = dict(store.decode(snapshot.to_dict()), id=card_id)
+            receipt_ref = owner.collection("invoice_payments").document(payment_id)
+            receipt = receipt_ref.get(transaction=tr)
+            if not receipt.exists:
+                raise HTTPException(404, "Pagamento não encontrado.")
+            data = receipt.to_dict()
+            cycle = data["state"]["cycle_end"]
+            reversal_ref = owner.collection("transactions").document(reversal_id)
+            existing = reversal_ref.get(transaction=tr)
+            txs = store.card_purchase_rows(instance, uid, card_id, tr)
+            cats = {c['id']: c for c in store.rows(instance, uid, "categories", tr)}
+            if existing.exists:
+                if existing.to_dict().get("invoice_reversal_of") != payment_id:
+                    raise HTTPException(409, "Operação reutilizada com dados diferentes.")
+                return output(invoice_state(card, txs, cycle, cats))
+            if data.get("undone_at"):
+                raise HTTPException(409, "Este pagamento já foi desfeito.")
+            if data["request"].get("card_id") != card_id:
+                raise HTTPException(404, "Pagamento não encontrado.")
+            cycles = card.get("invoice_cycles") or {}
+            entry = dict(cycles.get(cycle) or {})
+            if entry.get("reconciled"):
+                raise HTTPException(409, "Fatura já conferida: o pagamento não pode ser desfeito.")
+            if entry.get("last_payment_id") != payment_id:
+                raise HTTPException(409, "Só o último pagamento desta fatura pode ser desfeito.")
+            payments = list(entry.get("payments") or [])
+            last = payments.pop() if payments else None
+            if not last or last["id"] != payment_id:
+                raise HTTPException(409, "Pagamento antigo sem histórico; não pode ser desfeito aqui.")
+            next_key = entry.get("carried_to") if last.get("carried_cents") else None
+            if next_key and (cycles.get(next_key) or {}).get("paid_cents"):
+                raise HTTPException(409, "A fatura seguinte já tem pagamento com o saldo levado; desfaça aquele primeiro.")
+            debit_snapshot = owner.collection("transactions").document(payment_id).get(transaction=tr)
+            if not debit_snapshot.exists:
+                raise HTTPException(409, "Lançamento do pagamento não encontrado.")
+            debit = store.decode(debit_snapshot.to_dict())
+            now = datetime.now(timezone.utc)
+            reversal = dict(
+                id=reversal_id, user_id=uid, name=f"Estorno do pagamento {card['name']}", value=debit["value"],
+                type="receita", status="pago", date=today, account_id=debit["account_id"], card_id=None,
+                to_account_id=None, category_id=None, fixed=False, installment=False, invoice_payment=True,
+                invoice_card_id=card_id, invoice_cycle=cycle, invoice_reversal_of=payment_id,
+                created_at=now, updated_at=now,
+            )
+            entry["paid_cents"] = entry.get("paid_cents", 0) - last["cents"]
+            entry["payments"] = payments
+            entry["last_payment_id"] = payments[-1]["id"] if payments else None
+            entry["paid_at"] = payments[-1]["date"] if payments else None
+            if next_key:
+                entry.pop("carried_cents", None)
+                entry.pop("carried_to", None)
+                following = dict(cycles.get(next_key) or {})
+                if following.get("items"):
+                    following["items"] = [i for i in following["items"] if i.get("id") != f"carry:{cycle}"]
+                    cycles[next_key] = following
+            cycles[cycle] = entry
+            card["invoice_cycles"] = cycles
+            tr.create(reversal_ref, store.encode(reversal))
+            record_event(tr, owner, "transactions", "created", None, reversal)
+            tr.set(card_ref, store.encode(card))
+            tr.update(receipt_ref, {"undone_at": now, "reversal_id": reversal_id})
+            from finnos.lib.finance_shadow_outbox import capture_event
+            capture_event("cards", "updated", {"id": card_id}, {"id": card_id})
+            return output(invoice_state(card, txs, cycle, cats))
+
+        return store.atomic(instance, uid, action)
+
     return await run_in_threadpool(execute)
 
 

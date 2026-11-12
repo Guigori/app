@@ -3,7 +3,7 @@ import { offerStatementImport } from "@/lib/importOffer";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { createCard, deleteCard, fetchAccounts, fetchInstitutions, updateCard } from "@/lib/data";
+import { createCard, deleteCard, fetchInstitutions, updateCard } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { parseAmount } from "@/lib/format";
 import { resolveInstitutionChoice, type InstitutionChoice } from "@/lib/institutionSelection";
@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // The color comes from the card's bank; this is only the fallback before linking.
 const FALLBACK_COLOR = "#5B3FE4";
@@ -48,8 +47,6 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
   const [active, setActive] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, enabled: open, staleTime: 60_000 });
-  const accounts = accountsQuery.data ?? [];
   const institutionsQuery = useQuery({ queryKey: ["institutions"], queryFn: fetchInstitutions, enabled: open });
   const institutions = institutionsQuery.data ?? [];
 
@@ -212,24 +209,9 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="card-account">Conta de pagamento</Label>
-            <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger id="card-account" className="w-full" aria-label="Conta de pagamento" data-testid="card-account-select">
-                <SelectValue>
-                  {accountId === "none" ? "Não definida" : (accounts.find((a) => a.id === accountId)?.name ?? "")}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Não definida</SelectItem>
-                {accounts.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <p className="text-xs text-muted-foreground" data-testid="card-pay-note">
+            A conta que paga a fatura é escolhida na hora de pagar.
+          </p>
 
           <div className="flex items-start gap-3 rounded-2xl bg-muted/50 p-3">
             <Checkbox id="card-default" checked={isDefault} onCheckedChange={(v) => setIsDefault(v === true)} data-testid="card-default-checkbox" />

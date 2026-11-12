@@ -178,6 +178,26 @@ def card_purchase_rows(db, uid, card_id, transaction):
     return docs
 
 
+def account_movement_rows(db, uid, account_id, transaction):
+    """Movements touching one account (source or destination), read inside
+    the finance transaction. Indexed equality queries; fail closed past 20k."""
+    scoped({"user_id": uid})
+    resource_id(account_id)
+    docs: dict[str, dict] = {}
+    for field in ("account_id", "to_account_id"):
+        snapshots = (
+            root(db, uid).collection("transactions")
+            .where(field, "==", account_id)
+            .limit(20001)
+            .stream(transaction=transaction, timeout=15)
+        )
+        for snap in snapshots:
+            docs[snap.id] = dict(decode(snap.to_dict()), id=snap.id, user_id=uid)
+            if len(docs) > 20000:
+                raise HTTPException(413, "Volume financeiro excede o limite transacional; nada foi alterado.")
+    return list(docs.values())
+
+
 def matching_rows(db, uid, name, query, transaction=None):
     """Read a UID-scoped document directly when filtering by exact ID.
 
@@ -217,6 +237,27 @@ def atomic(db, uid, action):
     return execute(db.transaction(max_attempts=5))
 
 
+_TRANSFER_KEYS = ("value", "account_id", "to_account_id", "status", "date", "type")
+
+
+def _check_transfer_funds(db, uid, doc, transaction, original_tx, today, allow_overdraft):
+    """A paid transfer may not overdraw the source (approved 12/11/2026)."""
+    if doc.get("type") != "transferencia" or doc.get("status") != "pago" or str(doc.get("date", "")) > today:
+        return
+    if original_tx is not None and all(original_tx.get(k) == doc.get(k) for k in _TRANSFER_KEYS):
+        return  # renaming an existing transfer is not a new movement
+    from finnos.lib.account_funds import balance_in_transaction, ensure_funds
+    from finnos.lib.money import cents
+
+    snapshot = root(db, uid).collection("accounts").document(resource_id(doc["account_id"])).get(transaction=transaction)
+    if not snapshot.exists:
+        return  # reference validation below reports the missing account
+    account = dict(decode(snapshot.to_dict()), id=doc["account_id"])
+    balance = balance_in_transaction(db, uid, account, transaction, today,
+                                     exclude_id=(original_tx or {}).get("id"))
+    ensure_funds(balance, cents(doc["value"]), account, allow_overdraft=allow_overdraft)
+
+
 def validate_refs(db, uid, name, doc, transaction, original_tx=None):
     from finnos.lib.institutions import institution_key
     fields = []
@@ -239,9 +280,11 @@ def validate_refs(db, uid, name, doc, transaction, original_tx=None):
     if name == "cards":
         fields.append(("payment_account_id", "accounts"))
     if name == "transactions":
+        allow_overdraft = bool(doc.pop("_allow_overdraft", False))
         if doc.get("invoice_payment") or doc.get("invoice_refund"):
             raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
         from finnos.lib.dates import today_iso
+        _check_transfer_funds(db, uid, doc, transaction, original_tx, today_iso(), allow_overdraft)
         from finnos.lib.invoices import purchase_write_conflict
         cards = rows(db, uid, "cards", transaction)
         for card in cards:

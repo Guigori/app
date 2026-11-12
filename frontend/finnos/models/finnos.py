@@ -34,6 +34,8 @@ class AccountOut(BaseModel):
     active: bool = True
     # Preselected for Pix/debit (bank), for benefits, or for cash.
     is_default: bool = False
+    # Cheque especial: how far below zero a confirmed payment/transfer may go.
+    overdraft_limit: Optional[Money] = None
     balance: Money = 0.0
     total_income: Money = 0.0
     total_expense: Money = 0.0
@@ -51,6 +53,7 @@ class AccountIn(BaseModel):
     active: bool = True
     # None keeps the current flag (older clients do not send it).
     is_default: Optional[bool] = None
+    overdraft_limit: Optional[Money] = Field(default=None, ge=0)
 
 
 class AccountDetailOut(BaseModel):
@@ -146,6 +149,8 @@ class TransactionIn(BaseModel):
     notes: Optional[str] = Field(default=None, max_length=500)
     origin: Optional[str] = Field(default=None, max_length=40)
     notify_enabled: bool = True
+    # The person confirmed using the cheque especial for this transfer.
+    allow_overdraft: bool = False
 
 
 # --- Dashboard --------------------------------------------------------------
