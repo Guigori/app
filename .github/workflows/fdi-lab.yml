@@ -1,0 +1,83 @@
+name: FINNOS · FDI laboratório (OCR)
+
+# Isolated lab for FINNOS Document Intelligence. Synthetic documents only;
+# no secrets, no Firebase, no deploy. The API's requirements stay untouched.
+on:
+  pull_request:
+    paths:
+      - 'frontend/finnos/document_intelligence/**'
+      - 'frontend/finnos/tests/test_fdi_*.py'
+      - 'frontend/finnos/tests/fdi_*.py'
+      - 'frontend/finnos/tests/test_document_intelligence.py'
+      - '.github/workflows/fdi-lab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tesseract:
+    name: FDI · PDF nativo + Tesseract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Tesseract (por)
+        run: |
+          for attempt in 1 2 3; do
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-por && break
+            sleep 15
+          done
+          tesseract --list-langs
+      - name: Install lab dependencies
+        run: python -m pip install -r requirements.txt pytest httpx pdfplumber==0.11.10 pypdfium2==5.13.0 reportlab "pillow>=11,<13" "numpy>=2,<3"
+      - name: FDI tests
+        env:
+          PYTHONPATH: .
+        run: python -m pytest -q finnos/tests/test_document_intelligence.py finnos/tests/test_fdi_engine.py finnos/tests/test_fdi_corpus.py
+      - name: Precision report
+        env:
+          PYTHONPATH: .
+        run: python -m finnos.tests.fdi_benchmark --ocr --out fdi-report-tesseract.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fdi-report-tesseract
+          path: frontend/fdi-report-tesseract.json
+
+  paddleocr:
+    name: FDI · PaddleOCR (medição)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    continue-on-error: true  # measurement job; models come from upstream hosting
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Tesseract (por)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-por
+      - name: Install OCR worker dependencies
+        run: python -m pip install -r finnos/document_intelligence/requirements-ocr.txt reportlab pytest httpx
+      - name: Fetch PaddleOCR models once
+        run: |
+          python - <<'EOF'
+          from paddleocr import PaddleOCR
+          PaddleOCR(lang="pt", use_doc_orientation_classify=False, use_doc_unwarping=False, use_textline_orientation=False)
+          EOF
+      - name: Precision report (PaddleOCR primary, Tesseract comparison)
+        env:
+          PYTHONPATH: .
+        run: python -m finnos.tests.fdi_benchmark --ocr --out fdi-report-paddle.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fdi-report-paddle
+          path: frontend/fdi-report-paddle.json

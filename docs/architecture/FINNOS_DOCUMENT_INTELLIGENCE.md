@@ -1,150 +1,135 @@
 # FINNOS Document Intelligence (FDI)
 
-**Status:** foundation / proof of concept  
-**Execution target:** local-first + FINNOS-controlled server  
-**Priority:** extraction precision  
-**Default policy:** deterministic processing; external AI disabled
+**Status:** POC engine on branch `feat/fdi-engine` (on top of `feat/fdi-foundation`). Not deployed, not merged.
+**Execution:** light path inside the API + isolated OCR worker (not deployed).
+**Priority:** extraction precision.
+**Default policy:** deterministic processing; external AI never used.
 
-## Purpose
+> FDI interprets; the person reviews; the existing FINNOS financial services persist.
 
-FDI converts financial documents into traceable, reviewable financial data. It is a document interpretation subsystem, not a second financial ledger.
+FDI does not import, call or write to Firestore, `finnos.lib.db`, routers, the
+wallet or any Ledger. A test enforces that the package imports none of them.
 
-The invariant is:
+## Audit of the foundation (PR #123)
 
-> FDI interprets; the user reviews; the existing FINNOS financial services persist.
+The foundation had the right shape (pure module, provider-neutral contracts,
+cents, no heavy imports) but these defects were confirmed by test and fixed:
 
-FDI must not write directly to Firestore, transactions, cards, accounts, invoices, or the future Financial Ledger.
-
-## Current repository boundaries
-
-- Active API and financial routers: `frontend/api/index.py` and `frontend/finnos/`.
-- Active persistence adapter: `frontend/finnos/lib/db.py`, UID-scoped Firestore.
-- Legacy MongoDB backend is not an execution target.
-- The initial FDI core is a pure Python module under `frontend/finnos/document_intelligence/`.
-- No authentication, session, Firestore rules, financial router, or production entrypoint changes are part of this foundation.
-
-## Architecture
-
-1. **Ingestion (next phase):** validate file type, size, page count, and content; calculate a content hash; stage the original in temporary private storage.
-2. **Text providers:** native PDF/text extraction and optional OCR engines return the provider-neutral `TextSpan` contract (page, text, optional bounding box).
-3. **Classification:** identify document kind conservatively; unknown is safer than a false positive.
-4. **Financial extraction:** provider-neutral deterministic parsers produce candidate fields and transaction rows.
-5. **Validation:** validate dates, integer-cent amounts, direction, duplicate candidates, and document-level arithmetic.
-6. **Review:** every result starts as `pending_review`; corrections retain original value, corrected value, actor, and timestamp.
-7. **Import preparation:** after explicit confirmation, map candidates to existing FINNOS finance contracts. The integration must be idempotent and UID-scoped.
-
-## Provider-neutral contracts
-
-- `TextSpan`: recognized text, page number, optional normalized bounding box.
-- `ExtractedField`: normalized value, raw value, confidence, source engine, evidence, validation status.
-- `ExtractedTransaction`: candidate date, description, amount in integer cents, direction, confidence, warnings, review state.
-- `ExtractionResult`: document identity, kind, engine, extracted fields/rows, warnings, schema version and review state.
-
-Confidence is not a proof of correctness. OCR confidence, semantic confidence, and financial consistency must remain distinct. A high OCR score must not silently imply that a row is a purchase, Pix payment, transfer, refund, or invoice payment.
-
-## Initial POC implementation
-
-The first commit implements a text-first deterministic core:
-- Brazilian currency normalization to integer cents.
-- Explicit Brazilian date normalization.
-- Conservative bank/card statement classification.
-- Candidate transaction-row parsing from already recognized text.
-- Per-field source evidence and engine provenance.
-- Conservative direction handling: unsigned values remain unknown.
-- An explicit OCR engine protocol and registry without heavyweight imports.
-- Unit tests that do not require Firebase, Firestore, OCR packages, or external AI.
-
-This is intentionally not yet a production upload API and does not claim to perform OCR. It creates the stable contract that PaddleOCR, Docling, Tesseract, native PDF extraction, and other providers can implement.
-
-## Open-source provider strategy
-
-| Provider | Intended role | Integration rule |
+| # | Defect | Fix |
 | --- | --- | --- |
-| PaddleOCR | Primary OCR candidate | Optional server/local worker adapter; lazy dependency |
-| Docling | Complex PDF/table parsing | Separate parser adapter |
-| Tesseract | Comparison/fallback OCR | Optional adapter |
-| OCRmyPDF | Scanned PDF preprocessing | Worker preprocessing stage |
-| invoice2data | Template-driven invoice fields | Specialized adapter, not domain model |
-| nfelib | Brazilian fiscal XML | Structured fiscal adapter |
-| Bank Statement Parser | Evaluate supported bank formats | POC comparison only until validated |
+| 1 | `PIX 100,00 5.000,00` → amount = balance column, description swallowed the amount | Trailing amount group + column layout (header words and x positions). Without layout: amount left empty, `multiple_amount_columns`, LOW |
+| 2 | `1234.567` → R$ 1.234.567,00 | Dot-thousands only with valid grouping; cents need exactly 2 digits |
+| 3 | `125,90-` (Itaú/BB) rejected | Trailing minus and `(125,90)` accepted, sign source kept |
+| 4 | `R$ -125,90` → "R$" in the description | Currency and sign are part of the token |
+| 5 | Card rows without year (`12/11`, `12 NOV`) never parsed | Year inferred against the due/closing date |
+| 6 | `-50,00 C` silently EXPENSE | Conflict → direction UNKNOWN, `sign_marker_conflict`, LOW |
+| 7 | "consumidor"/"valor total" classified as receipt | A kind needs a strong phrase |
+| 8 | Fixed confidences, averaged | Row confidence = weakest component; HIGH needs a cross-check |
+| 9 | Document id = hash of extracted text | uid-scoped id over the file bytes |
+| 10 | Empty-string sign check | Fixed; `""`/`"R$"` fail closed |
 
-Before adopting any provider, verify the exact release, transitive dependencies, model-weight licenses, runtime compatibility, memory/CPU profile, and behavior on the FINNOS reference corpus.
+## Pipeline
 
-## Precision and safety rules
+```
+bytes ─► sniff type (magic bytes) ─► limits (size, pages, pixels)
+      ─► PDF text layer (pdfplumber, word boxes) ── page has text? ─► lines
+                                           └─ no ─► light target: stop, needs_ocr_worker
+                                                    worker + consent: render (pypdfium2 300 dpi)
+images ─► EXIF/grayscale/contrast/upscale/deskew ─► OSD rotation ─► PaddleOCR | Tesseract
+      ─► lines (TextSpan + words + boxes + confidence)
+      ─► classify kind ─► identify issuer ─► statement | invoice extractor
+      ─► checks (running balance, statement balance, invoice total, engine agreement)
+      ─► ExtractionResult (pending_review) ─► ReviewSession ─► prepare_import (read-only)
+```
 
-- Store money as integer cents in the FDI domain.
-- Preserve raw text and evidence for every extracted field.
-- Do not infer transaction direction when the document does not state it.
-- Do not infer a successful Pix/payment from a screenshot or receipt.
-- Never auto-create a financial transaction from OCR.
-- Do not auto-merge possible duplicates; surface candidates for review.
-- Keep OCR/provider imports out of API startup.
-- Do not send documents to external AI providers by default.
-- Never log raw document text or financial identifiers.
-- Isolate document metadata, temporary files, jobs, and results by verified Firebase UID when persistence is introduced.
+Modules (`frontend/finnos/document_intelligence/`):
+
+| Module | Role |
+| --- | --- |
+| `models.py` | Contracts: `TextSpan`/`Word`, `ExtractedField` (value, raw, confidence, engine, evidence, validation, correction), `ExtractedTransaction` (+ operation, installment, balance, checks), `ExtractionResult` |
+| `normalization.py` | BRL amounts with sign source, pt-BR dates, `12 NOV`, year inference |
+| `parsers.py` | Line splitting, OCR noise tolerance, operation classification, field confidence |
+| `extractors.py` | Bank statement and card invoice extractors, checks, confidence caps |
+| `institutions.py` | Inter, Itaú, Bradesco, Nubank, Banco do Brasil by CNPJ / legal name / brand, header+footer only |
+| `layout.py` | Words/boxes → lines; same-row merging |
+| `engines.py` | Native PDF reader, PDF renderer, image preparation + deskew, `TesseractEngine` (CLI, TSV), `PaddleOCREngine` (local models only), registry |
+| `processor.py` | Routing, limits, consent gate, engine comparison |
+| `review.py` | Corrections (original kept), accept/reject, check acknowledgement, re-check with decisions, append-only events, `prepare_import` with idempotency keys |
+| `worker.py` | OCR worker app (token + verified uid + consent). Not mounted in the API |
+
+Operations recognised on invoices: purchase, installment (`PARC 03/10`,
+`03 DE 10`, `Parcela 3/10`, `(Parcela 3 de 10)`), interest, late interest
+(juros de mora), late fee (multa), IOF, charges (encargos/rotativo), annual
+fee, bank fee, cash withdrawal, invoice payment, refund (estorno), credit
+(cashback/ajuste), previous balance. Foreign-currency columns are skipped in
+favour of the BRL amount. Previous balance and invoice payment are
+`evidence_only` in `prepare_import`: the wallet should match them, not create them.
+
+On statements: Pix in/out, TED/DOC in/out, salary, deposit, bill payment,
+card bill payment, purchase, fee, withdrawal, IOF, interest, refund.
+
+## Confidence
+
+| Level | Score | Meaning |
+| --- | --- | --- |
+| HIGH | ≥ 0.95 | Clean reading **and** a financial cross-check passed (row running balance or document total/balance) |
+| MEDIUM | 0.80–0.94 | Highlighted for review (inferred columns, OCR-repaired date, direction from description, not cross-checked, engines disagree, document total failed) |
+| LOW | < 0.80 | Must be corrected or rejected; cannot be accepted as is |
+
+Score = minimum of date, amount, description, direction and semantic
+components. Thresholds are hypotheses to calibrate.
+
+## Hybrid execution
+
+* **Light (API):** type sniffing, limits, PDF text layer. No OCR packages, so
+  `frontend/requirements.txt` is unchanged. Scanned pages → `needs_ocr_worker`.
+* **OCR worker:** separate service (`worker.Dockerfile`, `requirements-ocr.txt`)
+  with Tesseract `por` and PaddleOCR models baked in. Requires a service token,
+  the uid the API verified, and `X-FDI-Consent: ocr`. Nothing is stored.
+* **On device (later):** pdf.js / structured files in the web app produce the
+  same `TextSpan` contract.
+
+PaddlePaddle alone is a 193 MB wheel; it cannot live in the Vercel function.
+
+## Results on the synthetic corpus (10 documents, 98 rows, 5 banks)
+
+Measured with `python -m finnos.tests.fdi_benchmark --ocr` (Tesseract 5.3.4 por):
+
+| Variant | Amount | Date | Description | Operation | Wrong value shown HIGH | Missing rows |
+| --- | --- | --- | --- | --- | --- | --- |
+| Native PDF | 100% | 100% | 100% | 100% | 0 | 0 |
+| Clean image, Tesseract | 100% | 100% | 100% | 100% | 0 | 0 |
+| Scan (blur, noise, 1.2° skew) | 94.9% | 94.9% | 79.6% | 93.9% | 0 | 5 (all in docs whose total/balance check failed) |
+| Phone photo (90° + JPEG) | 84.7% | 84.7% | 80.6% | 84.7% | 0 | 15 (same) |
+
+Read these honestly: the corpus is generated by the same team that wrote the
+parsers, so native-PDF 100% says the parsers handle *these* layouts, not real
+bank PDFs. The meaningful signals are (a) zero wrong date/amount/direction
+shown as HIGH, and (b) every document with a missing row failed its
+cross-check. **PaddleOCR was not measured here** (model hosts unreachable from
+the dev sandbox); the `fdi-lab` workflow measures it on GitHub.
 
 ## POC gates
 
-### FDI-01 — Text core (current foundation)
-- [x] Provider-neutral extraction contracts
-- [x] BRL cents and date normalization
-- [x] Conservative statement row parser
-- [x] Evidence and provenance
-- [x] Unit tests
-- [ ] Execute tests in repository CI and correct any failures
-
-### FDI-02 — OCR and PDF adapters
-- [ ] Native PDF text adapter
-- [ ] PaddleOCR adapter behind optional dependency
-- [ ] Tesseract comparison adapter
-- [ ] Docling complex-document adapter
-- [ ] Reference corpus with reviewed ground truth
-
-### FDI-03 — Financial document extractors
-- [ ] Bank statement layouts and balance reconciliation
-- [ ] Card invoice cycle, installment, fee, refund, and payment extraction
-- [ ] Receipt and fiscal XML extraction
-- [ ] Pix receipt evidence extraction without payment authentication claims
-
-### FDI-04 — Validation and review
-- [ ] Field-level calibrated confidence
-- [ ] Cross-engine disagreement handling
-- [ ] Human correction history
-- [ ] Duplicate candidate detection
-- [ ] Review UI and explicit confirmation
-
-### FDI-05 — Hybrid execution
-- [ ] Local native-text and structured-format processing
-- [ ] Optional local OCR runtime where supported
-- [ ] FINNOS-controlled server workers for heavy OCR
-- [ ] Explicit consent before uploading a document for server processing
-- [ ] Resource limits, private staging, retention and deletion controls
-
-### FDI-06 — Controlled financial integration
-- [ ] Map reviewed candidates to existing financial service contracts
-- [ ] UID-scoped idempotency key
-- [ ] No direct Firestore writes from FDI
-- [ ] Ledger and reconciliation integration only after user confirmation
-- [ ] Audit and rollback tests
-
-## Acceptance targets (to be measured, not assumed)
-
-- Monetary amount exact match: at least 99%.
-- Date exact match: at least 98%.
-- Institution identification: at least 98%.
-- Description exact/normalized match: at least 95%.
-- Financial operation classification: at least 95%.
-- Evidence traceability for every extracted critical field: 100%.
-
-Report metrics separately by document type, source engine, and image quality. Compare monetary values in integer cents. Do not use an aggregate score to conceal errors in critical fields.
+- [x] FDI-01 core contracts, normalisation, evidence (audit fixes above)
+- [x] FDI-02 native PDF adapter, Tesseract adapter, PaddleOCR adapter (fake-tested), engine comparison
+- [ ] FDI-02 Docling adapter (not needed by current layouts; add when a table layout requires it)
+- [x] FDI-03 statements (running balance, D/C, debit/credit columns) and card invoices (full set of operations)
+- [ ] FDI-03 receipts, fiscal XML (nfelib), Pix receipts
+- [x] FDI-04 field confidence, review with corrections/history, duplicate flags, re-check
+- [ ] FDI-04 review UI
+- [x] FDI-05 light/worker routing, consent gate, limits, worker app
+- [ ] FDI-05 worker deploy, private staging, retention
+- [ ] FDI-06 integration with wallet/Ledger (explicitly out of scope until authorised)
+- [ ] Corpus of **real anonymised** documents from the five banks with reviewed ground truth
 
 ## Test commands
 
-From the repository root:
-
 ```bash
-PYTHONPATH=frontend python3 -m pytest -q frontend/finnos/tests/test_document_intelligence.py
-PYTHONPATH=frontend python3 -m pytest -q frontend/finnos/tests
+cd frontend
+PYTHONPATH=. python -m pytest -q finnos/tests/test_document_intelligence.py finnos/tests/test_fdi_engine.py finnos/tests/test_fdi_corpus.py
+PYTHONPATH=. python -m finnos.tests.fdi_benchmark --ocr --out fdi-report.json
 ```
 
-No live Firebase project or real user financial data is required for the deterministic core tests.
+PDF/OCR tests skip when pdfplumber, reportlab or Tesseract `por` are missing,
+so the existing API CI keeps its current dependencies.

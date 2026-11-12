@@ -1,0 +1,14 @@
+# FDI OCR worker only. NEVER add these to frontend/requirements.txt:
+# the FINNOS API is a Vercel Python function (size/time limits) and must stay light.
+# Licences checked for the POC (re-verify on every upgrade, incl. model weights):
+#   pdfplumber/pdfminer.six MIT · pypdfium2 Apache-2.0/BSD-3 · Pillow MIT-CMU · numpy BSD-3
+#   paddlepaddle Apache-2.0 · paddleocr Apache-2.0 (PP-OCRv5 weights: Apache-2.0 per upstream)
+#   Tesseract (system package) Apache-2.0
+pdfplumber==0.11.10
+pypdfium2==5.13.0
+pillow>=11,<13
+numpy>=2,<3
+paddlepaddle==3.0.0
+paddleocr>=3,<4
+fastapi==0.143.0
+uvicorn==0.52.1
