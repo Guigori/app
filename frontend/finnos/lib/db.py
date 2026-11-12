@@ -284,7 +284,21 @@ def validate_refs(db, uid, name, doc, transaction, original_tx=None):
         institution_ref = root(db, uid).collection("institutions").document(resource_id(doc["institution_id"]))
         institution = institution_ref.get(transaction=transaction)
         if institution.exists:
-            doc["institution"] = institution.to_dict()["name"]
+            data = institution.to_dict()
+            doc["institution"] = data["name"]
+            # The color is the institution's; accounts and cards no longer pick their own.
+            if data.get("color"):
+                doc["color"] = data["color"]
+    if name in {"accounts", "cards"} and doc.get("is_default"):
+        # Exactly one default per kind (account, card, benefit, cash). All reads
+        # happen above; only writes follow, as Firestore transactions require.
+        from finnos.lib.wallet_defaults import other_defaults
+        for other in other_defaults(name, doc, rows(db, uid, name, transaction)):
+            updated = dict(other, is_default=False)
+            if name in OFFLINE_VERSIONED:
+                updated["version"] = other.get("version", 1) + 1
+            transaction.set(root(db, uid).collection(name).document(resource_id(other["id"])), encode(updated))
+            record_event(transaction, root(db, uid), name, "updated", other, updated)
 
 
 class Cursor:

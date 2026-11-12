@@ -45,14 +45,14 @@ export function WalletInstitutions({
         {!collapsed && <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
           {group.accounts.map(account => <button key={account.id} type="button" onClick={() => onOpenAccount(account)} className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/50 active:bg-muted" data-testid={"wallet-account-" + account.id}>
             <span className="grid size-10 shrink-0 place-items-center rounded-full" style={{ backgroundColor: group.color + "1F", color: group.color }}><Wallet className="h-5 w-5"/></span>
-            <span className="min-w-0 flex-1"><span className="block truncate font-medium">{account.name}</span>{!account.active ? <span className="block text-xs text-muted-foreground">Inativa</span> : null}</span>
+            <span className="min-w-0 flex-1"><span className="block truncate font-medium">{account.name}{account.is_default ? <span className="ml-1.5 inline-flex rounded-full bg-primary px-1.5 py-0.5 align-middle text-[10px] font-bold text-primary-foreground">Padrão</span> : null}</span>{!account.active ? <span className="block text-xs text-muted-foreground">Inativa</span> : null}</span>
             <span className={"shrink-0 font-heading font-semibold tabular-nums " + (account.balance < 0 ? "text-expense" : "")}>{money(account.balance)}</span>
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" aria-hidden="true"/>
           </button>)}
           {group.cards.map(card => <div key={card.id} className="flex items-center gap-3 px-4 py-3.5" data-testid={"wallet-card-" + card.id}>
             <Link to={"/cartoes/" + card.id} className="flex min-w-0 flex-1 items-center gap-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary"><CreditCard className="h-5 w-5"/></span>
-              <span className="min-w-0 flex-1"><span className="block truncate font-medium">{card.name}</span><span className="block truncate text-xs text-muted-foreground">Fatura {money(card.current_invoice)} · paga com {card.payment_account_name ?? "conta não definida"}</span></span>
+              <span className="grid size-10 shrink-0 place-items-center rounded-full" style={{ backgroundColor: card.color + "1F", color: card.color }}><CreditCard className="h-5 w-5"/></span>
+              <span className="min-w-0 flex-1"><span className="block truncate font-medium">{card.name}{card.is_default ? <span className="ml-1.5 inline-flex rounded-full bg-primary px-1.5 py-0.5 align-middle text-[10px] font-bold text-primary-foreground">Padrão</span> : null}</span><span className="block truncate text-xs text-muted-foreground">Fatura {money(card.current_invoice)} · paga com {card.payment_account_name ?? "conta não definida"}</span></span>
             </Link>
             <Button size="icon-sm" variant="ghost" onClick={() => onEditCard(card)} aria-label={"Editar " + card.name}><Pencil className="h-4 w-4"/></Button>
           </div>)}

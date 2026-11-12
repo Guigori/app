@@ -23,7 +23,7 @@ async function createCheckingAccount(page: import("@playwright/test").Page) {
   await form.getByTestId("account-initial-input").fill("350,15");
   await form.getByTestId("account-submit-button").click();
   await expect(page.getByTestId("wallet-institutions")).toBeVisible();
-  await expect(page.getByText("Banco Inter", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("wallet-institutions").getByText("Banco Inter", { exact: true })).toBeVisible();
 }
 
 test("creates an institution-linked account and hides all balance figures", async ({ page }) => {

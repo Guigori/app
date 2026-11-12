@@ -1,6 +1,9 @@
 // Local-mode data engine: the same business rules as backend/lib/stats.py, run in
 // the browser. Keep the two in sync — a rule change belongs in both places.
 
+import { institutionIdentity } from "@/lib/institutionCatalog";
+import { accountScope, effectiveDefaults } from "@/lib/walletDefaults";
+import { institutionKey } from "@/lib/institutionGroups";
 import { addMonth, currentMonth, todayISO, toLocalISO } from "@/lib/format";
 import { newId, readDb, writeDb, freshDb, wipeDb, type LocalCard, type LocalDb } from "@/lib/local/store";
 import type {
@@ -211,8 +214,14 @@ function enrichedAccounts(db: LocalDb): Account[] {
       else if (tx.type === "despesa") expense.set(accId, (expense.get(accId) ?? 0) - amount);
     }
   }
+  const institutions = new Map(db.institutions.map((i) => [i.id, i]));
+  const defaults = effectiveDefaults(db.accounts, (a) => accountScope(a.type));
   return db.accounts.map((a) => ({
     ...a,
+    // The institution decides the name and color shown.
+    institution: institutions.get(a.institution_id ?? "")?.name ?? a.institution,
+    color: institutions.get(a.institution_id ?? "")?.color ?? a.color,
+    is_default: defaults.has(a.id),
     balance: round2(balance.get(a.id) ?? 0),
     total_income: round2(Math.max(income.get(a.id) ?? 0, 0)),
     total_expense: round2(Math.max(expense.get(a.id) ?? 0, 0)),
@@ -233,14 +242,69 @@ export function localListInstitutions() {
 
 export function localCreateInstitution(input: import("@/types/finnos").InstitutionInput) {
   const db = readDb();
-  const name = input.name.trim().replace(/\s+/g, " ");
-  if (name.length < 2 || db.institutions.some(inst => inst.name.trim().toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR"))) {
-    throw new Error("Instituição inválida ou já cadastrada.");
-  }
-  const institution = { id: newId(), name, color: input.color, created_at: new Date().toISOString() };
+  const identity = institutionIdentity(input.name ?? "", input.catalog_id);
+  if (identity.name.length < 2) throw new Error("Informe o nome da instituição.");
+  // The same name is already registered: hand it back instead of a duplicate.
+  const existing = db.institutions.find((inst) => institutionKey(inst.name) === institutionKey(identity.name));
+  if (existing) return existing;
+  const institution = { id: newId(), ...identity, created_at: new Date().toISOString() };
   db.institutions.push(institution);
   writeDb(db);
   return institution;
+}
+
+/** Fill institution_id from a typed bank name (cash has no institution). */
+function localResolveInstitution<T extends { institution: string; institution_id?: string | null; type?: string }>(input: T, isCard: boolean): T {
+  if (input.institution_id || (!isCard && input.type === "carteira")) return input;
+  const name = (input.institution ?? "").trim().replace(/\s+/g, " ");
+  if (name.length < 2) return input;
+  const institution = localCreateInstitution({ name });
+  return { ...input, institution: institution.name, institution_id: institution.id };
+}
+
+/** Exactly one default per kind; the previous one loses the flag. */
+function applyDefault<T extends { id: string; is_default?: boolean }>(items: T[], id: string, sameScope: (item: T) => boolean): T[] {
+  return items.map((item) => (item.id === id ? { ...item, is_default: true } : sameScope(item) ? { ...item, is_default: false } : item));
+}
+
+export function localSetDefaultAccount(id: string): Account {
+  const db = readDb();
+  const target = db.accounts.find((a) => a.id === id);
+  if (!target) throw new Error("Conta não encontrada.");
+  db.accounts = applyDefault(db.accounts, id, (a) => accountScope(a.type) === accountScope(target.type));
+  writeDb(db);
+  return enrichedAccounts(db).find((a) => a.id === id)!;
+}
+
+export function localSetDefaultCard(id: string): CreditCard {
+  const db = readDb();
+  if (!db.cards.some((c) => c.id === id)) throw new Error("Cartão não encontrado.");
+  db.cards = applyDefault(db.cards, id, () => true);
+  writeDb(db);
+  return localListCards().find((c) => c.id === id)!;
+}
+
+/** Link accounts and cards that only carry the bank name as text. Idempotent. */
+export function localLinkLegacyInstitutions() {
+  const before = readDb().institutions.length;
+  let linked_accounts = 0, linked_cards = 0;
+  for (const account of readDb().accounts) {
+    if (account.institution_id || account.type === "carteira" || (account.institution ?? "").trim().length < 2) continue;
+    const resolved = localResolveInstitution(account, false);
+    const db = readDb();
+    db.accounts = db.accounts.map((a) => (a.id === account.id ? { ...a, institution_id: resolved.institution_id } : a));
+    writeDb(db);
+    linked_accounts += 1;
+  }
+  for (const card of readDb().cards) {
+    if (card.institution_id || (card.institution ?? "").trim().length < 2) continue;
+    const resolved = localResolveInstitution(card, true);
+    const db = readDb();
+    db.cards = db.cards.map((c) => (c.id === card.id ? { ...c, institution_id: resolved.institution_id } : c));
+    writeDb(db);
+    linked_cards += 1;
+  }
+  return { linked_accounts, linked_cards, created_institutions: readDb().institutions.length - before };
 }
 
 export function localDeleteInstitution(id: string) {
@@ -270,7 +334,8 @@ export function localGetAccount(id: string): AccountDetail {
   return { account, transactions };
 }
 
-export function localCreateAccount(input: AccountInput): Account {
+export function localCreateAccount(raw: AccountInput): Account {
+  const input = localResolveInstitution(raw, false);
   const db = readDb();
   if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
   const account: Account = {
@@ -282,16 +347,20 @@ export function localCreateAccount(input: AccountInput): Account {
     created_at: new Date().toISOString(),
   };
   db.accounts.push(account);
+  if (input.is_default) db.accounts = applyDefault(db.accounts, account.id, (a) => accountScope(a.type) === accountScope(input.type));
   writeDb(db);
-  return account;
+  return enrichedAccounts(db).find((a) => a.id === account.id)!;
 }
 
-export function localUpdateAccount(id: string, input: AccountInput): Account {
+export function localUpdateAccount(id: string, raw: AccountInput): Account {
+  const input = localResolveInstitution(raw, false);
   const db = readDb();
   const index = db.accounts.findIndex((a) => a.id === id);
   if (index < 0) throw new Error("Conta não encontrada.");
   if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
-  db.accounts[index] = { ...db.accounts[index], ...input };
+  const { is_default, ...fields } = input;
+  db.accounts[index] = { ...db.accounts[index], ...fields, ...(is_default === undefined ? {} : { is_default }) };
+  if (is_default) db.accounts = applyDefault(db.accounts, id, (a) => accountScope(a.type) === accountScope(input.type));
   writeDb(db);
   return enrichedAccounts(db).find((a) => a.id === id)!;
 }
@@ -1182,19 +1251,28 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
 }
 export function localListCards(): CreditCard[] {
   const db = readDb();
-  return db.cards.map((card) => buildCard(card, db.transactions, db.accounts));
+  const institutions = new Map(db.institutions.map((i) => [i.id, i]));
+  const defaults = effectiveDefaults(db.cards, () => "card");
+  return db.cards.map((card) => {
+    const built = buildCard(card, db.transactions, db.accounts);
+    const institution = institutions.get(card.institution_id ?? "");
+    return { ...built, institution: institution?.name ?? built.institution, color: institution?.color ?? built.color, is_default: defaults.has(card.id) };
+  });
 }
 
-export function localCreateCard(input: CardInput): CreditCard {
+export function localCreateCard(raw: CardInput): CreditCard {
+  const input = localResolveInstitution(raw, true);
   const db = readDb();
   if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
   const card: LocalCard = { ...input, id: newId(), created_at: new Date().toISOString() };
   db.cards = [...db.cards, card];
+  if (input.is_default) db.cards = applyDefault(db.cards, card.id, () => true);
   writeDb(db);
-  return buildCard(card, db.transactions, db.accounts);
+  return localListCards().find((c) => c.id === card.id)!;
 }
 
-export function localUpdateCard(id: string, input: CardInput): CreditCard {
+export function localUpdateCard(id: string, raw: CardInput): CreditCard {
+  const input = localResolveInstitution(raw, true);
   const db = readDb();
   const existing = db.cards.find((c) => c.id === id);
   if (!existing) throw new Error("Cartão não encontrado.");
@@ -1202,10 +1280,12 @@ export function localUpdateCard(id: string, input: CardInput): CreditCard {
     throw new Error("Não é possível mudar o ciclo de um cartão com pagamentos registrados.");
   }
   if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
-  const card: LocalCard = { ...existing, ...input };
+  const { is_default, ...fields } = input;
+  const card: LocalCard = { ...existing, ...fields, ...(is_default === undefined ? {} : { is_default }) };
   db.cards = db.cards.map((c) => (c.id === id ? card : c));
+  if (is_default) db.cards = applyDefault(db.cards, id, () => true);
   writeDb(db);
-  return buildCard(card, db.transactions, db.accounts);
+  return localListCards().find((c) => c.id === id)!;
 }
 
 export function localDeleteCard(id: string): void {

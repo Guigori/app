@@ -8,7 +8,6 @@ import { resolveInstitutionChoice, type InstitutionChoice } from "@/lib/institut
 import { InstitutionPicker } from "@/components/accounts/InstitutionPicker";
 import { getApiErrorMessage } from "@/lib/errors";
 import { parseAmount, ACCOUNT_TYPE_LABEL } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import type { Account, AccountInput, AccountType } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,7 +23,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const ACCOUNT_COLORS = ["#070F52", "#8A05BE", "#FF7A00", "#EC7000", "#10B981", "#06B6D4", "#F43F5E", "#64748B"];
+// Cash has no institution; its color is fixed. Every other color comes from the institution.
+const CASH_COLOR = "#047857";
+const DEFAULT_LABEL: Record<AccountType, string> = {
+  corrente: "Conta padrão", salario: "Conta padrão", digital: "Conta padrão", poupanca: "Conta padrão",
+  carteira: "Dinheiro padrão", beneficio: "Benefício padrão",
+};
+const DEFAULT_HINT: Record<AccountType, string> = {
+  corrente: "Vem marcada primeiro em Pix, débito e no pagamento de faturas.",
+  salario: "Vem marcada primeiro em Pix, débito e no pagamento de faturas.",
+  digital: "Vem marcada primeiro em Pix, débito e no pagamento de faturas.",
+  poupanca: "Vem marcada primeiro em Pix, débito e no pagamento de faturas.",
+  carteira: "Vem marcado primeiro nos gastos em dinheiro.",
+  beneficio: "Vem marcado primeiro nos gastos com benefício.",
+};
 const ACCOUNT_TYPES: AccountType[] = ["corrente", "salario", "digital", "poupanca", "carteira", "beneficio"];
 
 interface AccountDialogProps {
@@ -43,7 +55,8 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
   const institutionsQuery = useQuery({ queryKey: ["institutions"], queryFn: fetchInstitutions, enabled: open });
   const institutions = institutionsQuery.data ?? [];
   const [type, setType] = useState<AccountType>("corrente");
-  const [color, setColor] = useState(ACCOUNT_COLORS[0]);
+  const [color, setColor] = useState(CASH_COLOR);
+  const [isDefault, setIsDefault] = useState(false);
   const [initialRaw, setInitialRaw] = useState("0");
   const [active, setActive] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
@@ -59,14 +72,16 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
       setColor(account.color);
       setInitialRaw(String(account.initial_balance));
       setActive(account.active);
+      setIsDefault(Boolean(account.is_default));
     } else {
       setName(initialName ?? "");
       setInstitution("");
       setInstitutionChoice("new");
       setType("corrente");
-      setColor(ACCOUNT_COLORS[0]);
+      setColor(CASH_COLOR);
       setInitialRaw("0");
       setActive(true);
+      setIsDefault(false);
     }
   }, [open, account, initialName]);
 
@@ -76,6 +91,7 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
       // financial institution before the primary entity has been synced.
       const resolved = !navigator.onLine && !account
         ? { institution: input.institution, institution_id: institutionChoice === "new" ? null : input.institution_id }
+        : input.type === "carteira" ? { institution: "", institution_id: null }
         : await resolveInstitutionChoice(institutionChoice, input.institution, institutions);
       const payload = { ...input, ...resolved };
       return account ? updateAccount(account.id, payload) : createAccount(payload);
@@ -111,16 +127,20 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
     setFormError(null);
     const initial = parseAmount(initialRaw);
     if (!name.trim()) return setFormError("Dê um nome à conta.");
+    if (type !== "carteira" && institutionChoice === "new" && institution.trim().length < 2 && !account)
+      return setFormError(type === "beneficio" ? "Escolha a empresa do benefício." : "Escolha o banco da conta.");
     if (initial === null || !Number.isSafeInteger(Math.round(initial * 100)) || Math.abs(initial * 100 - Math.round(initial * 100)) > 1e-6)
       return setFormError("Informe um saldo inicial válido, com até duas casas decimais.");
     mutation.mutate({
       name: name.trim(),
-      institution: institution.trim(),
-      institution_id: institutionChoice !== "new" && institutionChoice !== "none" ? institutionChoice : null,
+      institution: type === "carteira" ? "" : institution.trim(),
+      institution_id: type !== "carteira" && institutionChoice !== "new" && institutionChoice !== "none" && !institutionChoice.startsWith("catalog:") ? institutionChoice : null,
       type,
-      color,
+      color: type === "carteira" ? CASH_COLOR : color,
       initial_balance: initial,
       active,
+      // Only send the flag when it is turned on or changed, so editing keeps the current default.
+      ...(isDefault || account?.is_default ? { is_default: isDefault } : {}),
     });
   };
 
@@ -143,9 +163,13 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
             <Label htmlFor="account-name">Nome</Label>
             <Input id="account-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Nubank, Carteira" maxLength={60} data-testid="account-name-input" />
           </div>
-          <InstitutionPicker institutions={institutions} choice={institutionChoice} name={institution}
-            onChoice={value => { setInstitutionChoice(value); if (value === "none") setInstitution(""); else if (value !== "new") setInstitution(institutions.find(item => item.id === value)?.name ?? ""); }}
-            onName={setInstitution} />
+          {type !== "carteira" ? (
+            <InstitutionPicker institutions={institutions} choice={institutionChoice} name={institution}
+              kind={type === "beneficio" ? "beneficio" : "banco"} allowNone={Boolean(account && !account.institution_id)}
+              label={type === "beneficio" ? "Empresa do benefício" : "Banco"}
+              onChoice={value => { setInstitutionChoice(value); if (value === "none") setInstitution(""); else if (value !== "new" && !value.startsWith("catalog:")) setInstitution(institutions.find(item => item.id === value)?.name ?? ""); }}
+              onName={setInstitution} />
+          ) : null}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="account-type">Tipo</Label>
@@ -168,22 +192,12 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
               <p className="text-xs text-muted-foreground">Use um valor negativo se a conta já estiver no cheque especial (ex.: -500,00).</p>
             </div>
           </div>
-          <div className="space-y-2">
-            <Label>Cor</Label>
-            <div className="flex flex-wrap gap-2">
-              {ACCOUNT_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  aria-label={`Selecionar cor ${c}`}
-                  aria-pressed={color === c}
-                  className={cn("h-8 w-8 rounded-full border-2 transition-transform", color === c ? "scale-110 border-foreground" : "border-transparent hover:scale-105")}
-                  style={{ backgroundColor: c }}
-                  data-testid="account-color-swatch"
-                />
-              ))}
-            </div>
+          <div className="flex items-start gap-3 rounded-2xl bg-muted/50 p-3">
+            <Checkbox id="account-default" checked={isDefault} onCheckedChange={(checked) => setIsDefault(checked === true)} data-testid="account-default-checkbox" />
+            <Label htmlFor="account-default" className="flex flex-col items-start gap-0.5 font-normal">
+              <span className="font-semibold">{DEFAULT_LABEL[type]}</span>
+              <span className="text-xs text-muted-foreground">{DEFAULT_HINT[type]}</span>
+            </Label>
           </div>
           <div className="flex items-center gap-3">
             <Checkbox id="account-active" checked={active} onCheckedChange={(checked) => setActive(checked === true)} data-testid="account-active-checkbox" />

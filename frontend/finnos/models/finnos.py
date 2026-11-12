@@ -32,6 +32,8 @@ class AccountOut(BaseModel):
     color: str = "#070F52"
     initial_balance: Money = 0.0
     active: bool = True
+    # Preselected for Pix/debit (bank), for benefits, or for cash.
+    is_default: bool = False
     balance: Money = 0.0
     total_income: Money = 0.0
     total_expense: Money = 0.0
@@ -47,6 +49,8 @@ class AccountIn(BaseModel):
     # Overdrafts and pre-existing liabilities are legitimate opening balances.
     initial_balance: Money = Field(default=0.0)
     active: bool = True
+    # None keeps the current flag (older clients do not send it).
+    is_default: Optional[bool] = None
 
 
 class AccountDetailOut(BaseModel):

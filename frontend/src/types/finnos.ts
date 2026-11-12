@@ -17,16 +17,36 @@ export interface User {
   auth_providers?: string[];
 }
 
+export type InstitutionKind = "banco" | "beneficio" | "outro";
+
 export interface Institution {
   id: string;
   name: string;
+  /** Decided by the institution (catalog color, or a stable one for custom names). */
   color: string;
+  kind?: InstitutionKind;
+  catalog_id?: string | null;
   created_at: string;
 }
 
+/** A catalog entry, or a typed name. Any color sent is ignored by the server. */
 export interface InstitutionInput {
+  name?: string;
+  catalog_id?: string | null;
+  color?: string;
+}
+
+export interface InstitutionCatalogItem {
+  id: string;
   name: string;
   color: string;
+  kind: InstitutionKind;
+}
+
+export interface LegacyLinkResult {
+  linked_accounts: number;
+  linked_cards: number;
+  created_institutions: number;
 }
 
 export interface Account {
@@ -39,6 +59,8 @@ export interface Account {
   color: string;
   initial_balance: number;
   active: boolean;
+  /** Preselected for its kind: bank account, benefit or cash. */
+  is_default?: boolean;
   balance: number;
   total_income: number;
   total_expense: number;
@@ -50,9 +72,12 @@ export interface AccountInput {
   institution: string;
   institution_id?: string | null;
   type: AccountType;
+  /** Ignored when the account has an institution: the color comes from it. */
   color: string;
   initial_balance: number;
   active: boolean;
+  /** Omit to keep the current flag. */
+  is_default?: boolean;
 }
 
 export interface AccountDetail {
@@ -495,6 +520,8 @@ export interface CardInput {
   due_day: number;
   payment_account_id: string | null;
   active: boolean;
+  /** Omit to keep the current flag. */
+  is_default?: boolean;
 }
 
 export interface CreditCard {
@@ -510,6 +537,8 @@ export interface CreditCard {
   payment_account_id: string | null;
   payment_account_name: string | null;
   active: boolean;
+  /** The preselected credit card. */
+  is_default?: boolean;
   invoice_paid: boolean;
   current_invoice: number;
   payable_invoice?: number;

@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { defaultAccount } from "@/lib/walletDefaults";
 import { Link } from "react-router-dom";
 import { isLocalMode } from "@/lib/mode";
 import { RecurrenceScopeDialog } from "@/components/transactions/RecurrenceScopeDialog";
@@ -137,10 +138,10 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     }
   }, [open, transaction, syncPayload, initialType, initialDate]);
 
-  // One less required tap: a new transaction defaults to the first account (still editable).
+  // One less required tap: a new transaction starts on the default account (still editable).
   useEffect(() => {
     if (open && !transaction && !accountId && accounts.length > 0) {
-      setAccountId(accounts[0].id);
+      setAccountId((defaultAccount(accounts) ?? accounts[0]).id);
     }
   }, [open, transaction, accountId, accounts]);
 

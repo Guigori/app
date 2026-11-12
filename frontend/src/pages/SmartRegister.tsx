@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { defaultAccount } from "@/lib/walletDefaults";
 import { categoryFlowPath } from "@/lib/categoryLinks";
 import { useNavigate } from "react-router-dom";
 import { parseReceiptText, parseRegisterText } from "@/lib/registerParsing";
@@ -205,8 +206,8 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   
   useEffect(() => { if (categoriesQuery.isSuccess && category && !categories.some(c => c.id === category)) setCategory(""); }, [categories, category, categoriesQuery.isSuccess]);
   useEffect(() => { if (accountsQuery.isSuccess && account && !accounts.some(a => a.id === account)) setAccount(""); }, [accounts, account, accountsQuery.isSuccess]);
-  // A single wallet is the obvious default; with several, the first one (changeable in the chip).
-  useEffect(() => { if (!account && accounts.length > 0) setAccount(accounts[0].id); }, [accounts, account]);
+  // The default account comes first (changeable in the chip); without one, the oldest active.
+  useEffect(() => { if (!account && accounts.length > 0) setAccount((defaultAccount(accounts) ?? accounts[0]).id); }, [accounts, account]);
   useEffect(() => { if (cardsQuery.isSuccess && selectedCardId && !cards.some(c => c.id === selectedCardId)) setSelectedCardId(null); }, [cards, selectedCardId, cardsQuery.isSuccess]);
   const selectedCategory = categories.find(c => c.id === category);
   const visibleCategories = selectedCategory && !categories.slice(0, 4).some(c => c.id === selectedCategory.id) ? [...categories.slice(0, 3), selectedCategory] : categories.slice(0, 4);

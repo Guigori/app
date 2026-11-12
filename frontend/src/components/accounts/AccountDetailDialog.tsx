@@ -1,7 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
-import { ChartNoAxesCombined, ChevronRight, Pencil, Trash2, Wallet } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChartNoAxesCombined, ChevronRight, Pencil, Star, Trash2, Wallet } from "lucide-react";
+import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { fetchAccount } from "@/lib/data";
+import { fetchAccount, setDefaultAccount } from "@/lib/data";
+import { getApiErrorMessage } from "@/lib/errors";
 import { signedAccountMovement } from "@/lib/accountMovement";
 import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatDate, formatHiddenBRL } from "@/lib/format";
@@ -35,6 +37,16 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
     queryKey: ["account", account?.id],
     queryFn: () => fetchAccount(account?.id ?? ""),
     enabled: open && !!account,
+  });
+
+  const queryClient = useQueryClient();
+  const makeDefault = useMutation({
+    mutationFn: (id: string) => setDefaultAccount(id),
+    onSuccess: async () => {
+      toast.success(account?.type === "beneficio" ? "Benefício padrão definido." : "Conta padrão definida.");
+      await queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error, "Não foi possível definir como padrão.")),
   });
 
   if (!account) return null;
@@ -122,6 +134,13 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
         )}
 
         <DialogFooter>
+          {account.is_default ? (
+            <span className="mr-auto inline-flex items-center gap-1.5 text-sm font-semibold text-primary" data-testid="account-detail-default"><Star className="h-4 w-4 fill-current" aria-hidden="true" />Padrão</span>
+          ) : (
+            <Button variant="ghost" className="mr-auto" disabled={makeDefault.isPending} onClick={() => makeDefault.mutate(account.id)} data-testid="account-detail-default-button">
+              <Star className="h-4 w-4" aria-hidden="true" />Tornar padrão
+            </Button>
+          )}
           {onPaymentMethods ? <Button variant="ghost" onClick={() => onPaymentMethods(account)} data-testid="account-detail-payments-button">Formas de pagamento</Button> : null}
           <Button variant="outline" onClick={() => onEdit(account)} data-testid="account-detail-edit-button">
             <Pencil className="h-4 w-4" aria-hidden="true" />

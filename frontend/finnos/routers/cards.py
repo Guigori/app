@@ -12,8 +12,15 @@ from finnos.lib.stats import aware, months_between
 from finnos.models.cards import CardIn, CardOut
 from finnos.models.notify import Invoice, InvoiceItem, PayInvoiceIn, CreditInvoiceIn, BankRefundIn
 from finnos.routers.auth import require_user
+from finnos.lib.institution_links import resolve_institution
+from finnos.lib.wallet_defaults import effective_defaults
 
 router = APIRouter(prefix="/cards", tags=["cards"])
+
+
+def _payload(payload: CardIn) -> dict:
+    """The stored fields; an absent default flag leaves the current one untouched."""
+    return payload.model_dump(exclude={"is_default"} if payload.is_default is None else set())
 
 
 def _occurrence_value(tx: dict) -> float:
@@ -22,7 +29,7 @@ def _occurrence_value(tx: dict) -> float:
     return round(D(tx["value"]), 2)
 
 
-async def _build(doc: dict, txs: List[dict], accounts: dict) -> CardOut:
+async def _build(doc: dict, txs: List[dict], accounts: dict, institutions: dict | None = None, is_default: bool | None = None) -> CardOut:
     today = date.fromisoformat(today_iso())
     start, closing = cycle_bounds(today, doc["closing_day"])
     due = due_date(closing, doc["closing_day"], doc["due_day"])
@@ -35,19 +42,22 @@ async def _build(doc: dict, txs: List[dict], accounts: dict) -> CardOut:
     invoice, future, used = D(current)/100, D(future_cents)/100, D(used_cents)/100
     limit = D(doc["limit"])
     account = accounts.get(doc.get("payment_account_id") or "", {})
+    institution = (institutions or {}).get(doc.get("institution_id") or "") or {}
     return CardOut(
         version=doc.get("version", 1),
         id=doc["id"],
         name=doc["name"],
-        institution=doc.get("institution", ""),
+        institution=institution.get("name") or doc.get("institution", ""),
         institution_id=doc.get("institution_id"),
-        color=doc.get("color", "#5B3FE4"),
+        # The institution decides the color; old documents keep theirs until linked.
+        color=institution.get("color") or doc.get("color", "#5B3FE4"),
         limit=round(limit, 2),
         closing_day=doc["closing_day"],
         due_day=doc["due_day"],
         payment_account_id=doc.get("payment_account_id"),
         payment_account_name=account.get("name") or None,
         active=doc.get("active", True),
+        is_default=bool(doc.get("is_default")) if is_default is None else is_default,
         invoice_paid=invoice_state(doc, txs, closing.isoformat())["paid"],
         current_invoice=round(invoice, 2),
         payable_invoice=D(max(0, payable_state["total_cents"] - payable_state["paid_cents"])) / 100,
@@ -122,7 +132,13 @@ async def list_cards(user: dict = Depends(require_user)) -> List[CardOut]:
     by_card, accounts = await _context_all_cards(user["id"], docs)
     if await finance_revision(user["id"]) != start_revision:
         raise HTTPException(409, "Cartões alterados durante a consulta; tente novamente.")
-    return [await _build(doc, by_card[doc["id"]], accounts) for doc in docs]
+    institutions = await _institutions(user["id"])
+    defaults = effective_defaults("cards", docs)
+    return [await _build(doc, by_card[doc["id"]], accounts, institutions, doc["id"] in defaults) for doc in docs]
+
+
+async def _institutions(user_id: str) -> dict:
+    return {i["id"]: i for i in await db.institutions.find({"user_id": user_id}).to_list(500)}
 
 
 @router.post("", response_model=CardOut, status_code=201)
@@ -131,14 +147,14 @@ async def create_card(payload: CardIn, user: dict = Depends(require_user), x_fin
     doc = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
-        **payload.model_dump(),
+        **await resolve_institution(user["id"], "cards", _payload(payload)),
         **({"operation_id": x_finnos_operation_id} if x_finnos_operation_id else {}),
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
     await db.cards.insert_one(doc)
     txs, accounts = await _context_one_card(user["id"], doc["id"])
-    return await _build(doc, txs, accounts)
+    return await _build(doc, txs, accounts, await _institutions(user["id"]))
 
 
 @router.put("/{card_id}", response_model=CardOut)
@@ -150,13 +166,27 @@ async def update_card(card_id: str, payload: CardIn, user: dict = Depends(requir
         {"id": card_id, "user_id": user["id"],
          "_operation_id": x_finnos_operation_id,
          "_expected_version": x_finnos_base_version},
-        {"$set": {**payload.model_dump(), "updated_at": datetime.now(timezone.utc)}},
+        {"$set": {**await resolve_institution(user["id"], "cards", _payload(payload)), "updated_at": datetime.now(timezone.utc)}},
     )
     if not result.matched_count:
         raise HTTPException(404, "Cartão não encontrado.")
     doc = await db.cards.find_one({"id": card_id, "user_id": user["id"]})
     txs, accounts = await _context_one_card(user["id"], doc["id"])
-    return await _build(doc, txs, accounts)
+    return await _build(doc, txs, accounts, await _institutions(user["id"]))
+
+
+@router.post("/{card_id}/default", response_model=CardOut)
+async def make_default_card(card_id: str, user: dict = Depends(require_user)) -> CardOut:
+    """Make this the preselected credit card; the previous one is unset atomically."""
+    result = await db.cards.update_one(
+        {"id": card_id, "user_id": user["id"]},
+        {"$set": {"is_default": True, "updated_at": datetime.now(timezone.utc)}},
+    )
+    if not result.matched_count:
+        raise HTTPException(404, "Cartão não encontrado.")
+    doc = await db.cards.find_one({"id": card_id, "user_id": user["id"]})
+    txs, accounts = await _context_one_card(user["id"], doc["id"])
+    return await _build(doc, txs, accounts, await _institutions(user["id"]), True)
 
 
 @router.delete("/{card_id}", status_code=204, response_class=Response)

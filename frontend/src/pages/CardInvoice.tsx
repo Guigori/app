@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { defaultAccount } from "@/lib/walletDefaults";
 import { useParams } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/BackButton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -74,7 +75,7 @@ export default function CardInvoice() {
     setPayDate(new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }));
     setValueRaw(String(invoice.outstanding ?? invoice.total - invoice.paid_amount));
     setOperationId(crypto.randomUUID());
-    setAccountId((current) => current || accounts[0]?.id || "");
+    setAccountId((current) => current || defaultAccount(accounts)?.id || accounts[0]?.id || "");
   }, [payOpen, invoice, accounts]);
 
   useEffect(() => {

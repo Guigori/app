@@ -1,3 +1,4 @@
+import { INSTITUTION_CATALOG } from "@/lib/institutionCatalog";
 import { firebaseAuth } from "@/lib/firebase";
 // Single data boundary for the whole app. Every page/dialog calls these helpers so
 // "conta local" (browser-only) and "conta completa" (server) share one call shape:
@@ -18,6 +19,9 @@ import {
   localListInstitutions,
   localCreateInstitution,
   localDeleteInstitution,
+  localLinkLegacyInstitutions,
+  localSetDefaultAccount,
+  localSetDefaultCard,
   localCreateCategory,
   localCreateTransaction,
   localDashboard,
@@ -65,6 +69,8 @@ import type {
   AccountInput,
   Institution,
   InstitutionInput,
+  InstitutionCatalogItem,
+  LegacyLinkResult,
   FinanceHistoryPage,
   FinanceIntegrity,
   FiintMaturity,
@@ -330,6 +336,35 @@ export async function fetchInstitutions(): Promise<Institution[]> {
 export async function createInstitution(input: InstitutionInput): Promise<Institution> {
   if (isLocalMode()) return localCreateInstitution(input);
   return apiPost<Institution>("/institutions", input);
+}
+
+/** Known banks and benefit providers for the picker. */
+export async function fetchInstitutionCatalog(): Promise<InstitutionCatalogItem[]> {
+  if (isLocalMode()) return INSTITUTION_CATALOG;
+  try {
+    return await cachedFetch("institution-catalog", () => apiGet<InstitutionCatalogItem[]>("/institutions/catalog"));
+  } catch {
+    // The list is fixed; the bundled copy is the same one the server keeps.
+    return INSTITUTION_CATALOG;
+  }
+}
+
+/** Link older accounts and cards that only carry the bank name as text (idempotent). */
+export async function linkLegacyInstitutions(): Promise<LegacyLinkResult> {
+  if (isLocalMode()) return localLinkLegacyInstitutions();
+  return apiPost<LegacyLinkResult>("/institutions/link-legacy", {});
+}
+
+/** Preselect this account for its kind (bank, benefit or cash); the previous one is unset. */
+export async function setDefaultAccount(id: string): Promise<Account> {
+  if (isLocalMode()) return localSetDefaultAccount(id);
+  return apiPost<Account>(`/accounts/${encodeURIComponent(id)}/default`, {});
+}
+
+/** Preselect this credit card; the previous one is unset. */
+export async function setDefaultCard(id: string): Promise<CreditCard> {
+  if (isLocalMode()) return localSetDefaultCard(id);
+  return apiPost<CreditCard>(`/cards/${encodeURIComponent(id)}/default`, {});
 }
 
 export async function deleteInstitution(id: string): Promise<void> {

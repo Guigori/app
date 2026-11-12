@@ -12,6 +12,8 @@ from finnos.lib.account_balances import finance_revision, stream_account_balance
 from finnos.models.finnos import AccountDetailOut, AccountIn, AccountOut
 from finnos.routers.auth import require_user
 from finnos.routers.transactions import _ref_maps, enrich_transaction
+from finnos.lib.institution_links import resolve_institution
+from finnos.lib.wallet_defaults import effective_defaults
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -25,20 +27,27 @@ async def _enriched_accounts(user_id: str) -> list[AccountOut]:
         await db.accounts.find({"user_id": user_id}).sort("created_at", 1).to_list(500)
     )
     ledger = await stream_account_balances(user_id, accounts, today, revision)
+    institutions = {
+        i["id"]: i for i in await db.institutions.find({"user_id": user_id}).to_list(500)
+    }
+    defaults = effective_defaults("accounts", accounts)
     out = []
     for a in accounts:
+        institution = institutions.get(a.get("institution_id") or "")
         balance, total_income, total_expense = ledger.result(a["id"])
         out.append(
             AccountOut(
                 version=a.get("version", 1),
                 id=a["id"],
                 name=a["name"],
-                institution=a.get("institution", ""),
+                institution=(institution or {}).get("name") or a.get("institution", ""),
                 institution_id=a.get("institution_id"),
                 type=a.get("type", "corrente"),
-                color=a.get("color", "#070F52"),
+                # The institution decides the color; old documents keep theirs until linked.
+                color=(institution or {}).get("color") or a.get("color", "#070F52"),
                 initial_balance=D(a.get("initial_balance") or D("0.0")),
                 active=a.get("active", True),
+                is_default=a["id"] in defaults,
                 balance=balance,
                 total_income=total_income,
                 total_expense=total_expense,
@@ -53,6 +62,11 @@ async def _one_enriched(user_id: str, account_id: str) -> AccountOut | None:
         if account.id == account_id:
             return account
     return None
+
+
+def _payload(payload: AccountIn) -> dict:
+    """The stored fields; an absent default flag leaves the current one untouched."""
+    return payload.model_dump(exclude={"is_default"} if payload.is_default is None else set())
 
 
 @router.get("", response_model=List[AccountOut])
@@ -89,10 +103,11 @@ async def create_account(
     payload: AccountIn, user: dict = Depends(require_user),
     x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80)
 ) -> AccountOut:
+    data = await resolve_institution(user["id"], "accounts", _payload(payload))
     doc = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
-        **payload.model_dump(),
+        **data,
         **({"operation_id": x_finnos_operation_id} if x_finnos_operation_id else {}),
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
@@ -114,7 +129,22 @@ async def update_account(
         {"id": account_id, "user_id": user["id"],
          "_operation_id": x_finnos_operation_id,
          "_expected_version": x_finnos_base_version},
-        {"$set": {**payload.model_dump(), "updated_at": datetime.now(timezone.utc)}},
+        {"$set": {**await resolve_institution(user["id"], "accounts", _payload(payload)), "updated_at": datetime.now(timezone.utc)}},
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Conta não encontrada.")
+    account = await _one_enriched(user["id"], account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Conta não encontrada.")
+    return account
+
+
+@router.post("/{account_id}/default", response_model=AccountOut)
+async def make_default_account(account_id: str, user: dict = Depends(require_user)) -> AccountOut:
+    """Make this the preselected account of its kind; the previous one is unset atomically."""
+    result = await db.accounts.update_one(
+        {"id": account_id, "user_id": user["id"]},
+        {"$set": {"is_default": True, "updated_at": datetime.now(timezone.utc)}},
     )
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="Conta não encontrada.")

@@ -22,6 +22,8 @@ class CardIn(BaseModel):
     due_day: int = Field(ge=1, le=31)
     payment_account_id: Optional[str] = None
     active: bool = True
+    # None keeps the current flag (older clients do not send it).
+    is_default: Optional[bool] = None
 
 
 class CardOut(BaseModel):
@@ -37,6 +39,7 @@ class CardOut(BaseModel):
     payment_account_id: Optional[str] = None
     payment_account_name: Optional[str] = None
     active: bool
+    is_default: bool = False
     invoice_paid: bool = False
     # Derived, never stored:
     current_invoice: Money
