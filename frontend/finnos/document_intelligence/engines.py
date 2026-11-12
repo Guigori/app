@@ -307,7 +307,11 @@ class PaddleOCREngine:
             data = result.json["res"] if hasattr(result, "json") and "res" in getattr(result, "json", {}) else result
             texts = data.get("rec_texts", [])
             scores = data.get("rec_scores", [])
-            boxes = data.get("rec_boxes", [])
+            boxes = data.get("rec_boxes")
+            if boxes is None or len(boxes) == 0:
+                # Older/other pipelines return polygons only: use their bounding box.
+                boxes = [[min(p[0] for p in poly), min(p[1] for p in poly), max(p[0] for p in poly),
+                          max(p[1] for p in poly)] for poly in data.get("rec_polys", [])]
             for text, score, box in zip(texts, scores, boxes, strict=False):
                 x0, top, x1, bottom = (float(v) for v in list(box)[:4])
                 words.append(Word(str(text), *clamp_box(x0, top, x1, bottom, width, height),
