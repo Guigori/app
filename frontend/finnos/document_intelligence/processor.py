@@ -187,7 +187,13 @@ def process_document(
     low_pages = [n for n, q in outcome.page_quality.items() if q < policy.ocr_quality_threshold]
     if low_pages:
         result.warnings.append("low_ocr_quality_pages:" + ",".join(map(str, low_pages)))
+        # A low page average (QR codes, status bars, stamps) does not override
+        # values that closed a financial cross-check; everything else is capped.
+        verified_document = any(c.passed for c in result.checks
+                                if c.name in {"invoice_total", "statement_balance", "items_total", "payments_total"})
         for row in result.transactions:
+            if verified_document or any(c.passed for c in row.checks if c.name == "running_balance"):
+                continue
             if row.transaction_date and row.transaction_date.evidence.page in low_pages:
                 row.confidence = min(row.confidence, 0.79)
                 row.confidence_level = confidence_level(row.confidence)

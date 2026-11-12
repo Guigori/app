@@ -115,7 +115,8 @@ the dev sandbox); the `fdi-lab` workflow measures it on GitHub.
 - [x] FDI-02 native PDF adapter, Tesseract adapter, PaddleOCR adapter (fake-tested), engine comparison
 - [ ] FDI-02 Docling adapter (not needed by current layouts; add when a table layout requires it)
 - [x] FDI-03 statements (running balance, D/C, debit/credit columns) and card invoices (full set of operations)
-- [ ] FDI-03 receipts, fiscal XML (nfelib), Pix receipts
+- [x] FDI-03 NFC-e/NF-e DANFE (printed or photographed): issuer, CNPJ (check digits), date/time, items, discount, total, payments, change, access key (check digit + CNPJ/number/series/month cross-checks) — `fiscal.py`
+- [ ] FDI-03 fiscal XML (nfelib), Pix receipts, QR Code decoding
 - [x] FDI-04 field confidence, review with corrections/history, duplicate flags, re-check
 - [ ] FDI-04 review UI
 - [x] FDI-05 light/worker routing, consent gate, limits, worker app

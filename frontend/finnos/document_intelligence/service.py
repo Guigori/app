@@ -12,6 +12,7 @@ import re
 from collections.abc import Iterable
 
 from finnos.document_intelligence.extractors import extract_bank_statement, extract_card_invoice
+from finnos.document_intelligence.fiscal import extract_fiscal_receipt
 from finnos.document_intelligence.institutions import identify_institution
 from finnos.document_intelligence.models import (
     DocumentKind,
@@ -110,6 +111,13 @@ def extract_text_document(
         extraction = extract_card_invoice(materialized, source_engine=source_engine)
     elif kind == DocumentKind.BANK_STATEMENT:
         extraction = extract_bank_statement(materialized, source_engine=source_engine)
+    elif kind in (DocumentKind.FISCAL_DOCUMENT, DocumentKind.PURCHASE_RECEIPT):
+        fiscal = extract_fiscal_receipt(materialized, source_engine=source_engine)
+        result.details = {"items": fiscal.items, "payments": fiscal.payments}
+        # The issuer of a receipt is a merchant, not a bank.
+        result.fields.pop("institution", None)
+        result.warnings = [w for w in result.warnings if not w.startswith("institution_")]
+        extraction = fiscal
     else:
         result.warnings.append("transaction_row_parser_requires_statement_document")
         return result

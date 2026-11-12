@@ -286,6 +286,8 @@ class ExtractionResult:
     schema_version: str = SCHEMA_VERSION
     pages: int = 0
     engines_used: list[str] = field(default_factory=list)
+    # Document-specific detail kept for review (e.g. receipt items and payments).
+    details: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Return JSON-compatible output without losing field provenance."""
@@ -301,4 +303,5 @@ class ExtractionResult:
             "fields": {key: value.to_dict() for key, value in self.fields.items()},
             "checks": [c.to_dict() for c in self.checks],
             "transactions": [row.to_dict() for row in self.transactions],
+            "details": self.details,
         }
