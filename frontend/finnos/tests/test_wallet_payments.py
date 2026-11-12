@@ -215,3 +215,120 @@ def test_transfer_cannot_overdraw_and_rename_is_not_a_new_movement(monkeypatch):
     _check_transfer_funds(None, "uid", dict(transfer, value=Decimal("100")), None, None, "2026-11-12", False)
     _check_transfer_funds(None, "uid", dict(transfer, name="novo"), None, dict(transfer), "2026-11-12", False)
     _check_transfer_funds(None, "uid", dict(transfer, status="agendado", date="2026-12-01"), None, None, "2026-11-12", False)
+
+
+# ---------------------------------------------------------------- transfer undo
+
+
+def transfer_world(monkeypatch, *, destination_balance="0.00", overdraft=None):
+    from finnos.routers import transactions as tx_router
+
+    accounts = {
+        "a": Ref("accounts:a", {"id": "a", "name": "Itaú", "initial_balance": Decimal("500.00")}),
+        "b": Ref("accounts:b", {"id": "b", "name": "Inter", "initial_balance": Decimal(destination_balance),
+                                **({"overdraft_limit": Decimal(overdraft)} if overdraft else {})}),
+    }
+    original = {"id": "t1", "name": "Reserva", "type": "transferencia", "status": "pago", "date": "2026-11-01",
+                "value": Decimal("200.00"), "account_id": "a", "to_account_id": "b", "version": 1}
+    transactions = {"t1": Ref("transactions:t1", store.encode(original))}
+
+    class Owner:
+        def collection(self, name):
+            table = {
+                "accounts": lambda key: accounts[key],
+                "transactions": lambda key: transactions.setdefault(key, Ref("transactions:" + key)),
+                "finance_history": lambda key: Ref("history:" + key),
+            }
+            return type("Coll", (), {"document": lambda self, key: table[name](key)})()
+
+    class Tx:
+        def create(self, ref, value):
+            assert ref.data is None, "duplicate"
+            ref.data = copy.deepcopy(value)
+
+        def set(self, ref, value):
+            ref.data = copy.deepcopy(value)
+
+    def movements(db, uid, account_id, transaction):
+        rows = [dict(store.decode(ref.data), id=key) for key, ref in transactions.items() if ref.data]
+        return [r for r in rows if account_id in (r.get("account_id"), r.get("to_account_id"))]
+
+    async def ref_maps(uid):
+        return {k: store.decode(v.data) for k, v in accounts.items()}, {}
+
+    async def cards_by_id(uid):
+        return {}
+
+    monkeypatch.setattr(store, "scoped", lambda query: "uid")
+    monkeypatch.setattr(store, "client", lambda: object())
+    monkeypatch.setattr(store, "root", lambda db, uid: Owner())
+    monkeypatch.setattr(store, "atomic", lambda db, uid, fn: fn(Tx()))
+    monkeypatch.setattr(store, "account_movement_rows", movements)
+    monkeypatch.setattr(tx_router, "today_iso", lambda: "2026-11-12")
+    monkeypatch.setattr(tx_router, "_ref_maps", ref_maps)
+    monkeypatch.setattr(tx_router, "_cards_by_id", cards_by_id)
+    return transactions
+
+
+def reverse(op="r1", allow=False):
+    from finnos.routers.transactions import ReverseTransferIn, reverse_transfer
+
+    return asyncio.run(reverse_transfer("t1", ReverseTransferIn(allow_overdraft=allow), user={"id": "uid"},
+                                        x_finnos_operation_id=op))
+
+
+def test_transfer_undo_is_an_inverse_transfer_linked_both_ways(monkeypatch):
+    transactions = transfer_world(monkeypatch)
+    out = reverse()
+    assert (out.account_id, out.to_account_id, out.value, out.reversal_of) == ("b", "a", Decimal("200.00"), "t1")
+    original = store.decode(transactions["t1"].data)
+    assert original["reversed_by"] == out.id and original["version"] == 2
+    assert reverse().id == out.id  # same operation: no second inverse
+    with pytest.raises(HTTPException, match="já foi desfeita"):
+        reverse(op="r2")
+
+
+def test_transfer_undo_needs_the_destination_to_cover_it(monkeypatch):
+    transactions = transfer_world(monkeypatch)
+    # The destination already spent part of what it received.
+    transactions["spent"] = Ref("transactions:spent", store.encode({
+        "id": "spent", "name": "Aluguel", "type": "despesa", "status": "pago", "date": "2026-11-05",
+        "value": Decimal("150.00"), "account_id": "b"}))
+    with pytest.raises(HTTPException) as refused:
+        reverse()
+    assert refused.value.detail["code"] == "saldo_insuficiente"
+
+
+def test_reversed_transfers_cannot_be_edited():
+    from finnos.lib.db import validate_refs
+
+    with pytest.raises(HTTPException, match="desfeita"):
+        validate_refs(None, "uid", "transactions", {"type": "transferencia"}, None,
+                      original_tx={"id": "t1", "reversed_by": "x"})
+
+
+# ---------------------------------------------------------------- reminders
+
+
+def test_invoice_reminder_shows_what_is_owed_and_skips_settled(monkeypatch):
+    from datetime import date
+    from finnos.routers import notifications
+
+    card = dict(CARD)
+
+    class Cursor:
+        async def to_list(self, limit):
+            return [dict(PURCHASE)]
+
+    monkeypatch.setattr(notifications, "db", type("Db", (), {
+        "transactions": type("T", (), {"find": lambda self, query: Cursor()})()})())
+    today = date(2026, 11, 3)
+    items = asyncio.run(notifications._invoice_reminders("uid", card, today, today.toordinal() + 7, set()))
+    owed = [i for i in items if i.date == "2026-11-07"]
+    assert owed and owed[0].value == Decimal("100") and "Confirme" in owed[0].description
+    assert owed[0].target_url == "/cartoes/card?cycle=2026-10-29"
+    late = asyncio.run(notifications._invoice_reminders("uid", card, date(2026, 11, 10), date(2026, 11, 17).toordinal(), set()))
+    assert any(i.title.endswith("atrasada") for i in late)
+    card["invoice_cycles"] = {"2026-10-29": {"paid_cents": 10000}}
+    paid = asyncio.run(notifications._invoice_reminders("uid", card, today, today.toordinal() + 7, set()))
+    assert not [i for i in paid if i.date == "2026-11-07"]

@@ -187,6 +187,9 @@ export interface Transaction {
   invoice_payment?: boolean;
   /** Set on the reversal that undid an invoice payment. */
   invoice_reversal_of?: string | null;
+  /** Transfer undo: the inverse transfer points to the original and back. */
+  reversal_of?: string | null;
+  reversed_by?: string | null;
   invoice_refund?: boolean;
   version?: number;
   id: string;

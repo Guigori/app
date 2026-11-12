@@ -200,6 +200,10 @@ function accountBalance(db: LocalDb, accountId: string, excludeId?: string): num
   return round2(total);
 }
 
+function assertNotReversed(tx: Transaction): void {
+  if (tx.reversed_by || tx.reversal_of) throw new Error("Transferência desfeita fica no histórico como está; não pode ser editada nem excluída.");
+}
+
 const TRANSFER_KEYS = ["value", "account_id", "to_account_id", "status", "date", "type"] as const;
 
 /** Same rule as the server: a paid transfer may not overdraw the source. */
@@ -566,6 +570,7 @@ export function localUpdateTransaction(id: string, input: TransactionInput): Tra
   const index = db.transactions.findIndex((t) => t.id === id);
   if (index < 0) throw new Error("Transação não encontrada.");
   assertPurchaseNotSettled(db, db.transactions[index]);
+  assertNotReversed(db.transactions[index]);
   const tx = buildTransaction(db, input, db.transactions[index]);
   assertTransferFunds(db, tx, Boolean(input.allow_overdraft), db.transactions[index]);
   const before = { ...db.transactions[index] };
@@ -579,6 +584,7 @@ export function localDeleteTransaction(id: string): void {
   const db = readDb();
   const existing = db.transactions.find(t => t.id === id);
   if (existing) assertPurchaseNotSettled(db, existing);
+  if (existing) assertNotReversed(existing);
   db.transactions = db.transactions.filter((t) => t.id !== id);
   if (existing) localAudit(db, "transactions", "deleted", existing, null);
   writeDb(db);
@@ -1362,22 +1368,34 @@ export function localNotifications(windowDays = 7): Notifications {
       target_url: `/transacoes?date=${tx.date}&highlight=${encodeURIComponent(tx.id)}`,
     });
   }
+  // Reminder only: invoices with money owed, due in the window or overdue (≤ 30 days).
   for (const card of db.cards) {
     if (!card.active) continue;
-    const [, closing] = cycleBounds(today, card.closing_day);
-    const due = dueDate(closing, card.closing_day, card.due_day);
-    const daysLeft = dayDiff(due);
-    if (daysLeft > windowDays) continue;
-    items.push({
-      id: `card-${card.id}-${due}`,
-      kind: "fatura",
-      title: `Fatura ${card.name}`,
-      description: `Fecha em ${closing.slice(8, 10)}/${closing.slice(5, 7)} e vence em ${due.slice(8, 10)}/${due.slice(5, 7)}.`,
-      date: due,
-      value: 0,
-      days_left: daysLeft,
-      target_url: `/cartoes/${card.id}?due=${due}`,
-    });
+    const [start, current] = cycleBounds(today, card.closing_day);
+    const [, previous] = cycleBounds(addDays(start, -1), card.closing_day);
+    for (const closing of [previous, current]) {
+      const due = dueDate(closing, card.closing_day, card.due_day);
+      const daysLeft = dayDiff(due);
+      if (daysLeft > windowDays || daysLeft < -30) continue;
+      const state = invoiceForCycle(db, card, closing);
+      const owed = state.outstanding ?? 0;
+      const closed = closing < today;
+      if (owed <= 0 && closed) continue;
+      const overdue = daysLeft < 0;
+      const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+      items.push({
+        id: `card-${card.id}-${due}`,
+        kind: "fatura",
+        title: `Fatura ${card.name}${overdue ? " atrasada" : ""}`,
+        description: overdue ? `Venceu em ${dm(due)}. Pague e confirme no FINNOS.`
+          : closed ? `Vence em ${dm(due)}. Confirme no FINNOS quando pagar.`
+          : `Fecha em ${dm(closing)} e vence em ${dm(due)}.`,
+        date: due,
+        value: Math.max(owed, 0),
+        days_left: daysLeft,
+        target_url: `/cartoes/${card.id}?cycle=${closing}`,
+      });
+    }
   }
   items.sort((a, b) => a.days_left - b.days_left || a.title.localeCompare(b.title));
   return { items, count: items.length };
@@ -1529,6 +1547,29 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   db.cards = db.cards.map((c) => c.id === cardId ? card : c);
   writeDb(db);
   return localInvoice(cardId, closing);
+}
+
+/** Undo a transfer with an inverse transfer linked both ways (same rule as the server). */
+export function localReverseTransfer(id: string, allowOverdraft = false): Transaction {
+  const db = readDb();
+  const original = db.transactions.find(t => t.id === id);
+  if (!original) throw new Error("Transação não encontrada.");
+  if (original.type !== "transferencia" || original.status !== "pago") throw new Error("Só uma transferência realizada pode ser desfeita.");
+  if (original.reversal_of) throw new Error("Esta transferência já desfaz outra.");
+  if (original.reversed_by) throw new Error("Esta transferência já foi desfeita.");
+  const destination = db.accounts.find(a => a.id === original.to_account_id);
+  if (!destination) throw new Error("A conta de destino não existe mais.");
+  checkFunds(accountBalance(db, destination.id), original.value, destination, allowOverdraft);
+  const inverse = buildTransaction(db, {
+    name: `Desfaz: ${original.name}`, value: original.value, type: "transferencia", status: "pago", date: todayISO(),
+    account_id: destination.id, card_id: null, to_account_id: original.account_id, category_id: null, fixed: false,
+    recurrence: null, installment: false, total_installments: null, current_installment: null, adjusted_value: null,
+    attachment: null, notes: `Desfaz a transferência de ${original.date}.`,
+  });
+  inverse.reversal_of = id;
+  db.transactions = [...db.transactions.map(t => t.id === id ? { ...t, reversed_by: inverse.id, version: (t.version ?? 1) + 1 } : t), inverse];
+  writeDb(db);
+  return enrich(db, inverse);
 }
 
 /** Undo the last payment of a cycle with a linked reversal; the original stays. */

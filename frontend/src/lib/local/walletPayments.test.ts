@@ -117,3 +117,25 @@ it("a paid transfer cannot overdraw the source", () => {
   expect(localCreateTransaction({ ...transfer, value: 100 }).value).toBe(100);
   expect(localCreateTransaction({ ...transfer, status: "agendado", date: "2026-12-01" }).status).toBe("agendado");
 });
+
+it("undoing a transfer adds an inverse linked both ways and freezes both", async () => {
+  const { localReverseTransfer, localUpdateTransaction, localNotifications } = await import("@/lib/local/engine");
+  scenario(500);
+  const transfer: TransactionInput = {
+    name: "Reserva", value: 200, type: "transferencia", status: "pago", date: "2026-11-01", account_id: "bank",
+    card_id: null, to_account_id: "other", category_id: null, fixed: false, recurrence: null, installment: false,
+    total_installments: null, current_installment: null, adjusted_value: null, attachment: null, notes: null,
+  };
+  const original = localCreateTransaction(transfer);
+  const inverse = localReverseTransfer(original.id);
+  expect([inverse.account_id, inverse.to_account_id, inverse.reversal_of]).toEqual(["other", "bank", original.id]);
+  expect(readDb().transactions.find(t => t.id === original.id)?.reversed_by).toBe(inverse.id);
+  expect(localListAccounts().find(a => a.id === "bank")?.balance).toBe(500);
+  expect(() => localReverseTransfer(original.id)).toThrow(/já foi desfeita/);
+  expect(() => localUpdateTransaction(original.id, { ...transfer, name: "x" })).toThrow(/desfeita/);
+  // Reminder shows the owed invoice and links straight to it.
+  vi.setSystemTime(new Date("2026-11-03T14:00:00Z"));
+  const reminder = localNotifications(7).items.find(i => i.kind === "fatura" && i.date === "2026-11-07");
+  expect(reminder?.value).toBe(100);
+  expect(reminder?.target_url).toBe("/cartoes/card?cycle=2026-10-29");
+});

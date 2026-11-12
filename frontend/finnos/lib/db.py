@@ -283,6 +283,8 @@ def validate_refs(db, uid, name, doc, transaction, original_tx=None):
         allow_overdraft = bool(doc.pop("_allow_overdraft", False))
         if doc.get("invoice_payment") or doc.get("invoice_refund"):
             raise HTTPException(409, "Pagamento de fatura é imutável; use o fluxo de faturas.")
+        if original_tx is not None and (original_tx.get("reversed_by") or original_tx.get("reversal_of")):
+            raise HTTPException(409, "Transferência desfeita fica no histórico como está; não pode ser editada nem excluída.")
         from finnos.lib.dates import today_iso
         _check_transfer_funds(db, uid, doc, transaction, original_tx, today_iso(), allow_overdraft)
         from finnos.lib.invoices import purchase_write_conflict

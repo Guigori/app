@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { defaultAccount } from "@/lib/walletDefaults";
+import { methodKey, paymentEffect, paymentMethods } from "@/lib/paymentMethods";
 import { Link } from "react-router-dom";
 import { isLocalMode } from "@/lib/mode";
 import { RecurrenceScopeDialog } from "@/components/transactions/RecurrenceScopeDialog";
@@ -86,6 +87,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: fetchCards, enabled: open, staleTime: 60_000 });
   const cards = useMemo(() => (cardsQuery.data ?? []).filter((c) => c.active), [cardsQuery.data]);
   const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
+  const methods = useMemo(() => paymentMethods(accounts, cards), [accounts, cards]);
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
   const syncReviewQuery = useQuery({
     queryKey: ["sync-operation", syncOperationId],
@@ -282,6 +284,10 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     mutation.mutate(input);;
   };
 
+  const selectedMethod = methods.find((m) => m.key === methodKey(accountId, cardId === "none" ? null : cardId));
+  const methodEffect = paymentEffect(selectedMethod, parseAmount(valueRaw) ?? 0, date, accounts, cards,
+    transaction ? { accountId: transaction.account_id, cardId: transaction.card_id ?? null, value: transaction.value } : null);
+
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -426,6 +432,26 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
             ) : null}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {type === "despesa" ? (
+                <div className="space-y-2">
+                  <Label htmlFor="tx-method">Forma de pagamento</Label>
+                  <Select value={methodKey(accountId, cardId === "none" ? null : cardId)} onValueChange={(key) => {
+                    const method = methods.find((m) => m.key === key);
+                    if (!method) return;
+                    setAccountId(method.accountId);
+                    setCardId(method.cardId ?? "none");
+                  }}>
+                    <SelectTrigger id="tx-method" className="w-full" aria-label="Forma de pagamento" data-testid="tx-method-select">
+                      <SelectValue>{selectedMethod?.label ?? "Selecione"}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {methods.map((m) => (
+                        <SelectItem key={m.key} value={m.key} data-testid={`tx-method-${m.key.replace(":", "-")}`}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
               <div className="space-y-2">
                 <Label htmlFor="tx-account">{type === "transferencia" ? "Conta de origem" : "Conta"}</Label>
                 <Select value={accountId} onValueChange={setAccountId}>
@@ -443,6 +469,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
                   </SelectContent>
                 </Select>
               </div>
+              )}
 
               {type === "transferencia" ? (
                 <div className="space-y-2">
@@ -483,28 +510,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
               )}
             </div>
 
-            {type === "despesa" && cards.length > 0 ? (
-              <div className="space-y-2">
-                <Label htmlFor="tx-card">Cartão usado (opcional)</Label>
-                <Select value={cardId} onValueChange={setCardId}>
-                  <SelectTrigger id="tx-card" className="w-full" aria-label="Cartão usado" data-testid="tx-card-select">
-                    <SelectValue>
-                      {cardId === "none" ? "Sem cartão" : (cards.find((c) => c.id === cardId)?.name ?? "")}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sem cartão</SelectItem>
-                    {cards.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Marcar o cartão soma a despesa à fatura dele — a conta acima continua sendo a de pagamento.
-                </p>
-              </div>
+            {type === "despesa" && methodEffect ? (
+              <p className="text-xs text-muted-foreground" data-testid="tx-method-effect">{methodEffect}</p>
             ) : null}
 
             {type !== "transferencia" ? (

@@ -91,6 +91,9 @@ class CategoryIn(BaseModel):
 class TransactionOut(BaseModel):
     invoice_payment: bool = False
     invoice_refund: bool = False
+    # Transfer undo (etapa 2): the inverse points to the original and back.
+    reversal_of: Optional[str] = None
+    reversed_by: Optional[str] = None
     version: int = 1
     id: str
     name: str

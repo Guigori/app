@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { defaultAccount } from "@/lib/walletDefaults";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/BackButton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Search, RotateCcw } from "lucide-react";
@@ -45,7 +45,9 @@ export default function CardInvoice() {
   const [creditReason, setCreditReason] = useState("");
   const [creditOperationId, setCreditOperationId] = useState(() => crypto.randomUUID());
   const [creditError, setCreditError] = useState<string | null>(null);
-  const [cycleMonth, setCycleMonth] = useState("");
+  const [searchParams] = useSearchParams();
+  // A reminder links to a specific invoice: ?cycle=YYYY-MM-DD (its closing date).
+  const [cycleMonth, setCycleMonth] = useState(() => /^\d{4}-\d{2}-\d{2}$/.test(searchParams.get("cycle") ?? "") ? searchParams.get("cycle")!.slice(0, 7) : "");
   const [refundOpen, setRefundOpen] = useState(false);
   const [refundPurchaseId, setRefundPurchaseId] = useState("");
   const [refundAmount, setRefundAmount] = useState("");

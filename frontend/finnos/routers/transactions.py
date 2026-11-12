@@ -68,6 +68,8 @@ def enrich_transaction(
         version=doc.get("version", 1),
         invoice_payment=doc.get("invoice_payment", False),
         invoice_refund=doc.get("invoice_refund", False),
+        reversal_of=doc.get("reversal_of"),
+        reversed_by=doc.get("reversed_by"),
         id=doc["id"],
         name=doc["name"],
         value=D(doc["value"]),
@@ -504,6 +506,93 @@ async def change_recurrence_scope(
         raise HTTPException(409, "Ocorrência registrada, mas leitura indisponível.")
     accounts, categories = await _ref_maps(uid)
     return enrich_transaction(doc, accounts, categories, await _cards_by_id(uid))
+
+
+class ReverseTransferIn(FinanceModel):
+    # The person confirmed using the destination's cheque especial.
+    allow_overdraft: bool = False
+
+
+@router.post("/{tx_id}/reverse", response_model=TransactionOut)
+async def reverse_transfer(
+    tx_id: str,
+    payload: ReverseTransferIn,
+    user: dict = Depends(require_user),
+    x_finnos_operation_id: str = Header(...),
+):
+    """Undo a transfer with an inverse transfer linked to it (approved 12/11/2026).
+
+    Both sides move back in one write; the original stays in the history and
+    can no longer be edited. The money now leaves the destination, so the
+    destination must cover it (or its cheque especial, with confirmation).
+    """
+    from datetime import datetime, timezone
+    import hashlib
+    from finnos.lib import db as store
+    from finnos.lib.account_funds import balance_in_transaction, ensure_funds
+    from finnos.lib.history import record_event
+    from finnos.lib.money import cents
+
+    if not 1 <= len(x_finnos_operation_id) <= 200:
+        raise HTTPException(422, "Identificador de operação inválido.")
+    uid = store.scoped({"user_id": user["id"]})
+    store.resource_id(tx_id)
+    reversal_id = hashlib.sha256(("reverse:" + x_finnos_operation_id).encode()).hexdigest()
+    today = today_iso()
+
+    def execute():
+        instance = store.client()
+
+        def action(tr):
+            owner = store.root(instance, uid)
+            original_ref = owner.collection("transactions").document(tx_id)
+            snapshot = original_ref.get(transaction=tr)
+            if not snapshot.exists:
+                raise HTTPException(404, "Transação não encontrada.")
+            original = dict(store.decode(snapshot.to_dict()), id=tx_id)
+            reversal_ref = owner.collection("transactions").document(reversal_id)
+            existing = reversal_ref.get(transaction=tr)
+            if existing.exists:
+                saved = dict(store.decode(existing.to_dict()), id=reversal_id)
+                if saved.get("reversal_of") != tx_id:
+                    raise HTTPException(409, "Operação reutilizada com dados diferentes.")
+                return saved
+            if original.get("type") != "transferencia" or original.get("status") != "pago":
+                raise HTTPException(409, "Só uma transferência realizada pode ser desfeita.")
+            if original.get("reversal_of"):
+                raise HTTPException(409, "Esta transferência já desfaz outra.")
+            if original.get("reversed_by"):
+                raise HTTPException(409, "Esta transferência já foi desfeita.")
+            destination = owner.collection("accounts").document(store.resource_id(original["to_account_id"])).get(transaction=tr)
+            if not destination.exists:
+                raise HTTPException(409, "A conta de destino não existe mais.")
+            account = dict(store.decode(destination.to_dict()), id=original["to_account_id"])
+            balance = balance_in_transaction(instance, uid, account, tr, today)
+            ensure_funds(balance, cents(original["value"]), account, allow_overdraft=payload.allow_overdraft)
+            now = datetime.now(timezone.utc)
+            reversal = {
+                key: original.get(key) for key in ("value", "category_id", "origin")
+            } | dict(
+                id=reversal_id, user_id=uid, name=f"Desfaz: {original.get('name') or 'transferência'}",
+                type="transferencia", status="pago", date=today, account_id=original["to_account_id"],
+                to_account_id=original["account_id"], card_id=None, fixed=False, recurrence=None,
+                installment=False, total_installments=None, current_installment=None, adjusted_value=None,
+                attachment=None, notes=f"Desfaz a transferência de {original.get('date')}.", reversal_of=tx_id,
+                source="manual", notify_enabled=False, version=1, created_at=now, updated_at=now,
+            )
+            updated = dict(original, reversed_by=reversal_id, updated_at=now,
+                           version=int(original.get("version", 1)) + 1)
+            tr.create(reversal_ref, store.encode(reversal))
+            record_event(tr, owner, "transactions", "created", None, reversal)
+            tr.set(original_ref, store.encode(updated))
+            record_event(tr, owner, "transactions", "updated", original, updated)
+            return reversal
+
+        return store.atomic(instance, uid, action)
+
+    doc = await run_in_threadpool(execute)
+    accounts_by_id, categories_by_id = await _ref_maps(uid)
+    return enrich_transaction(doc, accounts_by_id, categories_by_id, await _cards_by_id(uid))
 
 
 @router.delete("/{tx_id}", status_code=204)

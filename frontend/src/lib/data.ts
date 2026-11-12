@@ -50,6 +50,7 @@ import {
   localInvoice,
   localPayInvoice,
   localUndoInvoicePayment,
+  localReverseTransfer,
   localCreditInvoice,
   localBankRefund,
   localSubscriptions,
@@ -832,6 +833,12 @@ export async function fetchInvoice(cardId: string, cycle?: string): Promise<Invo
 export async function payInvoice(cardId: string, input: PayInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
   if (isLocalMode()) return localPayInvoice(cardId, input);
   return apiPost<Invoice>(`/cards/${cardId}/pay`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+
+/** Undo a transfer with an inverse transfer linked to it; the original stays in the history. */
+export async function reverseTransfer(id: string, allowOverdraft = false, operationId = crypto.randomUUID()): Promise<Transaction> {
+  if (isLocalMode()) return localReverseTransfer(id, allowOverdraft);
+  return apiPost<Transaction>(`/transactions/${encodeURIComponent(id)}/reverse`, { allow_overdraft: allowOverdraft }, { "X-FINNOS-Operation-ID": operationId });
 }
 
 /** Undo the last payment of an invoice: a linked reversal returns the money; the original stays. */

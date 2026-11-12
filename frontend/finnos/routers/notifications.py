@@ -91,29 +91,56 @@ async def notifications(
         )
     cards = await db.cards.find({"user_id": user["id"], "active": True}).to_list(200)
     for card in cards:
-        _, closing = cycle_bounds(today, card["closing_day"])
-        due = due_date(closing, card["closing_day"], card["due_day"])
-        days_left = due.toordinal() - today.toordinal()
-        if due.toordinal() > limit:
-            continue
-        notification_id = f"card-{card['id']}-{due.isoformat()}"
-        if notification_id in dismissed:
-            continue
-        items.append(
-            NotificationItem(
-                id=notification_id,
-                kind="fatura",
-                title=f"Fatura {card['name']}",
-                description=f"Fecha em {closing.strftime('%d/%m')} e vence em {due.strftime('%d/%m')}.",
-                date=due.isoformat(),
-                value=D("0.0"),
-                days_left=days_left,
-                target_url=f"/cartoes/{card['id']}?due={due.isoformat()}",
-            )
-        )
+        items.extend(await _invoice_reminders(user["id"], card, today, limit, dismissed))
     items = await _pending_items(user["id"], dismissed) + items
     items.sort(key=lambda item: (item.days_left, item.title))
     return NotificationsOut(items=items, count=len(items))
+
+
+async def _invoice_reminders(uid: str, card: dict, today, limit: int, dismissed: set) -> list[NotificationItem]:
+    """Reminder only (approved 12/11/2026): one item per invoice with money still
+    owed, due inside the window or already overdue. Paying is always a
+    confirmation by the person; nothing is registered here."""
+    from datetime import timedelta
+    from finnos.lib.invoices import invoice_state
+
+    start, current = cycle_bounds(today, card["closing_day"])
+    _, previous = cycle_bounds(start - timedelta(days=1), card["closing_day"])
+    purchases = await db.transactions.find({"user_id": uid, "card_id": card["id"]}).to_list(20000)
+    found: list[NotificationItem] = []
+    for closing in (previous, current):
+        due = due_date(closing, card["closing_day"], card["due_day"])
+        days_left = due.toordinal() - today.toordinal()
+        if due.toordinal() > limit or days_left < -30:
+            continue
+        try:
+            state = invoice_state(card, purchases, closing.isoformat())
+        except (KeyError, ValueError):
+            continue  # a malformed card must not hide the other reminders
+        owed = state["total_cents"] - state["paid_cents"] - state.get("carried_cents", 0)
+        if owed <= 0 and closing < today:
+            continue  # closed and settled: nothing to remind
+        notification_id = f"card-{card['id']}-{due.isoformat()}"
+        if notification_id in dismissed:
+            continue
+        overdue = days_left < 0
+        closed = closing < today
+        description = (
+            f"Venceu em {due.strftime('%d/%m')}. Pague e confirme no FINNOS." if overdue
+            else f"Vence em {due.strftime('%d/%m')}. Confirme no FINNOS quando pagar." if closed
+            else f"Fecha em {closing.strftime('%d/%m')} e vence em {due.strftime('%d/%m')}."
+        )
+        found.append(NotificationItem(
+            id=notification_id,
+            kind="fatura",
+            title=f"Fatura {card['name']}" + (" atrasada" if overdue else ""),
+            description=description,
+            date=due.isoformat(),
+            value=D(max(owed, 0)) / 100,
+            days_left=days_left,
+            target_url=f"/cartoes/{card['id']}?cycle={closing.isoformat()}",
+        ))
+    return found
 
 
 @router.post("/{notification_id}/dismiss")
