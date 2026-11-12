@@ -52,7 +52,7 @@ import {
   localUndoInvoicePayment,
   localReverseTransfer,
   localCreateReconciliation, localListReconciliations, localGetReconciliation, localResolveReconciliation,
-  localUndoReconciliationEvent, localCompleteReconciliation, localAdjustBalance, localRechargeBenefits,
+  localUndoReconciliationEvent, localCompleteReconciliation, localAdjustBalance, localRechargeBenefits, localOpenReconciliations,
   localCreateCardReconciliation, localListCardReconciliations,
   localCreditInvoice,
   localBankRefund,
@@ -875,6 +875,12 @@ export async function fetchCardReconciliations(cardId: string): Promise<Reconcil
 export async function adjustAccountBalance(accountId: string, input: BalanceAdjustmentInput, operationId = crypto.randomUUID()): Promise<BalanceAdjustment> {
   if (isLocalMode()) return localAdjustBalance(accountId, input);
   return apiPost<BalanceAdjustment>(`/accounts/${encodeURIComponent(accountId)}/adjustments`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+
+/** Carteira: conferências em aberto, para o aviso de diferença de saldo. */
+export async function fetchOpenReconciliations(): Promise<import("@/lib/walletSummary").OpenReconciliation[]> {
+  if (isLocalMode()) return localOpenReconciliations();
+  return apiGet<import("@/lib/walletSummary").OpenReconciliation[]>("/reconciliations/open");
 }
 
 /** Benefit cards: credit the monthly recharges that are due (idempotent; safe on every app open). */

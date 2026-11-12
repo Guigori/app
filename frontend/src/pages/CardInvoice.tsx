@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { defaultAccount } from "@/lib/walletDefaults";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/BackButton";
@@ -72,6 +72,14 @@ export default function CardInvoice() {
   const invoice = invoiceQuery.data;
   const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
   const money = (value: number) => (hidden ? formatHiddenBRL() : formatBRL(value));
+
+  // Carteira "Pagar fatura" (?pagar=1) opens the payment as soon as the invoice is read.
+  const openedPay = useRef(false);
+  useEffect(() => {
+    if (openedPay.current || searchParams.get("pagar") !== "1" || !invoice) return;
+    openedPay.current = true;
+    if ((invoice.outstanding ?? 0) > 0) setPayOpen(true);
+  }, [invoice, searchParams]);
 
   // Defaults the user can change: the invoice due date and the first account.
   useEffect(() => {

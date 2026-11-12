@@ -20,7 +20,11 @@ router = APIRouter(prefix="/cards", tags=["cards"])
 
 def _payload(payload: CardIn) -> dict:
     """The stored fields; an absent default flag leaves the current one untouched."""
-    return payload.model_dump(exclude={"is_default"} if payload.is_default is None else set())
+    skip = {name for name in ("is_default", "last_digits") if getattr(payload, name) is None}
+    data = payload.model_dump(exclude=skip)
+    if data.get("last_digits") == "":
+        data["last_digits"] = None
+    return data
 
 
 def _occurrence_value(tx: dict) -> float:
@@ -58,6 +62,7 @@ async def _build(doc: dict, txs: List[dict], accounts: dict, institutions: dict 
         payment_account_name=account.get("name") or None,
         active=doc.get("active", True),
         is_default=bool(doc.get("is_default")) if is_default is None else is_default,
+        last_digits=doc.get("last_digits"),
         invoice_paid=invoice_state(doc, txs, closing.isoformat())["paid"],
         current_invoice=round(invoice, 2),
         payable_invoice=D(max(0, payable_state["total_cents"] - payable_state["paid_cents"])) / 100,

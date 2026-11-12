@@ -46,9 +46,11 @@ interface AccountDialogProps {
   account?: Account;
   /** Name to start a new one with (the card name Apple Pay sent). */
   initialName?: string;
+  /** Kind to start a new one as (the Carteira "+"). */
+  initialType?: AccountType;
 }
 
-export function AccountDialog({ open, onOpenChange, account, initialName }: AccountDialogProps) {
+export function AccountDialog({ open, onOpenChange, account, initialName, initialType }: AccountDialogProps) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [institution, setInstitution] = useState("");
@@ -87,13 +89,13 @@ export function AccountDialog({ open, onOpenChange, account, initialName }: Acco
       setOverdraftRaw("");
       setInstitution("");
       setInstitutionChoice("new");
-      setType("corrente");
+      setType(initialType ?? "corrente");
       setColor(CASH_COLOR);
       setInitialRaw("0");
       setActive(true);
       setIsDefault(false);
     }
-  }, [open, account, initialName]);
+  }, [open, account, initialName, initialType]);
 
   const mutation = useMutation({
     mutationFn: async (input: AccountInput) => {

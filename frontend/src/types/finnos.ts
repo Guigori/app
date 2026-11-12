@@ -572,6 +572,8 @@ export interface CardInput {
   active: boolean;
   /** Omit to keep the current flag. */
   is_default?: boolean;
+  /** Last 4 digits for the card art; "" clears; omit to keep. */
+  last_digits?: string;
 }
 
 export interface CreditCard {
@@ -589,6 +591,7 @@ export interface CreditCard {
   active: boolean;
   /** The preselected credit card. */
   is_default?: boolean;
+  last_digits?: string | null;
   invoice_paid: boolean;
   current_invoice: number;
   payable_invoice?: number;

@@ -8,6 +8,8 @@ import { getApiErrorMessage } from "@/lib/errors";
 import { parseAmount } from "@/lib/format";
 import { resolveInstitutionChoice, type InstitutionChoice } from "@/lib/institutionSelection";
 import { InstitutionPicker } from "@/components/accounts/InstitutionPicker";
+import { CardArt } from "@/components/wallet/CardArt";
+import { institutionIdentity } from "@/lib/institutionCatalog";
 import type { CardInput, CreditCard } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -45,6 +47,7 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
   const [dueDay, setDueDay] = useState("27");
   const [accountId, setAccountId] = useState("none");
   const [active, setActive] = useState(true);
+  const [lastDigits, setLastDigits] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
   const institutionsQuery = useQuery({ queryKey: ["institutions"], queryFn: fetchInstitutions, enabled: open });
@@ -64,7 +67,9 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
       setAccountId(card.payment_account_id ?? "none");
       setActive(card.active);
       setIsDefault(Boolean(card.is_default));
+      setLastDigits(card.last_digits ?? "");
     } else {
+      setLastDigits("");
       setName(initialName ?? "");
       setInstitution("");
       setInstitutionChoice("new");
@@ -124,7 +129,9 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
     if (!limit || limit <= 0) return setFormError("Informe o limite do cartão.");
     if (!closing || closing < 1 || closing > 31) return setFormError("O dia de fechamento deve ficar entre 1 e 31.");
     if (!due || due < 1 || due > 31) return setFormError("O dia de vencimento deve ficar entre 1 e 31.");
+    if (lastDigits && !/^\d{4}$/.test(lastDigits)) return setFormError("O final do cartão tem 4 números.");
     mutation.mutate({
+      last_digits: lastDigits,
       name: name.trim(),
       institution: institution.trim(),
       institution_id: institutionChoice !== "new" && institutionChoice !== "none" && !institutionChoice.startsWith("catalog:") ? institutionChoice : null,
@@ -157,6 +164,13 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
           }}
           data-testid="card-form"
         >
+          {/* Live preview: what the card will look like in the Carteira. */}
+          <div className="mx-auto w-full max-w-[300px]" data-testid="card-preview">
+            <CardArt name={name.trim()} institution={institution.trim()} lastDigits={/^\d{4}$/.test(lastDigits) ? lastDigits : null}
+              color={institutions.find((i) => i.id === institutionChoice)?.color
+                ?? (institution.trim() ? institutionIdentity(institution, institutionChoice.startsWith("catalog:") ? institutionChoice.slice(8) : null).color : color)}
+              invoice={card?.current_invoice ?? 0} isDefault={isDefault} />
+          </div>
           <div className="space-y-3">
             <div className="space-y-2">
               <Label htmlFor="card-name">Nome do cartão</Label>
@@ -168,6 +182,12 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
                 maxLength={60}
                 data-testid="card-name-input"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="card-last-digits">Final do cartão (opcional)</Label>
+              <Input id="card-last-digits" inputMode="numeric" placeholder="4 últimos números" maxLength={4} value={lastDigits}
+                onChange={(e) => setLastDigits(e.target.value.replace(/\D/g, "").slice(0, 4))} data-testid="card-last-digits-input" />
+              <p className="text-xs text-muted-foreground">Só os 4 últimos, para reconhecer o cartão. Nunca o número inteiro.</p>
             </div>
             <InstitutionPicker institutions={institutions} choice={institutionChoice} name={institution}
               allowNone={Boolean(card && !card.institution_id)}

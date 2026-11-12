@@ -24,6 +24,8 @@ class CardIn(BaseModel):
     active: bool = True
     # None keeps the current flag (older clients do not send it).
     is_default: Optional[bool] = None
+    # Last 4 digits shown on the card art (never the full number). None keeps what is stored; "" clears it.
+    last_digits: Optional[str] = Field(default=None, pattern=r"^(\d{4})?$")
 
 
 class CardOut(BaseModel):
@@ -40,6 +42,7 @@ class CardOut(BaseModel):
     payment_account_name: Optional[str] = None
     active: bool
     is_default: bool = False
+    last_digits: Optional[str] = None
     invoice_paid: bool = False
     # Derived, never stored:
     current_invoice: Money

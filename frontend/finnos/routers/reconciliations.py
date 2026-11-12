@@ -206,6 +206,32 @@ async def list_reconciliations(account_id: str, user: dict = Depends(require_use
     return await run_in_threadpool(read)
 
 
+@router.get("/reconciliations/open")
+async def list_open_reconciliations(user: dict = Depends(require_user)):
+    """Carteira (etapa 6): conferências começadas e não concluídas, para o aviso de diferença de saldo.
+
+    One indexed equality query; the difference is the one read when the file was attached
+    (bank closing − FINNOS closing), enough to tell the person there is something to review.
+    """
+    uid = store.scoped({"user_id": user["id"]})
+
+    def read():
+        owner = store.root(store.client(), uid)
+        docs = [s.to_dict() for s in owner.collection("reconciliations").where("status", "==", "pronta").limit(200).stream(timeout=15)]
+        out = []
+        for d in docs:
+            bank, finnos = d.get("bank_closing_cents"), d.get("finnos_closing_cents")
+            out.append({
+                "id": d["id"], "scope": d.get("scope") or "account", "account_id": d.get("account_id"),
+                "card_id": d.get("card_id"), "cycle": d.get("cycle"), "period_end": d.get("period_end"),
+                "difference": None if bank is None or finnos is None else (bank - finnos) / 100,
+                "pending": _summary(d)["pending"], "created_at": d.get("created_at"),
+            })
+        return sorted(out, key=lambda d: d["created_at"] or "", reverse=True)
+
+    return await run_in_threadpool(read)
+
+
 @router.get("/reconciliations/{rid}")
 async def get_reconciliation(rid: str, user: dict = Depends(require_user)):
     uid = store.scoped({"user_id": user["id"]})

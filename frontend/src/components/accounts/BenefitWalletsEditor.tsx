@@ -82,7 +82,7 @@ export function BenefitWalletsEditor({ wallets, onChange }: { wallets: WalletDra
       ))}
       {wallets.length < MAX_WALLETS ? (
         <Button type="button" variant="outline" size="sm" onClick={() => onChange([...wallets, emptyWallet(wallets.length)])}
-          data-testid="wallet-add">
+          data-testid="benefit-wallet-add">
           <Plus className="h-4 w-4" aria-hidden="true" /> Adicionar benefício ({wallets.length}/{MAX_WALLETS})
         </Button>
       ) : (

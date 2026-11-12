@@ -921,10 +921,24 @@ export function localLoadDemo(): void {
     total_expense: 0,
     created_at: new Date().toISOString(),
   }));
+  // Etapa 6: the demo also has a credit card and a multi benefit card, so the new Carteira shows every part.
+  const nubankCard: LocalCard = { id: newId(), name: "Roxinho", institution: "Nubank", color: "#8A05BE", limit: 3500, closing_day: 28,
+    due_day: 7, payment_account_id: null, active: true, is_default: true, last_digits: "4821", created_at: new Date().toISOString() };
+  db.cards = [nubankCard];
+  const benefitWallets = normalizeWallets([
+    { name: "Refeição", monthly_amount: 660, day: 1, initial_balance: 0, allow_negative: false, is_default: true },
+    { name: "Mercado", monthly_amount: 440, day: 1, initial_balance: 0, allow_negative: false, is_default: false },
+  ], [], addMonth(m0, -1) + "-01", new Set(), newId);
+  db.accounts.push({ id: newId(), name: "Caju", institution: "Caju", type: "beneficio", color: "#FF5A00", initial_balance: 0, active: true,
+    is_default: true, wallets: benefitWallets as unknown as Account["wallets"], balance: 0, total_income: 0, total_expense: 0, created_at: new Date().toISOString() });
   const acc = (name: string) => db.accounts.find((a) => a.name === name)!.id;
   const cat = (name: string) => db.categories.find((c) => c.name === name)?.id ?? null;
 
   const rows: Array<Partial<TransactionInput> & { name: string; value: number; date: string }> = [
+    { name: "Restaurante do trabalho", value: 42.5, account_id: acc("Caju"), wallet_id: benefitWallets[0].id, category_id: cat("Alimentação") ?? cat("Mercado"), date: day(m0, 4) },
+    { name: "Hortifruti", value: 96.3, account_id: acc("Caju"), wallet_id: benefitWallets[1].id, category_id: cat("Mercado"), date: day(m0, 9) },
+    { name: "Loja online", value: 239.9, account_id: acc("Nubank"), card_id: nubankCard.id, category_id: cat("Compras"), date: day(m0, 2) },
+    { name: "Delivery", value: 58.7, account_id: acc("Nubank"), card_id: nubankCard.id, category_id: cat("Lazer"), date: day(m0, 6) },
     { name: "Salário", value: 5200, type: "receita", account_id: acc("Itaú"), category_id: cat("Renda"), date: day(m0, 5) },
     { name: "Aluguel", value: 1450, account_id: acc("Itaú"), category_id: cat("Moradia"), date: day(m0, 5), fixed: true },
     { name: "Internet fibra", value: 99.9, account_id: acc("Itaú"), category_id: cat("Moradia"), date: day(m0, 8), fixed: true },
@@ -959,7 +973,8 @@ export function localLoadDemo(): void {
       status: r.status ?? (r.date > todayISO() ? "agendado" : "pago"),
       date: r.date,
       account_id: r.account_id!,
-      card_id: null,
+      card_id: r.card_id ?? null,
+      wallet_id: r.wallet_id ?? null,
       to_account_id: r.to_account_id ?? null,
       category_id: r.category_id ?? null,
       fixed: r.fixed ?? false,
@@ -1388,8 +1403,14 @@ export function localListCards(): CreditCard[] {
   });
 }
 
+function cardDigits(input: CardInput): CardInput {
+  if (input.last_digits === undefined) return input;
+  if (input.last_digits && !/^\d{4}$/.test(input.last_digits)) throw new Error("O final do cartão tem 4 números.");
+  return { ...input, last_digits: input.last_digits || undefined };
+}
+
 export function localCreateCard(raw: CardInput): CreditCard {
-  const input = localResolveInstitution(raw, true);
+  const input = cardDigits(localResolveInstitution(raw, true));
   const db = readDb();
   if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
   const card: LocalCard = { ...input, id: newId(), created_at: new Date().toISOString() };
@@ -1400,7 +1421,7 @@ export function localCreateCard(raw: CardInput): CreditCard {
 }
 
 export function localUpdateCard(id: string, raw: CardInput): CreditCard {
-  const input = localResolveInstitution(raw, true);
+  const input = cardDigits(localResolveInstitution(raw, true));
   const db = readDb();
   const existing = db.cards.find((c) => c.id === id);
   if (!existing) throw new Error("Cartão não encontrado.");
@@ -2213,4 +2234,13 @@ export function localCreateCardReconciliation(cardId: string, input: CardReconci
 
 export function localListCardReconciliations(cardId: string): Reconciliation[] {
   return (readDb().reconciliations ?? []).filter(r => r.card_id === cardId).map(reconSummary).sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+/** Carteira (etapa 6): conferências começadas e não concluídas (same as GET /reconciliations/open). */
+export function localOpenReconciliations(): import("@/lib/walletSummary").OpenReconciliation[] {
+  return (readDb().reconciliations ?? []).filter(r => r.status === "pronta").map(reconSummary).map(r => ({
+    id: r.id, scope: r.scope ?? "account", account_id: r.account_id ?? null, card_id: r.card_id ?? null, cycle: r.cycle ?? null,
+    period_end: r.period_end, pending: r.pending,
+    difference: r.bank_closing_cents == null ? null : (r.bank_closing_cents - r.finnos_closing_cents) / 100,
+  }));
 }

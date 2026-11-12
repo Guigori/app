@@ -49,6 +49,12 @@ export function useHeaderSlotState() {
   return [count > 0, change] as const;
 }
 
+/** For a screen that draws its own header with its own back control (Carteira bank screen). */
+export function useOwnHeader() {
+  const register = useContext(HeaderSlot);
+  useEffect(() => { register?.(1); return () => register?.(-1); }, [register]);
+}
+
 /** The header of a screen: [voltar] título / subtítulo … [ações]. */
 export function ScreenHeader({ title, subtitle, eyebrow, actions, onBack, backLabel, back, className, titleTestId, keepSubtitle }: {
   title: ReactNode; subtitle?: ReactNode; eyebrow?: ReactNode; actions?: ReactNode;

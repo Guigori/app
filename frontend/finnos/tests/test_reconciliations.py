@@ -272,3 +272,16 @@ def test_balance_adjustment_is_auditable_and_idempotent(world):
     assert asyncio.run(rec.adjust_balance("acc", body, user=USER, x_finnos_operation_id="adj"))["id"] == out["id"]
     from finnos.lib.stats import month_portion
     assert month_portion(saved, "2026-11") is None  # never income or spending
+
+
+def test_open_reconciliations_feed_the_wallet_balance_warning(world):
+    rec_open = create("op-open", closing=1400.00)
+    done = create("op-done")
+    world.table("reconciliations")[done["id"]]["status"] = "concluida"
+    out = asyncio.run(rec.list_open_reconciliations(user=USER))
+    assert [r["id"] for r in out] == [rec_open["id"]]
+    item = out[0]
+    assert item["scope"] == "account" and item["account_id"] == "acc"
+    # FINNOS closes October at 1000 + 3000 − 18,50 − 49,90 − 1500 = 2431,60; the bank says 1400.
+    assert item["difference"] == pytest.approx(1400.00 - 2431.60)
+    assert item["pending"] > 0

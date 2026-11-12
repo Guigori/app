@@ -205,3 +205,19 @@ def test_pace_daily_allowance_and_run_out_date():
     assert out["next_recharge"] == "2026-12-01"
     assert round(out["daily_allowance"], 2) == round(50 / 19, 2)
     assert out["runs_out_on"] == "2026-11-27"  # R$ 100 in 30 days → R$ 3,33/day → 15 days
+
+
+# ---------------------------------------------------------------- etapa 6: final do cartão
+
+def test_card_last_digits_are_four_numbers_or_cleared():
+    from pydantic import ValidationError
+    from finnos.models.cards import CardIn
+    from finnos.routers.cards import _payload
+
+    base = {"name": "Roxinho", "limit": 1000, "closing_day": 1, "due_day": 10}
+    assert _payload(CardIn(**base, last_digits="1234"))["last_digits"] == "1234"
+    assert _payload(CardIn(**base, last_digits=""))["last_digits"] is None  # cleared
+    assert "last_digits" not in _payload(CardIn(**base))  # older clients keep what is stored
+    for wrong in ("123", "12345", "12a4", "4111111111111111"):
+        with pytest.raises(ValidationError):
+            CardIn(**base, last_digits=wrong)
