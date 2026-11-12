@@ -76,7 +76,7 @@ def invoice_state(card, txs, cycle, categories=None):
     paid = (saved or {}).get('paid_cents', 0)
     carried = (saved or {}).get('carried_cents', 0)
     refunds = list((card.get('invoice_refunds') or {}).get(cycle) or [])
-    return dict(card_id=card['id'],card_name=card['name'],cycle_start=start,cycle_end=cycle,due_date=due_date(closing,card['closing_day'],card['due_day']).isoformat(),total_cents=total,paid_cents=paid,carried_cents=carried,carried_to=(saved or {}).get('carried_to') if carried else None,last_payment_id=(saved or {}).get('last_payment_id'),paid=total > 0 and paid >= total,paid_at=(saved or {}).get('paid_at'),items=items,adjustments=adjustments,adjustment_cents=credit_total_cents(card, cycle),refunds=refunds,refund_cents=sum(item['refund_cents'] for item in refunds))
+    return dict(card_id=card['id'],card_name=card['name'],cycle_start=start,cycle_end=cycle,due_date=due_date(closing,card['closing_day'],card['due_day']).isoformat(),total_cents=total,paid_cents=paid,carried_cents=carried,carried_to=(saved or {}).get('carried_to') if carried else None,last_payment_id=(saved or {}).get('last_payment_id'),reconciled=bool((saved or {}).get('reconciled')),minimum_cents=(saved or {}).get('minimum_cents'),paid=total > 0 and paid >= total,paid_at=(saved or {}).get('paid_at'),items=items,adjustments=adjustments,adjustment_cents=credit_total_cents(card, cycle),refunds=refunds,refund_cents=sum(item['refund_cents'] for item in refunds))
 
 
 def default_invoice_cycle(card, txs, today):
@@ -103,11 +103,12 @@ def default_invoice_cycle(card, txs, today):
 def output(state):
     return {
         **{k: v for k, v in state.items() if k not in {
-            'total_cents', 'paid_cents', 'carried_cents', 'items', 'adjustments', 'adjustment_cents', 'refunds', 'refund_cents'
+            'total_cents', 'paid_cents', 'carried_cents', 'minimum_cents', 'items', 'adjustments', 'adjustment_cents', 'refunds', 'refund_cents'
         }},
         'total': state['total_cents'] / 100,
         'paid_amount': state['paid_cents'] / 100,
         'carried_amount': state.get('carried_cents', 0) / 100,
+        'minimum_payment': None if state.get('minimum_cents') is None else state['minimum_cents'] / 100,
         'outstanding': max(0, state['total_cents'] - state['paid_cents'] - state.get('carried_cents', 0)) / 100,
         'adjustment_total': state.get('adjustment_cents', 0) / 100,
         'items': [

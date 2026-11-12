@@ -198,6 +198,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     if (prefill.date) setDate(prefill.date);
     if (prefill.status) setStatus(prefill.status);
     if (prefill.account_id) setAccountId(prefill.account_id);
+    if (prefill.card_id) setCardId(prefill.card_id);
     if (prefill.notes) setNotes(prefill.notes);
   }, [open, prefill, transaction, syncPayload]);
 

@@ -111,6 +111,7 @@ export default function App() {
             <Route path="/cartoes" element={<Navigate to="/contas?aba=cartoes" replace />} />
             <Route path="/cartoes/:cardId" element={<CardInvoice />} />
             <Route path="/contas/:accountId/conferencia" element={<ReconciliationPage />} />
+            <Route path="/cartoes/:cardId/conferencia" element={<ReconciliationPage />} />
             <Route path="/orcamento" element={<Budget />} />
             <Route path="/orcamento/configuracoes" element={<BudgetSettings />} />
             <Route path="/historico" element={<FinanceHistory />} />

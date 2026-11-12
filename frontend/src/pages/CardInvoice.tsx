@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { defaultAccount } from "@/lib/walletDefaults";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/BackButton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Search, RotateCcw } from "lucide-react";
@@ -280,6 +280,12 @@ export default function CardInvoice() {
             {invoice.carried_to ? formatDate(invoice.carried_to) : "—"} como “Saldo da fatura anterior”.
           </p>
         ) : null}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Link to={`/cartoes/${encodeURIComponent(cardId)}/conferencia?cycle=${invoice.cycle_end}`} className="text-sm font-semibold text-primary underline-offset-4 hover:underline" data-testid="invoice-reconcile-link">
+            Conferir com a fatura do banco
+          </Link>
+          {invoice.reconciled ? <Badge variant="secondary" data-testid="invoice-reconciled">Conferida</Badge> : null}
+        </div>
         {invoice.last_payment_id && invoice.paid_amount > 0 ? (
           <Button size="sm" variant="ghost" className="mt-2 -ml-2" disabled={undoMutation.isPending}
             onClick={() => undoMutation.mutate(invoice.last_payment_id!)} data-testid="undo-payment-button">
@@ -564,6 +570,12 @@ export default function CardInvoice() {
                 onClick={() => setValueRaw(String(invoice.outstanding ?? invoice.total - invoice.paid_amount))}>
                 Fatura inteira
               </Button>
+              {invoice.minimum_payment ? (
+                <Button type="button" size="sm" variant="outline" data-testid="pay-minimum-button"
+                  onClick={() => setValueRaw(String(invoice.minimum_payment))}>
+                  Mínimo ({money(invoice.minimum_payment)})
+                </Button>
+              ) : null}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">

@@ -716,6 +716,9 @@ export interface Invoice {
   carried_amount?: number;
   carried_to?: string | null;
   last_payment_id?: string | null;
+  /** Conferred against the bank's invoice; the minimum comes from it. */
+  reconciled?: boolean;
+  minimum_payment?: number | null;
   items: InvoiceItem[];
   adjustments?: InvoiceAdjustment[];
   adjustment_total?: number;
@@ -859,14 +862,21 @@ export interface ReconLine {
   fitid?: string | null; origin_key: string;
   level: "strong" | "probable" | "value_diff" | "only_statement" | "already" | "linked";
   tx_id: string | null; reasons: string[]; state: ReconLineState; kept_difference?: boolean;
+  /** Card invoice lines read by the FDI. */
+  operation?: string | null; installment?: { current: number; total: number } | null;
+  confidence?: "high" | "medium" | "low"; evidence?: string | null;
 }
-export interface ReconFinnosItem { tx_id: string; state: "open" | "kept" | "pending" | "deleted"; repeated_of: string | null }
+export interface ReconFinnosItem { tx_id: string; state: "open" | "kept" | "pending" | "deleted"; repeated_of: string | null; name?: string; cents?: number }
 export interface ReconEvent {
   id: string; seq: number; action: string; target: string; note?: string; created_at: string;
   undone_by: string | null; undo_of: string | null;
 }
 export interface Reconciliation {
-  id: string; account_id: string; period_start: string; period_end: string; file_name: string;
+  /** "card": conferência of one invoice (cycle = closing date). */
+  scope?: "account" | "card"; card_id?: string | null; cycle?: string | null;
+  invoice_fields?: { due_date?: string; total_cents?: number; minimum_payment_cents?: number; card_last_digits?: string };
+  invoice_checks?: { name: string; passed: boolean | null; detail: string }[]; warnings?: string[]; difference_note?: string | null;
+  id: string; account_id: string | null; period_start: string; period_end: string; file_name: string;
   source: "ofx" | "csv" | "pdf" | "ocr"; status: "pronta" | "concluida";
   bank_closing_cents: number | null; finnos_closing_cents: number;
   lines: ReconLine[]; finnos: ReconFinnosItem[]; counts: Record<string, number>; pending: number;
@@ -876,6 +886,11 @@ export interface ReconciliationInput {
   period_start: string; period_end: string; file_name: string; file_hash: string; source: Reconciliation["source"];
   bank_closing_balance: number | null;
   lines: { date: string; description: string; value: number; direction: "in" | "out"; fitid?: string | null }[];
+}
+export interface CardReconciliationInput {
+  cycle: string; file_name: string; file_hash: string; source: Reconciliation["source"];
+  pages?: { page: number; text: string }[];
+  lines?: ReconciliationInput["lines"];
 }
 export interface ReconResolveInput { line?: number; tx_id?: string; action: string; note?: string }
 export interface BalanceAdjustmentInput { target_balance: number; reason: string; date: string; reconciliation_id?: string | null }

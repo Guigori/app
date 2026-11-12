@@ -127,6 +127,9 @@ class Invoice(BaseModel):
     carried_amount: Money = 0
     carried_to: Optional[str] = None
     last_payment_id: Optional[str] = None
+    # Conferred against the bank's invoice (etapa 4); the minimum comes from it.
+    reconciled: bool = False
+    minimum_payment: Optional[Money] = None
     items: List[InvoiceItem]
     adjustments: List[InvoiceAdjustment] = Field(default_factory=list)
     adjustment_total: Money = 0

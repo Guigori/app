@@ -47,6 +47,26 @@ class ReconciliationIn(BaseModel):
     lines: list[StatementLineIn] = Field(max_length=MAX_LINES)
 
 
+class PageTextIn(BaseModel):
+    page: int = Field(ge=1, le=60)
+    text: str = Field(max_length=20000)
+
+
+class CardReconciliationIn(BaseModel):
+    cycle: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    file_name: str = Field(default="", max_length=200)
+    file_hash: str = Field(min_length=8, max_length=128)
+    source: Literal["ofx", "csv", "pdf", "ocr"] = "pdf"
+    # PDF with text: the lines pdf.js rebuilt on the device, read here by the FDI.
+    pages: list[PageTextIn] = Field(default_factory=list, max_length=60)
+    # CSV/OFX already parsed on the device.
+    lines: list[StatementLineIn] = Field(default_factory=list, max_length=MAX_LINES)
+
+
+class CompleteIn(BaseModel):
+    note: str = Field(default="", max_length=300)
+
+
 LineAction = Literal["confirm", "separate", "use_bank_value", "keep_value", "link", "ignore"]
 FinnosAction = Literal["keep", "keep_pending", "delete"]
 
@@ -198,7 +218,13 @@ async def get_reconciliation(rid: str, user: dict = Depends(require_user)):
         doc = snap.to_dict()
         events = [s.to_dict() for s in owner.collection("reconciliation_events").where("reconciliation_id", "==", rid)
                   .limit(5000).stream(timeout=15)]
-        if doc["status"] != "concluida":
+        if doc["status"] != "concluida" and doc.get("scope") == "card":
+            card_snap = owner.collection("cards").document(store.resource_id(doc["card_id"])).get()
+            if card_snap.exists:
+                card = dict(store.decode(card_snap.to_dict()), id=doc["card_id"])
+                txs = store.card_purchase_rows(store.client(), uid, doc["card_id"], None)
+                doc["finnos_closing_cents"] = card_movements(card, txs, doc["cycle"])[1]["total_cents"]
+        elif doc["status"] != "concluida":
             # Live: decisions and adjustments change the FINNOS side until it is concluded.
             account_snap = owner.collection("accounts").document(store.resource_id(doc["account_id"])).get()
             if account_snap.exists:
@@ -210,10 +236,158 @@ async def get_reconciliation(rid: str, user: dict = Depends(require_user)):
     return await run_in_threadpool(read)
 
 
+
+# ---------------------------------------------------------------- card invoice (etapa 4)
+
+CARD_ACCOUNT = "__invoice__"  # virtual account the invoice lines are matched against
+
+
+def card_movements(card: dict, txs: list[dict], cycle: str, categories: dict | None = None) -> tuple[list[dict], dict]:
+    """The FINNOS side of one invoice as matchable movements (cents in ``value``)."""
+    from finnos.lib.invoices import invoice_state
+
+    state = invoice_state(card, txs, cycle, categories or {})
+    movements = []
+    for item in state["items"]:
+        movements.append({"id": item["id"], "date": item["date"], "name": item["name"], "type": "despesa",
+                          "status": "pago", "account_id": CARD_ACCOUNT, "value": D(item["purchase_cents"]) / 100,
+                          "installment_label": item.get("installment_label")})
+    for index, credit in enumerate(state.get("adjustments") or []):
+        movements.append({"id": f"credit:{cycle}:{index}", "date": credit.get("date") or cycle,
+                          "name": credit.get("description") or "Crédito na fatura", "type": "receita", "status": "pago",
+                          "account_id": CARD_ACCOUNT, "value": D(credit["credit_cents"]) / 100})
+    saved = (card.get("invoice_cycles") or {}).get(cycle) or {}
+    for payment in saved.get("payments") or []:
+        movements.append({"id": f"pay:{payment['id']}", "date": payment["date"], "name": "Pagamento da fatura",
+                          "type": "receita", "status": "pago", "account_id": CARD_ACCOUNT,
+                          "value": D(payment["cents"]) / 100})
+    return movements, state
+
+
+def _read_invoice_pages(pages: list[PageTextIn]):
+    from finnos.document_intelligence.extractors import extract_card_invoice
+    from finnos.document_intelligence.models import TextSpan
+
+    spans = [TextSpan(text=line, page=p.page) for p in pages for line in p.text.splitlines() if line.strip()]
+    return extract_card_invoice(spans, source_engine="native_text")
+
+
+@router.post("/cards/{card_id}/reconciliations")
+async def create_card_reconciliation(card_id: str, payload: CardReconciliationIn, user: dict = Depends(require_user),
+                                     x_finnos_operation_id: str = Header(...)):
+    """Compare the bank's invoice with the FINNOS invoice of ``cycle``."""
+    uid = store.scoped({"user_id": user["id"]})
+    rid = hashlib.sha256(f"{uid}:card-rec:{x_finnos_operation_id}".encode()).hexdigest()[:32]
+    fields: dict = {}
+    checks: list = []
+    warnings: list = []
+    lines: list[dict] = []
+    if payload.pages:
+        extraction = _read_invoice_pages(payload.pages)
+        fields = {k: v.value for k, v in extraction.fields.items()}
+        checks = [c.to_dict() for c in extraction.checks]
+        warnings = list(extraction.warnings)
+        for row in extraction.rows:
+            if row.amount_cents is None or row.amount_cents.value is None or row.transaction_date is None \
+                    or row.transaction_date.value is None or row.direction.value == "unknown":
+                warnings.append(f"linha_ilegivel:{row.line_index}")
+                continue
+            lines.append({
+                "date": row.transaction_date.value, "description": row.description.value if row.description else "",
+                "cents": int(row.amount_cents.value), "direction": "in" if row.direction.value == "income" else "out",
+                "fitid": None, "operation": row.operation.value,
+                "installment": row.installment.to_dict() if row.installment else None,
+                "confidence": row.confidence_level.value, "evidence": row.amount_cents.evidence.text,
+            })
+    else:
+        for line in payload.lines:
+            lines.append({"date": line.date, "description": line.description.strip(), "cents": _cents(line.value),
+                          "direction": line.direction, "fitid": line.fitid, "operation": None, "installment": None,
+                          "confidence": "high", "evidence": None})
+    if not lines:
+        raise HTTPException(422, "Não encontrei lançamentos nesta fatura.")
+    for index, line in enumerate(lines):
+        line["index"] = index
+        line["origin_key"] = origin_key(uid, f"card:{card_id}", line)
+
+    def execute():
+        instance = store.client()
+
+        def action(tr):
+            owner = store.root(instance, uid)
+            ref = owner.collection("reconciliations").document(rid)
+            existing = ref.get(transaction=tr)
+            if existing.exists:
+                return existing.to_dict()
+            snap = owner.collection("cards").document(store.resource_id(card_id)).get(transaction=tr)
+            if not snap.exists:
+                raise HTTPException(404, "Cartão não encontrado.")
+            card = dict(store.decode(snap.to_dict()), id=card_id)
+            txs = store.card_purchase_rows(instance, uid, card_id, tr)
+            movements, state = card_movements(card, txs, payload.cycle)
+            # Previous balance only explains the total; it is not a purchase to match.
+            matchable = [l for l in lines if l.get("operation") != "previous_balance"]
+            matched = match_lines(matchable, movements, CARD_ACCOUNT)
+            stored = []
+            for line in lines:
+                if line.get("operation") == "previous_balance":
+                    stored.append({**line, "level": "info", "tx_id": None, "reasons": ["saldo da fatura anterior"],
+                                   "state": "matched"})
+                    continue
+                result = matched["lines"][line["index"]]
+                state_name = ("matched" if result["level"] == "strong"
+                              else "review" if result["level"] in ("probable", "value_diff") else "open")
+                reasons = list(result["reasons"])
+                if line.get("confidence") != "high" and state_name == "matched":
+                    state_name = "review"  # an uncertain reading is always shown to the person
+                    reasons.append("leitura a confirmar")
+                level = result["level"]
+                if line.get("confidence") != "high" and level == "strong":
+                    level = "probable"
+                stored.append({**line, "level": level, "tx_id": result["tx_id"], "reasons": reasons, "state": state_name})
+            finnos = [{"tx_id": tx_id, "state": "open", "repeated_of": matched["repeated"].get(tx_id),
+                       "name": next(m["name"] for m in movements if m["id"] == tx_id),
+                       "cents": cents(next(m["value"] for m in movements if m["id"] == tx_id))}
+                      for tx_id in matched["only_finnos"]]
+            printed_total = fields.get("total_cents")
+            doc = {
+                "id": rid, "scope": "card", "card_id": card_id, "account_id": None, "cycle": payload.cycle,
+                "period_start": state["cycle_start"], "period_end": payload.cycle,
+                "file_name": payload.file_name, "file_hash": payload.file_hash, "source": payload.source,
+                "bank_closing_cents": printed_total, "finnos_closing_cents": state["total_cents"],
+                "invoice_fields": {k: fields.get(k) for k in ("due_date", "total_cents", "minimum_payment_cents",
+                                                               "card_last_digits", "closing_date") if k in fields},
+                "invoice_checks": checks, "warnings": warnings,
+                "status": "pronta", "lines": stored, "finnos": finnos, "events": 0, "created_at": _now().isoformat(),
+            }
+            tr.create(ref, doc)
+            return doc
+
+        return store.atomic(instance, uid, action)
+
+    return _summary(await run_in_threadpool(execute))
+
+
+@router.get("/cards/{card_id}/reconciliations")
+async def list_card_reconciliations(card_id: str, user: dict = Depends(require_user)):
+    uid = store.scoped({"user_id": user["id"]})
+
+    def read():
+        owner = store.root(store.client(), uid)
+        docs = [s.to_dict() for s in owner.collection("reconciliations").where("card_id", "==", card_id).limit(200).stream(timeout=15)]
+        return sorted(({k: d.get(k) for k in ("id", "cycle", "period_start", "period_end", "status", "file_name", "created_at",
+                                              "bank_closing_cents", "finnos_closing_cents")} for d in docs),
+                      key=lambda d: d["created_at"], reverse=True)
+
+    return await run_in_threadpool(read)
+
+
 # ---------------------------------------------------------------- decisions
 
 
-def _tx(owner, tr, tx_id: str) -> tuple[object, dict]:
+def _tx(owner, tr, tx_id: str, doc: dict | None = None, *, changes_money: bool = True) -> tuple[object, dict]:
+    if ":" in tx_id:
+        raise HTTPException(409, "Este item só muda pelo próprio fluxo (pagamento, crédito ou saldo levado).")
     ref = owner.collection("transactions").document(store.resource_id(tx_id))
     snap = ref.get(transaction=tr)
     if not snap.exists:
@@ -222,6 +396,14 @@ def _tx(owner, tr, tx_id: str) -> tuple[object, dict]:
     if tx.get("invoice_payment") or tx.get("invoice_refund") or tx.get("reversed_by") or tx.get("reversal_of") \
             or tx.get("balance_adjustment"):
         raise HTTPException(409, "Este lançamento só muda pelo próprio fluxo (fatura, estorno ou ajuste).")
+    if doc and doc.get("scope") == "card":
+        if tx.get("card_id") != doc["card_id"]:
+            raise HTTPException(409, "Este lançamento não é deste cartão.")
+        saved = ((doc.get("_card") or {}).get("invoice_cycles") or {}).get(doc["cycle"]) or {}
+        if changes_money and saved.get("paid_cents"):
+            raise HTTPException(409, "Fatura já paga: a diferença entra como crédito ou compra na próxima fatura.")
+    elif doc and doc.get("account_id") and doc["account_id"] not in (tx.get("account_id"), tx.get("to_account_id")):
+        raise HTTPException(409, "Este lançamento não é desta conta.")
     return ref, tx
 
 
@@ -245,6 +427,9 @@ async def resolve(rid: str, payload: ResolveIn, user: dict = Depends(require_use
                 return doc  # same operation replayed
             if doc["status"] == "concluida":
                 raise HTTPException(409, "Conferência concluída; abra uma nova para mudar algo.")
+            if doc.get("scope") == "card":
+                card_snap = owner.collection("cards").document(store.resource_id(doc["card_id"])).get(transaction=tr)
+                doc["_card"] = store.decode(card_snap.to_dict()) if card_snap.exists else {}
             effects: dict = {}
             reads: dict = {}
             if payload.line is not None:
@@ -260,13 +445,15 @@ async def resolve(rid: str, payload: ResolveIn, user: dict = Depends(require_use
                 if payload.action not in allowed:
                     raise HTTPException(409, "Esta linha já foi decidida; desfaça a decisão para mudar.")
                 if payload.action == "use_bank_value":
-                    reads["tx"] = _tx(owner, tr, line["tx_id"])
+                    reads["tx"] = _tx(owner, tr, line["tx_id"], doc)
+                    if line.get("installment") or reads["tx"][1].get("installment"):
+                        raise HTTPException(409, "Compra parcelada: corrija o valor da compra no registro, não a parcela.")
                 if payload.action == "link":
                     if not payload.tx_id:
                         raise HTTPException(422, "Informe o lançamento a ligar.")
                     if any(l.get("tx_id") == payload.tx_id and l["state"] == "matched" for l in doc["lines"]):
                         raise HTTPException(409, "Este lançamento já está ligado a outra linha.")
-                    reads["link"] = _tx(owner, tr, payload.tx_id)
+                    reads["link"] = _tx(owner, tr, payload.tx_id, doc, changes_money=False)
                 # ---- writes start here
                 if payload.action == "confirm":
                     line.update(state="matched")
@@ -298,10 +485,13 @@ async def resolve(rid: str, payload: ResolveIn, user: dict = Depends(require_use
                 if item is None or item["state"] != "open":
                     raise HTTPException(409, "Este lançamento já foi decidido; desfaça a decisão para mudar.")
                 before = dict(item)
-                if payload.action in ("keep_pending", "delete"):
-                    reads["tx"] = _tx(owner, tr, payload.tx_id)
+                card_scope = doc.get("scope") == "card"
+                if payload.action == "delete" or (payload.action == "keep_pending" and not card_scope):
+                    reads["tx"] = _tx(owner, tr, payload.tx_id, doc)
                 if payload.action == "keep":
                     item.update(state="kept")
+                elif payload.action == "keep_pending" and card_scope:
+                    item.update(state="pending")  # it will show up on a later invoice: nothing changes
                 elif payload.action == "keep_pending":
                     tx_ref, tx = reads["tx"]
                     updated = dict(tx, status="pendente", version=int(tx.get("version", 1)) + 1, updated_at=_now())
@@ -324,6 +514,7 @@ async def resolve(rid: str, payload: ResolveIn, user: dict = Depends(require_use
                 "target": target, "before": before, "after": after, "effects": effects, "note": payload.note,
                 "actor": uid, "created_at": _now().isoformat(), "undone_by": None, "undo_of": None,
             })
+            doc.pop("_card", None)
             tr.set(ref, doc)
             return doc
 
@@ -411,8 +602,12 @@ async def undo_event(rid: str, event_id: str, user: dict = Depends(require_user)
 
 
 @router.post("/reconciliations/{rid}/complete")
-async def complete(rid: str, user: dict = Depends(require_user)):
-    """All lines decided and the balances equal → account "Conferida até"."""
+async def complete(rid: str, payload: CompleteIn | None = None, user: dict = Depends(require_user)):
+    """All lines decided and the balances equal → account "Conferida até".
+
+    For a card invoice the totals must match, or the person explains the
+    difference in a note; the invoice is then marked as reconciled."""
+    note = (payload.note if payload else "").strip()
     uid = store.scoped({"user_id": user["id"]})
 
     def execute():
@@ -427,6 +622,8 @@ async def complete(rid: str, user: dict = Depends(require_user)):
             summary = _summary(doc)
             if summary["pending"]:
                 raise HTTPException(409, f"Ainda há {summary['pending']} item(ns) para decidir.")
+            if doc.get("scope") == "card":
+                return _complete_card(owner, tr, instance, uid, ref, doc, note)
             account_ref = owner.collection("accounts").document(store.resource_id(doc["account_id"]))
             account = _account(owner, tr, doc["account_id"])
             movements = store.account_movement_rows(instance, uid, doc["account_id"], tr)
@@ -453,6 +650,35 @@ async def complete(rid: str, user: dict = Depends(require_user)):
         return store.atomic(instance, uid, action)
 
     return _summary(await run_in_threadpool(execute))
+
+
+def _complete_card(owner, tr, instance, uid, ref, doc, note):
+    card_ref = owner.collection("cards").document(store.resource_id(doc["card_id"]))
+    snap = card_ref.get(transaction=tr)
+    card = dict(store.decode(snap.to_dict()), id=doc["card_id"])
+    txs = store.card_purchase_rows(instance, uid, doc["card_id"], tr)
+    total = card_movements(card, txs, doc["cycle"])[1]["total_cents"]
+    bank = doc.get("bank_closing_cents")
+    if bank is not None and total != bank and len(note) < 3:
+        raise HTTPException(409, {"code": "total_diferente", "finnos": total / 100, "bank": bank / 100,
+                                  "message": "Os totais ainda não batem. Registre o que falta ou explique a diferença."})
+    for line in doc["lines"]:
+        if line["state"] == "matched" and line.get("tx_id") and ":" not in line["tx_id"]:
+            link_id = hashlib.sha256(f"card:{doc['card_id']}:{line['origin_key']}".encode()).hexdigest()[:40]
+            tr.set(owner.collection("reconciliation_links").document(link_id),
+                   {"account_id": f"card:{doc['card_id']}", "key": line["origin_key"], "tx_id": line["tx_id"],
+                    "reconciliation_id": doc["id"]})
+    cycles = card.setdefault("invoice_cycles", {})
+    entry = dict(cycles.get(doc["cycle"]) or {})
+    fields = doc.get("invoice_fields") or {}
+    entry.update(reconciled=True, reconciled_at=_now().isoformat(), reconciled_total_cents=bank,
+                 minimum_cents=fields.get("minimum_payment_cents"), reconciliation_id=doc["id"])
+    cycles[doc["cycle"]] = entry
+    tr.set(card_ref, store.encode(card))
+    doc.update(status="concluida", finnos_closing_cents=total, completed_at=_now().isoformat(),
+               difference_note=note or None)
+    tr.set(ref, doc)
+    return doc
 
 
 # ---------------------------------------------------------------- balance adjustment

@@ -86,3 +86,25 @@ it("refuses to complete with open items or different balances; adjustment closes
   expect(localGetReconciliation(rec.id).finnos_closing_cents).toBe(100);
   expect(localCompleteReconciliation(rec.id).status).toBe("concluida");
 });
+
+it("card invoice: compares bank lines with the FINNOS invoice and marks it conferida", async () => {
+  const { localCreateCardReconciliation, localInvoice } = await import("@/lib/local/engine");
+  const db = readDb();
+  db.cards = [{ id: "card", name: "Nubank", closing_day: 3, due_day: 10, limit: 2000, payment_account_id: null, institution: "Nubank",
+    institution_id: null, color: "#820AD1", active: true, created_at: "2026-01-01T00:00:00Z" }];
+  db.transactions.push(tx("m", "2026-11-10", "Mercado Bom Preço", 345.9, "despesa", { card_id: "card" }),
+    tx("x", "2026-11-25", "Farmácia", 22, "despesa", { card_id: "card" }));
+  writeDb(db);
+  const rec = localCreateCardReconciliation("card", { cycle: "2026-12-03", file_name: "fatura.csv", file_hash: "abcdef123456", source: "csv", lines: [
+    { date: "2026-11-10", description: "MERCADO BOM PRECO", value: 345.9, direction: "out" },
+    { date: "2026-11-28", description: "IOF COMPRA INTERNACIONAL", value: 3.85, direction: "out" },
+  ] });
+  expect(rec.lines.map(l => [l.level, l.state])).toEqual([["strong", "matched"], ["only_statement", "open"]]);
+  expect(rec.finnos.map(f => [f.tx_id, f.name])).toEqual([["x", "Farmácia"]]);
+  expect(() => localResolveReconciliation(rec.id, { line: 1, action: "link", tx_id: "a" })).toThrow(/não é deste cartão/);
+  localResolveReconciliation(rec.id, { line: 1, action: "ignore" });
+  localResolveReconciliation(rec.id, { tx_id: "x", action: "keep_pending" });
+  expect(readDb().transactions.find(t => t.id === "x")?.status).toBe("pago");
+  expect(localCompleteReconciliation(rec.id).status).toBe("concluida");
+  expect(localInvoice("card", "2026-12-03").reconciled).toBe(true);
+});

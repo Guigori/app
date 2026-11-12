@@ -53,6 +53,7 @@ import {
   localReverseTransfer,
   localCreateReconciliation, localListReconciliations, localGetReconciliation, localResolveReconciliation,
   localUndoReconciliationEvent, localCompleteReconciliation, localAdjustBalance,
+  localCreateCardReconciliation, localListCardReconciliations,
   localCreditInvoice,
   localBankRefund,
   localSubscriptions,
@@ -64,7 +65,7 @@ import {
   type LocalTxFilters,
 } from "@/lib/local/engine";
 import type {
-  Reconciliation, ReconciliationInput, ReconResolveInput, BalanceAdjustment, BalanceAdjustmentInput,
+  Reconciliation, ReconciliationInput, ReconResolveInput, BalanceAdjustment, BalanceAdjustmentInput, CardReconciliationInput,
   ConfirmAllResult,
   PendingCaptureConfirm,
   PendingCaptures,
@@ -859,9 +860,17 @@ export async function undoReconciliationEvent(id: string, eventId: string, opera
   if (isLocalMode()) return localUndoReconciliationEvent(id, eventId);
   return apiPost<Reconciliation>(`/reconciliations/${encodeURIComponent(id)}/events/${encodeURIComponent(eventId)}/undo`, {}, { "X-FINNOS-Operation-ID": operationId });
 }
-export async function completeReconciliation(id: string): Promise<Reconciliation> {
-  if (isLocalMode()) return localCompleteReconciliation(id);
-  return apiPost<Reconciliation>(`/reconciliations/${encodeURIComponent(id)}/complete`, {});
+export async function completeReconciliation(id: string, note = ""): Promise<Reconciliation> {
+  if (isLocalMode()) return localCompleteReconciliation(id, note);
+  return apiPost<Reconciliation>(`/reconciliations/${encodeURIComponent(id)}/complete`, { note });
+}
+export async function createCardReconciliation(cardId: string, input: CardReconciliationInput, operationId = crypto.randomUUID()): Promise<Reconciliation> {
+  if (isLocalMode()) return localCreateCardReconciliation(cardId, input);
+  return apiPost<Reconciliation>(`/cards/${encodeURIComponent(cardId)}/reconciliations`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+export async function fetchCardReconciliations(cardId: string): Promise<Reconciliation[]> {
+  if (isLocalMode()) return localListCardReconciliations(cardId);
+  return apiGet<Reconciliation[]>(`/cards/${encodeURIComponent(cardId)}/reconciliations`);
 }
 export async function adjustAccountBalance(accountId: string, input: BalanceAdjustmentInput, operationId = crypto.randomUUID()): Promise<BalanceAdjustment> {
   if (isLocalMode()) return localAdjustBalance(accountId, input);

@@ -3,6 +3,8 @@
 
 import { checkFunds } from "@/lib/funds";
 import { matchLines, originKey, type MatchLine } from "@/lib/statementMatching";
+import { parseFinancialFile } from "@/lib/importFinancial";
+import { statementLinesToCsv } from "@/lib/pdfStatement";
 import { institutionIdentity } from "@/lib/institutionCatalog";
 import { accountScope, effectiveDefaults } from "@/lib/walletDefaults";
 import { institutionKey } from "@/lib/institutionGroups";
@@ -48,7 +50,7 @@ import type {
   Transaction,
   TransactionInput,
   Trends,
-  Reconciliation, ReconciliationInput, ReconResolveInput, ReconEvent, BalanceAdjustment, BalanceAdjustmentInput,
+  Reconciliation, ReconciliationInput, ReconResolveInput, ReconEvent, BalanceAdjustment, BalanceAdjustmentInput, CardReconciliationInput,
 } from "@/types/finnos";
 
 import { spendingPace } from "@/lib/budgetPace";
@@ -1463,6 +1465,7 @@ function invoiceForCycle(db: LocalDb, card: LocalCard, closing: string): Invoice
     carried_amount: carried,
     carried_to: carried ? payment?.carried_to ?? null : null,
     last_payment_id: payment?.last_payment_id ?? null,
+    reconciled: Boolean(payment?.reconciled),
     items,
     adjustments,
     adjustment_total: adjustmentTotal,
@@ -1834,11 +1837,23 @@ function reconSummary(doc: Reconciliation): Reconciliation {
   return { ...doc, counts, pending: (counts.review ?? 0) + (counts.open ?? 0) + finnosOpen };
 }
 
-function protectedTx(tx: Transaction | undefined): Transaction {
+function protectedTx(tx: Transaction | undefined, doc?: Reconciliation, db?: LocalDb, changesMoney = true): Transaction {
   if (!tx) throw new Error("Lançamento não encontrado; ele pode ter sido excluído.");
   if (tx.invoice_payment || tx.invoice_refund || tx.reversed_by || tx.reversal_of || tx.balance_adjustment)
     throw new Error("Este lançamento só muda pelo próprio fluxo (fatura, estorno ou ajuste).");
+  if (doc?.scope === "card") {
+    if (tx.card_id !== doc.card_id) throw new Error("Este lançamento não é deste cartão.");
+    const card = db?.cards.find(c => c.id === doc.card_id);
+    if (changesMoney && card?.paid_cycles?.[doc.cycle!]?.amount) throw new Error("Fatura já paga: a diferença entra como crédito ou compra na próxima fatura.");
+  } else if (doc?.account_id && tx.account_id !== doc.account_id && tx.to_account_id !== doc.account_id) {
+    throw new Error("Este lançamento não é desta conta.");
+  }
   return tx;
+}
+
+function lookupTx(db: LocalDb, id: string | null | undefined): Transaction | undefined {
+  if (id && id.includes(":")) throw new Error("Este item só muda pelo próprio fluxo (pagamento, crédito ou saldo levado).");
+  return db.transactions.find(t => t.id === id);
 }
 
 export function localCreateReconciliation(accountId: string, input: ReconciliationInput): Reconciliation {
@@ -1887,7 +1902,8 @@ export function localGetReconciliation(id: string): Reconciliation {
   if (!doc) throw new Error("Conferência não encontrada.");
   const history = (db.reconciliation_events ?? []).filter(e => e.reconciliation_id === id).sort((a, b) => a.seq - b.seq);
   // Live: decisions and adjustments change the FINNOS side until it is concluded.
-  const live = doc.status === "concluida" ? doc.finnos_closing_cents : balanceUntil(db, doc.account_id, doc.period_end);
+  const live = doc.status === "concluida" ? doc.finnos_closing_cents
+    : doc.scope === "card" ? centsOf(localInvoice(doc.card_id!, doc.cycle!).total) : balanceUntil(db, doc.account_id!, doc.period_end);
   return { ...reconSummary(doc), finnos_closing_cents: live, history };
 }
 
@@ -1917,7 +1933,8 @@ export function localResolveReconciliation(id: string, input: ReconResolveInput)
     else if (input.action === "separate") { doc.finnos.push({ tx_id: line.tx_id!, state: "open", repeated_of: null }); Object.assign(line, { state: "open", tx_id: null, level: "only_statement" }); }
     else if (input.action === "keep_value") Object.assign(line, { state: "matched", kept_difference: true });
     else if (input.action === "use_bank_value") {
-      const tx = protectedTx(db.transactions.find(t => t.id === line.tx_id));
+      const tx = protectedTx(lookupTx(db, line.tx_id), doc, db);
+      if (line.installment || tx.installment) throw new Error("Compra parcelada: corrija o valor da compra no registro, não a parcela.");
       effects.tx_updated = { id: tx.id, before_cents: centsOf(tx.value) };
       const updated = { ...tx, value: line.cents / 100, version: (tx.version ?? 1) + 1, updated_at: new Date().toISOString() };
       db.transactions = db.transactions.map(t => t.id === tx.id ? updated : t);
@@ -1926,7 +1943,7 @@ export function localResolveReconciliation(id: string, input: ReconResolveInput)
     } else if (input.action === "link") {
       if (!input.tx_id) throw new Error("Informe o lançamento a ligar.");
       if (doc.lines.some(l => l.tx_id === input.tx_id && l.state === "matched")) throw new Error("Este lançamento já está ligado a outra linha.");
-      protectedTx(db.transactions.find(t => t.id === input.tx_id));
+      protectedTx(lookupTx(db, input.tx_id), doc, db, false);
       Object.assign(line, { state: "matched", tx_id: input.tx_id, level: "linked" });
       doc.finnos = doc.finnos.filter(f => f.tx_id !== input.tx_id);
       effects.linked = input.tx_id;
@@ -1938,8 +1955,9 @@ export function localResolveReconciliation(id: string, input: ReconResolveInput)
     if (!item || item.state !== "open") throw new Error("Este lançamento já foi decidido; desfaça a decisão para mudar.");
     target = `finnos:${input.tx_id}`; before = { ...item };
     if (input.action === "keep") item.state = "kept";
+    else if (input.action === "keep_pending" && doc.scope === "card") item.state = "pending"; // shows up on a later invoice
     else if (input.action === "keep_pending" || input.action === "delete") {
-      const tx = protectedTx(db.transactions.find(t => t.id === input.tx_id));
+      const tx = protectedTx(lookupTx(db, input.tx_id), doc, db);
       if (input.action === "keep_pending") {
         effects.tx_updated = { id: tx.id, before_status: tx.status };
         const updated = { ...tx, status: "pendente" as const, version: (tx.version ?? 1) + 1, updated_at: new Date().toISOString() };
@@ -2002,19 +2020,34 @@ export function localUndoReconciliationEvent(id: string, eventId: string): Recon
   return reconSummary(doc);
 }
 
-export function localCompleteReconciliation(id: string): Reconciliation {
+export function localCompleteReconciliation(id: string, note = ""): Reconciliation {
   const db = readDb();
   const found = (db.reconciliations ?? []).find(r => r.id === id);
   if (!found) throw new Error("Conferência não encontrada.");
   if (found.status === "concluida") return reconSummary(found);
   const summary = reconSummary(found);
   if (summary.pending) throw new Error(`Ainda há ${summary.pending} item(ns) para decidir.`);
-  const finnosClosing = balanceUntil(db, found.account_id, found.period_end);
+  if (found.scope === "card") {
+    const total = centsOf(localInvoice(found.card_id!, found.cycle!).total);
+    if (found.bank_closing_cents != null && total !== found.bank_closing_cents && note.trim().length < 3)
+      throw new Error("Os totais ainda não batem. Registre o que falta ou explique a diferença.");
+    const fresh = readDb();
+    const links = { ...(fresh.reconciliation_links ?? {}) };
+    for (const line of found.lines) if (line.state === "matched" && line.tx_id && !line.tx_id.includes(":")) links[`card:${found.card_id}:${line.origin_key}`] = line.tx_id;
+    fresh.reconciliation_links = links;
+    fresh.cards = fresh.cards.map(c => c.id !== found.card_id ? c : { ...c, paid_cycles: { ...c.paid_cycles,
+      [found.cycle!]: { amount: 0, paid_at: null, ...c.paid_cycles?.[found.cycle!], reconciled: true } } });
+    const done: Reconciliation = { ...found, status: "concluida", finnos_closing_cents: total, difference_note: note.trim() || null };
+    fresh.reconciliations = (fresh.reconciliations ?? []).map(r => r.id === id ? done : r);
+    writeDb(fresh);
+    return reconSummary(done);
+  }
+  const finnosClosing = balanceUntil(db, found.account_id!, found.period_end);
   if (found.bank_closing_cents != null && finnosClosing !== found.bank_closing_cents)
     throw new Error("Os saldos ainda não batem. Corrija o saldo ou revise as linhas.");
   const links = { ...(db.reconciliation_links ?? {}) };
   for (const line of found.lines) if (line.state === "matched" && line.tx_id)
-    for (const key of [line.fitid, line.origin_key]) if (key) links[`${found.account_id}:${key}`] = line.tx_id;
+    for (const key of [line.fitid, line.origin_key]) if (key) links[`${found.account_id!}:${key}`] = line.tx_id;
   db.reconciliation_links = links;
   db.accounts = db.accounts.map(a => a.id === found.account_id && (!a.reconciled_until || a.reconciled_until < found.period_end) ? { ...a, reconciled_until: found.period_end } : a);
   const done: Reconciliation = { ...found, status: "concluida", finnos_closing_cents: finnosClosing };
@@ -2042,4 +2075,55 @@ export function localAdjustBalance(accountId: string, input: BalanceAdjustmentIn
   localAudit(db, "transactions", "created", null, tx);
   writeDb(db);
   return { id: tx.id, type: tx.type as "receita" | "despesa", value: tx.value, date: tx.date, previous_balance: before / 100, new_balance: target / 100, difference: diff / 100 };
+}
+
+
+export function localCreateCardReconciliation(cardId: string, input: CardReconciliationInput): Reconciliation {
+  const db = readDb();
+  const card = db.cards.find(c => c.id === cardId);
+  if (!card) throw new Error("Cartão não encontrado.");
+  // Local mode reads the PDF lines with the device parser (no FDI here).
+  let raw = input.lines ?? [];
+  if (!raw.length && input.pages?.length) {
+    const textLines = input.pages.flatMap(p => p.text.split("\n"));
+    const year = Number(textLines.join(" ").match(/\b(20\d{2})\b/)?.[1] ?? input.cycle.slice(0, 4));
+    raw = parseFinancialFile(statementLinesToCsv(textLines, year), "invoice").map(r => ({
+      date: r.date, description: r.description, value: Math.abs(r.value), direction: r.type === "receita" ? "in" as const : "out" as const,
+    }));
+  }
+  if (!raw.length) throw new Error("Não encontrei lançamentos nesta fatura.");
+  const invoice = localInvoice(cardId, input.cycle);
+  const movements = [
+    ...invoice.items.map(i => ({ id: i.id, date: i.date, name: i.name, value: i.value, type: "despesa", status: "pago", account_id: "__invoice__", card_id: null }) as unknown as Transaction),
+    ...(card.paid_cycles?.[input.cycle]?.payments ?? []).map(p => ({ id: `pay:${p.id}`, date: p.date, name: "Pagamento da fatura", value: p.amount, type: "receita", status: "pago", account_id: "__invoice__", card_id: null }) as unknown as Transaction),
+  ];
+  const links: Record<string, string> = {};
+  for (const [key, txId] of Object.entries(db.reconciliation_links ?? {})) if (key.startsWith(`card:${cardId}:`)) links[key.slice(`card:${cardId}:`.length)] = txId;
+  const lines: MatchLine[] = raw.map((l, index) => {
+    const base = { date: l.date, description: l.description.trim(), cents: centsOf(l.value), direction: l.direction, fitid: l.fitid ?? null };
+    return { ...base, index, origin_key: originKey("local", `card:${cardId}`, base) };
+  });
+  const matched = matchLines(lines, movements, "__invoice__", links);
+  const doc: Reconciliation = {
+    id: newId(), scope: "card", card_id: cardId, cycle: input.cycle, account_id: null,
+    period_start: invoice.cycle_start, period_end: input.cycle, file_name: input.file_name, source: input.source,
+    status: "pronta", bank_closing_cents: null, finnos_closing_cents: centsOf(invoice.total), counts: {}, pending: 0,
+    created_at: new Date().toISOString(), invoice_fields: {}, invoice_checks: [], warnings: ["leitura_local_sem_total"],
+    lines: lines.map(line => {
+      const r = matched.lines.get(line.index)!;
+      const state = r.level === "strong" ? "matched" : r.level === "probable" || r.level === "value_diff" ? "review" : "open";
+      return { ...line, level: r.level, tx_id: r.tx_id, reasons: r.reasons, state };
+    }),
+    finnos: matched.onlyFinnos.map(id => {
+      const m = movements.find(x => x.id === id)!;
+      return { tx_id: id, state: "open" as const, repeated_of: matched.repeated[id] ?? null, name: m.name, cents: centsOf(m.value) };
+    }),
+  };
+  db.reconciliations = [...(db.reconciliations ?? []), doc];
+  writeDb(db);
+  return reconSummary(doc);
+}
+
+export function localListCardReconciliations(cardId: string): Reconciliation[] {
+  return (readDb().reconciliations ?? []).filter(r => r.card_id === cardId).map(reconSummary).sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
