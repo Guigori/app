@@ -282,6 +282,8 @@ class PaddleOCREngine:
                 "use_doc_orientation_classify": False,
                 "use_doc_unwarping": False,
                 "use_textline_orientation": False,
+                # Paddle 3.3 CPU + oneDNN fails on PP-OCRv6 graphs; plain CPU kernels work.
+                "enable_mkldnn": False,
             }
             if self.model_dir:
                 options["text_detection_model_dir"] = os.path.join(self.model_dir, "det")

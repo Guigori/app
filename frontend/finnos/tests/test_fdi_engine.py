@@ -346,6 +346,7 @@ def test_paddle_adapter_maps_boxes_to_lines_without_network():
     engine = PaddleOCREngine(factory=_FakePaddle, model_dir="/models")
     page = engine.read_image(pil.new("RGB", (500, 100), 255), page=1)
     assert engine._ocr.options["text_recognition_model_dir"] == "/models/rec"
+    assert engine._ocr.options["enable_mkldnn"] is False
     assert [s.text for s in page.spans] == ["12/11/2026 MERCADO EXEMPLO 125,90 D"]
     assert page.spans[0].confidence == 0.93
     row = parse_statement_span(page.spans[0], source_engine="paddleocr")

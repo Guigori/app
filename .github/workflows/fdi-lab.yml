@@ -71,7 +71,7 @@ jobs:
         run: |
           python - <<'EOF'
           from paddleocr import PaddleOCR
-          PaddleOCR(lang="pt", use_doc_orientation_classify=False, use_doc_unwarping=False, use_textline_orientation=False)
+          PaddleOCR(lang="pt", use_doc_orientation_classify=False, use_doc_unwarping=False, use_textline_orientation=False, enable_mkldnn=False)
           EOF
       - name: Precision report (PaddleOCR primary, Tesseract comparison)
         env:

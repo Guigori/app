@@ -15,7 +15,7 @@ ENV FDI_PADDLE_MODEL_DIR=/models/paddle PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=Tr
 RUN python - <<'EOF'
 import os, shutil
 from paddleocr import PaddleOCR
-PaddleOCR(lang="pt", use_doc_orientation_classify=False, use_doc_unwarping=False, use_textline_orientation=False)
+PaddleOCR(lang="pt", use_doc_orientation_classify=False, use_doc_unwarping=False, use_textline_orientation=False, enable_mkldnn=False)
 cache = os.path.expanduser("~/.paddlex/official_models")
 names = sorted(os.listdir(cache))
 det = next(n for n in names if n.endswith("_det"))
