@@ -263,7 +263,6 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     setName(invTitle);
     const payer = invPayers.find(a => a.id === invCard?.payment_account_id) ?? defaultAccount(invPayers) ?? invPayers[0];
     if (payer) setAccount(payer.id);
-    setKeypadOpen(false);
   }, [inv, accountsQuery.isSuccess, cardsQuery.isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
   const invoiceMutation = useMutation({
     mutationFn: (allowOverdraft: boolean) => payInvoice(invoice!.cardId, { cycle: inv!.cycle_end, account_id: account, date, value: invAmount, allow_overdraft: allowOverdraft }, invOperation),
@@ -483,23 +482,18 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         {desktop || !keypadOpen ? <div className="size-10 shrink-0" aria-hidden="true" /> : (
           <button type="button" onClick={toggleCalc} aria-pressed={calc} aria-label="Modo calculadora" data-testid="quick-entry-calc" className={cn("grid size-10 shrink-0 place-items-center rounded-full border border-[#a78bfa] transition-colors", calc ? "bg-[#7c3aed] text-white" : "bg-primary/10 text-[#a78bfa] dark:bg-[#17132e]")}><Calculator size={19} strokeWidth={1.8} aria-hidden="true" /></button>
         )}
-        {invoice ? (
-          <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-[3px]" data-testid="quick-entry-invoice">
-            <span className={cn("flex h-[34px] shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-bold", PROTO_TONE["Transferência"].chip)}><CreditCard size={16} aria-hidden="true" />Fatura</span>
-            <span className="min-w-0 truncate pr-2 text-sm font-semibold">{invCard?.name ?? "Cartão"}</span>
-          </div>
-        ) : <div className="flex h-10 min-w-0 flex-1 items-center justify-between rounded-full border border-border bg-card px-[3px]" role="radiogroup" aria-label="Tipo">
+        <div className="flex h-10 min-w-0 flex-1 items-center justify-between rounded-full border border-border bg-card px-[3px]" role="radiogroup" aria-label="Tipo">
           {(["Receita", "Despesa", "Transferência"] as Kind[]).map((k) => {
             const Icon = KIND_UI[k].icon;
             const active = kind === k;
             return (
-              <button key={k} type="button" role="radio" aria-checked={active} aria-label={k} disabled={(Boolean(capture) && k !== "Despesa") || Boolean(existing && (existing.invoice_payment || existing.invoice_refund || existing.installment) && KIND_OF(existing.type) !== k)} onClick={() => setKind(k)}
+              <button key={k} type="button" role="radio" aria-checked={active} aria-label={k} disabled={(Boolean(invoice) && k !== "Transferência") || (Boolean(capture) && k !== "Despesa") || Boolean(existing && (existing.invoice_payment || existing.invoice_refund || existing.installment) && KIND_OF(existing.type) !== k)} onClick={() => setKind(k)}
                 className={cn("flex h-[34px] shrink-0 items-center justify-center gap-1.5 rounded-full text-sm font-bold transition-all", active ? cn("px-3", PROTO_TONE[k].chip) : "w-9 text-muted-foreground")}>
                 <Icon size={16} aria-hidden="true" />{active ? <span>{k}</span> : null}
               </button>
             );
           })}
-        </div>}
+        </div>
         <button type="button" onClick={() => go("start")} aria-label={MEDIA_INPUTS ? "Registro inteligente: escrever, falar ou fotografar" : "Registro inteligente: escrever como foi"} title="Registro inteligente" className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card text-[#a78bfa]"><Sparkles size={18} /></button>
       </header>}
 
@@ -521,6 +515,25 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         ) : !keypadOpen ? <span className="text-[13px] text-muted-foreground">{ops ? `${expr.replace(/\./g, ",").replace(/\s*([+−×÷])\s*/g, " $1 ")} · ` : ""}{existing ? "Toque para editar" : "toque para editar"}</span> : null}
       </button>
 
+      {invoice ? (
+        <div className="relative flex shrink-0 flex-col gap-2" data-testid="transfer-preview">
+          <button type="button" onClick={() => go("pay")} data-testid="transfer-from" className="flex h-[52px] items-center gap-3 rounded-full bg-muted pl-2 pr-[18px] text-left">
+            <span className="grid size-[38px] shrink-0 place-items-center rounded-full bg-income/15 text-income dark:bg-[#0d2a22] dark:text-[#10b981]"><Wallet size={18} aria-hidden="true" /></span>
+            <span className="flex min-w-0 flex-1 flex-col leading-[1.15]">
+              <span className={cn("truncate text-xs", invCover?.short ? "text-expense" : invCover?.overdraft ? "text-amber-500" : "text-muted-foreground")} data-testid="invoice-pay-after">Sai de{invPayer && invCover && invAmount > 0 ? (hidden ? " · fica R$ ••••" : invCover.short ? " · saldo não cobre" : ` · fica ${invCover.after < 0 ? "− " : ""}${formatBRL(Math.abs(invCover.after))}${invCover.overdraft ? " (cheque especial)" : ""}`) : ""}</span>
+              <span className="truncate text-base font-bold">{invPayer?.name ?? "Escolha uma conta"}</span>
+            </span>
+            <ChevronRight size={18} className="text-[#a78bfa]" aria-hidden="true" />
+          </button>
+          <div className="flex h-[52px] items-center gap-3 rounded-full bg-muted pl-2 pr-[18px]" data-testid="quick-entry-invoice">
+            <span className="grid size-[38px] shrink-0 place-items-center rounded-full bg-primary/15 text-primary dark:bg-[#1d1640] dark:text-[#a78bfa]"><CreditCard size={18} aria-hidden="true" /></span>
+            <span className="flex min-w-0 flex-1 flex-col leading-[1.15]">
+              <span className="truncate text-xs text-muted-foreground">Vai para a fatura{inv ? ` · vence ${ddmm(inv.due_date)}` : ""}</span>
+              <span className="truncate text-base font-bold">{invCard?.name ?? "Cartão"}{inv ? ` · ${INVOICE_MONTHS[Number(inv.cycle_end.slice(5, 7)) - 1]}` : ""}</span>
+            </span>
+          </div>
+        </div>
+      ) : null}
       {kind === "Transferência" && !invoice ? (
         <div className="relative flex shrink-0 flex-col gap-2" data-testid="transfer-preview">
           {([["Sai de", fromAccount, () => go("pay"), "transfer-from", "bg-income/15 text-income dark:bg-[#0d2a22] dark:text-[#10b981]"], ["Vai para", toAccount, () => { setDestinationPicker(true); setInstitutionId(null); go("accounts"); }, "transfer-to", "bg-amber-500/15 text-amber-500 dark:bg-[#2a1a0c] dark:text-[#fb923c]"]] as const).map(([label, acc, pick, id, iconTone]) => (
@@ -534,23 +547,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           {<button type="button" aria-label="Inverter origem e destino" data-testid="transfer-swap" onClick={() => { if (!destination) return; const from = account; setAccount(destination); setDestination(from); }} className="absolute left-1/2 top-1/2 z-10 grid size-[38px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-[3px] border-background bg-[#7c3aed] text-white"><ArrowLeftRight size={16} className="rotate-90" aria-hidden="true" /></button>}
         </div>
       ) : null}
-      {invoice ? (
-        <div className="shrink-0 space-y-2 rounded-[22px] bg-card px-3 py-3" data-testid="invoice-pay-panel">
-          <div className="flex gap-2 overflow-x-auto [scrollbar-width:none]" role="radiogroup" aria-label="Quanto vai pagar">
-            {([["Fatura inteira", invOwed], ...(invMinimum ? [["Mínimo", invMinimum]] : [])] as [string, number][]).map(([label, v]) => (
-              <button key={label} type="button" role="radio" aria-checked={Math.abs(invAmount - v) < 0.005} onClick={() => setExpr(Number.isInteger(v) ? String(v) : v.toFixed(2).replace(".", ","))}
-                data-testid={`invoice-pay-${label === "Mínimo" ? "minimum" : "full"}`}
-                className={cn("h-9 shrink-0 rounded-full px-3.5 text-[13px] font-semibold tabular-nums", Math.abs(invAmount - v) < 0.005 ? "bg-primary text-primary-foreground" : "bg-muted")}>
-                {label} <span className="font-normal opacity-80">{hidden ? "R$ ••••" : formatBRL(v)}</span>
-              </button>
-            ))}
-            <button type="button" onClick={() => setKeypadOpen(true)} className="h-9 shrink-0 rounded-full bg-muted px-3.5 text-[13px] font-semibold" data-testid="invoice-pay-other">Outro valor</button>
-          </div>
-          <p className="px-1 text-xs text-muted-foreground">{inv ? `${inv.cycle_end < todayISO() ? "Fechou" : "Fecha"} dia ${inv.cycle_end.slice(8, 10)} · vence ${ddmm(inv.due_date)}${inv.paid_amount > 0 ? ` · já pago ${hidden ? "R$ ••••" : formatBRL(inv.paid_amount)}` : ""}` : "Lendo a fatura…"}</p>
-          <p className="px-1 text-xs text-muted-foreground">Sai da conta e não conta como gasto de novo: as compras já entraram no mês em que foram feitas.</p>
-          {inv && invAmount > 0 && invAmount < invOwed - 0.004 ? <p className="rounded-2xl bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300" data-testid="invoice-pay-partial">{formatBRL(invOwed - invAmount)} fica para a próxima fatura como “Saldo da fatura anterior”, sem juros automáticos.</p> : null}
-        </div>
-      ) : null}
+      {invoice && inv && invAmount > 0 && invAmount < invOwed - 0.004 ? <p className="shrink-0 text-xs text-amber-600 dark:text-amber-400" role="status" data-testid="invoice-pay-partial">{formatBRL(invOwed - invAmount)} fica para a próxima fatura como “Saldo da fatura anterior”, sem juros.</p> : null}
       {overdraftAsk ? (
         <div role="alert" className="shrink-0 space-y-2 rounded-2xl bg-amber-500/10 p-3 text-sm" data-testid="invoice-pay-overdraft-ask">
           <p>{overdraftAsk}</p>
@@ -561,6 +558,15 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
 
       <input value={name} readOnly={Boolean(invoice)} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Uber, mercado)" aria-label="Nome" onFocus={() => setKeypadOpen(false)} className="h-12 w-full shrink-0 rounded-full bg-muted px-5 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
 
+      {invoice ? <div className="flex h-[30px] shrink-0 items-center gap-2 overflow-x-auto text-[13px] [scrollbar-width:none]" data-testid="invoice-pay-amounts">
+        <span className="flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-3 font-medium text-primary dark:bg-[#1d1640] dark:text-[#c4b5fd]"><Tag size={13} aria-hidden="true" />Fatura</span>
+        {([["Inteira", invOwed, "invoice-pay-full"], ...(invMinimum ? [["Mínimo", invMinimum, "invoice-pay-minimum"]] : [])] as [string, number, string][]).map(([label, v, id]) => (
+          <button key={id} type="button" onClick={() => setExpr(Number.isInteger(v) ? String(v) : v.toFixed(2).replace(".", ","))} data-testid={id}
+            className={cn("flex h-7 shrink-0 items-center whitespace-nowrap rounded-full px-3 font-medium tabular-nums", Math.abs(invAmount - v) < 0.005 ? "bg-sky-500/12 text-sky-500 dark:bg-[#0c2330] dark:text-[#38bdf8]" : "text-muted-foreground")}>
+            {label} {hidden ? "R$ ••••" : formatBRL(v)}
+          </button>
+        ))}
+      </div> : null}
       <div className={cn("flex h-[30px] shrink-0 items-center gap-2 text-[13px]", invoice && "hidden")}>
         {originOpen ? (
           <input autoFocus value={origin} maxLength={40} onChange={(e) => setOrigin(e.target.value)} onBlur={() => window.setTimeout(() => setOriginOpen(false), 150)}
@@ -634,14 +640,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
             {selectedCard ? <span className="text-xs text-muted-foreground">Crédito</span> : null}
           </span>
         </button> : null}
-        {invoice ? <button type="button" onClick={() => go("pay")} className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-muted px-1.5 text-left" data-testid="invoice-pay-account">
-          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-income/15 text-income dark:bg-[#0d2a22] dark:text-[#10b981]"><Wallet size={17} /></span>
-          <span className="flex min-w-0 flex-col leading-[1.15]">
-            <span className="truncate text-[15px] font-bold">{invPayer?.name ?? "De qual conta sai?"}</span>
-            {invPayer && invCover && invAmount > 0 ? <span className={cn("truncate text-xs", invCover.short ? "text-expense" : invCover.overdraft ? "text-amber-500" : "text-muted-foreground")} data-testid="invoice-pay-after">{hidden ? "Fica R$ ••••" : invCover.short ? "Saldo não cobre" : `${invCover.overdraft ? "Usa cheque especial · " : ""}Fica ${invCover.after < 0 ? "− " : ""}${formatBRL(Math.abs(invCover.after))}`}</span> : null}
-          </span>
-        </button> : null}
-        <button type="button" onClick={() => { setKeypadOpen(false); setDateOpen(true); }} className={cn("h-12 shrink-0 rounded-full bg-muted px-5 text-[15px] font-bold", kind === "Transferência" && !invoice && "flex-1")} data-testid="quick-entry-date">{dateLabel}</button>
+        <button type="button" onClick={() => { setKeypadOpen(false); setDateOpen(true); }} className={cn("h-12 shrink-0 rounded-full bg-muted px-5 text-[15px] font-bold", kind === "Transferência" && "flex-1")} data-testid="quick-entry-date">{dateLabel}</button>
       </div>
 
       {!selectedCard && kind !== "Transferência" && benefitWallets.length ? (

@@ -239,7 +239,7 @@ test("nova Carteira: as in the prototype — summary, stacked cards, one row per
   await expect(page.getByTestId("tx-account-select")).toContainText("Conta Inter");
 });
 
-test("pagar fatura abre o registro de sempre, com a fatura, a conta e o saldo depois", async ({ page }) => {
+test("pagar fatura abre o registro de sempre, com a fatura, a conta e o saldo depois", async ({ page }, info) => {
   await createCheckingAccount(page);
   await page.getByTestId("wallet-single-add-cartao").click();
   const form = page.getByTestId("card-form");
@@ -267,9 +267,10 @@ test("pagar fatura abre o registro de sempre, com a fatura, a conta e o saldo de
   await expect(page.getByTestId("quick-entry-invoice")).toContainText("Roxinho");
   await expect(page.getByTestId("quick-entry-amount")).toHaveText("R$ 200");
   await expect(page.getByRole("textbox", { name: "Nome" })).toHaveValue(/^Fatura Roxinho/);
-  await expect(page.getByTestId("invoice-pay-panel")).toContainText("não conta como gasto de novo");
+  await expect(page.getByRole("radio", { name: "Transferência" })).toHaveAttribute("aria-checked", "true");
+  if (info.project.name === "mobile") await expect(page.getByTestId("quick-entry-keypad")).toBeVisible();
   await expect(page.getByRole("radiogroup", { name: "Categoria" })).toHaveCount(0);
-  await expect(page.getByTestId("invoice-pay-after")).toContainText("Fica R$ 150,15");
+  await expect(page.getByTestId("invoice-pay-after")).toContainText("fica R$ 150,15");
   await page.keyboard.press("Enter");
   await expect(page.getByText(/Fatura paga: R\$\s200,00 saiu de/)).toBeVisible();
   await expect(page.locator("[data-sonner-toast]").getByRole("button", { name: "Desfazer" })).toBeVisible();
