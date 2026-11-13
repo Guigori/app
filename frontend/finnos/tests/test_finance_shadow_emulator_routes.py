@@ -41,7 +41,8 @@ HEADERS = {
 def seed_firestore(instance):
     owner = store.root(instance, UID)
     owner.collection("accounts").document("bank").set({
-        "name": "Conta de teste", "initial_balance_cents": 0,
+        # Etapa 2: paying an invoice needs funds in the paying account (no silent overdraft).
+        "name": "Conta de teste", "initial_balance_cents": 100000,
     })
     owner.collection("categories").document("shopping").set({
         "name": "Compras", "color": "#aabbcc", "icon": "shopping-bag",
