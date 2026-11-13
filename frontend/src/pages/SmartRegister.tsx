@@ -12,6 +12,7 @@ import { motion } from "motion/react";
 import { isLocalMode } from "@/lib/mode";
 import { openRegisterSheet } from "@/lib/registerSheet";
 import { SeriesScopeSheet } from "@/components/transactions/SeriesScopeSheet";
+import { InvoiceInsight } from "@/components/transactions/InvoiceInsight";
 import { RecordInsight } from "@/components/transactions/RecordInsight";
 import { DatePickerSheet } from "@/components/shared/DatePickerSheet";
 import { KIND_THEME, RegisterSuccess } from "@/components/transactions/RegisterSuccess";
@@ -77,7 +78,8 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [expr, setExpr] = useState(() => ((existing ?? template) ? (Number.isInteger((existing ?? template)!.value) ? String((existing ?? template)!.value) : (existing ?? template)!.value.toFixed(2).replace(".", ",")) : capture ? String(capture.item.value).replace(".", ",") : ""));
   const [done, setDone] = useState<{ kind: Kind; amount: string; name: string; chips: string[]; transaction: Transaction } | null>(null);
   const [calc, setCalc] = useState(getRegisterCalc);
-  const [keypadOpen, setKeypadOpen] = useState(!existing);
+  // "Pagar fatura" opens like a saved lançamento: keypad closed, the invoice below; tapping the amount brings it back.
+  const [keypadOpen, setKeypadOpen] = useState(!existing && !invoice);
   const [listening, setListening] = useState(false);
   const [ocrProgress, setOcrProgress] = useState<number | null>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
@@ -141,6 +143,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [origin, setOrigin] = useState(() => (existing ?? template)?.origin ?? "");
   const [dateOpen, setDateOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const insightMode = Boolean(existing || invoice);
   const recordScroll = useRef<HTMLDivElement>(null);
   const collapsing = useRef(false);
   const swipeStart = useRef<number | null>(null);
@@ -439,8 +442,8 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const view = done ? "success" : page === "entry" ? "entry" : "other";
   const saving = saveMutation.isPending || invoiceMutation.isPending;
   useEffect(() => {
-    onController?.({ view, kind, dirty, canSave, saving, hint, expanded: Boolean(existing && expanded), save: () => latest.current.save() });
-  }, [onController, view, kind, dirty, canSave, saving, hint, existing, expanded]);
+    onController?.({ view, kind, dirty, canSave, saving, hint, expanded: Boolean(insightMode && expanded), save: () => latest.current.save() });
+  }, [onController, view, kind, dirty, canSave, saving, hint, insightMode, expanded]);
   const toggleCalc = () => {
     const next = !calc;
     // Leaving the calculator keeps the result of what was typed instead of a half-built sum.
@@ -468,7 +471,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     return <div className={embedded ? "relative flex h-full min-h-0 w-full flex-col gap-2.5 bg-background px-5 pb-4 pt-6 text-foreground" : "relative mx-auto flex h-[min(860px,calc(100dvh-8rem))] w-full max-w-md flex-col gap-2.5 overflow-hidden rounded-[36px] border border-border bg-background px-5 pb-4 pt-6 text-foreground shadow-2xl"} data-testid="quick-entry">
       {embedded ? null : <div className="absolute left-1/2 top-2 h-[5px] w-20 -translate-x-1/2 rounded-full bg-border" aria-hidden="true" />}
       {/* Header: calculator · type (icons, the chosen one named) · AI. */}
-      {existing && expanded ? (
+      {insightMode && expanded ? (
         // Receipt over the whole screen: only the way back and what this lançamento is.
         <motion.header className="flex h-12 shrink-0 items-center gap-2 pt-[max(0rem,calc(env(safe-area-inset-top)-1.5rem))] box-content" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
           <button type="button" onClick={collapseRecord} aria-label="Voltar ao registro" data-testid="record-collapse" className="grid size-12 shrink-0 place-items-center rounded-full border border-border bg-card"><ArrowLeft size={20} /></button>
@@ -500,9 +503,9 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       {(() => {
         const top = <>
       {/* Amount: big, in the type's colour, with a caret while typing; the sum above it in calculator mode. */}
-      <button type="button" onClick={() => { if (swiped.current) { swiped.current = false; return; } setKeypadOpen(true); }} onPointerDown={(e) => { swipeStart.current = e.clientX; }} onPointerUp={(e) => { const dx = e.clientX - (swipeStart.current ?? e.clientX); swipeStart.current = null; if (existing && Math.abs(dx) > 70) { swiped.current = true; goSibling(dx < 0 ? 1 : -1); } }} aria-label="Valor: toque para digitar" className={cn("flex min-h-[60px] flex-col", existing && !keypadOpen ? "h-[88px] shrink-0" : "flex-1", " items-center justify-center gap-1", amountValue || ops ? tone.text : "text-[#5d5d75]")}>
+      <button type="button" onClick={() => { if (swiped.current) { swiped.current = false; return; } setKeypadOpen(true); }} onPointerDown={(e) => { swipeStart.current = e.clientX; }} onPointerUp={(e) => { const dx = e.clientX - (swipeStart.current ?? e.clientX); swipeStart.current = null; if (existing && Math.abs(dx) > 70) { swiped.current = true; goSibling(dx < 0 ? 1 : -1); } }} aria-label="Valor: toque para digitar" className={cn("flex min-h-[60px] flex-col", insightMode && !keypadOpen ? "h-[88px] shrink-0" : "flex-1", " items-center justify-center gap-1", amountValue || ops ? tone.text : "text-[#5d5d75]")}>
         {ops && keypadOpen ? <span className="text-[17px] font-medium tabular-nums" aria-hidden="true">{expr.replace(/\./g, ",").replace(/\s*([+−×÷])\s*/g, " $1 ")}</span> : null}
-        <span className={cn("flex items-center font-bold leading-none tracking-[-1px] tabular-nums", !keypadOpen ? (existing ? "text-[50px]" : "text-[64px]") : ops ? "text-[48px]" : "text-[56px]")}>
+        <span className={cn("flex items-center font-bold leading-none tracking-[-1px] tabular-nums", !keypadOpen ? (insightMode ? "text-[50px]" : "text-[64px]") : ops ? "text-[48px]" : "text-[56px]")}>
           <span data-testid="quick-entry-amount" aria-live="polite">{existing && hidden && !keypadOpen ? "R$ ••••" : typedAmount ?? formatBRL(amountValue).replace(/,00$/, "")}</span>
           {keypadOpen && !ops && !desktop ? <span className={cn("ml-1 h-[47px] w-[3px] animate-pulse rounded-sm", tone.caret)} aria-hidden="true" /> : null}
         </span>
@@ -606,11 +609,16 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       ) : null}
 
         </>;
-        if (!existing) return top;
+        if (!insightMode) return top;
         // A saved lançamento: scrolling the receipt folds the fields away so it gets the whole screen.
         return <motion.div className="-mx-1 -my-1 flex shrink-0 flex-col gap-2.5 overflow-hidden px-1 py-1" initial={false}
           animate={expanded ? { height: 0, opacity: 0, marginBottom: -10 } : { height: "auto", opacity: 1, marginBottom: 0 }} transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }} aria-hidden={expanded}>{top}</motion.div>;
       })()}
+      {invoice && inv && !keypadOpen ? (
+        <div ref={recordScroll} onScroll={(e) => { const top = e.currentTarget.scrollTop; if (collapsing.current) { if (top <= 4) collapsing.current = false; return; } if (!expanded && top > 24) setExpanded(true); }} className={cn("-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1", expanded && "pb-24")} data-testid="record-scroll">
+          <InvoiceInsight invoice={inv} card={invCard} payer={invPayer} amount={invAmount} hidden={hidden} today={todayISO()} onOpenCard={() => { onClose?.(); navigate(`/cartoes/${encodeURIComponent(invoice.cardId)}`); }} />
+        </div>
+      ) : null}
       {existing && !keypadOpen ? (
         <div ref={recordScroll} onScroll={(e) => { const top = e.currentTarget.scrollTop; if (collapsing.current) { if (top <= 4) collapsing.current = false; return; } if (!expanded && top > 24) setExpanded(true); }} className={cn("-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1", expanded && "pb-24")} data-testid="record-scroll">
           <RecordInsight tx={existing} onDeleted={() => onClose?.()} onLeave={() => onClose?.()} onSettle={settle} settling={settling} onChanged={(u) => openRegisterSheet({ existing: u })} onRepeat={() => openRegisterSheet({ template: existing })} />
@@ -631,7 +639,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       ) : null}
 
       {/* ⋮ · wallet · date */}
-      <div className={cn("flex h-12 shrink-0 items-center gap-2", existing && expanded && "hidden")}>
+      <div className={cn("flex h-12 shrink-0 items-center gap-2", insightMode && expanded && "hidden")}>
         <button type="button" onClick={() => go("more")} aria-label="Mais opções" data-testid="quick-entry-more" className="grid size-12 shrink-0 place-items-center rounded-full border border-border bg-card"><MoreVertical size={20} /></button>
         {kind !== "Transferência" ? <button type="button" onClick={() => go("pay")} className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-muted px-1.5 text-left" data-testid="quick-entry-account">
           <span className={cn("grid size-9 shrink-0 place-items-center rounded-full", selectedCard ? "bg-primary/15 text-primary" : "bg-income/15 text-income dark:bg-[#0d2a22] dark:text-[#10b981]")}>{selectedCard ? <CreditCard size={17} /> : <Wallet size={17} />}</span>

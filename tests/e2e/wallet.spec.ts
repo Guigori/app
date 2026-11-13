@@ -268,7 +268,11 @@ test("pagar fatura abre o registro de sempre, com a fatura, a conta e o saldo de
   await expect(page.getByTestId("quick-entry-amount")).toHaveText("R$ 200");
   await expect(page.getByRole("textbox", { name: "Nome" })).toHaveValue(/^Fatura Roxinho/);
   await expect(page.getByRole("radio", { name: "Transferência" })).toHaveAttribute("aria-checked", "true");
-  if (info.project.name === "mobile") await expect(page.getByTestId("quick-entry-keypad")).toBeVisible();
+  // Opens like a saved lançamento: keypad closed, the invoice below (impact, the invoice, its purchases).
+  await expect(page.getByTestId("quick-entry-keypad")).toHaveCount(0);
+  await expect(page.getByTestId("invoice-insight")).toContainText("fica paga");
+  await expect(page.getByTestId("invoice-insight")).toContainText("Mercado");
+  void info;
   await expect(page.getByRole("radiogroup", { name: "Categoria" })).toHaveCount(0);
   await expect(page.getByTestId("invoice-pay-after")).toContainText("fica R$ 150,15");
   await page.keyboard.press("Enter");
