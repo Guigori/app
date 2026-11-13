@@ -21,7 +21,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { PendingCapture, Transaction, TransactionInput } from "@/types/finnos";
 import { confirmBody, type CaptureChoice } from "@/lib/pendingCaptures";
-import { addTransactionPhoto, editRecurrence, settleTransaction, type RecurrenceEditScope, confirmPendingCapture, createTransaction, fetchTransactionById, updateTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions } from "@/lib/data";
+import { addTransactionPhoto, editRecurrence, settleTransaction, type RecurrenceEditScope, confirmPendingCapture, createTransaction, fetchTransactionById, updateTransaction, fetchOrigins, fetchAccounts, fetchCards, fetchCategories, fetchTransactions, fetchInvoice, payInvoice, undoInvoicePayment } from "@/lib/data";
+import { fundsIssue } from "@/lib/funds";
 import { getAccountPaymentMethods } from "@/lib/accountPaymentPreferences";
 import { addMonth, formatBRL, isISODate, todayISO } from "@/lib/format";
 import { benefitFundsIssue } from "@/lib/benefits";
@@ -48,6 +49,8 @@ const addDays = (iso: string, n: number) => { const d = new Date(`${iso}T12:00:0
 
 /** Same day next month (clamped), the next occurrence of a monthly series. */
 const nextMonthlyDate = (iso: string) => { const today = todayISO(); const ref = iso > today ? iso : today; const [y, m] = ref.slice(0, 7).split("-").map(Number); const day = Number(iso.slice(8, 10)); const max = new Date(Date.UTC(y, m + 1, 0)).getUTCDate(); const next = new Date(Date.UTC(y, m, 1)); return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(day, max)).padStart(2, "0")}`; };
+const INVOICE_MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const KIND_OF = (t: Transaction["type"]): Kind => (t === "receita" ? "Receita" : t === "transferencia" ? "Transferência" : "Despesa");
 /** Prototype colours per type: chosen chip, amount and caret (dark values from the prototype). */
 const PROTO_TONE: Record<Kind, { chip: string; text: string; caret: string }> = {
@@ -67,7 +70,7 @@ export interface RegisterController {
   expanded?: boolean;
   save: () => void;
 }
-export default function SmartRegister({ embedded = false, desktop = false, capture, existing, siblings, initialKind, template, onClose, onController }: { initialKind?: Kind; /** The list the lançamento came from: swipe or arrows go to the previous and next. */ siblings?: Transaction[]; /** "Lançar de novo": a new entry with the fields of this one, dated today. */ template?: Transaction; embedded?: boolean; desktop?: boolean; /** A saved lançamento: opens in the same screen, with its impact and receipt below; ✓ saves changes. */ existing?: Transaction; /** An Apple Pay purchase being reviewed: same screens, prefilled; saving confirms it. */ capture?: { item: PendingCapture; choice: CaptureChoice }; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
+export default function SmartRegister({ embedded = false, desktop = false, capture, existing, siblings, initialKind, template, invoice, onClose, onController }: { initialKind?: Kind; /** "Pagar fatura": this register, as the payment of the card's invoice. */ invoice?: { cardId: string; cycle?: string }; /** The list the lançamento came from: swipe or arrows go to the previous and next. */ siblings?: Transaction[]; /** "Lançar de novo": a new entry with the fields of this one, dated today. */ template?: Transaction; embedded?: boolean; desktop?: boolean; /** A saved lançamento: opens in the same screen, with its impact and receipt below; ✓ saves changes. */ existing?: Transaction; /** An Apple Pay purchase being reviewed: same screens, prefilled; saving confirms it. */ capture?: { item: PendingCapture; choice: CaptureChoice }; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
   const dialogs = useDialogs();
   const navigate = useNavigate();
   const { hidden, toggle: toggleHidden } = useBalanceHidden();
@@ -88,6 +91,15 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
   const accounts = useMemo(() => (accountsQuery.data ?? []).filter(a => a.active), [accountsQuery.data]);
   const cards = useMemo(() => (cardsQuery.data ?? []).filter(c => c.active), [cardsQuery.data]);
+  // "Pagar fatura" in the register (12/11/2026): same screen, the invoice decides the name, the amount and where it goes.
+  const invoiceQuery = useQuery({ queryKey: ["invoice", invoice?.cardId ?? "", invoice?.cycle ?? "default"], queryFn: () => fetchInvoice(invoice!.cardId, invoice!.cycle), enabled: Boolean(invoice) });
+  const inv = invoice ? invoiceQuery.data : undefined;
+  const invCard = invoice ? (cardsQuery.data ?? []).find(c => c.id === invoice.cardId) : undefined;
+  const invOwed = inv ? Math.round((inv.outstanding ?? inv.total - inv.paid_amount) * 100) / 100 : 0;
+  const invMinimum = inv?.minimum_payment && inv.minimum_payment < invOwed ? inv.minimum_payment : null;
+  const invTitle = inv ? `Fatura ${invCard?.name ?? "do cartão"} · ${INVOICE_MONTHS[Number(inv.cycle_end.slice(5, 7)) - 1]}` : "Fatura do cartão";
+  const [invOperation] = useState(() => crypto.randomUUID());
+  const [overdraftAsk, setOverdraftAsk] = useState<string | null>(null);
   const cardsForAccount = (accountId: string) => cards.filter(c => c.payment_account_id === accountId || (!c.payment_account_id && (!c.institution || c.institution.toLocaleLowerCase("pt-BR") === accounts.find(a => a.id === accountId)?.institution?.toLocaleLowerCase("pt-BR"))));
   const [paymentPreferencesVersion, setPaymentPreferencesVersion] = useState(0);
   const [availablePayments, setAvailablePayments] = useState<string[]>([]);
@@ -111,7 +123,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [text, setText] = useState("");
   const [value, setValue] = useState(() => ((existing ?? template) ? String((existing ?? template)!.value) : capture ? String(capture.item.value) : ""));
   const [name, setName] = useState(() => (existing ?? template)?.name ?? capture?.item.name ?? "");
-  const [kind, setKind] = useState<Kind>(() => (existing ? KIND_OF(existing.type) : template ? KIND_OF(template.type) : initialKind ?? "Despesa"));
+  const [kind, setKind] = useState<Kind>(() => (existing ? KIND_OF(existing.type) : template ? KIND_OF(template.type) : (invoice ? "Transferência" : initialKind ?? "Despesa")));
   const [category, setCategory] = useState(() => (existing ?? template)?.category_id ?? capture?.choice.categoryId ?? "");
   const [account, setAccount] = useState(() => (existing ?? template)?.account_id ?? capture?.choice.accountId ?? "");
   const selectedAccount = accounts.find(a => a.id === account);
@@ -204,6 +216,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   }, onSettled: () => { scopeRef.current = null; }, onSuccess: async (transaction) => { setSaveStatus("synced"); await refreshFinancialData(); finishSave(transaction); }, onError: async (error: Error, input) => { const benefit = benefitFundsIssue(error); if (benefit && !existing && !capture) { setBenefitPrompt({ message: benefit.message, available: benefit.available, input }); return; } if (error.message.includes("FINNOS_OFFLINE_QUEUED")) { setSaveStatus("pending"); await refreshFinancialData(); finishSave(null); toast.info("Registro salvo neste dispositivo. Sincronização pendente."); return; } toast.error(error.message && !/^(HTTP\b|Failed to fetch|NetworkError)/i.test(error.message) ? `Não foi possível salvar: ${error.message}` : "Não foi possível salvar. O registro não foi confirmado; tente novamente."); } });
   const save = () => {
     if (!canSave) return;
+    if (invoice) { invoiceMutation.mutate(Boolean(overdraftAsk)); return; }
     // Saving an edit to a monthly series asks which months it applies to first.
     if (isSeries && !scopeRef.current) { setScopeOpen(true); return; }
     const amount = Number(value);
@@ -231,7 +244,47 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   useEffect(() => { if (cardsQuery.isSuccess && selectedCardId && !cards.some(c => c.id === selectedCardId)) setSelectedCardId(null); }, [cards, selectedCardId, cardsQuery.isSuccess]);
   const selectedCategory = categories.find(c => c.id === category);
   const visibleCategories = selectedCategory && !categories.slice(0, 4).some(c => c.id === selectedCategory.id) ? [...categories.slice(0, 3), selectedCategory] : categories.slice(0, 4);
-  const canSave = Number(value) > 0 && !!account && (kind === "Transferência" ? !!destination && destination !== account : !!category && !(kind === "Despesa" && selectedCategory?.name.toLocaleLowerCase("pt-BR") === "renda"));
+  const invPayers = accounts.filter(a => a.type !== "beneficio");
+  const invPayer = invPayers.find(a => a.id === account);
+  const invAmount = Number(value) || 0;
+  const coverOf = (a: { balance: number; overdraft_limit?: number | null }) => {
+    const after = Math.round((a.balance - invAmount) * 100) / 100;
+    const limit = a.overdraft_limit ?? 0;
+    return { after, short: after < 0 && -after > limit, overdraft: after < 0 && -after <= limit };
+  };
+  const invCover = invPayer ? coverOf(invPayer) : null;
+  const invHint = !inv ? "Lendo a fatura…" : invAmount <= 0 ? "Informe quanto vai pagar" : invAmount > invOwed + 0.004 ? `Falta pagar só ${formatBRL(invOwed)} nesta fatura` : !invPayer ? "Escolha de qual conta sai" : date > todayISO() ? "Pagamento futuro não é registrado: o FINNOS te lembra no vencimento" : invCover?.short ? `O saldo de ${invPayer.name} não cobre este pagamento` : null;
+  const prefilled = useRef(false);
+  useEffect(() => {
+    // The invoice arrives: what is owed, its name, and the card's paying account (or the default one).
+    if (!invoice || !inv || !accountsQuery.isSuccess || !cardsQuery.isSuccess || prefilled.current) return;
+    prefilled.current = true;
+    setExpr(invOwed > 0 ? (Number.isInteger(invOwed) ? String(invOwed) : invOwed.toFixed(2).replace(".", ",")) : "");
+    setName(invTitle);
+    const payer = invPayers.find(a => a.id === invCard?.payment_account_id) ?? defaultAccount(invPayers) ?? invPayers[0];
+    if (payer) setAccount(payer.id);
+    setKeypadOpen(false);
+  }, [inv, accountsQuery.isSuccess, cardsQuery.isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
+  const invoiceMutation = useMutation({
+    mutationFn: (allowOverdraft: boolean) => payInvoice(invoice!.cardId, { cycle: inv!.cycle_end, account_id: account, date, value: invAmount, allow_overdraft: allowOverdraft }, invOperation),
+    onSuccess: async (result) => {
+      setOverdraftAsk(null);
+      const carried = result.carried_amount ?? 0;
+      const paymentId = result.last_payment_id;
+      const from = invPayer?.name ?? "a conta";
+      await Promise.all([refreshFinancialData(), queryClient.invalidateQueries({ queryKey: ["invoice", invoice!.cardId] }), queryClient.invalidateQueries({ queryKey: ["notifications"] })]);
+      if (carried > 0) toast.info(`${formatBRL(carried)} vai para a próxima fatura como “Saldo da fatura anterior”.`);
+      toast.success(`Fatura paga: ${formatBRL(invAmount)} saiu de ${from}.`, paymentId ? { action: { label: "Desfazer", onClick: () => { void undoInvoicePayment(invoice!.cardId, paymentId).then(async () => { await Promise.all([refreshFinancialData(), queryClient.invalidateQueries({ queryKey: ["invoice", invoice!.cardId] })]); toast.success("Pagamento desfeito. O valor voltou para a conta."); }).catch((e: Error) => toast.error(e.message || "Não foi possível desfazer agora.")); } } } : undefined);
+      close();
+    },
+    onError: (error: Error) => {
+      const issue = fundsIssue(error);
+      if (issue?.code === "confirmar_cheque_especial") { setOverdraftAsk(issue.message); return; }
+      setOverdraftAsk(null);
+      toast.error(error.message && !/^(HTTP\b|Failed to fetch|NetworkError)/i.test(error.message) ? `Não foi possível pagar: ${error.message}` : "Não foi possível pagar agora. Nada foi registrado; tente de novo.");
+    },
+  });
+  const canSave = invoice ? invHint === null && !invoiceMutation.isPending : Number(value) > 0 && !!account && (kind === "Transferência" ? !!destination && destination !== account : !!category && !(kind === "Despesa" && selectedCategory?.name.toLocaleLowerCase("pt-BR") === "renda"));
   const accountLabel = selectedCard ? `${selectedCard.name} · Crédito` : selectedAccount ? [selectedAccount.name, payment].filter(Boolean).join(" · ") : "Selecionar";
   const [reminder, setReminder] = useState(false);
   const [project, setProject] = useState("");
@@ -353,7 +406,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     return [...(habitsQuery.data ?? [])].filter((t) => t.type === type).sort((a, b) => (b.date + b.created_at).localeCompare(a.date + a.created_at))
       .filter((t) => { const k = t.name.toLocaleLowerCase("pt-BR"); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 3);
   }, [habitsQuery.data, kind]);
-  const hint = amountValue <= 0 ? null : !account ? "Escolha a conta" : kind === "Transferência" ? (!destination || destination === account ? "Escolha a conta de destino" : null) : !category ? "Escolha a categoria" : null;
+  const hint = invoice ? invHint : amountValue <= 0 ? null : !account ? "Escolha a conta" : kind === "Transferência" ? (!destination || destination === account ? "Escolha a conta de destino" : null) : !category ? "Escolha a categoria" : null;
   useEffect(() => {
     if (kind !== "Despesa" && selectedCardId) { setSelectedCardId(null); setInstallments(1); setPayment(""); }
   }, [kind, selectedCardId]);
@@ -371,7 +424,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       const key = /^\d$/.test(event.key) ? event.key : map[event.key];
       if (event.key === "Escape" || event.key === "Delete") { event.preventDefault(); setExpr(""); return; }
       if (key) { event.preventDefault(); press(key); }
-      else if (event.key === "Enter" && canSave && !saveMutation.isPending) { event.preventDefault(); save(); }
+      else if (event.key === "Enter" && canSave && !saving) { event.preventDefault(); save(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -385,7 +438,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const latest = useRef({ save });
   latest.current = { save };
   const view = done ? "success" : page === "entry" ? "entry" : "other";
-  const saving = saveMutation.isPending;
+  const saving = saveMutation.isPending || invoiceMutation.isPending;
   useEffect(() => {
     onController?.({ view, kind, dirty, canSave, saving, hint, expanded: Boolean(existing && expanded), save: () => latest.current.save() });
   }, [onController, view, kind, dirty, canSave, saving, hint, existing, expanded]);
@@ -430,7 +483,12 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         {desktop || !keypadOpen ? <div className="size-10 shrink-0" aria-hidden="true" /> : (
           <button type="button" onClick={toggleCalc} aria-pressed={calc} aria-label="Modo calculadora" data-testid="quick-entry-calc" className={cn("grid size-10 shrink-0 place-items-center rounded-full border border-[#a78bfa] transition-colors", calc ? "bg-[#7c3aed] text-white" : "bg-primary/10 text-[#a78bfa] dark:bg-[#17132e]")}><Calculator size={19} strokeWidth={1.8} aria-hidden="true" /></button>
         )}
-        <div className="flex h-10 min-w-0 flex-1 items-center justify-between rounded-full border border-border bg-card px-[3px]" role="radiogroup" aria-label="Tipo">
+        {invoice ? (
+          <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-[3px]" data-testid="quick-entry-invoice">
+            <span className={cn("flex h-[34px] shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-bold", PROTO_TONE["Transferência"].chip)}><CreditCard size={16} aria-hidden="true" />Fatura</span>
+            <span className="min-w-0 truncate pr-2 text-sm font-semibold">{invCard?.name ?? "Cartão"}</span>
+          </div>
+        ) : <div className="flex h-10 min-w-0 flex-1 items-center justify-between rounded-full border border-border bg-card px-[3px]" role="radiogroup" aria-label="Tipo">
           {(["Receita", "Despesa", "Transferência"] as Kind[]).map((k) => {
             const Icon = KIND_UI[k].icon;
             const active = kind === k;
@@ -441,7 +499,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
               </button>
             );
           })}
-        </div>
+        </div>}
         <button type="button" onClick={() => go("start")} aria-label={MEDIA_INPUTS ? "Registro inteligente: escrever, falar ou fotografar" : "Registro inteligente: escrever como foi"} title="Registro inteligente" className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card text-[#a78bfa]"><Sparkles size={18} /></button>
       </header>}
 
@@ -463,7 +521,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         ) : !keypadOpen ? <span className="text-[13px] text-muted-foreground">{ops ? `${expr.replace(/\./g, ",").replace(/\s*([+−×÷])\s*/g, " $1 ")} · ` : ""}{existing ? "Toque para editar" : "toque para editar"}</span> : null}
       </button>
 
-      {kind === "Transferência" ? (
+      {kind === "Transferência" && !invoice ? (
         <div className="relative flex shrink-0 flex-col gap-2" data-testid="transfer-preview">
           {([["Sai de", fromAccount, () => go("pay"), "transfer-from", "bg-income/15 text-income dark:bg-[#0d2a22] dark:text-[#10b981]"], ["Vai para", toAccount, () => { setDestinationPicker(true); setInstitutionId(null); go("accounts"); }, "transfer-to", "bg-amber-500/15 text-amber-500 dark:bg-[#2a1a0c] dark:text-[#fb923c]"]] as const).map(([label, acc, pick, id, iconTone]) => (
             <button key={id} type="button" onClick={pick} data-testid={id} className="flex h-[52px] items-center gap-3 rounded-full bg-muted pl-2 pr-[18px] text-left">
@@ -476,11 +534,34 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           {<button type="button" aria-label="Inverter origem e destino" data-testid="transfer-swap" onClick={() => { if (!destination) return; const from = account; setAccount(destination); setDestination(from); }} className="absolute left-1/2 top-1/2 z-10 grid size-[38px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-[3px] border-background bg-[#7c3aed] text-white"><ArrowLeftRight size={16} className="rotate-90" aria-hidden="true" /></button>}
         </div>
       ) : null}
-      {kind === "Transferência" && fromAccount && amountValue > 0 && fromAfter < 0 ? <p className="shrink-0 text-xs text-expense" role="status" data-testid="transfer-negative">{fromAccount.name} fica negativa em {formatBRL(-fromAfter)} com esta transferência.</p> : null}
+      {invoice ? (
+        <div className="shrink-0 space-y-2 rounded-[22px] bg-card px-3 py-3" data-testid="invoice-pay-panel">
+          <div className="flex gap-2 overflow-x-auto [scrollbar-width:none]" role="radiogroup" aria-label="Quanto vai pagar">
+            {([["Fatura inteira", invOwed], ...(invMinimum ? [["Mínimo", invMinimum]] : [])] as [string, number][]).map(([label, v]) => (
+              <button key={label} type="button" role="radio" aria-checked={Math.abs(invAmount - v) < 0.005} onClick={() => setExpr(Number.isInteger(v) ? String(v) : v.toFixed(2).replace(".", ","))}
+                data-testid={`invoice-pay-${label === "Mínimo" ? "minimum" : "full"}`}
+                className={cn("h-9 shrink-0 rounded-full px-3.5 text-[13px] font-semibold tabular-nums", Math.abs(invAmount - v) < 0.005 ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                {label} <span className="font-normal opacity-80">{hidden ? "R$ ••••" : formatBRL(v)}</span>
+              </button>
+            ))}
+            <button type="button" onClick={() => setKeypadOpen(true)} className="h-9 shrink-0 rounded-full bg-muted px-3.5 text-[13px] font-semibold" data-testid="invoice-pay-other">Outro valor</button>
+          </div>
+          <p className="px-1 text-xs text-muted-foreground">{inv ? `${inv.cycle_end < todayISO() ? "Fechou" : "Fecha"} dia ${inv.cycle_end.slice(8, 10)} · vence ${ddmm(inv.due_date)}${inv.paid_amount > 0 ? ` · já pago ${hidden ? "R$ ••••" : formatBRL(inv.paid_amount)}` : ""}` : "Lendo a fatura…"}</p>
+          <p className="px-1 text-xs text-muted-foreground">Sai da conta e não conta como gasto de novo: as compras já entraram no mês em que foram feitas.</p>
+          {inv && invAmount > 0 && invAmount < invOwed - 0.004 ? <p className="rounded-2xl bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300" data-testid="invoice-pay-partial">{formatBRL(invOwed - invAmount)} fica para a próxima fatura como “Saldo da fatura anterior”, sem juros automáticos.</p> : null}
+        </div>
+      ) : null}
+      {overdraftAsk ? (
+        <div role="alert" className="shrink-0 space-y-2 rounded-2xl bg-amber-500/10 p-3 text-sm" data-testid="invoice-pay-overdraft-ask">
+          <p>{overdraftAsk}</p>
+          <button type="button" onClick={() => invoiceMutation.mutate(true)} disabled={invoiceMutation.isPending} className="h-9 rounded-full bg-primary px-4 text-[13px] font-bold text-primary-foreground" data-testid="invoice-pay-overdraft">Usar cheque especial e pagar</button>
+        </div>
+      ) : null}
+      {kind === "Transferência" && !invoice && fromAccount && amountValue > 0 && fromAfter < 0 ? <p className="shrink-0 text-xs text-expense" role="status" data-testid="transfer-negative">{fromAccount.name} fica negativa em {formatBRL(-fromAfter)} com esta transferência.</p> : null}
 
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Uber, mercado)" aria-label="Nome" onFocus={() => setKeypadOpen(false)} className="h-12 w-full shrink-0 rounded-full bg-muted px-5 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
+      <input value={name} readOnly={Boolean(invoice)} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Uber, mercado)" aria-label="Nome" onFocus={() => setKeypadOpen(false)} className="h-12 w-full shrink-0 rounded-full bg-muted px-5 text-base outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40" />
 
-      <div className="flex h-[30px] shrink-0 items-center gap-2 text-[13px]">
+      <div className={cn("flex h-[30px] shrink-0 items-center gap-2 text-[13px]", invoice && "hidden")}>
         {originOpen ? (
           <input autoFocus value={origin} maxLength={40} onChange={(e) => setOrigin(e.target.value)} onBlur={() => window.setTimeout(() => setOriginOpen(false), 150)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setOriginOpen(false); } }} onFocus={() => setKeypadOpen(false)} aria-label="Origem" placeholder="Origem (ex.: Mercado Pago)" data-testid="quick-entry-origin-input"
@@ -530,7 +611,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         </div>
       ) : null}
 
-      {!existing && !keypadOpen && !desktop && recentTemplates.length > 0 ? (
+      {!existing && !invoice && !keypadOpen && !desktop && recentTemplates.length > 0 ? (
         <div className="flex shrink-0 flex-col gap-1.5" data-testid="quick-entry-recent">
           <div className="flex h-[18px] items-center justify-between text-[13px] text-muted-foreground"><span>Repetir um lançamento recente</span></div>
           {recentTemplates.map((t) => (
@@ -553,7 +634,14 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
             {selectedCard ? <span className="text-xs text-muted-foreground">Crédito</span> : null}
           </span>
         </button> : null}
-        <button type="button" onClick={() => { setKeypadOpen(false); setDateOpen(true); }} className={cn("h-12 shrink-0 rounded-full bg-muted px-5 text-[15px] font-bold", kind === "Transferência" && "flex-1")} data-testid="quick-entry-date">{dateLabel}</button>
+        {invoice ? <button type="button" onClick={() => go("pay")} className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-muted px-1.5 text-left" data-testid="invoice-pay-account">
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-income/15 text-income dark:bg-[#0d2a22] dark:text-[#10b981]"><Wallet size={17} /></span>
+          <span className="flex min-w-0 flex-col leading-[1.15]">
+            <span className="truncate text-[15px] font-bold">{invPayer?.name ?? "De qual conta sai?"}</span>
+            {invPayer && invCover && invAmount > 0 ? <span className={cn("truncate text-xs", invCover.short ? "text-expense" : invCover.overdraft ? "text-amber-500" : "text-muted-foreground")} data-testid="invoice-pay-after">{hidden ? "Fica R$ ••••" : invCover.short ? "Saldo não cobre" : `${invCover.overdraft ? "Usa cheque especial · " : ""}Fica ${invCover.after < 0 ? "− " : ""}${formatBRL(Math.abs(invCover.after))}`}</span> : null}
+          </span>
+        </button> : null}
+        <button type="button" onClick={() => { setKeypadOpen(false); setDateOpen(true); }} className={cn("h-12 shrink-0 rounded-full bg-muted px-5 text-[15px] font-bold", kind === "Transferência" && !invoice && "flex-1")} data-testid="quick-entry-date">{dateLabel}</button>
       </div>
 
       {!selectedCard && kind !== "Transferência" && benefitWallets.length ? (
@@ -605,8 +693,8 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         ))}
       </div> : null}
       {/* In the sheet the floating button saves (✓ in the type's colour); the full page keeps its own button. */}
-      {embedded ? null : <button type="button" onClick={save} disabled={saveMutation.isPending || !canSave} className={cn("h-12 w-full shrink-0 rounded-full text-base font-semibold transition-opacity disabled:opacity-40", KIND_THEME[kind].solid)} data-testid="quick-entry-save">
-        {saveMutation.isPending ? "Salvando…" : hint ?? "Salvar"}
+      {embedded ? null : <button type="button" onClick={save} disabled={saving || !canSave} className={cn("h-12 w-full shrink-0 rounded-full text-base font-semibold transition-opacity disabled:opacity-40", KIND_THEME[kind].solid)} data-testid="quick-entry-save">
+        {saving ? "Salvando…" : hint ?? (invoice ? "Pagar fatura" : "Salvar")}
       </button>}
       {datePicker}
       {scopeSheet}
@@ -633,7 +721,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     {SUB_TITLES[page] ? (
       <header className="flex h-11 shrink-0 items-center gap-3 px-5 pt-6 pb-0 box-content">
         <button type="button" aria-label="Voltar" onClick={back} className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-card"><ArrowLeft size={18} /></button>
-        <h2 className="min-w-0 flex-1 truncate text-[21px] font-bold">{page === "accounts" && destinationPicker ? "Vai para" : SUB_TITLES[page]}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-[21px] font-bold">{page === "accounts" && destinationPicker ? "Vai para" : invoice && page === "pay" ? "De qual conta sai?" : SUB_TITLES[page]}</h2>
         {page === "pay" || page === "accounts" ? <button type="button" onClick={toggleHidden} aria-label="Mostrar ou ocultar saldos" className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-background text-[#a78bfa]">{hidden ? <EyeOff size={18} /> : <Eye size={18} />}</button> : null}
       </header>
     ) : <header className="flex items-center gap-3 px-6 pt-7 pb-4"><div className="grid size-11 place-items-center rounded-2xl bg-primary/12 text-primary"><WandSparkles size={20}/></div><div className="flex-1"><div className="font-semibold">Registro inteligente</div><div className="text-xs text-muted-foreground">{MEDIA_INPUTS ? "Escreva, fale ou fotografe" : "Escreva como foi, em uma frase"}</div></div><button aria-label="Voltar" onClick={back} className="grid size-10 place-items-center rounded-full hover:bg-muted"><ArrowLeft size={20}/></button></header>}
@@ -651,9 +739,9 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       </div>}
       {(page === "pay" || (page === "accounts" && destinationPicker)) && <div className="flex flex-col gap-2">
         <p className="mt-0.5 text-[13px] text-muted-foreground">Contas e dinheiro</p>
-        {accounts.filter(a => page === "pay" || a.id !== account).map(a => {
+        {accounts.filter(a => (page === "pay" || a.id !== account) && !(invoice && a.type === "beneficio")).map(a => {
           const selected = page === "pay" ? account === a.id && !selectedCardId : destination === a.id;
-          return pickRow({ key: a.id, selected, testId: "pay-account-" + a.id, onClick: () => { if (page === "pay") { setAccount(a.id); setSelectedCardId(null); setInstallments(1); setPayment(""); } else setDestination(a.id); back(); }, icon: <Wallet size={20} />, iconClass: WALLET_TONES[accounts.indexOf(a) % WALLET_TONES.length], title: a.name, sub: hidden ? "R$ ••••" : formatBRL(a.balance) });
+          return pickRow({ key: a.id, selected, testId: "pay-account-" + a.id, onClick: () => { if (page === "pay") { setAccount(a.id); setSelectedCardId(null); setInstallments(1); setPayment(""); } else setDestination(a.id); back(); }, icon: <Wallet size={20} />, iconClass: WALLET_TONES[accounts.indexOf(a) % WALLET_TONES.length], title: a.name, sub: hidden ? "R$ ••••" : invoice && page === "pay" && invAmount > 0 ? (() => { const c = coverOf(a); return c.short ? `Saldo ${formatBRL(a.balance)} não cobre` : `Fica ${c.after < 0 ? "− " : ""}${formatBRL(Math.abs(c.after))}${c.overdraft ? " · cheque especial" : ""}`; })() : formatBRL(a.balance) });
         })}
         {page === "pay" && kind === "Despesa" ? <>
           <p className="mt-2 text-[13px] text-muted-foreground">Cartões de crédito</p>
