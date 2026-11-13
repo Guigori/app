@@ -2,18 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useOwnHeader } from "@/components/layout/BackButton";
 import { CardAnalysis } from "@/components/wallet/CardAnalysis";
-import { PayInvoiceSheet, type PaidSummary } from "@/components/wallet/PayInvoiceSheet";
+import { openRegisterSheet } from "@/lib/registerSheet";
 import { askAbout } from "@/lib/askAi";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, Loader2, Paperclip, Search, RotateCcw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { fetchAccounts, fetchCards, fetchInvoice, payInvoice, undoInvoicePayment, creditInvoice, refundInvoiceToBank } from "@/lib/data";
-import { fundsIssue } from "@/lib/funds";
+import { fetchAccounts, fetchCards, fetchInvoice, undoInvoicePayment, creditInvoice, refundInvoiceToBank } from "@/lib/data";
 import { useBalanceHidden } from "@/lib/balance";
 import { getApiErrorMessage } from "@/lib/errors";
 import { formatBRL, formatDate, formatHiddenBRL, parseAmount } from "@/lib/format";
-import type { PayInvoiceInput, CreditInvoiceInput, BankRefundInput } from "@/types/finnos";
+import type { CreditInvoiceInput, BankRefundInput } from "@/types/finnos";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,15 +35,6 @@ export default function CardInvoice() {
   useOwnHeader();
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
-  const [payOpen, setPayOpen] = useState(false);
-  const [paidDone, setPaidDone] = useState<PaidSummary | null>(null);
-  const [paidPaymentId, setPaidPaymentId] = useState<string | null>(null);
-  // One operation id per opening of "Pagar fatura": a retry or the cheque especial confirmation reuses it.
-  useEffect(() => { if (payOpen) setOperationId(crypto.randomUUID()); }, [payOpen]);
-  const [operationId, setOperationId] = useState(() => crypto.randomUUID());
-  const [formError, setFormError] = useState<string | null>(null);
-  // Cheque especial needs an explicit "yes" from the person (approved 12/11/2026).
-  const [overdraftPrompt, setOverdraftPrompt] = useState<{ message: string; input: PayInvoiceInput } | null>(null);
   const [creditOpen, setCreditOpen] = useState(false);
   const [creditPurchaseId, setCreditPurchaseId] = useState("");
   const [creditAmountRaw, setCreditAmountRaw] = useState("");
@@ -84,8 +74,8 @@ export default function CardInvoice() {
   useEffect(() => {
     if (openedPay.current || searchParams.get("pagar") !== "1" || !invoice) return;
     openedPay.current = true;
-    if ((invoice.outstanding ?? 0) > 0) setPayOpen(true);
-  }, [invoice, searchParams]);
+    if ((invoice.outstanding ?? 0) > 0) openRegisterSheet({ invoice: { cardId, cycle: invoice.cycle_end } });
+  }, [invoice, searchParams, cardId]);
 
   useEffect(() => {
     if (!creditOpen || !invoice) return;
@@ -141,29 +131,6 @@ export default function CardInvoice() {
       await refreshMoney();
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
-  });
-
-  const payMutation = useMutation({
-    mutationFn: (input: PayInvoiceInput) => payInvoice(cardId, input, operationId),
-    onSuccess: async (result, input) => {
-      const carried = result.carried_amount ?? 0;
-      const paymentId = result.last_payment_id;
-      if (carried > 0) toast.info(`${formatBRL(carried)} vai para a próxima fatura como “Saldo da fatura anterior”.`);
-      setPaidPaymentId(paymentId ?? null);
-      setPaidDone({ value: input.value ?? 0, accountId: input.account_id, scheduled: false });
-      setOverdraftPrompt(null);
-      await refreshMoney();
-    },
-    onError: (error, input) => {
-      const issue = fundsIssue(error);
-      if (issue?.code === "confirmar_cheque_especial") {
-        setFormError(null);
-        setOverdraftPrompt({ message: issue.message, input });
-        return;
-      }
-      setOverdraftPrompt(null);
-      setFormError(getApiErrorMessage(error));
-    },
   });
 
   const creditMutation = useMutation({
@@ -324,7 +291,7 @@ export default function CardInvoice() {
       </section>
 
       <div className="grid grid-cols-2 gap-2.5">
-        <Button className="h-[50px] rounded-full text-sm font-bold" onClick={() => setPayOpen(true)} disabled={owed <= 0} data-testid="pay-invoice-button">Pagar fatura</Button>
+        <Button className="h-[50px] rounded-full text-sm font-bold" onClick={() => openRegisterSheet({ invoice: { cardId, cycle: invoice.cycle_end } })} disabled={owed <= 0} data-testid="pay-invoice-button">Pagar fatura</Button>
         <Link to={`/cartoes/${encodeURIComponent(cardId)}/configurar`} className="grid h-[50px] place-items-center rounded-full border border-border bg-card text-sm font-bold" data-testid="card-configure-link">Configurar cartão</Link>
       </div>
       <Link to={`/cartoes/${encodeURIComponent(cardId)}/conferencia?cycle=${invoice.cycle_end}`} className="flex h-12 items-center justify-center gap-2 rounded-full bg-primary/10 text-sm font-bold text-primary" data-testid="invoice-reconcile-link">
@@ -511,16 +478,6 @@ export default function CardInvoice() {
         </DialogContent>
       </Dialog>
 
-      <PayInvoiceSheet open={payOpen} onOpenChange={(open) => { setPayOpen(open); if (!open) { setPaidDone(null); setOverdraftPrompt(null); setFormError(null); } }}
-        invoice={invoice} card={card} accounts={accounts} pending={payMutation.isPending} error={formError}
-        overdraftMessage={overdraftPrompt?.message ?? null} done={paidDone}
-        onPay={(input, scheduled) => {
-          setFormError(null);
-          if (scheduled) { setPaidDone({ value: input.value ?? 0, accountId: input.account_id, scheduled: true }); return; }
-          payMutation.mutate({ ...input, allow_overdraft: Boolean(overdraftPrompt) });
-        }}
-        onUndo={() => { if (paidPaymentId) undoMutation.mutate(paidPaymentId); setPayOpen(false); setPaidDone(null); }}
-        onDoneClose={() => { setPayOpen(false); setPaidDone(null); }} />
     </div>
   );
 }

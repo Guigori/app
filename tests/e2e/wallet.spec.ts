@@ -238,3 +238,46 @@ test("nova Carteira: as in the prototype — summary, stacked cards, one row per
   await page.getByTestId("wallet-bank-transfer").click();
   await expect(page.getByTestId("tx-account-select")).toContainText("Conta Inter");
 });
+
+test("pagar fatura abre o registro de sempre, com a fatura, a conta e o saldo depois", async ({ page }, info) => {
+  await createCheckingAccount(page);
+  await page.getByTestId("wallet-single-add-cartao").click();
+  const form = page.getByTestId("card-form");
+  await pickCardBank(page, "Nubank");
+  await form.getByTestId("card-name-input").fill("Roxinho");
+  await form.getByTestId("card-limit-input").fill("1000");
+  await form.getByTestId("card-submit-button").click();
+  await expect(form).toHaveCount(0);
+
+  // A purchase on the card, from the register.
+  await page.goto("/registro-inteligente");
+  await expect(page.getByTestId("quick-entry")).toBeVisible();
+  for (const key of ["2", "0", "0"]) await page.keyboard.press(key);
+  await expect(page.getByTestId("quick-entry-amount")).toHaveText("R$ 200");
+  await page.getByRole("textbox", { name: "Nome" }).fill("Mercado");
+  await page.getByRole("radiogroup", { name: "Categoria" }).getByRole("radio").nth(1).click();
+  await page.getByTestId("quick-entry-account").click();
+  await page.locator("[data-testid^=pay-card-]").first().click();
+  await page.getByTestId("quick-entry-save").click();
+  await expect(page.getByRole("status").filter({ hasText: "Salvo" })).toBeVisible();
+
+  // "Pagar fatura" on the card opens the same register, as the payment of the invoice.
+  await page.goto("/contas");
+  await page.getByTestId("wallet-card-pay").first().click();
+  await expect(page.getByTestId("quick-entry-invoice")).toContainText("Roxinho");
+  await expect(page.getByTestId("quick-entry-amount")).toHaveText("R$ 200");
+  await expect(page.getByRole("textbox", { name: "Nome" })).toHaveValue(/^Fatura Roxinho/);
+  await expect(page.getByRole("radio", { name: "Despesa" })).toHaveAttribute("aria-checked", "true");
+  // Opens like a saved lançamento: keypad closed, the invoice below (impact, the invoice, its purchases).
+  await expect(page.getByTestId("quick-entry-keypad")).toHaveCount(0);
+  await expect(page.getByTestId("invoice-insight")).toContainText("fica paga");
+  await expect(page.getByTestId("invoice-insight")).toContainText("Mercado");
+  void info;
+  await expect(page.getByRole("radiogroup", { name: "Categoria" })).toHaveCount(0);
+  await expect(page.getByTestId("invoice-pay-after")).toContainText("fica R$ 150,15");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText(/Fatura paga: R\$\s200,00 saiu de/)).toBeVisible();
+  await expect(page.locator("[data-sonner-toast]").getByRole("button", { name: "Desfazer" })).toBeVisible();
+  await page.goto("/contas");
+  await expect(page.locator("[data-testid^=wallet-bank-]").filter({ hasText: "Banco Inter" })).toContainText("150,15");
+});
