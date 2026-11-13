@@ -125,7 +125,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [text, setText] = useState("");
   const [value, setValue] = useState(() => ((existing ?? template) ? String((existing ?? template)!.value) : capture ? String(capture.item.value) : ""));
   const [name, setName] = useState(() => (existing ?? template)?.name ?? capture?.item.name ?? "");
-  const [kind, setKind] = useState<Kind>(() => (existing ? KIND_OF(existing.type) : template ? KIND_OF(template.type) : (invoice ? "Transferência" : initialKind ?? "Despesa")));
+  const [kind, setKind] = useState<Kind>(() => (existing ? KIND_OF(existing.type) : template ? KIND_OF(template.type) : (invoice ? "Despesa" : initialKind ?? "Despesa")));
   const [category, setCategory] = useState(() => (existing ?? template)?.category_id ?? capture?.choice.categoryId ?? "");
   const [account, setAccount] = useState(() => (existing ?? template)?.account_id ?? capture?.choice.accountId ?? "");
   const selectedAccount = accounts.find(a => a.id === account);
@@ -490,7 +490,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
             const Icon = KIND_UI[k].icon;
             const active = kind === k;
             return (
-              <button key={k} type="button" role="radio" aria-checked={active} aria-label={k} disabled={(Boolean(invoice) && k !== "Transferência") || (Boolean(capture) && k !== "Despesa") || Boolean(existing && (existing.invoice_payment || existing.invoice_refund || existing.installment) && KIND_OF(existing.type) !== k)} onClick={() => setKind(k)}
+              <button key={k} type="button" role="radio" aria-checked={active} aria-label={k} disabled={(Boolean(invoice) && k !== "Despesa") || (Boolean(capture) && k !== "Despesa") || Boolean(existing && (existing.invoice_payment || existing.invoice_refund || existing.installment) && KIND_OF(existing.type) !== k)} onClick={() => setKind(k)}
                 className={cn("flex h-[34px] shrink-0 items-center justify-center gap-1.5 rounded-full text-sm font-bold transition-all", active ? cn("px-3", PROTO_TONE[k].chip) : "w-9 text-muted-foreground")}>
                 <Icon size={16} aria-hidden="true" />{active ? <span>{k}</span> : null}
               </button>
@@ -586,7 +586,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         )) : <button type="button" onClick={() => go("more")} className="shrink-0 whitespace-nowrap text-muted-foreground" data-testid="quick-entry-add-tag">{existing ? "+ tag" : "+ Adicionar tag"}</button>}
       </div>
 
-      {kind !== "Transferência" ? (
+      {kind !== "Transferência" && !invoice ? (
         <div className="shrink-0 rounded-[22px] bg-card px-3 pb-2 pt-[7px]">
           <div ref={categoryStrip} className="relative -mx-1 flex items-center gap-2.5 overflow-x-auto scroll-smooth px-1 py-[3px] [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)]" role="radiogroup" aria-label="Categoria">
             <button type="button" onClick={() => go("categories")} aria-label="Buscar categoria" className="grid size-11 shrink-0 place-items-center rounded-full border-[1.5px] border-dashed border-[#3a3b6a] text-muted-foreground"><Search size={18} /></button>
@@ -641,17 +641,17 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       {/* ⋮ · wallet · date */}
       <div className={cn("flex h-12 shrink-0 items-center gap-2", insightMode && expanded && "hidden")}>
         <button type="button" onClick={() => go("more")} aria-label="Mais opções" data-testid="quick-entry-more" className="grid size-12 shrink-0 place-items-center rounded-full border border-border bg-card"><MoreVertical size={20} /></button>
-        {kind !== "Transferência" ? <button type="button" onClick={() => go("pay")} className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-muted px-1.5 text-left" data-testid="quick-entry-account">
+        {kind !== "Transferência" && !invoice ? <button type="button" onClick={() => go("pay")} className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-muted px-1.5 text-left" data-testid="quick-entry-account">
           <span className={cn("grid size-9 shrink-0 place-items-center rounded-full", selectedCard ? "bg-primary/15 text-primary" : "bg-income/15 text-income dark:bg-[#0d2a22] dark:text-[#10b981]")}>{selectedCard ? <CreditCard size={17} /> : <Wallet size={17} />}</span>
           <span className="flex min-w-0 flex-col leading-[1.15]">
             <span className="truncate text-[15px] font-bold">{selectedCard ? selectedCard.name : selectedAccount?.name ?? "Escolher conta"}</span>
             {selectedCard ? <span className="text-xs text-muted-foreground">Crédito</span> : null}
           </span>
         </button> : null}
-        <button type="button" onClick={() => { setKeypadOpen(false); setDateOpen(true); }} className={cn("h-12 shrink-0 rounded-full bg-muted px-5 text-[15px] font-bold", kind === "Transferência" && "flex-1")} data-testid="quick-entry-date">{dateLabel}</button>
+        <button type="button" onClick={() => { setKeypadOpen(false); setDateOpen(true); }} className={cn("h-12 shrink-0 rounded-full bg-muted px-5 text-[15px] font-bold", (kind === "Transferência" || invoice) && "flex-1")} data-testid="quick-entry-date">{dateLabel}</button>
       </div>
 
-      {!selectedCard && kind !== "Transferência" && benefitWallets.length ? (
+      {!selectedCard && !invoice && kind !== "Transferência" && benefitWallets.length ? (
         <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto [scrollbar-width:none]" role="radiogroup" aria-label="Benefício" data-testid="quick-entry-wallets">
           {benefitWallets.map((w) => (
             <button key={w.id} type="button" role="radio" aria-checked={chosenWallet === w.id} onClick={() => { setWallet(w.id); setBenefitPrompt(null); }}
@@ -750,7 +750,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
           const selected = page === "pay" ? account === a.id && !selectedCardId : destination === a.id;
           return pickRow({ key: a.id, selected, testId: "pay-account-" + a.id, onClick: () => { if (page === "pay") { setAccount(a.id); setSelectedCardId(null); setInstallments(1); setPayment(""); } else setDestination(a.id); back(); }, icon: <Wallet size={20} />, iconClass: WALLET_TONES[accounts.indexOf(a) % WALLET_TONES.length], title: a.name, sub: hidden ? "R$ ••••" : invoice && page === "pay" && invAmount > 0 ? (() => { const c = coverOf(a); return c.short ? `Saldo ${formatBRL(a.balance)} não cobre` : `Fica ${c.after < 0 ? "− " : ""}${formatBRL(Math.abs(c.after))}${c.overdraft ? " · cheque especial" : ""}`; })() : formatBRL(a.balance) });
         })}
-        {page === "pay" && kind === "Despesa" ? <>
+        {page === "pay" && kind === "Despesa" && !invoice ? <>
           <p className="mt-2 text-[13px] text-muted-foreground">Cartões de crédito</p>
           {cards.length === 0 ? <p className="rounded-full border-[1.5px] border-dashed border-[#3a3b6a] px-5 py-3.5 text-sm text-muted-foreground">Nenhum cartão cadastrado.</p> : cards.map(c => pickRow({ key: c.id, selected: selectedCardId === c.id, testId: "pay-card-" + c.id, onClick: () => { setSelectedCardId(c.id); setAccount((accounts.some(a => a.id === c.payment_account_id) ? c.payment_account_id : defaultAccount(accounts)?.id) ?? accounts[0]?.id ?? ""); setPayment("Crédito"); back(); }, icon: <CreditCard size={20} />, iconClass: "bg-primary/15 text-primary dark:bg-[#1d1640] dark:text-[#a78bfa]", title: c.name, sub: hidden ? "Disponível R$ ••••" : `Disponível ${formatBRL(c.available)} · fecha dia ${c.closing_day}` }))}
         </> : null}
@@ -765,7 +765,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
             {chip("Outra data", date !== todayISO() && date !== addDays(todayISO(), -1), () => setDateOpen(true))}
           </div>
         </section>
-        {kind !== "Transferência" ? <section className={MORE_CARD + " px-4 py-3"}>
+        {kind !== "Transferência" && !invoice ? <section className={MORE_CARD + " px-4 py-3"}>
           <div className="mb-2 text-[15px] font-bold">Forma de pagamento</div>
           <div className="flex gap-2 overflow-x-auto [scrollbar-width:none]">
             {(["Pix", "Débito", "Crédito", "Dinheiro", "Boleto"] as const).filter(m => kind !== "Receita" || (m !== "Débito" && m !== "Crédito")).map(m => chip(m, m === "Crédito" ? Boolean(selectedCard) : !selectedCard && payment === m, () => {
