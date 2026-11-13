@@ -141,10 +141,10 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onCh
   const position = same.filter((r) => r.date < tx.date || (r.date === tx.date && r.created_at <= tx.created_at)).length || 1;
   const total = same.reduce((s, r) => s + r.value, 0);
   const repeats = rhythm(tx, history.data ?? [], subscriptions.data?.items ?? []);
-  const canSplit = tx.type === "despesa" && Boolean(tx.card_id) && !tx.installment && !tx.fixed && !tx.invoice_payment;
+  const canSplit = tx.type === "despesa" && Boolean(tx.card_id) && !tx.installment && !tx.fixed && !(tx.invoice_payment || tx.balance_adjustment);
   const looksLikeSubscription = tx.type === "despesa" && SUBSCRIPTION_HINTS.some((k) => norm(tx.name).includes(k));
   const subscriptionHint = looksLikeSubscription && subscriptions.isSuccess && !(subscriptions.data?.items ?? []).some((sub) => norm(sub.name) === norm(tx.name) || norm(tx.name).includes(norm(sub.name)));
-  const suggestFixed = !tx.fixed && !tx.installment && !tx.invoice_payment && tx.type !== "transferencia" && repeats.kind === "repete" && repeats.times >= 3;
+  const suggestFixed = !tx.fixed && !tx.installment && !(tx.invoice_payment || tx.balance_adjustment) && tx.type !== "transferencia" && repeats.kind === "repete" && repeats.times >= 3;
   const signed = signedAmount(tx);
   const created = tx.created_at ? new Date(tx.created_at) : null;
   const when = created && !Number.isNaN(created.getTime()) ? `${created.toLocaleDateString("pt-BR")} · ${created.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : tx.date.split("-").reverse().join("/");
@@ -194,7 +194,7 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onCh
 
   const refresh = () => Promise.all(["transactions", "accounts", "dashboard", "cards", "categories", "flow", "calendar", "budget"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
   // A plain lançamento goes at once with "Desfazer"; series, installments and invoice entries ask first.
-  const simple = !tx.fixed && !tx.installment && !tx.invoice_payment && !tx.invoice_refund && !tx.recurrence_id;
+  const simple = !tx.fixed && !tx.installment && !(tx.invoice_payment || tx.balance_adjustment) && !tx.invoice_refund && !tx.recurrence_id;
   const remove = async () => {
     try {
       await deleteTransaction(tx.id);
@@ -312,7 +312,7 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onCh
         </Card>
       ) : null}
       <Card title="DETALHES">
-        <ActionRow label={tx.type === "receita" ? "Receita fixa" : "Despesa fixa"} value={tx.fixed ? "Sim · mensal" : "Não"} action={!tx.fixed && !tx.installment && tx.type !== "transferencia" && !tx.invoice_payment ? "Tornar fixa" : undefined} onClick={() => setFixOpen(true)} testId="record-make-fixed" />
+        <ActionRow label={tx.type === "receita" ? "Receita fixa" : "Despesa fixa"} value={tx.fixed ? "Sim · mensal" : "Não"} action={!tx.fixed && !tx.installment && tx.type !== "transferencia" && !(tx.invoice_payment || tx.balance_adjustment) ? "Tornar fixa" : undefined} onClick={() => setFixOpen(true)} testId="record-make-fixed" />
         <ActionRow label="Parcelado" value={tx.installment && tx.total_installments ? `${tx.current_installment ?? 1} de ${tx.total_installments}` : "Não"} action={canSplit ? "Parcelar" : undefined} onClick={() => setSplitOpen(true)} testId="record-split" />
         <Row label="Repetição" value={repeats.kind === "unica" ? "Avulso" : repeats.kind === "repete" ? `${repeats.times}× em 6 meses` : repeats.kind === "assinatura" ? "Assinatura" : repeats.kind === "fixa" ? "Fixa" : "Avulso"} i={2} />
         <button type="button" onClick={() => setHistoryOpen(true)} data-testid="record-history-open" className="flex min-h-[38px] w-full items-center justify-between gap-4 text-sm">

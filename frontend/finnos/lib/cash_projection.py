@@ -35,7 +35,7 @@ def project_scheduled_cash(
             count += 1
 
     for tx in transactions:
-        if (tx.get("card_id") or tx.get("invoice_payment")
+        if (tx.get("card_id") or (tx.get("invoice_payment") or tx.get("balance_adjustment"))
                 or tx.get("type") not in ("receita", "despesa")):
             continue
         multiplier = 1 if tx["type"] == "receita" else -1

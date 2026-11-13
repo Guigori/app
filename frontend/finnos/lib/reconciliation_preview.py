@@ -15,7 +15,9 @@ def compare_invoice_evidence(cards: list[dict], txs: list[dict], evidence: list[
     receipts = defaultdict(int)
     for tx in txs:
         if tx.get("invoice_payment") and tx.get("status") == "pago":
-            receipts[(tx.get("invoice_card_id"), tx.get("invoice_cycle"))] += cents(tx["value"])
+            # A payment reversal (receita) gives the money back.
+            sign = -1 if tx.get("type") == "receita" else 1
+            receipts[(tx.get("invoice_card_id"), tx.get("invoice_cycle"))] += sign * cents(tx["value"])
     results = []
     for row in evidence:
         card_id, cycle = row["card_id"], row["cycle"]

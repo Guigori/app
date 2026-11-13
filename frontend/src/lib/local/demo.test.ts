@@ -19,7 +19,7 @@ test("demo opens with sample finances and preserves the personal local database"
   localLoadDemo();
   expect(getMode()).toBe("demo");
   expect(isLocalMode()).toBe(true);
-  expect(readDb().accounts).toHaveLength(4);
+  expect(readDb().accounts).toHaveLength(5) // etapa 6: the demo also has a multi benefit card;
   expect(readDb().transactions.length).toBeGreaterThan(0);
   expect(values.get("finnos:local-db")).toBe(personal);
   enableLocalMode();

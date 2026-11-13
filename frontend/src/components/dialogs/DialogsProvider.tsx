@@ -18,6 +18,8 @@ export interface TransactionDialogInit {
   syncOperationId?: string;
   syncPayload?: import("@/types/finnos").TransactionInput;
   firstAttemptAt?: string;
+  /** Fields to start a new one with (a transfer from this account, for instance). */
+  prefill?: Partial<import("@/types/finnos").TransactionInput>;
 }
 
 export interface CategoryDialogInit {
@@ -32,7 +34,8 @@ interface DialogsApi {
   /** What a lançamento means (budget, recurrence, impact); editing is one action inside it. */
   /** The list it was opened from lets the register swipe to the previous and next ones. */
   openTransactionDetail: (transaction: Transaction, siblings?: Transaction[]) => void;
-  openAccount: (account?: Account) => void;
+  /** ``type`` starts a new one as that kind (the Carteira "+": Banco, Benefício or Dinheiro). */
+  openAccount: (account?: Account, init?: { type?: import("@/types/finnos").AccountType }) => void;
   openCategory: (init?: CategoryDialogInit) => void;
 }
 
@@ -52,7 +55,7 @@ interface TxState extends TransactionDialogInit {
 
 export function DialogsProvider({ children }: { children: ReactNode }) {
   const [tx, setTx] = useState<TxState>({ open: false });
-  const [account, setAccount] = useState<{ open: boolean; account?: Account }>({ open: false });
+  const [account, setAccount] = useState<{ open: boolean; account?: Account; type?: import("@/types/finnos").AccountType }>({ open: false });
   const [category, setCategory] = useState<{ open: boolean } & CategoryDialogInit>({ open: false });
 
   // Once opened, a form stays mounted so its closing animation still plays.
@@ -75,7 +78,7 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
     [],
   );
   const openAccount = useCallback(
-    (acct?: Account) => { setSeen((s) => ({ ...s, account: true })); setAccount({ open: true, account: acct }); },
+    (acct?: Account, init?: { type?: import("@/types/finnos").AccountType }) => { setSeen((s) => ({ ...s, account: true })); setAccount({ open: true, account: acct, type: init?.type }); },
     [],
   );
   const openCategory = useCallback(
@@ -96,6 +99,7 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
         syncOperationId={tx.syncOperationId}
         syncPayload={tx.syncPayload}
         firstAttemptAt={tx.firstAttemptAt}
+        prefill={tx.prefill}
       /> : null}
       {seen.detail ? <TransactionDetailSheet
         open={detail.open}
@@ -107,6 +111,7 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
         open={account.open}
         onOpenChange={(open) => setAccount((prev) => ({ ...prev, open }))}
         account={account.account}
+        initialType={account.type}
       /> : null}
       {seen.category ? <CategoryDialog
         open={category.open}

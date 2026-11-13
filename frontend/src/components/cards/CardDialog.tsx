@@ -3,12 +3,13 @@ import { offerStatementImport } from "@/lib/importOffer";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { createCard, deleteCard, fetchAccounts, fetchInstitutions, updateCard } from "@/lib/data";
+import { createCard, deleteCard, fetchInstitutions, updateCard } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
 import { parseAmount } from "@/lib/format";
 import { resolveInstitutionChoice, type InstitutionChoice } from "@/lib/institutionSelection";
 import { InstitutionPicker } from "@/components/accounts/InstitutionPicker";
-import { cn } from "@/lib/utils";
+import { CardArt } from "@/components/wallet/CardArt";
+import { institutionIdentity } from "@/lib/institutionCatalog";
 import type { CardInput, CreditCard } from "@/types/finnos";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -22,9 +23,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const COLORS = ["#5B3FE4", "#8B5CF6", "#0EA5E9", "#10B981", "#F97316", "#EF4444", "#111827"];
+// The color comes from the card's bank; this is only the fallback before linking.
+const FALLBACK_COLOR = "#5B3FE4";
 
 interface CardDialogProps {
   open: boolean;
@@ -39,16 +40,16 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
   const [name, setName] = useState("");
   const [institution, setInstitution] = useState("");
   const [institutionChoice, setInstitutionChoice] = useState<InstitutionChoice>("new");
-  const [color, setColor] = useState(COLORS[0]);
+  const [color, setColor] = useState(FALLBACK_COLOR);
+  const [isDefault, setIsDefault] = useState(false);
   const [limitRaw, setLimitRaw] = useState("");
   const [closingDay, setClosingDay] = useState("20");
   const [dueDay, setDueDay] = useState("27");
   const [accountId, setAccountId] = useState("none");
   const [active, setActive] = useState(true);
+  const [lastDigits, setLastDigits] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
-  const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, enabled: open, staleTime: 60_000 });
-  const accounts = accountsQuery.data ?? [];
   const institutionsQuery = useQuery({ queryKey: ["institutions"], queryFn: fetchInstitutions, enabled: open });
   const institutions = institutionsQuery.data ?? [];
 
@@ -65,11 +66,15 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
       setDueDay(String(card.due_day));
       setAccountId(card.payment_account_id ?? "none");
       setActive(card.active);
+      setIsDefault(Boolean(card.is_default));
+      setLastDigits(card.last_digits ?? "");
     } else {
+      setLastDigits("");
       setName(initialName ?? "");
       setInstitution("");
       setInstitutionChoice("new");
-      setColor(COLORS[0]);
+      setColor(FALLBACK_COLOR);
+      setIsDefault(false);
       setLimitRaw("");
       setClosingDay("20");
       setDueDay("27");
@@ -120,19 +125,24 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
     const closing = parseInt(closingDay, 10);
     const due = parseInt(dueDay, 10);
     if (!name.trim()) return setFormError("Dê um nome ao cartão.");
+    if (institutionChoice === "new" && institution.trim().length < 2 && !card) return setFormError("Escolha o banco do cartão.");
     if (!limit || limit <= 0) return setFormError("Informe o limite do cartão.");
     if (!closing || closing < 1 || closing > 31) return setFormError("O dia de fechamento deve ficar entre 1 e 31.");
     if (!due || due < 1 || due > 31) return setFormError("O dia de vencimento deve ficar entre 1 e 31.");
+    if (lastDigits && !/^\d{4}$/.test(lastDigits)) return setFormError("O final do cartão tem 4 números.");
     mutation.mutate({
+      last_digits: lastDigits,
       name: name.trim(),
       institution: institution.trim(),
-      institution_id: institutionChoice !== "new" && institutionChoice !== "none" ? institutionChoice : null,
+      institution_id: institutionChoice !== "new" && institutionChoice !== "none" && !institutionChoice.startsWith("catalog:") ? institutionChoice : null,
       color,
       limit,
       closing_day: closing,
       due_day: due,
       payment_account_id: accountId === "none" ? null : accountId,
       active,
+      // Only send the flag when it is turned on or changed, so editing keeps the current default.
+      ...(isDefault || card?.is_default ? { is_default: isDefault } : {}),
     });
   };
 
@@ -154,21 +164,35 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
           }}
           data-testid="card-form"
         >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {/* Live preview: what the card will look like in the Carteira. */}
+          <div className="mx-auto w-full max-w-[300px]" data-testid="card-preview">
+            <CardArt name={name.trim()} institution={institution.trim()} lastDigits={/^\d{4}$/.test(lastDigits) ? lastDigits : null}
+              color={institutions.find((i) => i.id === institutionChoice)?.color
+                ?? (institution.trim() ? institutionIdentity(institution, institutionChoice.startsWith("catalog:") ? institutionChoice.slice(8) : null).color : color)}
+              invoice={card?.current_invoice ?? 0} isDefault={isDefault} />
+          </div>
+          <div className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="card-name">Nome</Label>
+              <Label htmlFor="card-name">Nome do cartão</Label>
               <Input
                 id="card-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Ex.: Nubank Ultravioleta"
+                placeholder="Ex.: Roxinho, Cartão da casa"
                 maxLength={60}
                 data-testid="card-name-input"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="card-last-digits">Final do cartão (opcional)</Label>
+              <Input id="card-last-digits" inputMode="numeric" placeholder="4 últimos números" maxLength={4} value={lastDigits}
+                onChange={(e) => setLastDigits(e.target.value.replace(/\D/g, "").slice(0, 4))} data-testid="card-last-digits-input" />
+              <p className="text-xs text-muted-foreground">Só os 4 últimos, para reconhecer o cartão. Nunca o número inteiro.</p>
+            </div>
             <InstitutionPicker institutions={institutions} choice={institutionChoice} name={institution}
-              onChoice={value => { setInstitutionChoice(value); if (value === "none") setInstitution(""); else if (value !== "new") setInstitution(institutions.find(item => item.id === value)?.name ?? ""); }}
-              onName={setInstitution} label="Instituição emissora" />
+              allowNone={Boolean(card && !card.institution_id)}
+              onChoice={value => { setInstitutionChoice(value); if (value === "none") setInstitution(""); else if (value !== "new" && !value.startsWith("catalog:")) setInstitution(institutions.find(item => item.id === value)?.name ?? ""); }}
+              onName={setInstitution} label="Banco do cartão" />
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -205,44 +229,16 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="card-account">Conta de pagamento</Label>
-            <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger id="card-account" className="w-full" aria-label="Conta de pagamento" data-testid="card-account-select">
-                <SelectValue>
-                  {accountId === "none" ? "Não definida" : (accounts.find((a) => a.id === accountId)?.name ?? "")}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Não definida</SelectItem>
-                {accounts.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <p className="text-xs text-muted-foreground" data-testid="card-pay-note">
+            A conta que paga a fatura é escolhida na hora de pagar.
+          </p>
 
-          <div className="space-y-2">
-            <Label>Cor</Label>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Cor do cartão">
-              {COLORS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setColor(option)}
-                  aria-label={`Usar a cor ${option}`}
-                  aria-pressed={color === option}
-                  className={cn(
-                    "h-8 w-8 rounded-full transition-transform duration-150 hover:scale-110",
-                    color === option ? "ring-2 ring-ring ring-offset-2 ring-offset-background" : undefined,
-                  )}
-                  style={{ backgroundColor: option }}
-                  data-testid={`card-color-${option.replace("#", "")}`}
-                />
-              ))}
-            </div>
+          <div className="flex items-start gap-3 rounded-2xl bg-muted/50 p-3">
+            <Checkbox id="card-default" checked={isDefault} onCheckedChange={(v) => setIsDefault(v === true)} data-testid="card-default-checkbox" />
+            <Label htmlFor="card-default" className="flex flex-col items-start gap-0.5 font-normal">
+              <span className="font-semibold">Cartão padrão</span>
+              <span className="text-xs text-muted-foreground">Vem marcado primeiro quando o gasto é no crédito.</span>
+            </Label>
           </div>
 
           <label className="flex items-center gap-3 text-sm text-foreground">

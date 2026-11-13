@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { defaultAccount } from "@/lib/walletDefaults";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FileUp } from "lucide-react";
@@ -97,7 +98,7 @@ export function StatementImportDialog({ open, onOpenChange, initialTarget }: { o
   };
 
   const runImport = async () => {
-    const accountId = targetAccount?.id ?? targetCard?.payment_account_id ?? accounts[0]?.id;
+    const accountId = targetAccount?.id ?? targetCard?.payment_account_id ?? defaultAccount(accounts)?.id ?? accounts[0]?.id;
     if (!accountId) { toast.error("Cadastre uma conta antes de importar."); return; }
     const total = toImport.length + toMerge.length;
     setImporting({ done: 0, total });

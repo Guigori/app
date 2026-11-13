@@ -77,7 +77,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00`) - Date.parse(`${a}T12:00:00`)) / 86_400_000);
 const amount = (t: Transaction) => t.adjusted_value ?? t.value;
 /** Real spending of a list: expenses that are not an invoice payment (the purchases already count). */
-export const spending = (txs: Transaction[]) => txs.filter((t) => t.type === "despesa" && !t.invoice_payment && !t.invoice_refund);
+export const spending = (txs: Transaction[]) => txs.filter((t) => t.type === "despesa" && !(t.invoice_payment || t.balance_adjustment) && !t.invoice_refund);
 const sum = (txs: Transaction[]) => txs.reduce((s, t) => s + amount(t), 0);
 const merchant = (name: string) => name.trim().toLowerCase().replace(/\s+/g, " ").replace(/\s*\d+\/\d+$/, "");
 const short = (m: string) => cap(shortMonthName(m));
@@ -482,7 +482,7 @@ export const READERS: Record<string, { needs: Need[]; read: (c: Ctx) => Reading 
   "a-revisar": {
     needs: ["tx", "prevTx"],
     read: ({ tx, prevTx, money }) => {
-      const pick = (txs: Transaction[]) => txs.filter((t) => t.type !== "transferencia" && !t.invoice_payment && (!t.category_id || t.capture_unusual));
+      const pick = (txs: Transaction[]) => txs.filter((t) => t.type !== "transferencia" && !(t.invoice_payment || t.balance_adjustment) && (!t.category_id || t.capture_unusual));
       const list = pick(tx).sort((a, b) => b.date.localeCompare(a.date));
       const noCat = list.filter((t) => !t.category_id), unusual = list.filter((t) => t.capture_unusual);
       return {

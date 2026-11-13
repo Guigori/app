@@ -90,5 +90,7 @@ test("local institutions are isolated records and cannot be deleted while used",
     type: "corrente", color: "#070F52", initial_balance: 50, active: true,
   });
   expect(checking.institution_id).toBe(bank.id);
-  expect(() => localCreateInstitution({ name: "banco próprio", color: "#5B35FF" })).toThrow(/já cadastrada/);
+  // The same name again is the same institution, never a duplicate.
+  expect(localCreateInstitution({ name: "banco próprio", color: "#5B35FF" }).id).toBe(bank.id);
+  expect(localListInstitutions().filter(item => item.name === "Banco Próprio")).toHaveLength(1);
 });

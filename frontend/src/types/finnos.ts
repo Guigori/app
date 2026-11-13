@@ -17,16 +17,36 @@ export interface User {
   auth_providers?: string[];
 }
 
+export type InstitutionKind = "banco" | "beneficio" | "outro";
+
 export interface Institution {
   id: string;
   name: string;
+  /** Decided by the institution (catalog color, or a stable one for custom names). */
   color: string;
+  kind?: InstitutionKind;
+  catalog_id?: string | null;
   created_at: string;
 }
 
+/** A catalog entry, or a typed name. Any color sent is ignored by the server. */
 export interface InstitutionInput {
+  name?: string;
+  catalog_id?: string | null;
+  color?: string;
+}
+
+export interface InstitutionCatalogItem {
+  id: string;
   name: string;
   color: string;
+  kind: InstitutionKind;
+}
+
+export interface LegacyLinkResult {
+  linked_accounts: number;
+  linked_cards: number;
+  created_institutions: number;
 }
 
 export interface Account {
@@ -39,6 +59,19 @@ export interface Account {
   color: string;
   initial_balance: number;
   active: boolean;
+  /** Preselected for its kind: bank account, benefit or cash. */
+  is_default?: boolean;
+  /** Cheque especial: how far below zero a confirmed payment/transfer may go. */
+  overdraft_limit?: number | null;
+  /** Last statement date that closed with the FINNOS balance (conferência). */
+  reconciled_until?: string | null;
+  /** Benefit cards (etapa 5): up to 8 benefits, each with its own balance. */
+  wallets?: BenefitWallet[];
+  /** Notify when the balance falls below this (etapa 6). */
+  low_balance_alert?: number | null;
+  /** Benefit cards: warn before a benefit runs out / when a recharge lands. */
+  benefit_runout_alert?: boolean;
+  benefit_recharge_alert?: boolean;
   balance: number;
   total_income: number;
   total_expense: number;
@@ -50,9 +83,43 @@ export interface AccountInput {
   institution: string;
   institution_id?: string | null;
   type: AccountType;
+  /** Ignored when the account has an institution: the color comes from it. */
   color: string;
   initial_balance: number;
   active: boolean;
+  /** Omit to keep the current flag. */
+  is_default?: boolean;
+  /** Omit to keep the current limit; 0 removes it. */
+  overdraft_limit?: number | null;
+  /** Omit to keep the stored benefits. */
+  wallets?: BenefitWalletInput[];
+  /** Omit to keep; 0 turns the low balance alert off. */
+  low_balance_alert?: number | null;
+  benefit_runout_alert?: boolean;
+  benefit_recharge_alert?: boolean;
+}
+
+export interface BenefitWalletInput {
+  id?: string | null;
+  name: string;
+  monthly_amount: number;
+  /** Recharge day, 1–31; 31 falls on the last day of short months. */
+  day: number;
+  allow_negative: boolean;
+  is_default: boolean;
+  initial_balance: number;
+}
+
+export interface BenefitWallet extends BenefitWalletInput {
+  id: string;
+  /** Recharges start in the month the benefit was created. */
+  start?: string | null;
+  balance: number;
+  next_recharge?: string | null;
+  /** What can be spent per day until the next recharge. */
+  daily_allowance: number;
+  /** At the last 30 days' pace, the balance ends before the next recharge on this day. */
+  runs_out_on?: string | null;
 }
 
 export interface AccountDetail {
@@ -156,6 +223,18 @@ export interface Transaction {
   capture_unusual?: boolean;
   recurrence_id?: string | null;
   invoice_payment?: boolean;
+  /** Auditable balance correction (conferência): out of spending and income. */
+  balance_adjustment?: boolean;
+  /** Set on the reversal that undid an invoice payment. */
+  invoice_reversal_of?: string | null;
+  /** Transfer undo: the inverse transfer points to the original and back. */
+  reversal_of?: string | null;
+  reversed_by?: string | null;
+  /** Benefit cards: which benefit paid (and, for a move, which received). */
+  wallet_id?: string | null;
+  to_wallet_id?: string | null;
+  benefit_recharge?: boolean;
+  recharge_competence?: string | null;
   invoice_refund?: boolean;
   version?: number;
   id: string;
@@ -214,6 +293,11 @@ export interface TransactionInput {
   notes: string | null;
   origin?: string | null;
   notify_enabled?: boolean;
+  /** The person confirmed using the cheque especial for this transfer. */
+  allow_overdraft?: boolean;
+  /** Benefit cards: the benefit that pays; the default one when absent. */
+  wallet_id?: string | null;
+  to_wallet_id?: string | null;
 }
 
 export interface CategorySlice {
@@ -495,7 +579,18 @@ export interface CardInput {
   due_day: number;
   payment_account_id: string | null;
   active: boolean;
+  /** Omit to keep the current flag. */
+  is_default?: boolean;
+  /** Last 4 digits for the card art; "" clears; omit to keep. */
+  last_digits?: string;
+  /** Only to identify the card; never drawn on the card art. "" clears. */
+  network?: CardNetwork | "";
+  limit_alert?: boolean;
+  invoice_reminder?: boolean;
+  remind_days?: number;
 }
+
+export type CardNetwork = "visa" | "master" | "elo" | "amex";
 
 export interface CreditCard {
   version?: number;
@@ -510,6 +605,16 @@ export interface CreditCard {
   payment_account_id: string | null;
   payment_account_name: string | null;
   active: boolean;
+  /** The preselected credit card. */
+  is_default?: boolean;
+  last_digits?: string | null;
+  network?: CardNetwork | null;
+  /** Notify at 80% of the limit. */
+  limit_alert?: boolean;
+  /** Remind before the due date (on unless turned off). */
+  invoice_reminder?: boolean;
+  /** Days before the due date; unset = the app default (7). */
+  remind_days?: number | null;
   invoice_paid: boolean;
   current_invoice: number;
   payable_invoice?: number;
@@ -528,7 +633,7 @@ export interface CreditCard {
 
 // --- Notificações (mirror: backend/models/cards.py NotificationItem) ---
 
-export type NotificationKind = "vencimento" | "atrasado" | "fatura" | "captura";
+export type NotificationKind = "vencimento" | "atrasado" | "fatura" | "captura" | "saldo";
 
 export interface NotificationItem {
   id: string;
@@ -621,6 +726,8 @@ export interface InvoiceItem {
   category_name: string | null;
   category_color: string | null;
   installment_label: string | null;
+  /** Set on the "Saldo da fatura anterior" line: the cycle the balance came from. */
+  carry_from?: string | null;
 }
 
 export interface InvoiceAdjustment {
@@ -666,6 +773,13 @@ export interface Invoice {
   paid_amount: number;
   outstanding?: number;
   paid_at: string | null;
+  /** Partial payment of a closed invoice: the rest moved to `carried_to`. */
+  carried_amount?: number;
+  carried_to?: string | null;
+  last_payment_id?: string | null;
+  /** Conferred against the bank's invoice; the minimum comes from it. */
+  reconciled?: boolean;
+  minimum_payment?: number | null;
   items: InvoiceItem[];
   adjustments?: InvoiceAdjustment[];
   adjustment_total?: number;
@@ -678,6 +792,8 @@ export interface PayInvoiceInput {
   account_id: string;
   date: string;
   value: number | null;
+  /** The person confirmed using the account's cheque especial. */
+  allow_overdraft?: boolean;
 }
 
 
@@ -799,3 +915,45 @@ export interface ConfirmAllResult {
   skipped: number;
   failed: { id: string; name: string; detail: string }[];
 }
+
+/** Conferência da conta com o extrato (etapa 3). Money in cents. */
+export type ReconLineState = "matched" | "review" | "open" | "ignored";
+export interface ReconLine {
+  index: number; date: string; description: string; cents: number; direction: "in" | "out";
+  fitid?: string | null; origin_key: string;
+  level: "strong" | "probable" | "value_diff" | "only_statement" | "already" | "linked";
+  tx_id: string | null; reasons: string[]; state: ReconLineState; kept_difference?: boolean;
+  /** Card invoice lines read by the FDI. */
+  operation?: string | null; installment?: { current: number; total: number } | null;
+  confidence?: "high" | "medium" | "low"; evidence?: string | null;
+}
+export interface ReconFinnosItem { tx_id: string; state: "open" | "kept" | "pending" | "deleted"; repeated_of: string | null; name?: string; cents?: number }
+export interface ReconEvent {
+  id: string; seq: number; action: string; target: string; note?: string; created_at: string;
+  undone_by: string | null; undo_of: string | null;
+}
+export interface Reconciliation {
+  /** "card": conferência of one invoice (cycle = closing date). */
+  scope?: "account" | "card"; card_id?: string | null; cycle?: string | null;
+  invoice_fields?: { due_date?: string; total_cents?: number; minimum_payment_cents?: number; card_last_digits?: string };
+  invoice_checks?: { name: string; passed: boolean | null; detail: string }[]; warnings?: string[]; difference_note?: string | null;
+  id: string; account_id: string | null; period_start: string; period_end: string; file_name: string;
+  source: "ofx" | "csv" | "pdf" | "ocr"; status: "pronta" | "concluida";
+  bank_closing_cents: number | null; finnos_closing_cents: number;
+  lines: ReconLine[]; finnos: ReconFinnosItem[]; counts: Record<string, number>; pending: number;
+  history?: ReconEvent[]; created_at: string;
+}
+export interface ReconciliationInput {
+  period_start: string; period_end: string; file_name: string; file_hash: string; source: Reconciliation["source"];
+  bank_closing_balance: number | null;
+  lines: { date: string; description: string; value: number; direction: "in" | "out"; fitid?: string | null }[];
+}
+export interface CardReconciliationInput {
+  cycle: string; file_name: string; file_hash: string; source: Reconciliation["source"];
+  pages?: { page: number; text: string }[];
+  lines?: ReconciliationInput["lines"];
+}
+export interface ReconResolveInput { line?: number; tx_id?: string; action: string; note?: string }
+export interface BalanceAdjustmentInput { target_balance: number; reason: string; date: string; reconciliation_id?: string | null; /** Benefit cards: which benefit. */ wallet_id?: string | null }
+export interface BalanceAdjustment { id: string; type: "receita" | "despesa"; value: number; date: string; previous_balance: number; new_balance: number; difference: number }
+

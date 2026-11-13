@@ -1,12 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
-import { ChartNoAxesCombined, ChevronRight, Pencil, Trash2, Wallet } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { ArrowLeftRight, ChartNoAxesCombined, ChevronRight, CreditCard as CardIcon, FileCheck2, Pencil, Scale, Settings2, Sparkles, Star, Trash2, Wallet } from "lucide-react";
+import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { fetchAccount } from "@/lib/data";
+import { fetchAccount, fetchTransactions, setDefaultAccount } from "@/lib/data";
+import { monthSpendByMethod } from "@/lib/walletSpend";
+import { askAbout } from "@/lib/askAi";
+import { currentMonth } from "@/lib/format";
+import { getApiErrorMessage } from "@/lib/errors";
 import { signedAccountMovement } from "@/lib/accountMovement";
 import { useBalanceHidden } from "@/lib/balance";
 import { formatBRL, formatDate, formatHiddenBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { Account } from "@/types/finnos";
+import type { Account, CreditCard } from "@/types/finnos";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import {
@@ -18,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AdjustBalanceDialog } from "@/components/accounts/AdjustBalanceDialog";
 
 interface AccountDetailDialogProps {
   open: boolean;
@@ -26,19 +33,43 @@ interface AccountDetailDialogProps {
   onEdit: (account: Account) => void;
   onDelete: (account: Account) => void;
   onPaymentMethods?: (account: Account) => void;
+  /** Cards of the Carteira: those of the same bank get "Pagar fatura" and enter the month's spending. */
+  cards?: CreditCard[];
 }
 
-export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDelete, onPaymentMethods }: AccountDetailDialogProps) {
+export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDelete, onPaymentMethods, cards = [] }: AccountDetailDialogProps) {
   const dialogs = useDialogs();
   const { hidden } = useBalanceHidden();
+  const [adjusting, setAdjusting] = useState(false);
   const detailQuery = useQuery({
     queryKey: ["account", account?.id],
     queryFn: () => fetchAccount(account?.id ?? ""),
     enabled: open && !!account,
   });
 
+  const month = currentMonth();
+  const monthQuery = useQuery({
+    queryKey: ["transactions", { month, account_id: account?.id }],
+    queryFn: () => fetchTransactions({ month, account_id: account?.id ?? "" }),
+    enabled: open && !!account,
+  });
+  const queryClient = useQueryClient();
+  const makeDefault = useMutation({
+    mutationFn: (id: string) => setDefaultAccount(id),
+    onSuccess: async () => {
+      toast.success(account?.type === "beneficio" ? "Benefício padrão definido." : "Conta padrão definida.");
+      await queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error, "Não foi possível definir como padrão.")),
+  });
+
   if (!account) return null;
   const detail = detailQuery.data;
+  const isBank = account.type !== "beneficio" && account.type !== "carteira";
+  const bankCards = isBank ? cards.filter((c) => c.active && (c.institution_id ? c.institution_id === account.institution_id : c.institution && c.institution === account.institution)) : [];
+  const payCard = [...bankCards].sort((a, b) => (b.payable_invoice ?? 0) - (a.payable_invoice ?? 0) || b.current_invoice - a.current_invoice)[0];
+  const spend = monthSpendByMethod(account, monthQuery.data ?? [], bankCards, month);
+  const money = (v: number) => (hidden ? formatHiddenBRL() : formatBRL(v));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -85,6 +116,65 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
               </div>
             </div>
 
+            {detail.account.wallets?.length ? (
+              <ul className="space-y-2" data-testid="account-detail-wallets">
+                {detail.account.wallets.map((w) => (
+                  <li key={w.id} className="rounded-xl border p-3" data-testid={`account-wallet-${w.id}`}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-semibold">{w.name}{w.is_default ? <span className="ml-1 text-xs font-normal text-muted-foreground">padrão</span> : null}</span>
+                      <span className="font-heading font-bold tabular-nums">{hidden ? formatHiddenBRL() : formatBRL(w.balance)}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {w.monthly_amount > 0 && w.next_recharge ? `Recarga de ${formatBRL(w.monthly_amount)} em ${formatDate(w.next_recharge)}. ` : ""}
+                      {w.balance > 0 ? `Dá ${formatBRL(w.daily_allowance)} por dia até lá.` : "Sem saldo."}
+                      {w.runs_out_on ? ` No ritmo atual acaba em ${formatDate(w.runs_out_on)}.` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {account.reconciled_until ? (
+              <p className="text-xs text-muted-foreground" data-testid="account-detail-reconciled">Conferida com o extrato até {formatDate(account.reconciled_until)}</p>
+            ) : null}
+            <div className="grid grid-cols-4 gap-2" data-testid="account-detail-shortcuts">
+              <Shortcut label="Transferir" icon={ArrowLeftRight} testId="account-detail-transfer"
+                onClick={() => { onOpenChange(false); dialogs.openTransaction({ type: "transferencia", prefill: { type: "transferencia", account_id: account.id } }); }} />
+              {payCard ? (
+                <Link to={`/cartoes/${encodeURIComponent(payCard.id)}`} onClick={() => onOpenChange(false)} className={shortcutClass} data-testid="account-detail-pay-invoice">
+                  <CardIcon className="h-5 w-5 text-primary" aria-hidden="true" /><span>Pagar fatura</span>
+                </Link>
+              ) : <Shortcut label="Pagar fatura" icon={CardIcon} disabled testId="account-detail-pay-invoice" />}
+              <Link to={`/contas/${encodeURIComponent(account.id)}/conferencia`} onClick={() => onOpenChange(false)} className={shortcutClass} data-testid="account-detail-reconcile">
+                <FileCheck2 className="h-5 w-5 text-primary" aria-hidden="true" /><span>Conferir extrato</span>
+              </Link>
+              <Shortcut label="Configurar" icon={Settings2} testId="account-detail-configure" onClick={() => onEdit(account)} />
+            </div>
+            <Button variant="outline" className="h-11 w-full justify-start rounded-2xl" onClick={() => setAdjusting(true)} data-testid="account-detail-adjust">
+              <Scale className="h-4 w-4" aria-hidden="true" />Corrigir saldo
+            </Button>
+
+            {spend.rows.length ? (
+              <section className="rounded-2xl border border-border p-3" data-testid="account-detail-month-spend">
+                <div className="flex items-baseline justify-between">
+                  <p className="text-sm font-semibold">Gasto do mês por forma de pagamento</p>
+                  <p className="font-heading text-sm font-bold tabular-nums">{money(spend.total)}</p>
+                </div>
+                <ul className="mt-2 space-y-1.5">
+                  {spend.rows.map((row) => (
+                    <li key={row.label} className="text-sm">
+                      <div className="flex justify-between gap-2"><span className="truncate">{row.label}</span><span className="tabular-nums">{money(row.value)}</span></div>
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-primary" style={{ width: `${spend.total ? (row.value / spend.total) * 100 : 0}%` }} /></div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            <button type="button" className="flex items-center gap-1.5 text-sm font-semibold text-primary" data-testid="account-detail-ask"
+              onClick={() => { onOpenChange(false); askAbout(`Me ajude a entender ${account.name}: saldo, gastos do mês e o que vem pela frente.`,
+                { conta: account.name, saldo: detail.account.balance, gasto_mes: spend.total, por_forma: spend.rows }); }}>
+              <Sparkles className="size-4" aria-hidden="true" />Conversar sobre isso
+            </button>
+
             <Link to={`/transacoes?aba=caixa&account_id=${encodeURIComponent(account.id)}`} onClick={() => onOpenChange(false)} className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full justify-between rounded-2xl")} data-testid="account-detail-cashflow">
               <span className="flex items-center gap-2"><ChartNoAxesCombined className="h-4 w-4" aria-hidden="true" />Caixa desta conta</span><ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Link>
@@ -122,6 +212,13 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
         )}
 
         <DialogFooter>
+          {account.is_default ? (
+            <span className="mr-auto inline-flex items-center gap-1.5 text-sm font-semibold text-primary" data-testid="account-detail-default"><Star className="h-4 w-4 fill-current" aria-hidden="true" />Padrão</span>
+          ) : (
+            <Button variant="ghost" className="mr-auto" disabled={makeDefault.isPending} onClick={() => makeDefault.mutate(account.id)} data-testid="account-detail-default-button">
+              <Star className="h-4 w-4" aria-hidden="true" />Tornar padrão
+            </Button>
+          )}
           {onPaymentMethods ? <Button variant="ghost" onClick={() => onPaymentMethods(account)} data-testid="account-detail-payments-button">Formas de pagamento</Button> : null}
           <Button variant="outline" onClick={() => onEdit(account)} data-testid="account-detail-edit-button">
             <Pencil className="h-4 w-4" aria-hidden="true" />
@@ -133,6 +230,18 @@ export function AccountDetailDialog({ open, onOpenChange, account, onEdit, onDel
           </Button>
         </DialogFooter>
       </DialogContent>
+      <AdjustBalanceDialog open={adjusting} onOpenChange={setAdjusting} account={detail?.account ?? account}
+        suggested={detail?.account.balance ?? account.balance} />
     </Dialog>
+  );
+}
+
+const shortcutClass = "flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-2xl border border-border bg-card px-1 text-center text-[11px] font-semibold leading-tight transition-colors hover:bg-muted/60";
+
+function Shortcut({ label, icon: Icon, onClick, disabled, testId }: { label: string; icon: typeof Wallet; onClick?: () => void; disabled?: boolean; testId: string }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={cn(shortcutClass, disabled && "opacity-40")} data-testid={testId}>
+      <Icon className="h-5 w-5 text-primary" aria-hidden="true" /><span>{label}</span>
+    </button>
   );
 }

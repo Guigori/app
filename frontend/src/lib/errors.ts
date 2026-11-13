@@ -6,9 +6,15 @@ export function getApiErrorMessage(
   fallback = "Não foi possível concluir a ação. Tente novamente.",
 ): string {
   if (error instanceof ApiError) {
-    if (error.status === 422) return "Verifique os campos do formulário e tente novamente.";
     const detail = (error.body as { detail?: unknown } | null)?.detail;
+    // Business errors (e.g. funds) carry their own message even on 422.
+    if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+      const message = (detail as { message?: unknown }).message;
+      if (typeof message === "string" && message) return message;
+    }
+    if (error.status === 422) return "Verifique os campos do formulário e tente novamente.";
     if (typeof detail === "string" && detail) return detail;
   }
+  if (error instanceof Error && error.name === "FundsError" && error.message) return error.message;
   return fallback;
 }

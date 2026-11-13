@@ -650,7 +650,9 @@ def test_wallet_02_institution_issuer_and_payment_account_are_distinct(finance):
     bank_a = client.post("/api/institutions", json={"name": "Nubank"}).json()
     bank_b = client.post("/api/institutions", json={"name": "Banco Inter"}).json()
     assert bank_a["id"] != bank_b["id"]
-    assert client.post("/api/institutions", json={"name": "  nubank  "}).status_code == 409
+    # Etapa 1: the same name returns the existing institution instead of a conflict.
+    again = client.post("/api/institutions", json={"name": "  nubank  "})
+    assert again.status_code == 200 and again.json()["id"] == bank_a["id"]
     account_response = client.post("/api/accounts", json={
         "name": "Conta Inter", "institution": "texto arbitrário",
         "institution_id": bank_b["id"], "initial_balance": 100.25

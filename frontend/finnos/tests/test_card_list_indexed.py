@@ -28,6 +28,8 @@ def purchase(identifier, card_id, value):
 def configure(monkeypatch):
     cards_data = [card("one"), card("two")]
     accounts_data = [{"id": "bank", "name": "Conta"}]
+    institutions_data = [{"id": "inst", "name": "Banco", "color": "#820AD1"}]
+    cards_data[1]["institution_id"] = "inst"
     transactions = {
         "one": [purchase("a", "one", "17.23")],
         "two": [purchase("b", "two", "44.10")],
@@ -53,7 +55,7 @@ def configure(monkeypatch):
         def find(self, query):
             assert query["user_id"] == "owner"
             events.append(("read", self.key))
-            return Cursor(cards_data if self.key == "cards" else accounts_data)
+            return Cursor({"cards": cards_data, "accounts": accounts_data, "institutions": institutions_data}[self.key])
 
     async def revision(uid):
         assert uid == "owner"
@@ -65,7 +67,7 @@ def configure(monkeypatch):
         return transactions[card_id]
 
     monkeypatch.setattr(cards, "db", SimpleNamespace(
-        cards=Collection("cards"), accounts=Collection("accounts"),
+        cards=Collection("cards"), accounts=Collection("accounts"), institutions=Collection("institutions"),
     ))
     monkeypatch.setattr(cards, "today_iso", lambda: "2026-10-27")
     monkeypatch.setattr("finnos.lib.account_balances.finance_revision", revision)
@@ -85,8 +87,12 @@ def test_list_returns_independent_invoice_totals_without_global_history(monkeypa
     ]
     assert events == [
         ("read", "cards"), ("read", "accounts"),
-        ("card", "one"), ("card", "two"),
+        ("card", "one"), ("card", "two"), ("read", "institutions"),
     ]
+    # The institution decides the color; without one the stored color stays.
+    assert [x.color for x in result] == ["#5B3FE4", "#820AD1"]
+    # Nobody chose a default: the oldest active card is preselected.
+    assert [x.is_default for x in result] == [True, False]
 
 
 def test_list_refuses_mixed_snapshot_when_history_changes(monkeypatch):

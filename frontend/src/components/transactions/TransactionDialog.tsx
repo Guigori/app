@@ -1,4 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
+import { defaultAccount } from "@/lib/walletDefaults";
+import { methodKey, paymentEffect, paymentMethods } from "@/lib/paymentMethods";
 import { Link } from "react-router-dom";
 import { isLocalMode } from "@/lib/mode";
 import { RecurrenceScopeDialog } from "@/components/transactions/RecurrenceScopeDialog";
@@ -7,6 +9,8 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createTransaction, fetchAccounts, fetchCards, fetchCategories, fetchOrigins, updateTransaction } from "@/lib/data";
 import { getApiErrorMessage } from "@/lib/errors";
+import { fundsIssue } from "@/lib/funds";
+import { benefitFundsIssue } from "@/lib/benefits";
 import { updateQueuedTransaction, flushSyncQueue, queueTransaction, getSyncOperation, discardConflictedOperation } from "@/lib/sync/queue";
 import { formatBRL, parseAmount, todayISO, TX_STATUS_LABEL, TX_TYPE_LABEL } from "@/lib/format";
 import { TransferPreview } from "@/components/transactions/TransferPreview";
@@ -40,9 +44,13 @@ interface TransactionDialogProps {
   syncOperationId?: string;
   syncPayload?: TransactionInput;
   firstAttemptAt?: string;
+  /** New record already filled in (e.g. a statement line from a conferência). */
+  prefill?: Partial<TransactionInput>;
+  /** Called with the saved record (online saves only). */
+  onSaved?: (transaction: Transaction) => void;
 }
 
-export function TransactionDialog({ open, onOpenChange, initialType, initialDate, transaction, syncOperationId, syncPayload }: TransactionDialogProps) {
+export function TransactionDialog({ open, onOpenChange, initialType, initialDate, transaction, syncOperationId, syncPayload, prefill, onSaved }: TransactionDialogProps) {
   const queryClient = useQueryClient();
   const [type, setType] = useState<TxType>("despesa");
   const [name, setName] = useState("");
@@ -51,6 +59,10 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   const [status, setStatus] = useState<TxStatus>("pago");
   const [accountId, setAccountId] = useState("");
   const [toAccountId, setToAccountId] = useState("");
+  // Benefit cards: which benefit pays (empty = the card's default) and, for a move, which receives.
+  const [walletId, setWalletId] = useState("");
+  const [toWalletId, setToWalletId] = useState("");
+  const [benefitPrompt, setBenefitPrompt] = useState<{ message: string; available: number; input: TransactionInput } | null>(null);
   const [cardId, setCardId] = useState("none");
   const [categoryId, setCategoryId] = useState("none");
   const [fixed, setFixed] = useState(false);
@@ -63,6 +75,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   const [origin, setOrigin] = useState("");
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
+  // Transfer beyond the balance: only with cheque especial and an explicit yes.
+  const [overdraftPrompt, setOverdraftPrompt] = useState<{ message: string; input: TransactionInput } | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [recurrenceScopeOpen, setRecurrenceScopeOpen] = useState(false);
 
@@ -82,7 +96,11 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
   const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: fetchCards, enabled: open, staleTime: 60_000 });
   const cards = useMemo(() => (cardsQuery.data ?? []).filter((c) => c.active), [cardsQuery.data]);
   const accounts = useMemo(() => accountsQuery.data ?? [], [accountsQuery.data]);
+  const methods = useMemo(() => paymentMethods(accounts, cards), [accounts, cards]);
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
+  const sourceWallets = accounts.find((a) => a.id === accountId)?.wallets ?? [];
+  const targetWallets = type === "transferencia" ? accounts.find((a) => a.id === toAccountId)?.wallets ?? [] : [];
+  const paysWithBenefit = sourceWallets.length > 0 && !(type === "despesa" && cardId !== "none");
   const syncReviewQuery = useQuery({
     queryKey: ["sync-operation", syncOperationId],
     queryFn: () => getSyncOperation(syncOperationId!),
@@ -105,6 +123,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       setStatus(source.status);
       setAccountId(source.account_id);
       setToAccountId(source.to_account_id ?? "");
+      setWalletId(source.wallet_id ?? "");
+      setToWalletId(source.to_wallet_id ?? "");
       setCardId(source.card_id ?? "none");
       setCategoryId(source.category_id ?? "none");
       setFixed(source.fixed);
@@ -124,6 +144,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       setStatus("pago");
       setAccountId("");
       setToAccountId("");
+      setWalletId("");
+      setToWalletId("");
       setCardId("none");
       setCategoryId("none");
       setFixed(false);
@@ -137,10 +159,10 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     }
   }, [open, transaction, syncPayload, initialType, initialDate]);
 
-  // One less required tap: a new transaction defaults to the first account (still editable).
+  // One less required tap: a new transaction starts on the default account (still editable).
   useEffect(() => {
     if (open && !transaction && !accountId && accounts.length > 0) {
-      setAccountId(accounts[0].id);
+      setAccountId((defaultAccount(accounts) ?? accounts[0]).id);
     }
   }, [open, transaction, accountId, accounts]);
 
@@ -179,6 +201,19 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     },
   });
 
+  // Prefill runs after the reset above, only for a new record.
+  useEffect(() => {
+    if (!open || transaction || syncPayload || !prefill) return;
+    if (prefill.type) setType(prefill.type);
+    if (prefill.name) setName(prefill.name);
+    if (prefill.value) setValueRaw(String(prefill.value));
+    if (prefill.date) setDate(prefill.date);
+    if (prefill.status) setStatus(prefill.status);
+    if (prefill.account_id) setAccountId(prefill.account_id);
+    if (prefill.card_id) setCardId(prefill.card_id);
+    if (prefill.notes) setNotes(prefill.notes);
+  }, [open, prefill, transaction, syncPayload]);
+
   const mutation = useMutation({
     mutationFn: async (input: TransactionInput) => {
       if (syncOperationId) {
@@ -188,7 +223,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       }
       return transaction ? updateTransaction(transaction.id, input, "manual", transaction.version) : createTransaction(input);
     },
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
+      if (saved && onSaved) onSaved(saved);
       if (syncOperationId) {
         const remaining = await getSyncOperation(syncOperationId);
         if (remaining) {
@@ -205,7 +241,19 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       await refreshFinancialViews();
       onOpenChange(false);
     },
-    onError: async (error) => {
+    onError: async (error, input) => {
+      const benefit = benefitFundsIssue(error);
+      if (benefit) {
+        setFormError(null);
+        setBenefitPrompt({ message: benefit.message, available: benefit.available, input });
+        return;
+      }
+      const issue = fundsIssue(error);
+      if (issue?.code === "confirmar_cheque_especial") {
+        setFormError(null);
+        setOverdraftPrompt({ message: issue.message, input });
+        return;
+      }
       if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
         onOpenChange(false);
         toast.info("Salvo neste aparelho", {
@@ -221,6 +269,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
 
   const submit = () => {
     setFormError(null);
+    setOverdraftPrompt(null);
+    setBenefitPrompt(null);
     const value = parseAmount(valueRaw);
     if (lockedSyncAttempt) {
       return setFormError("Operação já enviada. Confira o histórico e resolva o conflito antes de criar outro lançamento.");
@@ -228,8 +278,9 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     if (!name.trim()) return setFormError("Dê um nome à transação.");
     if (!value || value <= 0) return setFormError("Informe um valor maior que zero.");
     if (!accountId) return setFormError("Selecione a conta.");
-    if (type === "transferencia" && (!toAccountId || toAccountId === accountId))
-      return setFormError("Escolha contas diferentes para a transferência.");
+    const moveInsideCard = type === "transferencia" && toAccountId === accountId && walletId && toWalletId && walletId !== toWalletId;
+    if (type === "transferencia" && (!toAccountId || (toAccountId === accountId && !moveInsideCard)))
+      return setFormError(toAccountId === accountId ? "Escolha dois benefícios diferentes." : "Escolha contas diferentes para a transferência.");
     if (installment && installments < 2) return setFormError("O parcelamento precisa de ao menos 2 parcelas.");
     const adjusted = parseAmount(adjustedRaw);
     const input: TransactionInput = {
@@ -252,6 +303,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       notes: notes.trim() || null,
       origin: origin.trim() || null,
       notify_enabled: notifyEnabled,
+      wallet_id: sourceWallets.length && !(type === "despesa" && cardId !== "none") ? walletId || null : null,
+      to_wallet_id: type === "transferencia" && targetWallets.length ? toWalletId || null : null,
     };
 
     if (!navigator.onLine && !syncOperationId) {
@@ -270,6 +323,23 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
 
     mutation.mutate(input);;
   };
+
+  const selectedMethod = methods.find((m) => m.key === methodKey(accountId, cardId === "none" ? null : cardId));
+  // Pay the part the benefit holds from it, and the rest from another benefit or an account.
+  const splitWith = async (prompt: NonNullable<typeof benefitPrompt>, rest: Partial<TransactionInput>) => {
+    const total = prompt.input.adjusted_value ?? prompt.input.value;
+    const first = Math.round(prompt.available * 100) / 100;
+    const second = Math.round((total - first) * 100) / 100;
+    setBenefitPrompt(null);
+    try {
+      if (first > 0) await createTransaction({ ...prompt.input, value: first, adjusted_value: null });
+      mutation.mutate({ ...prompt.input, value: second, adjusted_value: null, ...rest });
+    } catch (error) {
+      setFormError(getApiErrorMessage(error));
+    }
+  };
+  const methodEffect = paymentEffect(selectedMethod, parseAmount(valueRaw) ?? 0, date, accounts, cards,
+    transaction ? { accountId: transaction.account_id, cardId: transaction.card_id ?? null, value: transaction.value } : null);
 
   return (
     <>
@@ -415,6 +485,26 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
             ) : null}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {type === "despesa" ? (
+                <div className="space-y-2">
+                  <Label htmlFor="tx-method">Forma de pagamento</Label>
+                  <Select value={methodKey(accountId, cardId === "none" ? null : cardId)} onValueChange={(key) => {
+                    const method = methods.find((m) => m.key === key);
+                    if (!method) return;
+                    setAccountId(method.accountId);
+                    setCardId(method.cardId ?? "none");
+                  }}>
+                    <SelectTrigger id="tx-method" className="w-full" aria-label="Forma de pagamento" data-testid="tx-method-select">
+                      <SelectValue>{selectedMethod?.label ?? "Selecione"}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {methods.map((m) => (
+                        <SelectItem key={m.key} value={m.key} data-testid={`tx-method-${m.key.replace(":", "-")}`}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
               <div className="space-y-2">
                 <Label htmlFor="tx-account">{type === "transferencia" ? "Conta de origem" : "Conta"}</Label>
                 <Select value={accountId} onValueChange={setAccountId}>
@@ -432,6 +522,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
                   </SelectContent>
                 </Select>
               </div>
+              )}
 
               {type === "transferencia" ? (
                 <div className="space-y-2">
@@ -444,7 +535,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
                     </SelectTrigger>
                     <SelectContent>
                       {accounts
-                        .filter((a) => a.id !== accountId)
+                        .filter((a) => a.id !== accountId || (a.wallets?.length ?? 0) > 1)
                         .map((a) => (
                           <SelectItem key={a.id} value={a.id}>
                             {a.name}
@@ -472,28 +563,8 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
               )}
             </div>
 
-            {type === "despesa" && cards.length > 0 ? (
-              <div className="space-y-2">
-                <Label htmlFor="tx-card">Cartão usado (opcional)</Label>
-                <Select value={cardId} onValueChange={setCardId}>
-                  <SelectTrigger id="tx-card" className="w-full" aria-label="Cartão usado" data-testid="tx-card-select">
-                    <SelectValue>
-                      {cardId === "none" ? "Sem cartão" : (cards.find((c) => c.id === cardId)?.name ?? "")}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sem cartão</SelectItem>
-                    {cards.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Marcar o cartão soma a despesa à fatura dele — a conta acima continua sendo a de pagamento.
-                </p>
-              </div>
+            {type === "despesa" && methodEffect ? (
+              <p className="text-xs text-muted-foreground" data-testid="tx-method-effect">{methodEffect}</p>
             ) : null}
 
             {type !== "transferencia" ? (
@@ -628,6 +699,15 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
               <datalist id="tx-origin-options">{(origins.data ?? []).map((o) => <option key={o.label} value={o.label} />)}</datalist>
             </div>
 
+            {paysWithBenefit ? (
+              <WalletPicker label={type === "transferencia" ? "Benefício de origem" : type === "receita" ? "Benefício que recebe" : "Benefício que paga"}
+                wallets={sourceWallets} value={walletId} onChange={setWalletId} testId="tx-wallet" />
+            ) : null}
+            {targetWallets.length ? (
+              <WalletPicker label="Benefício de destino" wallets={targetWallets.filter((w) => toAccountId !== accountId || w.id !== (walletId || sourceWallets.find((x) => x.is_default)?.id))}
+                value={toWalletId} onChange={setToWalletId} testId="tx-to-wallet" />
+            ) : null}
+
             <div className="space-y-2">
               <Label htmlFor="tx-notes">Observação</Label>
               <Textarea
@@ -640,6 +720,36 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
               />
             </div>
 
+            {benefitPrompt ? (
+              <div className="space-y-2 rounded-xl bg-amber-500/10 px-3 py-2 text-sm" role="alert" data-testid="benefit-split-prompt">
+                <p>{benefitPrompt.message}</p>
+                {benefitPrompt.input.installment ? null : (
+                  <div className="flex flex-wrap gap-2">
+                    {sourceWallets.filter((w) => w.id !== (benefitPrompt.input.wallet_id ?? sourceWallets.find((x) => x.is_default)?.id) && w.balance > 0).map((w) => (
+                      <Button key={w.id} type="button" size="sm" variant="outline" disabled={mutation.isPending}
+                        data-testid={`benefit-split-wallet-${w.id}`} onClick={() => void splitWith(benefitPrompt, { wallet_id: w.id })}>
+                        {formatBRL(benefitPrompt.available)} aqui + resto em {w.name}
+                      </Button>
+                    ))}
+                    {accounts.filter((a) => a.type !== "beneficio" && a.active).map((a) => (
+                      <Button key={a.id} type="button" size="sm" variant="outline" disabled={mutation.isPending}
+                        data-testid={`benefit-split-account-${a.id}`} onClick={() => void splitWith(benefitPrompt, { account_id: a.id, wallet_id: null, card_id: null })}>
+                        {formatBRL(benefitPrompt.available)} aqui + resto em {a.name}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
+            {overdraftPrompt ? (
+              <div className="space-y-2 rounded-xl bg-amber-500/10 px-3 py-2 text-sm" role="alert" data-testid="transfer-overdraft-prompt">
+                <p>{overdraftPrompt.message}</p>
+                <Button type="button" size="sm" disabled={mutation.isPending} data-testid="transfer-overdraft-confirm"
+                  onClick={() => mutation.mutate({ ...overdraftPrompt.input, allow_overdraft: true })}>
+                  Usar cheque especial e transferir
+                </Button>
+              </div>
+            ) : null}
             {formError ? (
               <p role="alert" className="text-sm font-medium text-destructive" data-testid="tx-form-error">
                 {formError}
@@ -693,5 +803,27 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       onConfirm={() => discardMutation.mutate()}
     />
     </>
+  );
+}
+
+
+function WalletPicker({ label, wallets, value, onChange, testId }: {
+  label: string; wallets: NonNullable<import("@/types/finnos").Account["wallets"]>; value: string;
+  onChange: (id: string) => void; testId: string;
+}) {
+  const chosen = value || wallets.find((w) => w.is_default)?.id || wallets[0]?.id;
+  return (
+    <div className="space-y-2" data-testid={testId}>
+      <Label>{label}</Label>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={label}>
+        {wallets.map((w) => (
+          <button key={w.id} type="button" role="radio" aria-checked={chosen === w.id} onClick={() => onChange(w.id)}
+            data-testid={`${testId}-${w.id}`}
+            className={`rounded-full border px-3 py-1.5 text-left text-sm ${chosen === w.id ? "border-primary bg-primary/10 font-semibold" : ""}`}>
+            {w.name} <span className="text-xs text-muted-foreground">{formatBRL(w.balance)}</span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

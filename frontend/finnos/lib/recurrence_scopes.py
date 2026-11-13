@@ -27,7 +27,7 @@ def plan_recurrence_edit(
     except (ValueError, TypeError, KeyError) as exc:
         raise ValueError("Data de recorrência inválida.") from exc
     if (day < current or day < origin or not source.get("fixed")
-            or source.get("installment") or source.get("invoice_payment")
+            or source.get("installment") or (source.get("invoice_payment") or source.get("balance_adjustment"))
             or source.get("type") == "transferencia"
             or source.get("recurrence", "mensal") != "mensal"):
         raise ValueError("Somente uma série mensal futura pode ser alterada.")

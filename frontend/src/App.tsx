@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { AppErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { lazyRetry } from "@/lib/lazyRetry";
+import { walletV2Enabled } from "@/lib/walletV2";
 import { categoryFlowPath } from "@/lib/categoryLinks";
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
@@ -33,6 +34,12 @@ import { AppShell } from "@/components/layout/AppShell";
 const DashboardEntry = lazyRetry(() => import("@/pages/DashboardEntry"));
 const Transactions = lazyRetry(() => import("@/pages/Transactions"));
 const Accounts = lazyRetry(() => import("@/pages/Accounts"));
+const Wallet = lazyRetry(() => import("@/pages/Wallet"));
+const WalletBank = lazyRetry(() => import("@/pages/WalletBank"));
+const WalletAccountConfig = lazyRetry(() => import("@/pages/WalletAccountConfig"));
+const WalletCardConfig = lazyRetry(() => import("@/pages/WalletCardConfig"));
+const WalletBenefit = lazyRetry(() => import("@/pages/WalletBenefit"));
+const WalletBenefitConfig = lazyRetry(() => import("@/pages/WalletBenefitConfig"));
 const Categories = lazyRetry(() => import("@/pages/Categories"));
 const Settings = lazyRetry(() => import("@/pages/Settings"));
 const SettingsIntegrations = lazyRetry(() => import("@/pages/SettingsIntegrations"));
@@ -42,6 +49,7 @@ const BudgetSettings = lazyRetry(() => import("@/pages/BudgetSettings"));
 const FinanceHistory = lazyRetry(() => import("@/pages/FinanceHistory"));
 const Subscriptions = lazyRetry(() => import("@/pages/Subscriptions"));
 const CardInvoice = lazyRetry(() => import("@/pages/CardInvoice"));
+const ReconciliationPage = lazyRetry(() => import("@/pages/Reconciliation"));
 const Radar = lazyRetry(() => import("@/pages/Radar"));
 const RadarDetail = lazyRetry(() => import("@/pages/RadarDetail"));
 const Onboarding = lazyRetry(() => import("@/pages/Onboarding"));
@@ -99,7 +107,7 @@ export default function App() {
             <Route path="/validacao-preview" element={<PreviewValidation />} />
             <Route path="/registro-inteligente" element={<SmartRegister />} />
             <Route path="/transacoes" element={<Transactions />} />
-            <Route path="/contas" element={<Accounts />} />
+            <Route path="/contas" element={walletV2Enabled() ? <Wallet /> : <Accounts />} />
             <Route path="/categorias" element={<Categories />} />
             <Route path="/categorias/:categoryId" element={<CategoryRedirect />} />
             <Route path="/configuracoes" element={<SettingsHub />} />
@@ -109,6 +117,13 @@ export default function App() {
             <Route path="/configuracoes/graficos" element={<ChartSettings />} />
             <Route path="/cartoes" element={<Navigate to="/contas?aba=cartoes" replace />} />
             <Route path="/cartoes/:cardId" element={<CardInvoice />} />
+            <Route path="/cartoes/:cardId/configurar" element={<WalletCardConfig />} />
+            <Route path="/contas/:accountId/configurar" element={<WalletAccountConfig />} />
+            <Route path="/contas/beneficio/:accountId" element={<WalletBenefit />} />
+            <Route path="/contas/beneficio/:accountId/configurar" element={<WalletBenefitConfig />} />
+            <Route path="/contas/banco/:bankKey" element={walletV2Enabled() ? <WalletBank /> : <Navigate to="/contas" replace />} />
+            <Route path="/contas/:accountId/conferencia" element={<ReconciliationPage />} />
+            <Route path="/cartoes/:cardId/conferencia" element={<ReconciliationPage />} />
             <Route path="/orcamento" element={<Budget />} />
             <Route path="/orcamento/configuracoes" element={<BudgetSettings />} />
             <Route path="/historico" element={<FinanceHistory />} />

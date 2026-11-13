@@ -25,6 +25,7 @@ from finnos.routers import (
     backup,
     shortcuts,
     pending_captures,
+    reconciliations,
 )
 
 
@@ -56,6 +57,7 @@ def mount(app, firebase_app, verified_claims, same_origin):
         backup,
         shortcuts,
         pending_captures,
+        reconciliations,
     ]:
         router.include_router(module.router)
     app.include_router(router)

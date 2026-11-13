@@ -12,6 +12,10 @@ from finnos.lib.account_balances import finance_revision, stream_account_balance
 from finnos.models.finnos import AccountDetailOut, AccountIn, AccountOut
 from finnos.routers.auth import require_user
 from finnos.routers.transactions import _ref_maps, enrich_transaction
+from finnos.lib.institution_links import resolve_institution
+from finnos.lib.wallet_defaults import effective_defaults
+from finnos.lib import benefits
+from finnos.models.finnos import BenefitWalletOut
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -25,20 +29,34 @@ async def _enriched_accounts(user_id: str) -> list[AccountOut]:
         await db.accounts.find({"user_id": user_id}).sort("created_at", 1).to_list(500)
     )
     ledger = await stream_account_balances(user_id, accounts, today, revision)
+    institutions = {
+        i["id"]: i for i in await db.institutions.find({"user_id": user_id}).to_list(500)
+    }
+    defaults = effective_defaults("accounts", accounts)
+    wallet_views = {a["id"]: await _wallet_views(user_id, a, today) for a in accounts if a.get("wallets")}
     out = []
     for a in accounts:
+        institution = institutions.get(a.get("institution_id") or "")
         balance, total_income, total_expense = ledger.result(a["id"])
         out.append(
             AccountOut(
                 version=a.get("version", 1),
                 id=a["id"],
                 name=a["name"],
-                institution=a.get("institution", ""),
+                institution=(institution or {}).get("name") or a.get("institution", ""),
                 institution_id=a.get("institution_id"),
                 type=a.get("type", "corrente"),
-                color=a.get("color", "#070F52"),
+                # The institution decides the color; old documents keep theirs until linked.
+                color=(institution or {}).get("color") or a.get("color", "#070F52"),
                 initial_balance=D(a.get("initial_balance") or D("0.0")),
                 active=a.get("active", True),
+                is_default=a["id"] in defaults,
+                overdraft_limit=a.get("overdraft_limit"),
+                low_balance_alert=a.get("low_balance_alert"),
+                benefit_runout_alert=bool(a.get("benefit_runout_alert")),
+                benefit_recharge_alert=bool(a.get("benefit_recharge_alert")),
+                reconciled_until=a.get("reconciled_until"),
+                wallets=wallet_views.get(a["id"], []),
                 balance=balance,
                 total_income=total_income,
                 total_expense=total_expense,
@@ -48,11 +66,62 @@ async def _enriched_accounts(user_id: str) -> list[AccountOut]:
     return out
 
 
+async def _benefit_movements(user_id: str, account_id: str) -> list[dict]:
+    found: dict[str, dict] = {}
+    for field in ("account_id", "to_account_id"):
+        for doc in await db.transactions.find({"user_id": user_id, field: account_id}).to_list(20000):
+            found[doc["id"]] = doc
+    return list(found.values())
+
+
+async def _wallet_views(user_id: str, account: dict, today: str) -> list[BenefitWalletOut]:
+    from datetime import date
+
+    movements = await _benefit_movements(user_id, account["id"])
+    balances = benefits.wallet_balances(account, movements, today)
+    views = []
+    for wallet in account["wallets"]:
+        pace = benefits.pace(wallet, balances[wallet["id"]], movements, account, date.fromisoformat(today))
+        views.append(BenefitWalletOut(**{k: wallet.get(k) for k in (
+            "id", "name", "monthly_amount", "day", "allow_negative", "is_default", "start", "initial_balance")},
+            balance=D(balances[wallet["id"]]) / 100, **pace))
+    return views
+
+
+async def _with_wallets(user_id: str, payload: AccountIn, data: dict, existing: dict | None) -> dict:
+    """Benefit wallets are validated here; the account opening balance is their sum."""
+    if payload.wallets is None:
+        data.pop("wallets", None)
+        return data
+    if payload.type != "beneficio" and payload.wallets:
+        raise HTTPException(422, "Só cartão de benefício tem sub-benefícios.")
+    in_use: set[str] = set()
+    if existing:
+        account = {**existing, "wallets": existing.get("wallets") or []}
+        for tx in await _benefit_movements(user_id, existing["id"]):
+            in_use.update(filter(None, (tx.get("wallet_id"), tx.get("to_wallet_id"))))
+            if not tx.get("wallet_id") and account["wallets"]:
+                in_use.add(benefits.default_wallet_id(account))
+    wallets = benefits.normalize_wallets(
+        [w.model_dump() for w in payload.wallets], (existing or {}).get("wallets"), today=today_iso(), in_use=in_use)
+    data["wallets"] = wallets
+    if wallets:
+        data["initial_balance"] = quantize_brl(sum((D(w["initial_balance"]) for w in wallets), D(0)))
+    return data
+
+
 async def _one_enriched(user_id: str, account_id: str) -> AccountOut | None:
     for account in await _enriched_accounts(user_id):
         if account.id == account_id:
             return account
     return None
+
+
+def _payload(payload: AccountIn) -> dict:
+    """The stored fields; an absent default flag leaves the current one untouched."""
+    # Absent optional fields (older clients) keep what is stored; 0 clears the overdraft limit.
+    skip = {name for name in ("is_default", "overdraft_limit", "low_balance_alert", "benefit_runout_alert", "benefit_recharge_alert", "wallets") if getattr(payload, name) is None}
+    return payload.model_dump(exclude=skip)
 
 
 @router.get("", response_model=List[AccountOut])
@@ -89,10 +158,12 @@ async def create_account(
     payload: AccountIn, user: dict = Depends(require_user),
     x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80)
 ) -> AccountOut:
+    data = await resolve_institution(user["id"], "accounts", _payload(payload))
+    data = await _with_wallets(user["id"], payload, data, None)
     doc = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
-        **payload.model_dump(),
+        **data,
         **({"operation_id": x_finnos_operation_id} if x_finnos_operation_id else {}),
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
@@ -110,11 +181,42 @@ async def update_account(
     x_finnos_operation_id: str | None = Header(default=None, min_length=1, max_length=80),
     x_finnos_base_version: int | None = Header(default=None, ge=1)
 ) -> AccountOut:
+    existing = await db.accounts.find_one({"id": account_id, "user_id": user["id"]})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Conta não encontrada.")
+    data = await resolve_institution(user["id"], "accounts", _payload(payload))
+    data = await _with_wallets(user["id"], payload, data, existing)
     result = await db.accounts.update_one(
         {"id": account_id, "user_id": user["id"],
          "_operation_id": x_finnos_operation_id,
          "_expected_version": x_finnos_base_version},
-        {"$set": {**payload.model_dump(), "updated_at": datetime.now(timezone.utc)}},
+        {"$set": {**data, "updated_at": datetime.now(timezone.utc)}},
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Conta não encontrada.")
+    account = await _one_enriched(user["id"], account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Conta não encontrada.")
+    return account
+
+
+@router.post("/benefits/recharge")
+async def recharge_benefits(user: dict = Depends(require_user)) -> dict:
+    """Credit each benefit's monthly amount on its day, once per month (idempotent)."""
+    from starlette.concurrency import run_in_threadpool
+
+    created = await run_in_threadpool(benefits.run_recharges, user["id"])
+    return {"created": [{"id": d["id"], "account_id": d["account_id"], "wallet_id": d["wallet_id"],
+                         "value": float(d["value"]), "date": d["date"], "competence": d["recharge_competence"]}
+                        for d in created]}
+
+
+@router.post("/{account_id}/default", response_model=AccountOut)
+async def make_default_account(account_id: str, user: dict = Depends(require_user)) -> AccountOut:
+    """Make this the preselected account of its kind; the previous one is unset atomically."""
+    result = await db.accounts.update_one(
+        {"id": account_id, "user_id": user["id"]},
+        {"$set": {"is_default": True, "updated_at": datetime.now(timezone.utc)}},
     )
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="Conta não encontrada.")

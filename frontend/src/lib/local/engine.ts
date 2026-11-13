@@ -1,8 +1,16 @@
 // Local-mode data engine: the same business rules as backend/lib/stats.py, run in
 // the browser. Keep the two in sync — a rule change belongs in both places.
 
+import { checkFunds } from "@/lib/funds";
+import { checkWalletFunds, defaultWalletId, dueRecharges, normalizeWallets, pace as walletPace, rechargeId, walletBalances, type StoredWallet } from "@/lib/benefits";
+import { matchLines, originKey, type MatchLine } from "@/lib/statementMatching";
+import { parseFinancialFile } from "@/lib/importFinancial";
+import { statementLinesToCsv } from "@/lib/pdfStatement";
+import { institutionIdentity } from "@/lib/institutionCatalog";
+import { accountScope, effectiveDefaults } from "@/lib/walletDefaults";
+import { institutionKey } from "@/lib/institutionGroups";
 import { addMonth, currentMonth, todayISO, toLocalISO } from "@/lib/format";
-import { newId, readDb, writeDb, freshDb, wipeDb, type LocalCard, type LocalDb } from "@/lib/local/store";
+import { newId, readDb, writeDb, freshDb, wipeDb, type LocalCard, type LocalDb, type LocalPaidCycle } from "@/lib/local/store";
 import type {
   Account,
   AccountDetail,
@@ -43,6 +51,7 @@ import type {
   Transaction,
   TransactionInput,
   Trends,
+  Reconciliation, ReconciliationInput, ReconResolveInput, ReconEvent, BalanceAdjustment, BalanceAdjustmentInput, CardReconciliationInput,
 } from "@/types/finnos";
 
 import { spendingPace } from "@/lib/budgetPace";
@@ -158,7 +167,7 @@ function monthBounds(month: string): [string, string] {
 
 /** Positive amount the transaction contributes to `month`'s income/expense stats. */
 function monthPortion(tx: Transaction, month: string): number | null {
-  if (tx.invoice_payment || tx.invoice_refund || tx.type === "transferencia" || tx.status !== "pago") return null;
+  if ((tx.invoice_payment || tx.balance_adjustment) || tx.invoice_refund || tx.type === "transferencia" || tx.status !== "pago") return null;
   if (tx.installment) {
     const n = tx.total_installments ?? 1;
     const offset = monthsBetween(tx.date.slice(0, 7), month);
@@ -180,9 +189,112 @@ function balanceEffects(tx: Transaction, today: string): [string, number][] {
   }
   if (tx.type === "receita") return [[tx.account_id, round2(v)]];
   if (tx.type === "despesa") return [[tx.account_id, round2(-v)]];
+  if (tx.to_account_id === tx.account_id) return []; // between two benefits of the same card
   const effects: [string, number][] = [[tx.account_id, round2(-v)]];
   if (tx.to_account_id && tx.to_account_id !== tx.account_id) effects.push([tx.to_account_id, round2(v)]);
   return effects;
+}
+
+function accountBalance(db: LocalDb, accountId: string, excludeId?: string): number {
+  const today = todayISO();
+  const account = db.accounts.find(a => a.id === accountId);
+  let total = account?.initial_balance ?? 0;
+  for (const tx of db.transactions) {
+    if (tx.id === excludeId) continue;
+    for (const [id, amount] of balanceEffects(tx, today)) if (id === accountId) total += amount;
+  }
+  return round2(total);
+}
+
+function assertNotReversed(tx: Transaction): void {
+  if (tx.reversed_by || tx.reversal_of) throw new Error("Transferência desfeita fica no histórico como está; não pode ser editada nem excluída.");
+}
+
+const TRANSFER_KEYS = ["value", "account_id", "to_account_id", "status", "date", "type"] as const;
+
+/** Same rule as the server: a paid transfer may not overdraw the source. */
+function assertTransferFunds(db: LocalDb, tx: Transaction, allowOverdraft: boolean, original?: Transaction): void {
+  if (tx.type !== "transferencia" || tx.status !== "pago" || tx.date > todayISO()) return;
+  if (original && TRANSFER_KEYS.every(key => original[key] === tx[key])) return;
+  const account = db.accounts.find(a => a.id === tx.account_id);
+  if (!account) return;
+  checkFunds(accountBalance(db, account.id, original?.id), tx.value, account, allowOverdraft);
+}
+
+const WALLET_KEYS = ["value", "account_id", "wallet_id", "to_account_id", "to_wallet_id", "status", "date", "type", "installment", "total_installments"] as const;
+
+const storedWallets = (account?: Account) => (account?.wallets ?? []) as unknown as StoredWallet[];
+
+/** Benefit cards (etapa 5): same rule as lib/db._check_benefit_wallet. */
+function assertBenefitWallet(db: LocalDb, tx: Transaction, original?: Transaction): void {
+  if (tx.card_id) { tx.wallet_id = null; tx.to_wallet_id = null; return; }
+  const source = db.accounts.find((a) => a.id === tx.account_id);
+  const target = tx.to_account_id ? db.accounts.find((a) => a.id === tx.to_account_id) : undefined;
+  for (const [account, field, applies] of [[source, "wallet_id", true], [target, "to_wallet_id", tx.type === "transferencia"]] as const) {
+    const ids = new Set(storedWallets(account).map((w) => w.id));
+    if (tx[field] && !ids.has(tx[field]!)) throw new Error("Esse benefício não pertence ao cartão escolhido.");
+    if (ids.size && !tx[field] && applies) tx[field] = defaultWalletId({ wallets: storedWallets(account) });
+  }
+  if (!source || !storedWallets(source).length || tx.status !== "pago" || tx.date > todayISO()) return;
+  if ((tx.type !== "despesa" && tx.type !== "transferencia") || tx.benefit_recharge) return;
+  if (original && WALLET_KEYS.every((k) => original[k] === tx[k])) return;
+  const wallet = storedWallets(source).find((w) => w.id === tx.wallet_id)!;
+  const balances = walletBalances({ id: source.id, wallets: storedWallets(source) }, db.transactions, todayISO(), balanceEffects, original?.id);
+  const spent = -balanceEffects({ ...tx, to_account_id: null }, todayISO()).reduce((sum, [, amount]) => sum + amount, 0);
+  checkWalletFunds(balances.get(wallet.id) ?? 0, round2(spent), wallet);
+}
+
+function walletViews(db: LocalDb, account: Account) {
+  const wallets = storedWallets(account);
+  if (!wallets.length) return undefined;
+  const today = todayISO();
+  const balances = walletBalances({ id: account.id, wallets }, db.transactions, today, balanceEffects);
+  const fallback = defaultWalletId({ wallets });
+  return wallets.map((w) => ({ ...w, balance: (balances.get(w.id) ?? 0) / 100,
+    ...walletPace(w, balances.get(w.id) ?? 0, db.transactions, account.id, fallback, today) }));
+}
+
+/** Benefit cards: credit each monthly amount on its day, once per benefit and month. */
+export function localRechargeBenefits(today = todayISO()): Transaction[] {
+  const db = readDb();
+  const existing = new Set(db.transactions.map((t) => t.id));
+  const created: Transaction[] = [];
+  for (const account of db.accounts) {
+    if (account.type !== "beneficio" || account.active === false) continue;
+    for (const { wallet, competence, date } of dueRecharges({ wallets: storedWallets(account) }, today)) {
+      const id = rechargeId(account.id, wallet.id, competence);
+      if (existing.has(id)) continue;
+      const tx: Transaction = {
+        id, name: `Recarga ${wallet.name}`, value: wallet.monthly_amount, type: "receita", status: "pago", date,
+        account_id: account.id, account_name: "", card_id: null, card_name: null, to_account_id: null, to_account_name: null,
+        category_id: null, category_name: null, category_color: null, category_icon: null, fixed: false, recurrence: null,
+        installment: false, total_installments: null, current_installment: null, installment_value: null, adjusted_value: null,
+        attachment: null, notes: `Recarga de ${competence.slice(5)}/${competence.slice(0, 4)} do benefício ${wallet.name}.`,
+        wallet_id: wallet.id, benefit_recharge: true, recharge_competence: competence, created_at: new Date().toISOString(),
+      };
+      existing.add(id);
+      db.transactions.push(tx);
+      localAudit(db, "transactions", "created", null, tx);
+      created.push(tx);
+    }
+  }
+  if (created.length) writeDb(db);
+  return created;
+}
+
+function withWallets(db: LocalDb, input: AccountInput, existing?: Account): Partial<Account> {
+  if (input.wallets === undefined) return {};
+  if (input.type !== "beneficio" && input.wallets.length) throw new Error("Só cartão de benefício tem sub-benefícios.");
+  const inUse = new Set<string>();
+  if (existing) {
+    const fallback = defaultWalletId({ wallets: storedWallets(existing) });
+    for (const t of db.transactions) {
+      if (t.account_id !== existing.id && t.to_account_id !== existing.id) continue;
+      for (const id of [t.wallet_id ?? fallback, t.to_wallet_id]) if (id) inUse.add(id);
+    }
+  }
+  const wallets = normalizeWallets(input.wallets, storedWallets(existing), todayISO(), inUse, newId);
+  return { wallets: wallets as unknown as Account["wallets"], ...(wallets.length ? { initial_balance: round2(wallets.reduce((s, w) => s + w.initial_balance, 0)) } : {}) };
 }
 
 function enrich(db: LocalDb, tx: Transaction): Transaction {
@@ -211,8 +323,15 @@ function enrichedAccounts(db: LocalDb): Account[] {
       else if (tx.type === "despesa") expense.set(accId, (expense.get(accId) ?? 0) - amount);
     }
   }
+  const institutions = new Map(db.institutions.map((i) => [i.id, i]));
+  const defaults = effectiveDefaults(db.accounts, (a) => accountScope(a.type));
   return db.accounts.map((a) => ({
     ...a,
+    // The institution decides the name and color shown.
+    institution: institutions.get(a.institution_id ?? "")?.name ?? a.institution,
+    color: institutions.get(a.institution_id ?? "")?.color ?? a.color,
+    is_default: defaults.has(a.id),
+    wallets: walletViews(db, a),
     balance: round2(balance.get(a.id) ?? 0),
     total_income: round2(Math.max(income.get(a.id) ?? 0, 0)),
     total_expense: round2(Math.max(expense.get(a.id) ?? 0, 0)),
@@ -233,14 +352,69 @@ export function localListInstitutions() {
 
 export function localCreateInstitution(input: import("@/types/finnos").InstitutionInput) {
   const db = readDb();
-  const name = input.name.trim().replace(/\s+/g, " ");
-  if (name.length < 2 || db.institutions.some(inst => inst.name.trim().toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR"))) {
-    throw new Error("Instituição inválida ou já cadastrada.");
-  }
-  const institution = { id: newId(), name, color: input.color, created_at: new Date().toISOString() };
+  const identity = institutionIdentity(input.name ?? "", input.catalog_id);
+  if (identity.name.length < 2) throw new Error("Informe o nome da instituição.");
+  // The same name is already registered: hand it back instead of a duplicate.
+  const existing = db.institutions.find((inst) => institutionKey(inst.name) === institutionKey(identity.name));
+  if (existing) return existing;
+  const institution = { id: newId(), ...identity, created_at: new Date().toISOString() };
   db.institutions.push(institution);
   writeDb(db);
   return institution;
+}
+
+/** Fill institution_id from a typed bank name (cash has no institution). */
+function localResolveInstitution<T extends { institution: string; institution_id?: string | null; type?: string }>(input: T, isCard: boolean): T {
+  if (input.institution_id || (!isCard && input.type === "carteira")) return input;
+  const name = (input.institution ?? "").trim().replace(/\s+/g, " ");
+  if (name.length < 2) return input;
+  const institution = localCreateInstitution({ name });
+  return { ...input, institution: institution.name, institution_id: institution.id };
+}
+
+/** Exactly one default per kind; the previous one loses the flag. */
+function applyDefault<T extends { id: string; is_default?: boolean }>(items: T[], id: string, sameScope: (item: T) => boolean): T[] {
+  return items.map((item) => (item.id === id ? { ...item, is_default: true } : sameScope(item) ? { ...item, is_default: false } : item));
+}
+
+export function localSetDefaultAccount(id: string): Account {
+  const db = readDb();
+  const target = db.accounts.find((a) => a.id === id);
+  if (!target) throw new Error("Conta não encontrada.");
+  db.accounts = applyDefault(db.accounts, id, (a) => accountScope(a.type) === accountScope(target.type));
+  writeDb(db);
+  return enrichedAccounts(db).find((a) => a.id === id)!;
+}
+
+export function localSetDefaultCard(id: string): CreditCard {
+  const db = readDb();
+  if (!db.cards.some((c) => c.id === id)) throw new Error("Cartão não encontrado.");
+  db.cards = applyDefault(db.cards, id, () => true);
+  writeDb(db);
+  return localListCards().find((c) => c.id === id)!;
+}
+
+/** Link accounts and cards that only carry the bank name as text. Idempotent. */
+export function localLinkLegacyInstitutions() {
+  const before = readDb().institutions.length;
+  let linked_accounts = 0, linked_cards = 0;
+  for (const account of readDb().accounts) {
+    if (account.institution_id || account.type === "carteira" || (account.institution ?? "").trim().length < 2) continue;
+    const resolved = localResolveInstitution(account, false);
+    const db = readDb();
+    db.accounts = db.accounts.map((a) => (a.id === account.id ? { ...a, institution_id: resolved.institution_id } : a));
+    writeDb(db);
+    linked_accounts += 1;
+  }
+  for (const card of readDb().cards) {
+    if (card.institution_id || (card.institution ?? "").trim().length < 2) continue;
+    const resolved = localResolveInstitution(card, true);
+    const db = readDb();
+    db.cards = db.cards.map((c) => (c.id === card.id ? { ...c, institution_id: resolved.institution_id } : c));
+    writeDb(db);
+    linked_cards += 1;
+  }
+  return { linked_accounts, linked_cards, created_institutions: readDb().institutions.length - before };
 }
 
 export function localDeleteInstitution(id: string) {
@@ -270,11 +444,14 @@ export function localGetAccount(id: string): AccountDetail {
   return { account, transactions };
 }
 
-export function localCreateAccount(input: AccountInput): Account {
+export function localCreateAccount(raw: AccountInput): Account {
+  const input = localResolveInstitution(raw, false);
   const db = readDb();
   if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
+  const { wallets: _wallets, ...base } = input;
   const account: Account = {
-    ...input,
+    ...base,
+    ...withWallets(db, input),
     id: newId(),
     balance: input.initial_balance,
     total_income: 0,
@@ -282,16 +459,21 @@ export function localCreateAccount(input: AccountInput): Account {
     created_at: new Date().toISOString(),
   };
   db.accounts.push(account);
+  if (input.is_default) db.accounts = applyDefault(db.accounts, account.id, (a) => accountScope(a.type) === accountScope(input.type));
   writeDb(db);
-  return account;
+  return enrichedAccounts(db).find((a) => a.id === account.id)!;
 }
 
-export function localUpdateAccount(id: string, input: AccountInput): Account {
+export function localUpdateAccount(id: string, raw: AccountInput): Account {
+  const input = localResolveInstitution(raw, false);
   const db = readDb();
   const index = db.accounts.findIndex((a) => a.id === id);
   if (index < 0) throw new Error("Conta não encontrada.");
   if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
-  db.accounts[index] = { ...db.accounts[index], ...input };
+  const { is_default, wallets: _wallets, ...fields } = input;
+  const wallets = withWallets(db, input, db.accounts[index]);
+  db.accounts[index] = { ...db.accounts[index], ...fields, ...wallets, ...(is_default === undefined ? {} : { is_default }) };
+  if (is_default) db.accounts = applyDefault(db.accounts, id, (a) => accountScope(a.type) === accountScope(input.type));
   writeDb(db);
   return enrichedAccounts(db).find((a) => a.id === id)!;
 }
@@ -394,7 +576,8 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
     throw new Error("Conta inválida: selecione uma conta cadastrada.");
   }
   if (input.type === "transferencia") {
-    if (!input.to_account_id || input.to_account_id === input.account_id) {
+    const sameCardMove = input.to_account_id === input.account_id && input.wallet_id && input.to_wallet_id && input.wallet_id !== input.to_wallet_id;
+    if (!input.to_account_id || (input.to_account_id === input.account_id && !sameCardMove)) {
       throw new Error("Escolha contas diferentes para a transferência.");
     }
   }
@@ -437,6 +620,8 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
     notes: input.notes,
     origin: input.origin?.trim() || null,
     notify_enabled: input.notify_enabled ?? true,
+    wallet_id: input.wallet_id ?? null,
+    to_wallet_id: input.type === "transferencia" ? input.to_wallet_id ?? null : null,
     created_at: existing?.created_at ?? new Date().toISOString(),
   };
 }
@@ -444,6 +629,8 @@ function buildTransaction(db: LocalDb, input: TransactionInput, existing?: Trans
 export function localCreateTransaction(input: TransactionInput): Transaction {
   const db = readDb();
   const tx = buildTransaction(db, input);
+  assertBenefitWallet(db, tx);
+  assertTransferFunds(db, tx, Boolean(input.allow_overdraft));
   db.transactions.push(tx);
   localAudit(db, "transactions", "created", null, tx);
   writeDb(db);
@@ -452,7 +639,7 @@ export function localCreateTransaction(input: TransactionInput): Transaction {
 
 /** A paid invoice locks its purchase breakdown until an audited refund exists. */
 function assertPurchaseNotSettled(db: LocalDb, transaction: Transaction): void {
-  if (transaction.invoice_payment || transaction.invoice_refund) throw new Error("Movimento de fatura não pode ser alterado manualmente.");
+  if ((transaction.invoice_payment || transaction.balance_adjustment) || transaction.invoice_refund) throw new Error("Movimento de fatura não pode ser alterado manualmente.");
   if (!transaction.card_id) return;
   const card = db.cards.find(c => c.id === transaction.card_id);
   if (!card) return;
@@ -473,7 +660,10 @@ export function localUpdateTransaction(id: string, input: TransactionInput): Tra
   const index = db.transactions.findIndex((t) => t.id === id);
   if (index < 0) throw new Error("Transação não encontrada.");
   assertPurchaseNotSettled(db, db.transactions[index]);
+  assertNotReversed(db.transactions[index]);
   const tx = buildTransaction(db, input, db.transactions[index]);
+  assertBenefitWallet(db, tx, db.transactions[index]);
+  assertTransferFunds(db, tx, Boolean(input.allow_overdraft), db.transactions[index]);
   const before = { ...db.transactions[index] };
   db.transactions[index] = tx;
   localAudit(db, "transactions", "updated", before, tx);
@@ -485,6 +675,7 @@ export function localDeleteTransaction(id: string): void {
   const db = readDb();
   const existing = db.transactions.find(t => t.id === id);
   if (existing) assertPurchaseNotSettled(db, existing);
+  if (existing) assertNotReversed(existing);
   db.transactions = db.transactions.filter((t) => t.id !== id);
   if (existing) localAudit(db, "transactions", "deleted", existing, null);
   writeDb(db);
@@ -722,7 +913,7 @@ export function localLoadDemo(): void {
   const m0 = currentMonth();
   const m1 = addMonth(m0, -1);
 
-  db.accounts = DEMO_ACCOUNTS.map((a) => ({
+  db.accounts = DEMO_ACCOUNTS.map(({ wallets: _wallets, ...a }) => ({
     ...a,
     id: newId(),
     balance: a.initial_balance,
@@ -730,10 +921,24 @@ export function localLoadDemo(): void {
     total_expense: 0,
     created_at: new Date().toISOString(),
   }));
+  // Etapa 6: the demo also has a credit card and a multi benefit card, so the new Carteira shows every part.
+  const nubankCard: LocalCard = { id: newId(), name: "Roxinho", institution: "Nubank", color: "#8A05BE", limit: 3500, closing_day: 28,
+    due_day: 7, payment_account_id: null, active: true, is_default: true, last_digits: "4821", created_at: new Date().toISOString() };
+  db.cards = [nubankCard];
+  const benefitWallets = normalizeWallets([
+    { name: "Refeição", monthly_amount: 660, day: 1, initial_balance: 0, allow_negative: false, is_default: true },
+    { name: "Mercado", monthly_amount: 440, day: 1, initial_balance: 0, allow_negative: false, is_default: false },
+  ], [], addMonth(m0, -1) + "-01", new Set(), newId);
+  db.accounts.push({ id: newId(), name: "Caju", institution: "Caju", type: "beneficio", color: "#FF5A00", initial_balance: 0, active: true,
+    is_default: true, wallets: benefitWallets as unknown as Account["wallets"], balance: 0, total_income: 0, total_expense: 0, created_at: new Date().toISOString() });
   const acc = (name: string) => db.accounts.find((a) => a.name === name)!.id;
   const cat = (name: string) => db.categories.find((c) => c.name === name)?.id ?? null;
 
   const rows: Array<Partial<TransactionInput> & { name: string; value: number; date: string }> = [
+    { name: "Restaurante do trabalho", value: 42.5, account_id: acc("Caju"), wallet_id: benefitWallets[0].id, category_id: cat("Alimentação") ?? cat("Mercado"), date: day(m0, 4) },
+    { name: "Hortifruti", value: 96.3, account_id: acc("Caju"), wallet_id: benefitWallets[1].id, category_id: cat("Mercado"), date: day(m0, 9) },
+    { name: "Loja online", value: 239.9, account_id: acc("Nubank"), card_id: nubankCard.id, category_id: cat("Compras"), date: day(m0, 2) },
+    { name: "Delivery", value: 58.7, account_id: acc("Nubank"), card_id: nubankCard.id, category_id: cat("Lazer"), date: day(m0, 6) },
     { name: "Salário", value: 5200, type: "receita", account_id: acc("Itaú"), category_id: cat("Renda"), date: day(m0, 5) },
     { name: "Aluguel", value: 1450, account_id: acc("Itaú"), category_id: cat("Moradia"), date: day(m0, 5), fixed: true },
     { name: "Internet fibra", value: 99.9, account_id: acc("Itaú"), category_id: cat("Moradia"), date: day(m0, 8), fixed: true },
@@ -768,7 +973,8 @@ export function localLoadDemo(): void {
       status: r.status ?? (r.date > todayISO() ? "agendado" : "pago"),
       date: r.date,
       account_id: r.account_id!,
-      card_id: null,
+      card_id: r.card_id ?? null,
+      wallet_id: r.wallet_id ?? null,
       to_account_id: r.to_account_id ?? null,
       category_id: r.category_id ?? null,
       fixed: r.fixed ?? false,
@@ -842,7 +1048,7 @@ export function localFlow(params: FlowParams): Flow {
     const present = new Set<string>();
     const latest = new Map<string, Transaction>();
     for (const tx of txs) {
-      if (tx.invoice_payment || tx.type === "transferencia") continue;
+      if ((tx.invoice_payment || tx.balance_adjustment) || tx.type === "transferencia") continue;
       const key = recurrenceKey(tx);
       const txMonth = tx.date.slice(0, 7);
       if (txMonth === month) present.add(key);
@@ -853,7 +1059,7 @@ export function localFlow(params: FlowParams): Flow {
     return [...latest.entries()].filter(([key]) => !present.has(key)).map(([, tx]) => tx);
   };
   const projection = (t: Transaction, month: string): number | null => {
-    if (t.type === "transferencia" || t.invoice_payment) return null;
+    if (t.type === "transferencia" || (t.invoice_payment || t.balance_adjustment)) return null;
     return t.installment ? unpaidPortion(t, month) : t.status !== "pago" && t.date.slice(0, 7) === month ? amount(t) : null;
   };
 
@@ -1006,7 +1212,7 @@ export function localCalendar(month: string, categoryId?: string): CalendarMonth
       buckets.get(tx.date) ??
       { date: tx.date, income: 0, expense: 0, projected_income: 0, projected_expense: 0, count: 0, active_count: 0 };
     day.count += 1;
-    if (tx.type !== "transferencia" && !tx.invoice_payment && !tx.invoice_refund) {
+    if (tx.type !== "transferencia" && !(tx.invoice_payment || tx.balance_adjustment) && !tx.invoice_refund) {
       const value = occurrenceAmount(tx);
       if (tx.status === "pago") {
         if (tx.type === "receita") day.income = round2(day.income + value);
@@ -1024,7 +1230,7 @@ export function localCalendar(month: string, categoryId?: string): CalendarMonth
   for (const source of transactions) {
     if (!source.installment || source.date.slice(0, 7) === month
         || (source.type !== "receita" && source.type !== "despesa")
-        || source.invoice_payment || source.invoice_refund) continue;
+        || (source.invoice_payment || source.balance_adjustment) || source.invoice_refund) continue;
     const paid = source.status === "pago";
     const portion = paid ? monthPortion(source, month) : unpaidPortion(source, month);
     if (portion === null) continue;
@@ -1144,6 +1350,12 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
     if (!purchaseLines.has(cycle)) purchaseLines.set(cycle, new Map());
     for (const item of paid.items ?? []) purchaseLines.get(cycle)!.set(item.id, item.value);
   }
+  for (const [cycle, paid] of Object.entries(paidCycles)) {
+    if (!paid.carried || !paid.carried_to) continue;
+    if (!purchaseLines.has(paid.carried_to)) purchaseLines.set(paid.carried_to, new Map());
+    purchaseLines.get(paid.carried_to)!.set(`carry:${cycle}`, paid.carried);
+  }
+  const settled = (cycle: string) => round2((paidCycles[cycle]?.amount ?? 0) + (paidCycles[cycle]?.carried ?? 0));
   const totals = new Map([...purchaseLines].map(([cycle, purchases]) => [
     cycle, round2([...purchases.values()].reduce((sum, value) => sum + value, 0)),
   ]));
@@ -1153,17 +1365,18 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
   }
   let used = 0, future = 0;
   for (const [cycle, total] of totals) {
-    const outstanding = round2(Math.max(0, total - (paidCycles[cycle]?.amount ?? 0)));
+    const outstanding = round2(Math.max(0, total - settled(cycle)));
     used = round2(used + outstanding);
     if (cycle > closing) future = round2(future + outstanding);
   }
-  const invoice = round2(Math.max(0, (totals.get(closing) ?? 0) - (paidCycles[closing]?.amount ?? 0)));
+  const invoice = round2(Math.max(0, (totals.get(closing) ?? 0) - settled(closing)));
   // The invoice that already closed (the cycle before the open one) and what is still owed on it.
   const previousClosing = addDays(start, -1);
-  const payable = round2(Math.max(0, (totals.get(previousClosing) ?? 0) - (paidCycles[previousClosing]?.amount ?? 0)));
+  const payable = round2(Math.max(0, (totals.get(previousClosing) ?? 0) - settled(previousClosing)));
   const account = accounts.find((a) => a.id === doc.payment_account_id);
   return {
     ...doc,
+    network: doc.network || null,
     payment_account_name: account?.name ?? null,
     invoice_paid: (totals.get(closing) ?? 0) > 0 && invoice === 0,
     current_invoice: invoice,
@@ -1182,19 +1395,39 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
 }
 export function localListCards(): CreditCard[] {
   const db = readDb();
-  return db.cards.map((card) => buildCard(card, db.transactions, db.accounts));
+  const institutions = new Map(db.institutions.map((i) => [i.id, i]));
+  const defaults = effectiveDefaults(db.cards, () => "card");
+  return db.cards.map((card) => {
+    const built = buildCard(card, db.transactions, db.accounts);
+    const institution = institutions.get(card.institution_id ?? "");
+    return { ...built, institution: institution?.name ?? built.institution, color: institution?.color ?? built.color, is_default: defaults.has(card.id) };
+  });
 }
 
-export function localCreateCard(input: CardInput): CreditCard {
+function cardDigits(input: CardInput): CardInput {
+  if (input.last_digits === undefined) return input;
+  if (input.last_digits && !/^\d{4}$/.test(input.last_digits)) throw new Error("O final do cartão tem 4 números.");
+  return { ...input, last_digits: input.last_digits || undefined };
+}
+
+function cardSettings(input: CardInput): CardInput {
+  const out = cardDigits(input);
+  return { ...out, network: out.network === "" ? undefined : out.network };
+}
+
+export function localCreateCard(raw: CardInput): CreditCard {
+  const input = cardSettings(localResolveInstitution(raw, true));
   const db = readDb();
   if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
   const card: LocalCard = { ...input, id: newId(), created_at: new Date().toISOString() };
   db.cards = [...db.cards, card];
+  if (input.is_default) db.cards = applyDefault(db.cards, card.id, () => true);
   writeDb(db);
-  return buildCard(card, db.transactions, db.accounts);
+  return localListCards().find((c) => c.id === card.id)!;
 }
 
-export function localUpdateCard(id: string, input: CardInput): CreditCard {
+export function localUpdateCard(id: string, raw: CardInput): CreditCard {
+  const input = cardSettings(localResolveInstitution(raw, true));
   const db = readDb();
   const existing = db.cards.find((c) => c.id === id);
   if (!existing) throw new Error("Cartão não encontrado.");
@@ -1202,10 +1435,12 @@ export function localUpdateCard(id: string, input: CardInput): CreditCard {
     throw new Error("Não é possível mudar o ciclo de um cartão com pagamentos registrados.");
   }
   if (input.institution_id && !db.institutions.some(inst => inst.id === input.institution_id)) throw new Error("Instituição inválida.");
-  const card: LocalCard = { ...existing, ...input };
+  const { is_default, ...fields } = input;
+  const card: LocalCard = { ...existing, ...fields, ...(is_default === undefined ? {} : { is_default }) };
   db.cards = db.cards.map((c) => (c.id === id ? card : c));
+  if (is_default) db.cards = applyDefault(db.cards, id, () => true);
   writeDb(db);
-  return buildCard(card, db.transactions, db.accounts);
+  return localListCards().find((c) => c.id === id)!;
 }
 
 export function localDeleteCard(id: string): void {
@@ -1251,21 +1486,68 @@ export function localNotifications(windowDays = 7): Notifications {
       target_url: `/transacoes?date=${tx.date}&highlight=${encodeURIComponent(tx.id)}`,
     });
   }
+  // Reminder only: invoices with money owed, due in the window or overdue (≤ 30 days).
   for (const card of db.cards) {
-    if (!card.active) continue;
-    const [, closing] = cycleBounds(today, card.closing_day);
-    const due = dueDate(closing, card.closing_day, card.due_day);
-    const daysLeft = dayDiff(due);
-    if (daysLeft > windowDays) continue;
+    if (!card.active || (card as { invoice_reminder?: boolean }).invoice_reminder === false) continue;
+    const cardWindow = (card as { remind_days?: number | null }).remind_days || windowDays;
+    const [start, current] = cycleBounds(today, card.closing_day);
+    const [, previous] = cycleBounds(addDays(start, -1), card.closing_day);
+    for (const closing of [previous, current]) {
+      const due = dueDate(closing, card.closing_day, card.due_day);
+      const daysLeft = dayDiff(due);
+      if (daysLeft > cardWindow || daysLeft < -30) continue;
+      const state = invoiceForCycle(db, card, closing);
+      const owed = state.outstanding ?? 0;
+      const closed = closing < today;
+      if (owed <= 0 && closed) continue;
+      const overdue = daysLeft < 0;
+      const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+      items.push({
+        id: `card-${card.id}-${due}`,
+        kind: "fatura",
+        title: `Fatura ${card.name}${overdue ? " atrasada" : ""}`,
+        description: overdue ? `Venceu em ${dm(due)}. Pague e confirme no FINNOS.`
+          : closed ? `Vence em ${dm(due)}. Confirme no FINNOS quando pagar.`
+          : `Fecha em ${dm(closing)} e vence em ${dm(due)}.`,
+        date: due,
+        value: Math.max(owed, 0),
+        days_left: daysLeft,
+        target_url: `/cartoes/${card.id}?cycle=${closing}`,
+      });
+    }
+  }
+  // Carteira (etapa 6): 80% of the limit (mirror of _limit_alerts).
+  for (const card of localListCards()) {
+    if (!card.active || !card.limit_alert || card.used_percent < 80) continue;
     items.push({
-      id: `card-${card.id}-${due}`,
-      kind: "fatura",
-      title: `Fatura ${card.name}`,
-      description: `Fecha em ${closing.slice(8, 10)}/${closing.slice(5, 7)} e vence em ${due.slice(8, 10)}/${due.slice(5, 7)}.`,
-      date: due,
-      value: 0,
-      days_left: daysLeft,
-      target_url: `/cartoes/${card.id}?due=${due}`,
+      id: `limit-${card.id}-${card.next_closing}`, kind: "fatura", title: `${card.name}: ${Math.floor(card.used_percent)}% do limite`,
+      description: "O limite está quase no fim. Confira a fatura antes de novas compras.", date: today, value: card.available, days_left: 0,
+      target_url: `/cartoes/${card.id}`,
+    });
+  }
+  // Carteira (etapa 6): low balance alert, one per account and day (mirror of _low_balance_alerts).
+  for (const account of localListAccounts()) {
+    if (account.type === "beneficio" && account.active) {
+      for (const w of account.wallets ?? []) {
+        if (account.benefit_runout_alert && w.runs_out_on && w.next_recharge) {
+          items.push({ id: `runout-${account.id}-${w.id}-${w.next_recharge}`, kind: "saldo", title: `${w.name} pode acabar antes da recarga`,
+            description: `No ritmo atual acaba por volta de ${w.runs_out_on.slice(8, 10)}/${w.runs_out_on.slice(5, 7)}; a recarga cai em ${w.next_recharge.slice(8, 10)}/${w.next_recharge.slice(5, 7)}.`,
+            date: today, value: w.balance, days_left: 0, target_url: `/contas/beneficio/${account.id}?b=${w.id}` });
+        }
+      }
+      if (account.benefit_recharge_alert) {
+        for (const tx of db.transactions.filter((t) => t.account_id === account.id && t.benefit_recharge && t.date === today)) {
+          items.push({ id: `recharge-${tx.id}`, kind: "saldo", title: `${tx.name} caiu`, description: `A recarga de ${account.name} entrou hoje.`,
+            date: today, value: tx.value, days_left: 0, target_url: `/contas/beneficio/${account.id}?b=${tx.wallet_id ?? ""}` });
+        }
+      }
+    }
+    const threshold = account.low_balance_alert ?? 0;
+    if (!account.active || !threshold || account.balance >= threshold) continue;
+    items.push({
+      id: `low-${account.id}-${today}`, kind: "saldo", title: `Saldo baixo em ${account.name}`,
+      description: `Ficou abaixo de ${threshold.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/\u00a0/g, " ")}.`,
+      date: today, value: account.balance, days_left: 0, target_url: "/contas",
     });
   }
   items.sort((a, b) => a.days_left - b.days_left || a.title.localeCompare(b.title));
@@ -1296,6 +1578,11 @@ function cycleItems(card: LocalCard, txs: Transaction[], start: string, closing:
       installment_label: total > 1 ? `${first + offset + 1}/${total}` : null,
     });
   }
+  for (const [source, paid] of Object.entries(card.paid_cycles ?? {})) {
+    if (paid.carried_to !== closing || !paid.carried) continue;
+    items.push({ id: `carry:${source}`, name: "Saldo da fatura anterior", date: source, value: paid.carried,
+      category_name: null, category_color: null, installment_label: null, carry_from: source });
+  }
   const seen = new Set(frozen.map(item => item.id));
   return [...frozen, ...items.filter(item => !seen.has(item.id))]
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -1312,6 +1599,7 @@ function invoiceForCycle(db: LocalDb, card: LocalCard, closing: string): Invoice
   const adjustmentTotal = round2(adjustments.reduce((sum, item) => sum + item.value, 0));
   const total = round2(items.reduce((sum, item) => sum + item.value, 0) - adjustmentTotal);
   const paidAmount = round2(payment?.amount ?? 0);
+  const carried = round2(payment?.carried ?? 0);
   return {
     card_id: card.id,
     card_name: card.name,
@@ -1320,9 +1608,13 @@ function invoiceForCycle(db: LocalDb, card: LocalCard, closing: string): Invoice
     due_date: dueDate(closing, card.closing_day, card.due_day),
     total,
     paid: total > 0 && paidAmount === total,
-    outstanding: round2(Math.max(0, total - paidAmount)),
+    outstanding: round2(Math.max(0, total - paidAmount - carried)),
     paid_amount: paidAmount,
     paid_at: payment?.paid_at ?? null,
+    carried_amount: carried,
+    carried_to: carried ? payment?.carried_to ?? null : null,
+    last_payment_id: payment?.last_payment_id ?? null,
+    reconciled: Boolean(payment?.reconciled),
     items,
     adjustments,
     adjustment_total: adjustmentTotal,
@@ -1364,7 +1656,8 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   const db = readDb();
   const card = db.cards.find((c) => c.id === cardId);
   if (!card) throw new Error("Cartão não encontrado.");
-  if (!db.accounts.some((a) => a.id === input.account_id)) throw new Error("Conta inválida.");
+  const account = db.accounts.find((a) => a.id === input.account_id);
+  if (!account) throw new Error("Conta inválida.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || Number.isNaN(Date.parse(input.date + "T12:00:00")) || input.date > todayISO()) {
     throw new Error("A data do pagamento precisa ser válida e não pode estar no futuro.");
   }
@@ -1373,12 +1666,14 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   const first = configuredDayInMonth(closing, -1, card.closing_day);
   const start = addDays(first, 1);
   const items = cycleItems(card, db.transactions, start, closing, db.categories);
-  const total = invoiceForCycle(db, card, closing).total;
-  const previous = card.paid_cycles?.[closing]?.amount ?? 0;
-  const outstanding = round2(total - previous);
+  const state = invoiceForCycle(db, card, closing);
+  const saved = card.paid_cycles?.[closing];
+  const previous = saved?.amount ?? 0;
+  const outstanding = state.outstanding ?? 0;
   const amount = round2(input.value ?? outstanding);
   if (outstanding <= 0) throw new Error("Esta fatura já foi quitada ou não possui compras.");
   if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding) throw new Error("Pagamento deve ser positivo e não ultrapassar o saldo da fatura.");
+  checkFunds(accountBalance(db, account.id), amount, account, Boolean(input.allow_overdraft));
 
   // A settlement is a bank debit; never add a duplicate category expense.
   const debit = buildTransaction(db, {
@@ -1391,10 +1686,83 @@ export function localPayInvoice(cardId: string, input: PayInvoiceInput): Invoice
   });
   debit.invoice_payment = true;
   db.transactions = [...db.transactions, debit];
+  // Paying after the closing carries the rest; before it, it is an advance.
+  const carried = closing < input.date && amount < outstanding ? round2(outstanding - amount) : 0;
   card.paid_cycles = {
     ...card.paid_cycles,
-    [closing]: { amount: round2(previous + amount), paid_at: input.date, items },
+    [closing]: {
+      ...saved,
+      amount: round2(previous + amount), paid_at: input.date, items,
+      payments: [...(saved?.payments ?? []), { id: debit.id, amount, carried, date: input.date }],
+      last_payment_id: debit.id,
+      ...(carried ? { carried, carried_to: configuredDayInMonth(closing, 1, card.closing_day) } : {}),
+    },
   };
+  db.cards = db.cards.map((c) => c.id === cardId ? card : c);
+  writeDb(db);
+  return localInvoice(cardId, closing);
+}
+
+/** Undo a transfer with an inverse transfer linked both ways (same rule as the server). */
+export function localReverseTransfer(id: string, allowOverdraft = false): Transaction {
+  const db = readDb();
+  const original = db.transactions.find(t => t.id === id);
+  if (!original) throw new Error("Transação não encontrada.");
+  if (original.type !== "transferencia" || original.status !== "pago") throw new Error("Só uma transferência realizada pode ser desfeita.");
+  if (original.reversal_of) throw new Error("Esta transferência já desfaz outra.");
+  if (original.reversed_by) throw new Error("Esta transferência já foi desfeita.");
+  const destination = db.accounts.find(a => a.id === original.to_account_id);
+  if (!destination) throw new Error("A conta de destino não existe mais.");
+  checkFunds(accountBalance(db, destination.id), original.value, destination, allowOverdraft);
+  const inverse = buildTransaction(db, {
+    name: `Desfaz: ${original.name}`, value: original.value, type: "transferencia", status: "pago", date: todayISO(),
+    account_id: destination.id, card_id: null, to_account_id: original.account_id, category_id: null, fixed: false,
+    recurrence: null, installment: false, total_installments: null, current_installment: null, adjusted_value: null,
+    attachment: null, notes: `Desfaz a transferência de ${original.date}.`,
+  });
+  inverse.reversal_of = id;
+  db.transactions = [...db.transactions.map(t => t.id === id ? { ...t, reversed_by: inverse.id, version: (t.version ?? 1) + 1 } : t), inverse];
+  writeDb(db);
+  return enrich(db, inverse);
+}
+
+/** Undo the last payment of a cycle with a linked reversal; the original stays. */
+export function localUndoInvoicePayment(cardId: string, paymentId: string): Invoice {
+  const db = readDb();
+  const card = db.cards.find((c) => c.id === cardId);
+  if (!card) throw new Error("Cartão não encontrado.");
+  const entry = Object.entries(card.paid_cycles ?? {}).find(([, cycle]) => cycle.payments?.some(p => p.id === paymentId));
+  if (!entry) throw new Error("Pagamento não encontrado.");
+  const [closing, saved] = entry;
+  if (saved.reconciled) throw new Error("Fatura já conferida: o pagamento não pode ser desfeito.");
+  if (saved.last_payment_id !== paymentId) throw new Error("Só o último pagamento desta fatura pode ser desfeito.");
+  const payments = [...(saved.payments ?? [])];
+  const last = payments.pop()!;
+  const next = last.carried ? saved.carried_to : undefined;
+  if (next && card.paid_cycles?.[next]?.amount) throw new Error("A fatura seguinte já tem pagamento com o saldo levado; desfaça aquele primeiro.");
+  const debit = db.transactions.find(t => t.id === paymentId);
+  if (!debit) throw new Error("Lançamento do pagamento não encontrado.");
+  const reversal = buildTransaction(db, {
+    name: `Estorno do pagamento ${card.name}`, value: last.amount, type: "receita", status: "pago", date: todayISO(),
+    account_id: debit.account_id, card_id: null, to_account_id: null, category_id: null, fixed: false, recurrence: null,
+    installment: false, total_installments: null, current_installment: null, adjusted_value: null, attachment: null,
+    notes: `Desfaz o pagamento da fatura fechada em ${closing}.`,
+  });
+  reversal.invoice_payment = true;
+  reversal.invoice_reversal_of = paymentId;
+  db.transactions = [...db.transactions, reversal];
+  const updated: LocalPaidCycle = {
+    ...saved, amount: round2(saved.amount - last.amount), payments,
+    last_payment_id: payments.at(-1)?.id ?? null, paid_at: payments.at(-1)?.date ?? null,
+  };
+  const cycles = { ...card.paid_cycles, [closing]: updated };
+  if (next) {
+    delete updated.carried;
+    delete updated.carried_to;
+    const following = cycles[next];
+    if (following?.items) cycles[next] = { ...following, items: following.items.filter(i => i.id !== `carry:${closing}`) };
+  }
+  card.paid_cycles = cycles;
   db.cards = db.cards.map((c) => c.id === cardId ? card : c);
   writeDb(db);
   return localInvoice(cardId, closing);
@@ -1594,4 +1962,333 @@ export function localSubscriptions(): Subscriptions {
     items, monthly_total: monthly, yearly_total: yearly,
     income_percent: income ? round2(monthly / income * 100) : 0,
   };
+}
+
+
+// --- Conferência da conta com o extrato (etapa 3) — mirror of routers/reconciliations.py ---
+
+const centsOf = (value: number) => Math.round(value * 100);
+
+function balanceUntil(db: LocalDb, accountId: string, until: string): number {
+  const account = db.accounts.find(a => a.id === accountId);
+  let total = centsOf(account?.initial_balance ?? 0);
+  for (const tx of db.transactions) {
+    if (tx.date > until) continue;
+    for (const [id, amount] of balanceEffects(tx, until)) if (id === accountId) total += centsOf(amount);
+  }
+  return total;
+}
+
+function reconSummary(doc: Reconciliation): Reconciliation {
+  const counts: Record<string, number> = {};
+  for (const line of doc.lines) counts[line.state] = (counts[line.state] ?? 0) + 1;
+  const finnosOpen = doc.finnos.filter(f => f.state === "open").length;
+  return { ...doc, counts, pending: (counts.review ?? 0) + (counts.open ?? 0) + finnosOpen };
+}
+
+function protectedTx(tx: Transaction | undefined, doc?: Reconciliation, db?: LocalDb, changesMoney = true): Transaction {
+  if (!tx) throw new Error("Lançamento não encontrado; ele pode ter sido excluído.");
+  if (tx.invoice_payment || tx.invoice_refund || tx.reversed_by || tx.reversal_of || tx.balance_adjustment)
+    throw new Error("Este lançamento só muda pelo próprio fluxo (fatura, estorno ou ajuste).");
+  if (doc?.scope === "card") {
+    if (tx.card_id !== doc.card_id) throw new Error("Este lançamento não é deste cartão.");
+    const card = db?.cards.find(c => c.id === doc.card_id);
+    if (changesMoney && card?.paid_cycles?.[doc.cycle!]?.amount) throw new Error("Fatura já paga: a diferença entra como crédito ou compra na próxima fatura.");
+  } else if (doc?.account_id && tx.account_id !== doc.account_id && tx.to_account_id !== doc.account_id) {
+    throw new Error("Este lançamento não é desta conta.");
+  }
+  return tx;
+}
+
+function lookupTx(db: LocalDb, id: string | null | undefined): Transaction | undefined {
+  if (id && id.includes(":")) throw new Error("Este item só muda pelo próprio fluxo (pagamento, crédito ou saldo levado).");
+  return db.transactions.find(t => t.id === id);
+}
+
+export function localCreateReconciliation(accountId: string, input: ReconciliationInput): Reconciliation {
+  const db = readDb();
+  const start = input.period_start, end = input.period_end;
+  const span = (Date.parse(end) - Date.parse(start)) / 86_400_000;
+  if (span < 0 || span > 90) throw new Error("O extrato pode ter no máximo 90 dias.");
+  if (end > todayISO()) throw new Error("O período não pode terminar no futuro.");
+  if (!db.accounts.some(a => a.id === accountId)) throw new Error("Conta não encontrada.");
+  const lines: MatchLine[] = input.lines.map((l, index) => {
+    if (l.date < start || l.date > end) throw new Error(`Linha ${index + 1} fora do período do extrato.`);
+    const base = { date: l.date, description: l.description.trim(), cents: centsOf(l.value), direction: l.direction, fitid: l.fitid ?? null };
+    return { ...base, index, origin_key: originKey("local", accountId, base) };
+  });
+  const windowStart = addDays(start, -3), windowEnd = addDays(end, 3);
+  const inWindow = db.transactions.filter(t => t.date >= windowStart && t.date <= windowEnd);
+  const links: Record<string, string> = {};
+  for (const [key, txId] of Object.entries(db.reconciliation_links ?? {})) if (key.startsWith(`${accountId}:`)) links[key.slice(accountId.length + 1)] = txId;
+  const matched = matchLines(lines, inWindow, accountId, links);
+  const doc: Reconciliation = {
+    id: newId(), account_id: accountId, period_start: start, period_end: end, file_name: input.file_name, source: input.source,
+    status: "pronta", bank_closing_cents: input.bank_closing_balance == null ? null : centsOf(input.bank_closing_balance),
+    finnos_closing_cents: balanceUntil(db, accountId, end), counts: {}, pending: 0, created_at: new Date().toISOString(),
+    lines: lines.map(line => {
+      const r = matched.lines.get(line.index)!;
+      const already = Boolean(r.tx_id) && [line.fitid, line.origin_key].some(k => k && links[k] === r.tx_id);
+      const state = r.level === "strong" ? "matched" : r.level === "probable" || r.level === "value_diff" ? "review" : "open";
+      return { ...line, level: already ? "already" : r.level, tx_id: r.tx_id, reasons: r.reasons, state };
+    }),
+    finnos: matched.onlyFinnos
+      .filter(id => { const t = db.transactions.find(x => x.id === id); return Boolean(t && t.date >= start && t.date <= end); })
+      .map(id => ({ tx_id: id, state: "open" as const, repeated_of: matched.repeated[id] ?? null })),
+  };
+  db.reconciliations = [...(db.reconciliations ?? []), doc];
+  writeDb(db);
+  return reconSummary(doc);
+}
+
+export function localListReconciliations(accountId: string): Reconciliation[] {
+  return (readDb().reconciliations ?? []).filter(r => r.account_id === accountId).map(reconSummary).sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+export function localGetReconciliation(id: string): Reconciliation {
+  const db = readDb();
+  const doc = (db.reconciliations ?? []).find(r => r.id === id);
+  if (!doc) throw new Error("Conferência não encontrada.");
+  const history = (db.reconciliation_events ?? []).filter(e => e.reconciliation_id === id).sort((a, b) => a.seq - b.seq);
+  // Live: decisions and adjustments change the FINNOS side until it is concluded.
+  const live = doc.status === "concluida" ? doc.finnos_closing_cents
+    : doc.scope === "card" ? centsOf(localInvoice(doc.card_id!, doc.cycle!).total) : balanceUntil(db, doc.account_id!, doc.period_end);
+  return { ...reconSummary(doc), finnos_closing_cents: live, history };
+}
+
+function saveRecon(db: LocalDb, doc: Reconciliation, event: Omit<ReconEvent, "id" | "seq" | "created_at" | "undone_by" | "undo_of"> & { before: unknown; after: unknown; effects: Record<string, unknown>; undo_of?: string | null }) {
+  const seq = (db.reconciliation_events ?? []).filter(e => e.reconciliation_id === doc.id).length + 1;
+  db.reconciliation_events = [...(db.reconciliation_events ?? []), {
+    ...event, id: newId(), seq, created_at: new Date().toISOString(), undone_by: null, undo_of: event.undo_of ?? null, reconciliation_id: doc.id,
+  }];
+  db.reconciliations = (db.reconciliations ?? []).map(r => r.id === doc.id ? doc : r);
+}
+
+export function localResolveReconciliation(id: string, input: ReconResolveInput): Reconciliation {
+  const db = readDb();
+  const found = (db.reconciliations ?? []).find(r => r.id === id);
+  if (!found) throw new Error("Conferência não encontrada.");
+  if (found.status === "concluida") throw new Error("Conferência concluída; abra uma nova para mudar algo.");
+  const doc: Reconciliation = JSON.parse(JSON.stringify(found));
+  const effects: Record<string, unknown> = {};
+  let target: string, before: unknown, after: unknown;
+  if (input.line != null) {
+    const line = doc.lines[input.line];
+    if (!line) throw new Error("Linha não encontrada.");
+    target = `line:${input.line}`; before = { ...line };
+    const allowed: Record<string, string[]> = { review: ["confirm", "separate", "use_bank_value", "keep_value"], open: ["link", "ignore"] };
+    if (!(allowed[line.state] ?? []).includes(input.action)) throw new Error("Esta linha já foi decidida; desfaça a decisão para mudar.");
+    if (input.action === "confirm") line.state = "matched";
+    else if (input.action === "separate") { doc.finnos.push({ tx_id: line.tx_id!, state: "open", repeated_of: null }); Object.assign(line, { state: "open", tx_id: null, level: "only_statement" }); }
+    else if (input.action === "keep_value") Object.assign(line, { state: "matched", kept_difference: true });
+    else if (input.action === "use_bank_value") {
+      const tx = protectedTx(lookupTx(db, line.tx_id), doc, db);
+      if (line.installment || tx.installment) throw new Error("Compra parcelada: corrija o valor da compra no registro, não a parcela.");
+      effects.tx_updated = { id: tx.id, before_cents: centsOf(tx.value) };
+      const updated = { ...tx, value: line.cents / 100, version: (tx.version ?? 1) + 1, updated_at: new Date().toISOString() };
+      db.transactions = db.transactions.map(t => t.id === tx.id ? updated : t);
+      localAudit(db, "transactions", "updated", tx, updated);
+      line.state = "matched";
+    } else if (input.action === "link") {
+      if (!input.tx_id) throw new Error("Informe o lançamento a ligar.");
+      if (doc.lines.some(l => l.tx_id === input.tx_id && l.state === "matched")) throw new Error("Este lançamento já está ligado a outra linha.");
+      protectedTx(lookupTx(db, input.tx_id), doc, db, false);
+      Object.assign(line, { state: "matched", tx_id: input.tx_id, level: "linked" });
+      doc.finnos = doc.finnos.filter(f => f.tx_id !== input.tx_id);
+      effects.linked = input.tx_id;
+    } else if (input.action === "ignore") line.state = "ignored";
+    after = { ...line };
+  } else {
+    if (!input.tx_id) throw new Error("Informe a linha ou o lançamento.");
+    const item = doc.finnos.find(f => f.tx_id === input.tx_id);
+    if (!item || item.state !== "open") throw new Error("Este lançamento já foi decidido; desfaça a decisão para mudar.");
+    target = `finnos:${input.tx_id}`; before = { ...item };
+    if (input.action === "keep") item.state = "kept";
+    else if (input.action === "keep_pending" && doc.scope === "card") item.state = "pending"; // shows up on a later invoice
+    else if (input.action === "keep_pending" || input.action === "delete") {
+      const tx = protectedTx(lookupTx(db, input.tx_id), doc, db);
+      if (input.action === "keep_pending") {
+        effects.tx_updated = { id: tx.id, before_status: tx.status };
+        const updated = { ...tx, status: "pendente" as const, version: (tx.version ?? 1) + 1, updated_at: new Date().toISOString() };
+        db.transactions = db.transactions.map(t => t.id === tx.id ? updated : t);
+        localAudit(db, "transactions", "updated", tx, updated);
+        item.state = "pending";
+      } else {
+        effects.tx_deleted = tx;
+        db.transactions = db.transactions.filter(t => t.id !== tx.id);
+        localAudit(db, "transactions", "deleted", tx, null);
+        item.state = "deleted";
+      }
+    } else throw new Error("Ação inválida.");
+    after = { ...item };
+  }
+  saveRecon(db, doc, { action: input.action, target, before, after, effects, note: input.note ?? "" });
+  writeDb(db);
+  return reconSummary(doc);
+}
+
+export function localUndoReconciliationEvent(id: string, eventId: string): Reconciliation {
+  const db = readDb();
+  const found = (db.reconciliations ?? []).find(r => r.id === id);
+  if (!found) throw new Error("Conferência não encontrada.");
+  if (found.status === "concluida") throw new Error("Conferência concluída; abra uma nova para mudar algo.");
+  const events = (db.reconciliation_events ?? []).filter(e => e.reconciliation_id === id);
+  const event = events.find(e => e.id === eventId);
+  if (!event) throw new Error("Decisão não encontrada.");
+  if (event.undone_by || event.undo_of) throw new Error("Esta decisão já foi desfeita.");
+  const linked = event.effects.linked as string | undefined;
+  if (events.some(e => e.seq > event.seq && !e.undone_by && !e.undo_of && (e.target === event.target || (linked && e.target === `finnos:${linked}`))))
+    throw new Error("Uma decisão posterior depende desta; desfaça aquela primeiro.");
+  const doc: Reconciliation = JSON.parse(JSON.stringify(found));
+  const updatedFx = event.effects.tx_updated as { id: string; before_cents?: number; before_status?: Transaction["status"] } | undefined;
+  if (updatedFx) {
+    const tx = protectedTx(db.transactions.find(t => t.id === updatedFx.id));
+    const restored = { ...tx, version: (tx.version ?? 1) + 1, updated_at: new Date().toISOString(),
+      ...(updatedFx.before_cents != null ? { value: updatedFx.before_cents / 100 } : {}),
+      ...(updatedFx.before_status ? { status: updatedFx.before_status } : {}) };
+    db.transactions = db.transactions.map(t => t.id === tx.id ? restored : t);
+    localAudit(db, "transactions", "updated", tx, restored);
+  }
+  const deleted = event.effects.tx_deleted as Transaction | undefined;
+  if (deleted) {
+    if (db.transactions.some(t => t.id === deleted.id)) throw new Error("O lançamento excluído já existe de novo.");
+    db.transactions = [...db.transactions, deleted];
+    localAudit(db, "transactions", "created", null, deleted);
+  }
+  const [kind, key] = [event.target.slice(0, event.target.indexOf(":")), event.target.slice(event.target.indexOf(":") + 1)];
+  if (kind === "line") {
+    const previous = event.before as Reconciliation["lines"][number];
+    doc.lines[Number(key)] = previous;
+    if (event.action === "separate") doc.finnos = doc.finnos.filter(f => f.tx_id !== previous.tx_id);
+    if (event.action === "link" && linked) doc.finnos.push({ tx_id: linked, state: "open", repeated_of: null });
+  } else doc.finnos = doc.finnos.map(f => f.tx_id === key ? event.before as Reconciliation["finnos"][number] : f);
+  saveRecon(db, doc, { action: "undo", target: event.target, before: event.after, after: event.before, effects: {}, note: "", undo_of: eventId });
+  const undoEvent = db.reconciliation_events!.at(-1)!;
+  db.reconciliation_events = db.reconciliation_events!.map(e => e.id === eventId ? { ...e, undone_by: undoEvent.id } : e);
+  writeDb(db);
+  return reconSummary(doc);
+}
+
+export function localCompleteReconciliation(id: string, note = ""): Reconciliation {
+  const db = readDb();
+  const found = (db.reconciliations ?? []).find(r => r.id === id);
+  if (!found) throw new Error("Conferência não encontrada.");
+  if (found.status === "concluida") return reconSummary(found);
+  const summary = reconSummary(found);
+  if (summary.pending) throw new Error(`Ainda há ${summary.pending} item(ns) para decidir.`);
+  if (found.scope === "card") {
+    const total = centsOf(localInvoice(found.card_id!, found.cycle!).total);
+    if (found.bank_closing_cents != null && total !== found.bank_closing_cents && note.trim().length < 3)
+      throw new Error("Os totais ainda não batem. Registre o que falta ou explique a diferença.");
+    const fresh = readDb();
+    const links = { ...(fresh.reconciliation_links ?? {}) };
+    for (const line of found.lines) if (line.state === "matched" && line.tx_id && !line.tx_id.includes(":")) links[`card:${found.card_id}:${line.origin_key}`] = line.tx_id;
+    fresh.reconciliation_links = links;
+    fresh.cards = fresh.cards.map(c => c.id !== found.card_id ? c : { ...c, paid_cycles: { ...c.paid_cycles,
+      [found.cycle!]: { amount: 0, paid_at: null, ...c.paid_cycles?.[found.cycle!], reconciled: true } } });
+    const done: Reconciliation = { ...found, status: "concluida", finnos_closing_cents: total, difference_note: note.trim() || null };
+    fresh.reconciliations = (fresh.reconciliations ?? []).map(r => r.id === id ? done : r);
+    writeDb(fresh);
+    return reconSummary(done);
+  }
+  const finnosClosing = balanceUntil(db, found.account_id!, found.period_end);
+  if (found.bank_closing_cents != null && finnosClosing !== found.bank_closing_cents)
+    throw new Error("Os saldos ainda não batem. Corrija o saldo ou revise as linhas.");
+  const links = { ...(db.reconciliation_links ?? {}) };
+  for (const line of found.lines) if (line.state === "matched" && line.tx_id)
+    for (const key of [line.fitid, line.origin_key]) if (key) links[`${found.account_id!}:${key}`] = line.tx_id;
+  db.reconciliation_links = links;
+  db.accounts = db.accounts.map(a => a.id === found.account_id && (!a.reconciled_until || a.reconciled_until < found.period_end) ? { ...a, reconciled_until: found.period_end } : a);
+  const done: Reconciliation = { ...found, status: "concluida", finnos_closing_cents: finnosClosing };
+  db.reconciliations = (db.reconciliations ?? []).map(r => r.id === id ? done : r);
+  writeDb(db);
+  return reconSummary(done);
+}
+
+export function localAdjustBalance(accountId: string, input: BalanceAdjustmentInput): BalanceAdjustment {
+  const db = readDb();
+  if (input.date > todayISO()) throw new Error("O ajuste não pode ter data futura.");
+  if (input.reason.trim().length < 3) throw new Error("Explique o motivo do ajuste.");
+  const acct = db.accounts.find(a => a.id === accountId);
+  if (!acct) throw new Error("Conta não encontrada.");
+  const wallets = storedWallets(acct);
+  const walletId = wallets.length ? input.wallet_id || defaultWalletId({ wallets }) : null;
+  if (walletId && !wallets.some(w => w.id === walletId)) throw new Error("Esse benefício não pertence ao cartão.");
+  const before = walletId
+    ? walletBalances({ id: accountId, wallets }, db.transactions, input.date, balanceEffects).get(walletId) ?? 0
+    : balanceUntil(db, accountId, input.date);
+  const target = centsOf(input.target_balance);
+  const diff = target - before;
+  if (diff === 0) throw new Error("O saldo já é este; nada a ajustar.");
+  const tx = buildTransaction(db, {
+    name: "Ajuste de saldo", value: Math.abs(diff) / 100, type: diff > 0 ? "receita" : "despesa", status: "pago", date: input.date,
+    account_id: accountId, card_id: null, to_account_id: null, category_id: null, fixed: false, recurrence: null, installment: false,
+    total_installments: null, current_installment: null, adjusted_value: null, attachment: null, notes: input.reason.trim(),
+    wallet_id: walletId,
+  });
+  tx.balance_adjustment = true;
+  db.transactions = [...db.transactions, tx];
+  localAudit(db, "transactions", "created", null, tx);
+  writeDb(db);
+  return { id: tx.id, type: tx.type as "receita" | "despesa", value: tx.value, date: tx.date, previous_balance: before / 100, new_balance: target / 100, difference: diff / 100 };
+}
+
+
+export function localCreateCardReconciliation(cardId: string, input: CardReconciliationInput): Reconciliation {
+  const db = readDb();
+  const card = db.cards.find(c => c.id === cardId);
+  if (!card) throw new Error("Cartão não encontrado.");
+  // Local mode reads the PDF lines with the device parser (no FDI here).
+  let raw = input.lines ?? [];
+  if (!raw.length && input.pages?.length) {
+    const textLines = input.pages.flatMap(p => p.text.split("\n"));
+    const year = Number(textLines.join(" ").match(/\b(20\d{2})\b/)?.[1] ?? input.cycle.slice(0, 4));
+    raw = parseFinancialFile(statementLinesToCsv(textLines, year), "invoice").map(r => ({
+      date: r.date, description: r.description, value: Math.abs(r.value), direction: r.type === "receita" ? "in" as const : "out" as const,
+    }));
+  }
+  if (!raw.length) throw new Error("Não encontrei lançamentos nesta fatura.");
+  const invoice = localInvoice(cardId, input.cycle);
+  const movements = [
+    ...invoice.items.map(i => ({ id: i.id, date: i.date, name: i.name, value: i.value, type: "despesa", status: "pago", account_id: "__invoice__", card_id: null }) as unknown as Transaction),
+    ...(card.paid_cycles?.[input.cycle]?.payments ?? []).map(p => ({ id: `pay:${p.id}`, date: p.date, name: "Pagamento da fatura", value: p.amount, type: "receita", status: "pago", account_id: "__invoice__", card_id: null }) as unknown as Transaction),
+  ];
+  const links: Record<string, string> = {};
+  for (const [key, txId] of Object.entries(db.reconciliation_links ?? {})) if (key.startsWith(`card:${cardId}:`)) links[key.slice(`card:${cardId}:`.length)] = txId;
+  const lines: MatchLine[] = raw.map((l, index) => {
+    const base = { date: l.date, description: l.description.trim(), cents: centsOf(l.value), direction: l.direction, fitid: l.fitid ?? null };
+    return { ...base, index, origin_key: originKey("local", `card:${cardId}`, base) };
+  });
+  const matched = matchLines(lines, movements, "__invoice__", links);
+  const doc: Reconciliation = {
+    id: newId(), scope: "card", card_id: cardId, cycle: input.cycle, account_id: null,
+    period_start: invoice.cycle_start, period_end: input.cycle, file_name: input.file_name, source: input.source,
+    status: "pronta", bank_closing_cents: null, finnos_closing_cents: centsOf(invoice.total), counts: {}, pending: 0,
+    created_at: new Date().toISOString(), invoice_fields: {}, invoice_checks: [], warnings: ["leitura_local_sem_total"],
+    lines: lines.map(line => {
+      const r = matched.lines.get(line.index)!;
+      const state = r.level === "strong" ? "matched" : r.level === "probable" || r.level === "value_diff" ? "review" : "open";
+      return { ...line, level: r.level, tx_id: r.tx_id, reasons: r.reasons, state };
+    }),
+    finnos: matched.onlyFinnos.map(id => {
+      const m = movements.find(x => x.id === id)!;
+      return { tx_id: id, state: "open" as const, repeated_of: matched.repeated[id] ?? null, name: m.name, cents: centsOf(m.value) };
+    }),
+  };
+  db.reconciliations = [...(db.reconciliations ?? []), doc];
+  writeDb(db);
+  return reconSummary(doc);
+}
+
+export function localListCardReconciliations(cardId: string): Reconciliation[] {
+  return (readDb().reconciliations ?? []).filter(r => r.card_id === cardId).map(reconSummary).sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+/** Carteira (etapa 6): conferências começadas e não concluídas (same as GET /reconciliations/open). */
+export function localOpenReconciliations(): import("@/lib/walletSummary").OpenReconciliation[] {
+  return (readDb().reconciliations ?? []).filter(r => r.status === "pronta").map(reconSummary).map(r => ({
+    id: r.id, scope: r.scope ?? "account", account_id: r.account_id ?? null, card_id: r.card_id ?? null, cycle: r.cycle ?? null,
+    period_end: r.period_end, pending: r.pending,
+    difference: r.bank_closing_cents == null ? null : (r.bank_closing_cents - r.finnos_closing_cents) / 100,
+  }));
 }

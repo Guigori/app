@@ -14,7 +14,7 @@ const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const amount = (t: Transaction) => t.adjusted_value ?? t.value;
-const spending = (txs: Transaction[]) => txs.filter((t) => t.type === "despesa" && !t.invoice_payment && !t.invoice_refund);
+const spending = (txs: Transaction[]) => txs.filter((t) => t.type === "despesa" && !(t.invoice_payment || t.balance_adjustment) && !t.invoice_refund);
 const incomes = (txs: Transaction[]) => txs.filter((t) => t.type === "receita" && !t.invoice_refund);
 const sum = (txs: Transaction[]) => txs.reduce((s, t) => s + amount(t), 0);
 const short = (m: string) => cap(shortMonthName(m));

@@ -37,14 +37,14 @@ export function statementLinesToCsv(lines: string[], fallbackYear: number): stri
   return ["Data;Descrição;Valor", ...rows].join("\n");
 }
 
-/** Reads every page, rebuilds the visual lines (same height = same line) and converts them. */
-export async function pdfToStatementCsv(file: File): Promise<string> {
+/** Text lines of every page, rebuilt from pdf.js items (same height = same line).
+ * Read on the device: the file itself never leaves it. */
+export async function pdfTextPages(file: File): Promise<{ page: number; text: string }[]> {
   const pdfjs = await import("pdfjs-dist");
   const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
   const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
-  const lines: string[] = [];
-  let text = "";
+  const pages: { page: number; text: string }[] = [];
   for (let n = 1; n <= doc.numPages; n++) {
     const page = await doc.getPage(n);
     const content = await page.getTextContent();
@@ -54,12 +54,17 @@ export async function pdfToStatementCsv(file: File): Promise<string> {
       const y = Math.round(item.transform[5] / 2) * 2;
       byY.set(y, [...(byY.get(y) ?? []), { x: item.transform[4], s: item.str }]);
     }
-    for (const y of [...byY.keys()].sort((a, b) => b - a)) {
-      const line = byY.get(y)!.sort((a, b) => a.x - b.x).map((i) => i.s).join(" ");
-      lines.push(line);
-      text += line + "\n";
-    }
+    const lines = [...byY.keys()].sort((a, b) => b - a).map((y) => byY.get(y)!.sort((a, b) => a.x - b.x).map((i) => i.s).join(" "));
+    pages.push({ page: n, text: lines.join("\n") });
   }
+  return pages;
+}
+
+/** Reads every page, rebuilds the visual lines and converts them to statement CSV. */
+export async function pdfToStatementCsv(file: File): Promise<string> {
+  const pages = await pdfTextPages(file);
+  const lines = pages.flatMap((p) => p.text.split("\n"));
+  const text = lines.join("\n");
   const year = Number(text.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getFullYear());
   return statementLinesToCsv(lines, year);
 }

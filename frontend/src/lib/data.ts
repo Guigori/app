@@ -1,3 +1,4 @@
+import { INSTITUTION_CATALOG } from "@/lib/institutionCatalog";
 import { firebaseAuth } from "@/lib/firebase";
 // Single data boundary for the whole app. Every page/dialog calls these helpers so
 // "conta local" (browser-only) and "conta completa" (server) share one call shape:
@@ -18,6 +19,9 @@ import {
   localListInstitutions,
   localCreateInstitution,
   localDeleteInstitution,
+  localLinkLegacyInstitutions,
+  localSetDefaultAccount,
+  localSetDefaultCard,
   localCreateCategory,
   localCreateTransaction,
   localDashboard,
@@ -45,6 +49,11 @@ import {
   localNotifications,
   localInvoice,
   localPayInvoice,
+  localUndoInvoicePayment,
+  localReverseTransfer,
+  localCreateReconciliation, localListReconciliations, localGetReconciliation, localResolveReconciliation,
+  localUndoReconciliationEvent, localCompleteReconciliation, localAdjustBalance, localRechargeBenefits, localOpenReconciliations,
+  localCreateCardReconciliation, localListCardReconciliations,
   localCreditInvoice,
   localBankRefund,
   localSubscriptions,
@@ -56,6 +65,7 @@ import {
   type LocalTxFilters,
 } from "@/lib/local/engine";
 import type {
+  Reconciliation, ReconciliationInput, ReconResolveInput, BalanceAdjustment, BalanceAdjustmentInput, CardReconciliationInput,
   ConfirmAllResult,
   PendingCaptureConfirm,
   PendingCaptures,
@@ -65,6 +75,8 @@ import type {
   AccountInput,
   Institution,
   InstitutionInput,
+  InstitutionCatalogItem,
+  LegacyLinkResult,
   FinanceHistoryPage,
   FinanceIntegrity,
   FiintMaturity,
@@ -330,6 +342,35 @@ export async function fetchInstitutions(): Promise<Institution[]> {
 export async function createInstitution(input: InstitutionInput): Promise<Institution> {
   if (isLocalMode()) return localCreateInstitution(input);
   return apiPost<Institution>("/institutions", input);
+}
+
+/** Known banks and benefit providers for the picker. */
+export async function fetchInstitutionCatalog(): Promise<InstitutionCatalogItem[]> {
+  if (isLocalMode()) return INSTITUTION_CATALOG;
+  try {
+    return await cachedFetch("institution-catalog", () => apiGet<InstitutionCatalogItem[]>("/institutions/catalog"));
+  } catch {
+    // The list is fixed; the bundled copy is the same one the server keeps.
+    return INSTITUTION_CATALOG;
+  }
+}
+
+/** Link older accounts and cards that only carry the bank name as text (idempotent). */
+export async function linkLegacyInstitutions(): Promise<LegacyLinkResult> {
+  if (isLocalMode()) return localLinkLegacyInstitutions();
+  return apiPost<LegacyLinkResult>("/institutions/link-legacy", {});
+}
+
+/** Preselect this account for its kind (bank, benefit or cash); the previous one is unset. */
+export async function setDefaultAccount(id: string): Promise<Account> {
+  if (isLocalMode()) return localSetDefaultAccount(id);
+  return apiPost<Account>(`/accounts/${encodeURIComponent(id)}/default`, {});
+}
+
+/** Preselect this credit card; the previous one is unset. */
+export async function setDefaultCard(id: string): Promise<CreditCard> {
+  if (isLocalMode()) return localSetDefaultCard(id);
+  return apiPost<CreditCard>(`/cards/${encodeURIComponent(id)}/default`, {});
 }
 
 export async function deleteInstitution(id: string): Promise<void> {
@@ -796,6 +837,68 @@ export async function fetchInvoice(cardId: string, cycle?: string): Promise<Invo
 export async function payInvoice(cardId: string, input: PayInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
   if (isLocalMode()) return localPayInvoice(cardId, input);
   return apiPost<Invoice>(`/cards/${cardId}/pay`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+
+// --- Conferência da conta com o extrato (etapa 3) ---
+export async function createReconciliation(accountId: string, input: ReconciliationInput, operationId = crypto.randomUUID()): Promise<Reconciliation> {
+  if (isLocalMode()) return localCreateReconciliation(accountId, input);
+  return apiPost<Reconciliation>(`/accounts/${encodeURIComponent(accountId)}/reconciliations`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+export async function fetchAccountReconciliations(accountId: string): Promise<Reconciliation[]> {
+  if (isLocalMode()) return localListReconciliations(accountId);
+  return apiGet<Reconciliation[]>(`/accounts/${encodeURIComponent(accountId)}/reconciliations`);
+}
+export async function fetchReconciliation(id: string): Promise<Reconciliation> {
+  if (isLocalMode()) return localGetReconciliation(id);
+  return apiGet<Reconciliation>(`/reconciliations/${encodeURIComponent(id)}`);
+}
+export async function resolveReconciliation(id: string, input: ReconResolveInput, operationId = crypto.randomUUID()): Promise<Reconciliation> {
+  if (isLocalMode()) return localResolveReconciliation(id, input);
+  return apiPost<Reconciliation>(`/reconciliations/${encodeURIComponent(id)}/resolve`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+export async function undoReconciliationEvent(id: string, eventId: string, operationId = crypto.randomUUID()): Promise<Reconciliation> {
+  if (isLocalMode()) return localUndoReconciliationEvent(id, eventId);
+  return apiPost<Reconciliation>(`/reconciliations/${encodeURIComponent(id)}/events/${encodeURIComponent(eventId)}/undo`, {}, { "X-FINNOS-Operation-ID": operationId });
+}
+export async function completeReconciliation(id: string, note = ""): Promise<Reconciliation> {
+  if (isLocalMode()) return localCompleteReconciliation(id, note);
+  return apiPost<Reconciliation>(`/reconciliations/${encodeURIComponent(id)}/complete`, { note });
+}
+export async function createCardReconciliation(cardId: string, input: CardReconciliationInput, operationId = crypto.randomUUID()): Promise<Reconciliation> {
+  if (isLocalMode()) return localCreateCardReconciliation(cardId, input);
+  return apiPost<Reconciliation>(`/cards/${encodeURIComponent(cardId)}/reconciliations`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+export async function fetchCardReconciliations(cardId: string): Promise<Reconciliation[]> {
+  if (isLocalMode()) return localListCardReconciliations(cardId);
+  return apiGet<Reconciliation[]>(`/cards/${encodeURIComponent(cardId)}/reconciliations`);
+}
+export async function adjustAccountBalance(accountId: string, input: BalanceAdjustmentInput, operationId = crypto.randomUUID()): Promise<BalanceAdjustment> {
+  if (isLocalMode()) return localAdjustBalance(accountId, input);
+  return apiPost<BalanceAdjustment>(`/accounts/${encodeURIComponent(accountId)}/adjustments`, input, { "X-FINNOS-Operation-ID": operationId });
+}
+
+/** Carteira: conferências em aberto, para o aviso de diferença de saldo. */
+export async function fetchOpenReconciliations(): Promise<import("@/lib/walletSummary").OpenReconciliation[]> {
+  if (isLocalMode()) return localOpenReconciliations();
+  return apiGet<import("@/lib/walletSummary").OpenReconciliation[]>("/reconciliations/open");
+}
+
+/** Benefit cards: credit the monthly recharges that are due (idempotent; safe on every app open). */
+export async function rechargeBenefits(): Promise<{ created: { id: string }[] }> {
+  if (isLocalMode()) return { created: localRechargeBenefits() };
+  return apiPost<{ created: { id: string }[] }>("/accounts/benefits/recharge", {});
+}
+
+/** Undo a transfer with an inverse transfer linked to it; the original stays in the history. */
+export async function reverseTransfer(id: string, allowOverdraft = false, operationId = crypto.randomUUID()): Promise<Transaction> {
+  if (isLocalMode()) return localReverseTransfer(id, allowOverdraft);
+  return apiPost<Transaction>(`/transactions/${encodeURIComponent(id)}/reverse`, { allow_overdraft: allowOverdraft }, { "X-FINNOS-Operation-ID": operationId });
+}
+
+/** Undo the last payment of an invoice: a linked reversal returns the money; the original stays. */
+export async function undoInvoicePayment(cardId: string, paymentId: string, operationId = crypto.randomUUID()): Promise<Invoice> {
+  if (isLocalMode()) return localUndoInvoicePayment(cardId, paymentId);
+  return apiPost<Invoice>(`/cards/${encodeURIComponent(cardId)}/payments/${encodeURIComponent(paymentId)}/undo`, {}, { "X-FINNOS-Operation-ID": operationId });
 }
 
 /** Paid invoice refund creates one bank receipt; the original invoice remains paid. */

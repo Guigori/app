@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, ChartNoAxesCombined, ChevronRight, Pencil, Radar as RadarIcon } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, ChartNoAxesCombined, ChevronRight, Pencil, Radar as RadarIcon, RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
-import { fetchBudget, fetchBudgetCycleProgress, fetchCurrentBudgetCycle, fetchCalendar, fetchRadar, fetchSubscriptions, fetchTransactions } from "@/lib/data";
+import { fetchBudget, fetchBudgetCycleProgress, fetchCurrentBudgetCycle, fetchCalendar, fetchRadar, fetchSubscriptions, fetchTransactions, reverseTransfer } from "@/lib/data";
+import { getApiErrorMessage } from "@/lib/errors";
+import { fundsIssue } from "@/lib/funds";
 import { addMonth, formatBRL, formatDate, formatHiddenBRL, formatSignedBRL, monthLabel } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { budgetImpact, cashFlowLink, cycleImpact, flowPath, monthImpact, monthlyHistory, rhythm, signedAmount, type Rhythm } from "@/lib/transactionInsight";
@@ -70,6 +73,25 @@ interface Props {
 /** What a lançamento means: where it went, which budget it used, whether it repeats and how it moves the month. */
 export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, onEdit }: Props) {
   const { hidden } = useBalanceHidden();
+  const queryClient = useQueryClient();
+  const [undoPrompt, setUndoPrompt] = useState<string | null>(null);
+  const [operationId] = useState(() => crypto.randomUUID());
+  const undo = useMutation({
+    mutationFn: (allow: boolean) => reverseTransfer(tx!.id, allow, operationId),
+    onSuccess: async () => {
+      toast.success("Transferência desfeita: o valor voltou para a conta de origem.");
+      setUndoPrompt(null);
+      onOpenChange(false);
+      await Promise.all(["transactions", "accounts", "dashboard", "flow", "calendar"].map((key) =>
+        queryClient.invalidateQueries({ queryKey: [key] })));
+    },
+    onError: (error) => {
+      const issue = fundsIssue(error);
+      if (issue?.code === "confirmar_cheque_especial") return setUndoPrompt(issue.message);
+      setUndoPrompt(null);
+      toast.error(getApiErrorMessage(error));
+    },
+  });
   // Bottom sheet on the phone, side panel on wide screens.
   const [side] = useState<"bottom" | "right">(() => (typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches ? "right" : "bottom"));
   const month = tx?.date.slice(0, 7) ?? "";
@@ -205,9 +227,27 @@ export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, on
             <Link to={cashFlowLink(tx)} onClick={close} className={cn(buttonVariants(), "h-11 justify-between rounded-2xl")} data-testid="transaction-detail-cashflow">
               <span className="flex items-center gap-2"><ChartNoAxesCombined className="h-4 w-4" aria-hidden="true" />Ver no Caixa</span><ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Link>
-            <Button variant="outline" className="h-11 justify-between rounded-2xl" onClick={() => { close(); onEdit(tx); }} data-testid="transaction-detail-edit">
-              <span className="flex items-center gap-2"><Pencil className="h-4 w-4" aria-hidden="true" />Editar lançamento</span><ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </Button>
+            {tx.reversed_by || tx.reversal_of ? (
+              <p className="rounded-2xl bg-muted/60 p-3.5 text-sm text-muted-foreground" data-testid="transaction-detail-reversed">
+                {tx.reversed_by ? "Esta transferência foi desfeita por uma transferência inversa." : "Esta transferência desfaz outra."} Fica no histórico como está.
+              </p>
+            ) : (
+              <Button variant="outline" className="h-11 justify-between rounded-2xl" onClick={() => { close(); onEdit(tx); }} data-testid="transaction-detail-edit">
+                <span className="flex items-center gap-2"><Pencil className="h-4 w-4" aria-hidden="true" />Editar lançamento</span><ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            )}
+            {tx.type === "transferencia" && tx.status === "pago" && !tx.reversed_by && !tx.reversal_of ? (
+              <Button variant="ghost" className="h-11 justify-between rounded-2xl" disabled={undo.isPending}
+                onClick={() => undo.mutate(false)} data-testid="transaction-detail-reverse">
+                <span className="flex items-center gap-2"><RotateCcw className="h-4 w-4" aria-hidden="true" />Desfazer transferência</span>
+              </Button>
+            ) : null}
+            {undoPrompt ? (
+              <div className="space-y-2 rounded-2xl bg-amber-500/10 p-3.5 text-sm" role="alert" data-testid="transaction-reverse-overdraft">
+                <p>{undoPrompt}</p>
+                <Button size="sm" disabled={undo.isPending} onClick={() => undo.mutate(true)}>Usar cheque especial e desfazer</Button>
+              </div>
+            ) : null}
           </div>
         </div>
       </SheetContent>

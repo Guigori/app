@@ -68,6 +68,11 @@ def enrich_transaction(
         version=doc.get("version", 1),
         invoice_payment=doc.get("invoice_payment", False),
         invoice_refund=doc.get("invoice_refund", False),
+        reversal_of=doc.get("reversal_of"),
+        reversed_by=doc.get("reversed_by"),
+        wallet_id=doc.get("wallet_id"),
+        to_wallet_id=doc.get("to_wallet_id"),
+        benefit_recharge=bool(doc.get("benefit_recharge")),
         id=doc["id"],
         name=doc["name"],
         value=D(doc["value"]),
@@ -120,7 +125,9 @@ async def _validate(user_id: str, payload: TransactionIn) -> None:
     if payload.type == "transferencia":
         if payload.card_id or payload.installment:
             raise HTTPException(400, "Transferência não pode ter cartão ou parcelas.")
-        if not payload.to_account_id or payload.to_account_id == payload.account_id:
+        same_card_move = (payload.to_account_id == payload.account_id and payload.wallet_id
+                          and payload.to_wallet_id and payload.wallet_id != payload.to_wallet_id)
+        if not payload.to_account_id or (payload.to_account_id == payload.account_id and not same_card_move):
             raise HTTPException(
                 status_code=400,
                 detail="Escolha contas diferentes para a transferência.",
@@ -189,6 +196,9 @@ def _document(user_id: str, payload: TransactionIn) -> dict:
         "notes": payload.notes,
         "origin": (payload.origin or "").strip() or None,
         "notify_enabled": payload.notify_enabled,
+        # Benefit cards (etapa 5): which of its benefits pays; the default one when absent.
+        "wallet_id": payload.wallet_id,
+        "to_wallet_id": payload.to_wallet_id if payload.type == "transferencia" else None,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
@@ -350,6 +360,7 @@ async def create_transaction(
             (x_finnos_operation_id or doc["id"]),
         ))
     doc["source"] = normalized_operation_source(x_finnos_source)
+    doc["_allow_overdraft"] = payload.allow_overdraft
     await db.transactions.insert_one(doc)
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
     return enrich_transaction(
@@ -384,6 +395,7 @@ async def update_transaction(
     doc["operation_id"] = x_finnos_operation_id
     doc["_expected_version"] = x_finnos_base_version
     doc["source"] = normalized_operation_source(x_finnos_source)
+    doc["_allow_overdraft"] = payload.allow_overdraft
     await db.transactions.replace_one({"id": tx_id, "user_id": user["id"]}, doc)
     doc = await db.transactions.find_one({"id":tx_id,"user_id":user["id"]})
     accounts_by_id, categories_by_id = await _ref_maps(user["id"])
@@ -502,6 +514,93 @@ async def change_recurrence_scope(
         raise HTTPException(409, "Ocorrência registrada, mas leitura indisponível.")
     accounts, categories = await _ref_maps(uid)
     return enrich_transaction(doc, accounts, categories, await _cards_by_id(uid))
+
+
+class ReverseTransferIn(FinanceModel):
+    # The person confirmed using the destination's cheque especial.
+    allow_overdraft: bool = False
+
+
+@router.post("/{tx_id}/reverse", response_model=TransactionOut)
+async def reverse_transfer(
+    tx_id: str,
+    payload: ReverseTransferIn,
+    user: dict = Depends(require_user),
+    x_finnos_operation_id: str = Header(...),
+):
+    """Undo a transfer with an inverse transfer linked to it (approved 12/11/2026).
+
+    Both sides move back in one write; the original stays in the history and
+    can no longer be edited. The money now leaves the destination, so the
+    destination must cover it (or its cheque especial, with confirmation).
+    """
+    from datetime import datetime, timezone
+    import hashlib
+    from finnos.lib import db as store
+    from finnos.lib.account_funds import balance_in_transaction, ensure_funds
+    from finnos.lib.history import record_event
+    from finnos.lib.money import cents
+
+    if not 1 <= len(x_finnos_operation_id) <= 200:
+        raise HTTPException(422, "Identificador de operação inválido.")
+    uid = store.scoped({"user_id": user["id"]})
+    store.resource_id(tx_id)
+    reversal_id = hashlib.sha256(("reverse:" + x_finnos_operation_id).encode()).hexdigest()
+    today = today_iso()
+
+    def execute():
+        instance = store.client()
+
+        def action(tr):
+            owner = store.root(instance, uid)
+            original_ref = owner.collection("transactions").document(tx_id)
+            snapshot = original_ref.get(transaction=tr)
+            if not snapshot.exists:
+                raise HTTPException(404, "Transação não encontrada.")
+            original = dict(store.decode(snapshot.to_dict()), id=tx_id)
+            reversal_ref = owner.collection("transactions").document(reversal_id)
+            existing = reversal_ref.get(transaction=tr)
+            if existing.exists:
+                saved = dict(store.decode(existing.to_dict()), id=reversal_id)
+                if saved.get("reversal_of") != tx_id:
+                    raise HTTPException(409, "Operação reutilizada com dados diferentes.")
+                return saved
+            if original.get("type") != "transferencia" or original.get("status") != "pago":
+                raise HTTPException(409, "Só uma transferência realizada pode ser desfeita.")
+            if original.get("reversal_of"):
+                raise HTTPException(409, "Esta transferência já desfaz outra.")
+            if original.get("reversed_by"):
+                raise HTTPException(409, "Esta transferência já foi desfeita.")
+            destination = owner.collection("accounts").document(store.resource_id(original["to_account_id"])).get(transaction=tr)
+            if not destination.exists:
+                raise HTTPException(409, "A conta de destino não existe mais.")
+            account = dict(store.decode(destination.to_dict()), id=original["to_account_id"])
+            balance = balance_in_transaction(instance, uid, account, tr, today)
+            ensure_funds(balance, cents(original["value"]), account, allow_overdraft=payload.allow_overdraft)
+            now = datetime.now(timezone.utc)
+            reversal = {
+                key: original.get(key) for key in ("value", "category_id", "origin")
+            } | dict(
+                id=reversal_id, user_id=uid, name=f"Desfaz: {original.get('name') or 'transferência'}",
+                type="transferencia", status="pago", date=today, account_id=original["to_account_id"],
+                to_account_id=original["account_id"], card_id=None, fixed=False, recurrence=None,
+                installment=False, total_installments=None, current_installment=None, adjusted_value=None,
+                attachment=None, notes=f"Desfaz a transferência de {original.get('date')}.", reversal_of=tx_id,
+                source="manual", notify_enabled=False, version=1, created_at=now, updated_at=now,
+            )
+            updated = dict(original, reversed_by=reversal_id, updated_at=now,
+                           version=int(original.get("version", 1)) + 1)
+            tr.create(reversal_ref, store.encode(reversal))
+            record_event(tr, owner, "transactions", "created", None, reversal)
+            tr.set(original_ref, store.encode(updated))
+            record_event(tr, owner, "transactions", "updated", original, updated)
+            return reversal
+
+        return store.atomic(instance, uid, action)
+
+    doc = await run_in_threadpool(execute)
+    accounts_by_id, categories_by_id = await _ref_maps(uid)
+    return enrich_transaction(doc, accounts_by_id, categories_by_id, await _cards_by_id(uid))
 
 
 @router.delete("/{tx_id}", status_code=204)

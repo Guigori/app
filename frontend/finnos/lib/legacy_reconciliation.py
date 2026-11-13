@@ -33,7 +33,7 @@ def review_historical_invoices(cards: list[dict], txs: list[dict], today: str, *
         if tx.get("invoice_payment"):
             key = (tx.get("invoice_card_id"), tx.get("invoice_cycle"))
             try:
-                value = cents(tx["value"])
+                value = cents(tx["value"]) * (-1 if tx.get("type") == "receita" else 1)
             except (ValueError, TypeError, KeyError):
                 issue("invalid_legacy_amounts", key[0] or "", key[1])
                 continue

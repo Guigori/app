@@ -179,7 +179,7 @@ export interface FocusContext {
 /** Everything the Caixa says about one lançamento in its month: weight, impact, rhythm, budget, comparison. */
 export function focusFacts(tx: Transaction, ctx: FocusContext): FocusFacts {
   const month = tx.date.slice(0, 7);
-  const same = ctx.monthRows.filter((row) => row.type === tx.type && !row.invoice_payment && !row.invoice_refund && row.date.slice(0, 7) === month);
+  const same = ctx.monthRows.filter((row) => row.type === tx.type && !(row.invoice_payment || row.balance_adjustment) && !row.invoice_refund && row.date.slice(0, 7) === month);
   if (!same.some((row) => row.id === tx.id)) same.push(tx);
   const ranked = [...same].sort((a, b) => b.value - a.value);
   const total = same.reduce((sum, row) => sum + row.value, 0);

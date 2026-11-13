@@ -14,6 +14,8 @@ export type ImportRow = {
   blocked?: boolean;
   /** "HH:MM" when the file has it (OFX DTPOSTED); used to tell apart same-day twins. */
   time?: string | null;
+  /** OFX FITID: the bank's own id for the line (prevents conferring it twice). */
+  fitid?: string | null;
 };
 
 const parseMoney=(raw:string)=>{
@@ -81,7 +83,8 @@ export function parseFinancialFile(text:string,kind:ImportKind):ImportRow[]{
       const time=posted?.[2]&&!["0000","1200"].includes(posted[2])?`${posted[2].slice(0,2)}:${posted[2].slice(2)}`:null;
       const amount=parseMoney(block.match(/<TRNAMT>([^<\r\n]+)/i)?.[1]??"");
       const description=(block.match(/<(?:NAME|MEMO)>([^<\r\n]+)/i)?.[1]??"Lançamento").trim();
-      if(date&&amount!==null)rows.push({...row(`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`,description,amount,kind,true),time});
+      const fitid=block.match(/<FITID>([^<\r\n]+)/i)?.[1]?.trim()||null;
+      if(date&&amount!==null)rows.push({...row(`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`,description,amount,kind,true),time,fitid});
     }
   }else{
     let columns:Columns|null=null;
@@ -111,4 +114,11 @@ export function parseFinancialFile(text:string,kind:ImportKind):ImportRow[]{
   const counts=new Map<string,number>();
   rows.forEach(r=>{const k=r.description.toLocaleLowerCase("pt-BR").replace(/\d+/g,"").trim();counts.set(k,(counts.get(k)??0)+1)});
   return rows.map(r=>({...r,recurring_candidate:(counts.get(r.description.toLocaleLowerCase("pt-BR").replace(/\d+/g,"").trim())??0)>=2})).slice(0,500);
+}
+
+/** OFX closing balance (<LEDGERBAL><BALAMT>), when the bank sends it. */
+export function ofxClosingBalance(text:string):number|null{
+  const block=text.match(/<LEDGERBAL>([\s\S]*?)(?:<\/LEDGERBAL>|<AVAILBAL>|$)/i)?.[1]??"";
+  const amount=block.match(/<BALAMT>([^<\r\n]+)/i)?.[1];
+  return amount===undefined?null:parseMoney(amount);
 }

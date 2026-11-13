@@ -3,7 +3,7 @@
 Purchases represent expenses; payments represent bank movement only. All money
 in this module is integer cents. Historical unpaid invoices retain the limit.
 """
-from datetime import date
+from datetime import date, timedelta
 from finnos.lib.cards import cycle_bounds, due_date, _clamp_day
 from finnos.lib.money import cents, installment_portion, remaining_installment_indices
 from finnos.lib.invoice_credits import cycle_credits, credit_total_cents
@@ -26,6 +26,24 @@ def occurrences(card, tx):
     return results
 
 
+CARRY_NAME = 'Saldo da fatura anterior'
+
+
+def next_cycle(card, cycle):
+    """Closing date of the invoice after ``cycle``."""
+    return cycle_bounds(date.fromisoformat(cycle) + timedelta(days=1), card['closing_day'])[1].isoformat()
+
+
+def carried_into(card, cycle):
+    """Balances left unpaid on earlier closed invoices and moved into ``cycle``
+    (approved 12/11/2026: partial payment carries the rest, no automatic interest)."""
+    return [
+        (source, saved['carried_cents'])
+        for source, saved in sorted((card.get('invoice_cycles') or {}).items())
+        if saved.get('carried_to') == cycle and saved.get('carried_cents')
+    ]
+
+
 def invoice_state(card, txs, cycle, categories=None):
     closing = date.fromisoformat(cycle)
     if closing != _clamp_day(closing.year, closing.month, card['closing_day']):
@@ -39,6 +57,9 @@ def invoice_state(card, txs, cycle, categories=None):
                 continue
             cat = categories.get(tx.get('category_id'), {})
             items.append(dict(id=tx['id'],name=tx['name'],date=tx['date'],purchase_cents=value,category_name=cat.get('name'),category_color=cat.get('color'),installment_label=label))
+    for source, carried in carried_into(card, cycle):
+        items.append(dict(id=f'carry:{source}', name=CARRY_NAME, date=source, purchase_cents=carried,
+                          category_name=None, category_color=None, installment_label=None, carry_from=source))
     saved = (card.get('invoice_cycles') or {}).get(cycle)
     if saved:
         # Payments preserve a snapshot of the purchases already present. New
@@ -53,8 +74,9 @@ def invoice_state(card, txs, cycle, categories=None):
     adjustments = cycle_credits(card, cycle)
     total = sum(i['purchase_cents'] for i in items) - credit_total_cents(card, cycle)
     paid = (saved or {}).get('paid_cents', 0)
+    carried = (saved or {}).get('carried_cents', 0)
     refunds = list((card.get('invoice_refunds') or {}).get(cycle) or [])
-    return dict(card_id=card['id'],card_name=card['name'],cycle_start=start,cycle_end=cycle,due_date=due_date(closing,card['closing_day'],card['due_day']).isoformat(),total_cents=total,paid_cents=paid,paid=total > 0 and paid == total,paid_at=(saved or {}).get('paid_at'),items=items,adjustments=adjustments,adjustment_cents=credit_total_cents(card, cycle),refunds=refunds,refund_cents=sum(item['refund_cents'] for item in refunds))
+    return dict(card_id=card['id'],card_name=card['name'],cycle_start=start,cycle_end=cycle,due_date=due_date(closing,card['closing_day'],card['due_day']).isoformat(),total_cents=total,paid_cents=paid,carried_cents=carried,carried_to=(saved or {}).get('carried_to') if carried else None,last_payment_id=(saved or {}).get('last_payment_id'),reconciled=bool((saved or {}).get('reconciled')),minimum_cents=(saved or {}).get('minimum_cents'),paid=total > 0 and paid >= total,paid_at=(saved or {}).get('paid_at'),items=items,adjustments=adjustments,adjustment_cents=credit_total_cents(card, cycle),refunds=refunds,refund_cents=sum(item['refund_cents'] for item in refunds))
 
 
 def default_invoice_cycle(card, txs, today):
@@ -73,7 +95,7 @@ def default_invoice_cycle(card, txs, today):
         if cycle >= today.isoformat():
             continue
         state = invoice_state(card, txs, cycle)
-        if state['total_cents'] > state['paid_cents']:
+        if state['total_cents'] > state['paid_cents'] + state['carried_cents']:
             return cycle
     return open_cycle
 
@@ -81,11 +103,13 @@ def default_invoice_cycle(card, txs, today):
 def output(state):
     return {
         **{k: v for k, v in state.items() if k not in {
-            'total_cents', 'paid_cents', 'items', 'adjustments', 'adjustment_cents', 'refunds', 'refund_cents'
+            'total_cents', 'paid_cents', 'carried_cents', 'minimum_cents', 'items', 'adjustments', 'adjustment_cents', 'refunds', 'refund_cents'
         }},
         'total': state['total_cents'] / 100,
         'paid_amount': state['paid_cents'] / 100,
-        'outstanding': (state['total_cents'] - state['paid_cents']) / 100,
+        'carried_amount': state.get('carried_cents', 0) / 100,
+        'minimum_payment': None if state.get('minimum_cents') is None else state['minimum_cents'] / 100,
+        'outstanding': max(0, state['total_cents'] - state['paid_cents'] - state.get('carried_cents', 0)) / 100,
         'adjustment_total': state.get('adjustment_cents', 0) / 100,
         'items': [
             {**{k: v for k, v in item.items() if k != 'purchase_cents'},
@@ -128,9 +152,13 @@ def commitment(card, txs, current):
             bucket[item['id']] = item['purchase_cents']
     for cycle in card.get('invoice_adjustments') or {}:
         lines.setdefault(cycle, {})
+    for source, saved in saved_cycles.items():
+        if saved.get('carried_to') and saved.get('carried_cents'):
+            lines.setdefault(saved['carried_to'], {})[f'carry:{source}'] = saved['carried_cents']
     owed = {
         cycle: max(0, sum(bucket.values()) - credit_total_cents(card, cycle)
-                   - saved_cycles.get(cycle, {}).get('paid_cents', 0))
+                   - saved_cycles.get(cycle, {}).get('paid_cents', 0)
+                   - saved_cycles.get(cycle, {}).get('carried_cents', 0))
         for cycle, bucket in lines.items()
     }
     return (

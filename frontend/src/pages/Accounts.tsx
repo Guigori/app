@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getAccountPaymentMethods, setAccountPaymentMethods, clearLocalAccountPaymentMethods, PAYMENT_METHODS, type PaymentMethod } from "@/lib/accountPaymentPreferences";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CreditCard as CreditCardIcon, PlusCircle, Wallet } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { deleteAccount, fetchAccounts, fetchCards, fetchInstitutions, fetchSubscriptions } from "@/lib/data";
+import { deleteAccount, fetchAccounts, fetchCards, fetchInstitutions, fetchSubscriptions, linkLegacyInstitutions } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { CardsPanel } from "@/components/cards/CardsPanel";
 import { CardDialog } from "@/components/cards/CardDialog";
@@ -54,6 +54,23 @@ export default function Accounts() {
   const institutions = institutionsQuery.data ?? [];
   const [cardDialog, setCardDialog] = useState<{ open: boolean; card?: CreditCard }>({ open: false });
   const [institutionManagerOpen, setInstitutionManagerOpen] = useState(false);
+
+  // Older accounts and cards only carry the bank name as text: link them to an
+  // institution once, so the color and grouping come from the bank. Idempotent.
+  const linking = useRef(false);
+  useEffect(() => {
+    if (linking.current || !accountsQuery.isSuccess || !cardsQuery.isSuccess || !navigator.onLine) return;
+    const unlinked = [...(accountsQuery.data ?? []).filter((a) => a.type !== "carteira"), ...(cardsQuery.data ?? [])].some((x) => !x.institution_id && (x.institution ?? "").trim().length >= 2);
+    if (!unlinked) return;
+    linking.current = true;
+    void linkLegacyInstitutions().then((result) => {
+      if (result.linked_accounts + result.linked_cards > 0) {
+        void queryClient.invalidateQueries({ queryKey: ["accounts"] });
+        void queryClient.invalidateQueries({ queryKey: ["cards"] });
+        void queryClient.invalidateQueries({ queryKey: ["institutions"] });
+      }
+    }).catch(() => { /* tries again next visit */ });
+  }, [accountsQuery.isSuccess, cardsQuery.isSuccess, accountsQuery.data, cardsQuery.data, queryClient]);
 
   const [selected, setSelected] = useState<Account | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Account | null>(null);

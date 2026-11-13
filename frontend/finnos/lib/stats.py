@@ -51,7 +51,7 @@ def month_portion(tx: dict, month: str) -> float | None:
     month to the last installment — so future parcels never double-count in the
     current month. Pending/scheduled money and transfers count as zero.
     """
-    if tx.get("invoice_payment") or tx.get("invoice_refund") or tx.get("type") == "transferencia" or tx.get("status") != "pago":
+    if (tx.get("invoice_payment") or tx.get("balance_adjustment")) or tx.get("invoice_refund") or tx.get("type") == "transferencia" or tx.get("status") != "pago":
         return None
     d: str = tx["date"]
     if tx.get("installment"):
@@ -92,6 +92,8 @@ def balance_effects(tx: dict, today: str) -> list[tuple[str, float]]:
         return [(tx["account_id"], quantize_brl(v))]
     if tx["type"] == "despesa":
         return [(tx["account_id"], quantize_brl(-v))]
+    if tx.get("to_account_id") == tx["account_id"]:
+        return []  # between two benefits of the same card: the account total does not move
     effects = [(tx["account_id"], quantize_brl(-v))]
     if tx.get("to_account_id") and tx["to_account_id"] != tx["account_id"]:
         effects.append((tx["to_account_id"], quantize_brl(v)))

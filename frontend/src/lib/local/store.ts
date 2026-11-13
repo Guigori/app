@@ -15,10 +15,23 @@ export interface LocalProfile {
 
 /** Stored shape of a card: the input fields plus identity. Invoice/limit numbers are
  *  always derived at read time, exactly like the backend does. */
+export interface LocalPaidCycle {
+  amount: number;
+  paid_at: string | null;
+  items?: import("@/types/finnos").InvoiceItem[];
+  /** Payments in order; only the last one can be undone. */
+  payments?: { id: string; amount: number; carried: number; date: string }[];
+  last_payment_id?: string | null;
+  /** Partial payment of a closed invoice: the rest moved to `carried_to`. */
+  carried?: number;
+  carried_to?: string;
+  reconciled?: boolean;
+}
+
 export interface LocalCard extends CardInput {
   id: string;
   created_at: string;
-  paid_cycles?: Record<string, { amount: number; paid_at: string; items?: import("@/types/finnos").InvoiceItem[] }>;
+  paid_cycles?: Record<string, LocalPaidCycle>;
   invoice_adjustments?: Record<string, Array<import("@/types/finnos").InvoiceAdjustment & { fingerprint?: string }>>;
   invoice_refunds?: Record<string, Array<import("@/types/finnos").BankRefund & { fingerprint?: string }>>;
 }
@@ -32,6 +45,10 @@ export interface LocalDb {
   cards: LocalCard[];
   subscriptions: SubscriptionItem[];
   audit_events: FinanceHistoryEvent[];
+  /** Conferências da conta com o extrato (etapa 3). */
+  reconciliations?: import("@/types/finnos").Reconciliation[];
+  reconciliation_events?: (import("@/types/finnos").ReconEvent & { reconciliation_id: string; before: unknown; after: unknown; effects: Record<string, unknown> })[];
+  reconciliation_links?: Record<string, string>; // `${accountId}:${key}` -> tx id
   /** Monotonic write counter; the higher copy wins on startup (AUD-08). */
   revision?: number;
 }

@@ -173,7 +173,7 @@ def _projection(tx: dict, month: str) -> float | None:
 
     Monthly recurrence projections are emitted separately by the shared helper.
     """
-    if tx.get("invoice_payment") or tx.get("type") == "transferencia":
+    if (tx.get("invoice_payment") or tx.get("balance_adjustment")) or tx.get("type") == "transferencia":
         return None
     return _unpaid_portion(tx, month)
 
@@ -400,7 +400,7 @@ async def calendar_month(
         )
         day.count += 1
         # Invoice payment is a bank movement, not a second purchase expense.
-        if (tx["type"] == "transferencia" or tx.get("invoice_payment")
+        if (tx["type"] == "transferencia" or (tx.get("invoice_payment") or tx.get("balance_adjustment"))
                 or tx.get("invoice_refund")):
             continue
         value = _amount(tx)
@@ -422,7 +422,7 @@ async def calendar_month(
     for source in history:
         if (not source.get("installment") or source["date"][:7] == m
                 or source.get("type") not in ("receita", "despesa")
-                or source.get("invoice_payment") or source.get("invoice_refund")):
+                or (source.get("invoice_payment") or source.get("balance_adjustment")) or source.get("invoice_refund")):
             continue
         paid = source.get("status") == "pago"
         portion = month_portion(source, m) if paid else _unpaid_portion(source, m)

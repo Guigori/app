@@ -84,7 +84,7 @@ def test_negative_balance_reconciles_payment_and_transfer(monkeypatch):
             return Query(self.rows)
 
     monkeypatch.setattr(accounts, "db", SimpleNamespace(
-        accounts=Collection(docs), transactions=Collection(entries),
+        accounts=Collection(docs), transactions=Collection(entries), institutions=Collection([]),
     ))
     monkeypatch.setattr(accounts, "today_iso", lambda: "2026-10-26")
     from finnos.lib.account_balances import AccountLedger

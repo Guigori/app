@@ -79,7 +79,7 @@ function matchesAll(tx: Transaction, entities: Entity[]): boolean {
   return [...kinds.values()].every((group) => group.some((e) => entityMatch(tx, e)));
 }
 
-const counts = (tx: Transaction) => tx.type !== "transferencia" && !tx.invoice_payment && !tx.invoice_refund;
+const counts = (tx: Transaction) => tx.type !== "transferencia" && !(tx.invoice_payment || tx.balance_adjustment) && !tx.invoice_refund;
 const inPeriod = (tx: Transaction, p: Period) => tx.date >= p.start && tx.date <= p.end;
 
 function rowsFor(data: AnalystData, q: FinnQuery, p: Period, entities = q.entities) {
@@ -629,7 +629,7 @@ function notFoundAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
 
 /** "Quando foi a última vez que paguei o IPVA?", "procure Netflix": the lançamentos themselves, newest first. */
 function findAnswer(q: FinnQuery, data: AnalystData): FinnAnswer {
-  const rows = data.transactions.filter((tx) => tx.type !== "transferencia" && !tx.invoice_payment && inPeriod(tx, q.period) && matchesAll(tx, q.entities))
+  const rows = data.transactions.filter((tx) => tx.type !== "transferencia" && !(tx.invoice_payment || tx.balance_adjustment) && inPeriod(tx, q.period) && matchesAll(tx, q.entities))
     .sort((a, b) => b.date.localeCompare(a.date));
   const subject = q.entities.length ? q.entities.map((e) => e.name).join(" e ") : "o que você pediu";
   if (!rows.length) return { text: `Não encontrei lançamentos de **${subject}** ${inP(q.period)}.`, followUps: ["Para onde foi meu dinheiro este mês?"], links: linksFor(q), query: q, steps: [`Procurei ${subject} ${inP(q.period)}`] };
