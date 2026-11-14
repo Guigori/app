@@ -7,6 +7,7 @@ import { INSIGHTS, SIZE_LABEL, THEMES, type InsightDef, type WidgetConfig, type 
 import { cn } from "@/lib/utils";
 import { InsightWidget } from "@/components/insights/widgets";
 import { useCards } from "@/components/insights/useInsightData";
+import { useDragToClose } from "@/lib/gestures/useDragToClose";
 
 const PREVIEW_H: Record<WidgetSize, string> = { S: "h-[11rem] w-[54%]", M: "h-[11rem] w-full", L: "h-[23rem] w-full", XL: "h-[23rem] w-full" };
 
@@ -28,6 +29,7 @@ export function WidgetGallery({ open, onClose, onAdd, placedIds = [] }: { open: 
     ...THEMES.map((t) => ({ key: t, label: t, count: list.filter((d) => d.theme === t).length })),
   ].filter((c) => c.count > 0 || c.key === "todas");
   const close = () => { setPicked(null); setQuery(""); setTheme("todas"); onClose(); };
+  const drag = useDragToClose(close);
   // The page behind stays still while the gallery scrolls.
   useEffect(() => {
     if (!open) return;
@@ -40,10 +42,10 @@ export function WidgetGallery({ open, onClose, onAdd, placedIds = [] }: { open: 
     <AnimatePresence>
       {open ? (
         <motion.div className="fixed inset-0 z-[120] flex touch-none items-end bg-black/50 dashboard:items-center dashboard:justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={close}>
-          <motion.div role="dialog" aria-modal="true" aria-label="Adicionar widget" onClick={(e) => e.stopPropagation()}
+          <motion.div role="dialog" aria-modal="true" aria-label="Adicionar widget" onClick={(e) => e.stopPropagation()} {...drag.panel}
             className="flex max-h-[92dvh] w-full touch-auto flex-col overflow-hidden rounded-t-[28px] border border-border bg-background dashboard:max-w-xl dashboard:rounded-[28px]"
             initial={{ y: 60 }} animate={{ y: 0 }} exit={{ y: 60 }} transition={{ type: "spring", damping: 30, stiffness: 320 }} data-testid="widget-gallery">
-            <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-muted" aria-hidden="true" />
+            <div {...drag.grip} className="flex h-5 shrink-0 cursor-grab items-end justify-center"><div className="h-1.5 w-12 rounded-full bg-muted" aria-hidden="true" /></div>
             {picked ? <Detail def={picked} onBack={() => setPicked(null)} onAdd={(size, config) => { onAdd(picked.id, size, config); close(); }} /> : (
               <div className="flex min-h-0 flex-col">
                 <div className="flex items-center gap-3 px-4 pt-3">

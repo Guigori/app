@@ -6,6 +6,7 @@ import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
+import { gestureBlockedBy } from "@/lib/gestures/gestureTarget"
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -36,6 +37,65 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
   )
 }
 
+type Side = "top" | "right" | "bottom" | "left"
+
+/**
+ * Swiping a sheet back toward the edge it came from closes it, like the native ones: the menu to the
+ * left, a bottom sheet down (once its content is scrolled to the top). It follows the finger; short of
+ * the mark it slides back.
+ */
+function useSwipeToDismiss(side: Side) {
+  const [node, setNode] = React.useState<HTMLElement | null>(null)
+  const closer = React.useRef<HTMLButtonElement>(null)
+  React.useEffect(() => {
+    if (!node) return
+    const axis = side === "left" || side === "right" ? "x" : "y"
+    const sign = side === "left" || side === "top" ? -1 : 1
+    let g: { x: number; y: number; t: number; target: EventTarget | null; mode: "go" | "no" | null; d: number } | null = null
+    const paint = (d: number, animate: boolean) => {
+      node.style.transition = animate ? "transform 200ms cubic-bezier(.2,.8,.2,1)" : "none"
+      node.style.transform = d ? (axis === "x" ? `translate3d(${d}px,0,0)` : `translate3d(0,${d}px,0)`) : ""
+    }
+    const start = (e: TouchEvent) => {
+      g = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: performance.now(), target: e.target, mode: null, d: 0 } : null
+    }
+    const move = (e: TouchEvent) => {
+      if (!g || e.touches.length !== 1) return
+      const dx = e.touches[0].clientX - g.x
+      const dy = e.touches[0].clientY - g.y
+      const along = axis === "x" ? dx : dy
+      const across = axis === "x" ? dy : dx
+      if (!g.mode) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 10) return
+        g.mode = Math.abs(along) > Math.abs(across) * 1.2 && along * sign > 0 && !gestureBlockedBy(g.target, axis, along) ? "go" : "no"
+      }
+      if (g.mode !== "go") return
+      if (e.cancelable) e.preventDefault()
+      g.d = sign > 0 ? Math.max(0, along) : Math.min(0, along)
+      paint(g.d, false)
+    }
+    const end = () => {
+      const s = g
+      g = null
+      if (!s || s.mode !== "go") return
+      const speed = Math.abs(s.d) / Math.max(1, performance.now() - s.t)
+      if (Math.abs(s.d) > 80 || (speed > 0.5 && Math.abs(s.d) > 30)) closer.current?.click()
+      else paint(0, true)
+    }
+    node.addEventListener("touchstart", start, { passive: true })
+    node.addEventListener("touchmove", move, { passive: false })
+    node.addEventListener("touchend", end, { passive: true })
+    node.addEventListener("touchcancel", end, { passive: true })
+    return () => {
+      node.removeEventListener("touchstart", start)
+      node.removeEventListener("touchmove", move)
+      node.removeEventListener("touchend", end)
+      node.removeEventListener("touchcancel", end)
+    }
+  }, [node, side])
+  return { ref: setNode, closer }
+}
+
 function SheetContent({
   className,
   children,
@@ -43,13 +103,15 @@ function SheetContent({
   showCloseButton = true,
   ...props
 }: SheetPrimitive.Popup.Props & {
-  side?: "top" | "right" | "bottom" | "left"
+  side?: Side
   showCloseButton?: boolean
 }) {
+  const swipe = useSwipeToDismiss(side)
   return (
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Popup
+        ref={swipe.ref}
         data-slot="sheet-content"
         data-side={side}
         className={cn(
@@ -59,6 +121,7 @@ function SheetContent({
         {...props}
       >
         {children}
+        <SheetPrimitive.Close ref={swipe.closer} tabIndex={-1} aria-hidden="true" className="sr-only" data-slot="sheet-swipe-close" />
         {showCloseButton && (
           <SheetPrimitive.Close
             data-slot="sheet-close"

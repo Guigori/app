@@ -58,7 +58,7 @@ export function WidgetBoard({ surface, slots, header, emptyText }: { surface: Su
   });
 
   return (
-    <section className="space-y-3" data-testid={`widget-board-${surface}`}>
+    <section className="space-y-3" data-testid={`widget-board-${surface}`} data-gesture={editing ? "ignore" : undefined}>
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">{header}</div>
         {!editing ? (

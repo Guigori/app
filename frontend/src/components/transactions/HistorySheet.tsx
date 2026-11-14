@@ -6,6 +6,7 @@ import { History, PencilLine, Plus, Trash2, Undo2, X } from "lucide-react";
 import { fetchAccounts, fetchCards, fetchCategories, type HistoryEvent } from "@/lib/data";
 import { formatBRL } from "@/lib/format";
 import type { TransactionInput } from "@/types/finnos";
+import { useDragToClose } from "@/lib/gestures/useDragToClose";
 
 const FIELD: Record<string, string> = {
   name: "Nome", value_cents: "Valor", date: "Data", status: "Status", type: "Tipo", category_id: "Categoria",
@@ -76,16 +77,17 @@ export function HistorySheet({ open, events: raw, onClose, onRestore }: { open: 
     return String(v);
   };
   const when = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? iso : `${d.toLocaleDateString("pt-BR")} · ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`; };
+  const drag = useDragToClose(onClose);
   if (typeof document === "undefined") return null;
   return createPortal(
     <AnimatePresence>
       {open ? (
         <motion.div key="history" className="fixed inset-0 z-[85] flex items-end justify-center bg-black/60 dashboard:items-center" onClick={onClose}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-          <motion.div role="dialog" aria-modal="true" aria-label="Histórico de alterações" data-testid="record-history" onClick={(e) => e.stopPropagation()}
+          <motion.div role="dialog" aria-modal="true" aria-label="Histórico de alterações" data-testid="record-history" onClick={(e) => e.stopPropagation()} {...drag.panel}
             className="flex max-h-[85dvh] w-full max-w-md flex-col rounded-t-[32px] border border-b-0 border-border bg-card px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3.5 text-foreground dashboard:rounded-[28px] dashboard:border-b"
             initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", stiffness: 360, damping: 34 }}>
-            <div className="mx-auto mb-3 h-[5px] w-20 shrink-0 rounded-full bg-[#2a2b52]" aria-hidden="true" />
+            <div {...drag.grip} className="-mx-5 -mt-3.5 flex h-8 shrink-0 cursor-grab items-center justify-center"><div className="h-[5px] w-20 rounded-full bg-[#2a2b52]" aria-hidden="true" /></div>
             <div className="flex h-11 shrink-0 items-center gap-3">
               <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-background"><X size={18} /></button>
               <h2 className="flex min-w-0 flex-1 items-center gap-2 text-[21px] font-bold">Histórico de alterações</h2>

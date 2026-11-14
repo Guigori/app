@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { useDragToClose } from "@/lib/gestures/useDragToClose";
 
 export interface Choice { key: string; label: string; hint?: string; icon?: ReactNode }
 
@@ -8,13 +9,14 @@ export interface Choice { key: string; label: string; hint?: string; icon?: Reac
 export function ChoiceSheet({ open, title, text, choices, accent = "#a78bfa", onPick, onClose, testId }: {
   open: boolean; title: string; text?: string; choices: Choice[]; accent?: string; onPick: (key: string) => void; onClose: () => void; testId?: string;
 }) {
+  const drag = useDragToClose(onClose, { whole: true });
   if (typeof document === "undefined") return null;
   return createPortal(
     <AnimatePresence>
       {open ? (
         <motion.div key="choice" className="fixed inset-0 z-[86] flex items-end justify-center bg-black/60 dashboard:items-center" onClick={onClose}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <motion.div role="dialog" aria-modal="true" aria-label={title} data-testid={testId} onClick={(e) => e.stopPropagation()}
+          <motion.div role="dialog" aria-modal="true" aria-label={title} data-testid={testId} onClick={(e) => e.stopPropagation()} {...drag.panel}
             className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-t-[32px] border border-b-0 border-border bg-card px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3.5 text-foreground dashboard:rounded-[28px] dashboard:border-b"
             initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", stiffness: 360, damping: 34 }}>
             <div className="mx-auto mb-3 h-[5px] w-20 rounded-full bg-[#2a2b52]" aria-hidden="true" />
