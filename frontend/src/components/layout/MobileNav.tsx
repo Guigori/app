@@ -6,6 +6,7 @@ import { RegisterFab } from "@/components/layout/RegisterFab";
 import { toast } from "sonner";
 import { onRegisterSheet, type RegisterSheetRequest } from "@/lib/registerSheet";
 import { DiscardRegisterDialog } from "@/components/layout/DiscardRegisterDialog";
+import { useDragToClose } from "@/lib/gestures/useDragToClose";
 import type { RegisterController } from "@/pages/SmartRegister";
 const SmartRegister = lazyRetry(() => import("@/pages/SmartRegister"));
 import { cn } from "@/lib/utils";
@@ -83,6 +84,9 @@ export function MobileNav() {
   const entryDirty = registerOpen && controller?.view !== "success" && controller?.dirty;
   // Closing with something typed asks first; otherwise it just closes.
   const requestClose = () => { if (entryDirty) setDiscardOpen(true); else setRegisterOpen(false); };
+  // Dragging the handle down closes it (asking first if something was typed), like the native sheets.
+  const sheetFull = controller?.view === "success" || controller?.expanded;
+  const drag = useDragToClose(requestClose, { enabled: !sheetFull });
   const [transitioning, setTransitioning] = useState(false);
   const [visible, setVisible] = useState(true);
   const [compact, setCompact] = useState(false);
@@ -183,8 +187,8 @@ export function MobileNav() {
               // Grows out of the + button and goes back into it when it closes.
               style={{ transformOrigin: "calc(100% - 2.1rem) calc(100% + 2.85rem)" }}
               initial={{ scale: 0.06, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.06, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30, opacity: { duration: 0.18 } }}>
-              {controller?.view === "success" || controller?.expanded ? null : <div className="absolute left-1/2 top-2 z-10 h-[5px] w-20 -translate-x-1/2 rounded-full bg-[#2a2b52]/70 dark:bg-[#2a2b52]" aria-hidden="true" />}
+              transition={{ type: "spring", stiffness: 300, damping: 30, opacity: { duration: 0.18 } }} {...drag.panel}>
+              {sheetFull ? null : <div {...drag.grip} data-testid="register-sheet-grip" className="absolute left-1/2 top-0 z-10 flex h-6 w-40 -translate-x-1/2 cursor-grab justify-center pt-2"><div className="h-[5px] w-20 rounded-full bg-[#2a2b52]/70 dark:bg-[#2a2b52]" aria-hidden="true" /></div>}
               <div className="min-h-0 flex-1 overflow-hidden">
                 <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">Preparando o registro...</div>}>
                   <SmartRegister key={requestKey} existing={request.existing} siblings={request.siblings} template={request.template} initialKind={request.kind} invoice={request.invoice} embedded onClose={() => setRegisterOpen(false)} onController={setController} />

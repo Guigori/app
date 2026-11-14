@@ -217,6 +217,7 @@ export function HomeFinancialChart({ month, total, onOpenMetric, menuView, menuI
       ) : view === "projection" ? (
         <div
           className="w-full touch-pan-y pb-1"
+          data-gesture="ignore"
           onTouchStart={(event) => setProjectionDragX(event.touches[0]?.clientX ?? null)}
           onTouchEnd={(event) => {
             if (projectionDragX === null) return;

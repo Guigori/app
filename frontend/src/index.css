@@ -286,3 +286,9 @@
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Phones: the app has its own pull-to-refresh and swipe gestures, so the browser's (reload on pull,
+   rubber-band bounce) must not run underneath them. */
+@media (max-width: 1023px) {
+  html, body { overscroll-behavior-y: none; }
+}

@@ -78,7 +78,7 @@ export function DiscoveriesInsight({ size, to, className }: { size: WidgetSize; 
             </span>
           ) : null}
         </div>
-        <div className="-mx-4 mt-2 min-h-0 flex-1 overflow-hidden" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ touchAction: "pan-y" }}>
+        <div className="-mx-4 mt-2 min-h-0 flex-1 overflow-hidden" data-gesture="ignore" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ touchAction: "pan-y" }}>
           <div ref={track} className="flex h-full transition-transform duration-300 ease-out" style={{ transform: `translateX(-${at * 100}%)` }}>
             {list.map((d, i) => (
               <div key={d.id} className="flex w-full shrink-0 px-4" aria-hidden={i !== at}>

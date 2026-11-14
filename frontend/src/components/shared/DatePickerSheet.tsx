@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useDragToClose } from "@/lib/gestures/useDragToClose";
 
 const WEEK = ["D", "S", "T", "Q", "Q", "S", "S"];
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -39,13 +40,14 @@ export function DatePickerSheet({ open, value, onClose, onChange, accent = "#7c3
   const pick = (v: string) => { onChange(v); onClose(); };
   const quick: [string, string][] = [["Hoje", today], ["Ontem", shift(today, -1)], ["Anteontem", shift(today, -2)]];
 
+  const drag = useDragToClose(onClose, { whole: true });
   if (typeof document === "undefined") return null;
   return createPortal(
     <AnimatePresence>
       {open ? (
         <motion.div key="date" className="fixed inset-0 z-[85] flex items-end justify-center bg-black/60 dashboard:items-center" onClick={onClose}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-          <motion.div role="dialog" aria-modal="true" aria-label="Escolher data" data-testid="date-picker" onClick={(e) => e.stopPropagation()}
+          <motion.div role="dialog" aria-modal="true" aria-label="Escolher data" data-testid="date-picker" onClick={(e) => e.stopPropagation()} {...drag.panel}
             className="w-full max-w-md rounded-t-[32px] border border-b-0 border-border bg-card px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3.5 text-foreground dashboard:rounded-[28px] dashboard:border-b"
             initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", stiffness: 360, damping: 34 }}>
             <div className="mx-auto mb-3 h-[5px] w-20 rounded-full bg-[#2a2b52]" aria-hidden="true" />

@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { CalendarRange, Check, Repeat } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RecurrenceEditScope } from "@/lib/data";
+import { useDragToClose } from "@/lib/gestures/useDragToClose";
 
 const OPTIONS: [RecurrenceEditScope, string, string][] = [
   ["esta", "Só este lançamento", "Os outros meses da série continuam como estão."],
@@ -14,13 +15,14 @@ const OPTIONS: [RecurrenceEditScope, string, string][] = [
 export function SeriesScopeSheet({ open, canEditAll, otherFields, accent, onPick, onClose }: {
   open: boolean; canEditAll: boolean; otherFields: boolean; accent: string; onPick: (scope: RecurrenceEditScope) => void; onClose: () => void;
 }) {
+  const drag = useDragToClose(onClose, { whole: true });
   if (typeof document === "undefined") return null;
   return createPortal(
     <AnimatePresence>
       {open ? (
         <motion.div key="scope" className="fixed inset-0 z-[85] flex items-end justify-center bg-black/60 dashboard:items-center" onClick={onClose}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <motion.div role="dialog" aria-modal="true" aria-label="Aplicar a alteração" data-testid="recurrence-scope-dialog" onClick={(e) => e.stopPropagation()}
+          <motion.div role="dialog" aria-modal="true" aria-label="Aplicar a alteração" data-testid="recurrence-scope-dialog" onClick={(e) => e.stopPropagation()} {...drag.panel}
             className="w-full max-w-md rounded-t-[32px] border border-b-0 border-border bg-card px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3.5 text-foreground dashboard:rounded-[28px] dashboard:border-b"
             initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", stiffness: 360, damping: 34 }}>
             <div className="mx-auto mb-3 h-[5px] w-20 rounded-full bg-[#2a2b52]" aria-hidden="true" />

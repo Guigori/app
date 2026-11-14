@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, X } from "lucide-react";
 import { canGoBack } from "@/lib/navigation";
@@ -22,6 +22,27 @@ export function useBack() {
     go: () => (fromNotifications || canGoBack() ? navigate(-1) : navigate(parentPath)),
     label: fromNotifications ? "Voltar para a central de notificações" : "Voltar para a seção anterior",
   };
+}
+
+/**
+ * The way back that a screen's own header declares (its `onBack`, or `back={false}` for none), newest last.
+ * The swipe-back gesture follows it, so the gesture always does what the header's arrow does.
+ */
+const declaredBacks: Array<(() => void) | null> = [];
+/** undefined: the screen declared nothing (follow the route); null: no way back; else the screen's own back. */
+export function declaredBack(): (() => void) | null | undefined {
+  return declaredBacks.length ? declaredBacks[declaredBacks.length - 1] : undefined;
+}
+function useDeclareBack(onBack: (() => void) | undefined, back: boolean | undefined) {
+  const latest = useRef(onBack);
+  latest.current = onBack;
+  const kind = back === false ? "none" : onBack ? "own" : null;
+  useEffect(() => {
+    if (!kind) return;
+    const entry = kind === "none" ? null : () => latest.current?.();
+    declaredBacks.push(entry);
+    return () => { const i = declaredBacks.lastIndexOf(entry); if (i >= 0) declaredBacks.splice(i, 1); };
+  }, [kind]);
 }
 
 /** The round control used everywhere: an arrow to go back, an X to close. */
@@ -68,6 +89,7 @@ export function ScreenHeader({ title, subtitle, eyebrow, actions, onBack, backLa
   const nav = useBack();
   const register = useContext(HeaderSlot);
   useEffect(() => { register?.(1); return () => register?.(-1); }, [register]);
+  useDeclareBack(onBack, back);
   const showBack = back ?? (Boolean(onBack) || nav.show);
   return (
     <header className={cn("-mt-1 flex items-center gap-3", className)} data-testid="screen-header">
