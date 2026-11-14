@@ -110,6 +110,7 @@ export default function App() {
             <Route path="/contas" element={walletV2Enabled() ? <Wallet /> : <Accounts />} />
             <Route path="/categorias" element={<Categories />} />
             <Route path="/categorias/:categoryId" element={<CategoryRedirect />} />
+            <Route path="/perfil" element={<Settings forcedSection="perfil" />} />
             <Route path="/configuracoes" element={<SettingsHub />} />
             <Route path="/configuracoes/avancado" element={<Settings />} />
             <Route path="/configuracoes/:section" element={<Settings />} />

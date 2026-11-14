@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { ExternalLink, Loader2, MessageCircleMore, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPut } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -56,8 +56,8 @@ export function AiKeysCard() {
     <Card data-testid="settings-ai-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 font-heading">
-          <Sparkles className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
-          FINNOS IA — sua chave
+          <MessageCircleMore className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+          Conversa — sua chave
         </CardTitle>
         <CardDescription>
           Conecte a sua própria conta de IA para fazer perguntas sobre suas finanças. A chave é validada na

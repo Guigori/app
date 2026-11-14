@@ -3,7 +3,7 @@
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/BackButton";
 import { toast } from "sonner";
-import { ArrowRight, Check, Pin, Plus, Sparkles } from "lucide-react";
+import { ArrowRight, Check, Pin, Plus, MessageCircleMore } from "lucide-react";
 import { insightById, type WidgetConfig } from "@/lib/insights/registry";
 import { newKey, readLayouts, saveLayout, useLayout, type Surface } from "@/lib/insights/layout";
 import { cn } from "@/lib/utils";
@@ -65,7 +65,7 @@ export default function InsightDetail() {
       </section>
 
       <section className="rounded-3xl border border-border/80 bg-card p-5 shadow-sm" data-testid="insight-detail-ai">
-        <p className={LABEL}>Converse com o FINNOS IA</p>
+        <p className={LABEL}>Converse com o FINNOS</p>
         <p className="mt-2 text-sm text-muted-foreground">Ele abre sabendo qual é esta análise{scope ? ` (${scope})` : ""} e como ela é feita.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           {def.questions.map((q) => (
@@ -73,7 +73,7 @@ export default function InsightDetail() {
           ))}
         </div>
         <button type="button" onClick={() => ask(`Me explique a análise "${def.title}"${scope ? ` de ${scope}` : ""} com os meus números.`)} className="mt-4 inline-flex h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground" data-testid="insight-detail-ask">
-          <Sparkles className="size-4" aria-hidden="true" />Perguntar sobre esta análise
+          <MessageCircleMore className="size-4" aria-hidden="true" />Perguntar sobre esta análise
         </button>
       </section>
 

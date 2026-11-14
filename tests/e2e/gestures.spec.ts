@@ -43,7 +43,7 @@ test("swiping sideways moves between the bottom-bar tabs", async ({ page }) => {
   await drag(page, { x: 320, y: 180 }, { x: 60, y: 186 });
   await settle(page, "/transacoes");
   await drag(page, { x: 320, y: 420 }, { x: 60, y: 425 });
-  await settle(page, "/analise");
+  await settle(page, "/orcamento");
   await drag(page, { x: 80, y: 420 }, { x: 340, y: 425 });
   await settle(page, "/transacoes");
 });

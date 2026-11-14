@@ -1,6 +1,6 @@
 /** "vs mês passado" line and the FINNOS IA summary at the top of an analysis page. */
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownRight, ArrowUpRight, Sparkles } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, MessageCircleMore } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { isLocalMode } from "@/lib/mode";
 import type { Comparison } from "@/lib/insights/compare";
@@ -47,7 +47,7 @@ export function FinnSummary({ title, sentences, context }: { title: string; sent
   if (!sentences.length) return null;
   return (
     <section className="rounded-3xl border border-primary/25 bg-primary/[0.04] p-5" data-testid="finn-summary" aria-live="polite">
-      <p className={cn(LABEL, "flex items-center gap-1.5 text-primary")}><Sparkles className="size-3.5" aria-hidden="true" />Resumo do FINNOS IA</p>
+      <p className={cn(LABEL, "flex items-center gap-1.5 text-primary")}><MessageCircleMore className="size-3.5" aria-hidden="true" />Resumo do FINNOS</p>
       {text ? <p className="mt-2 text-[15px] leading-relaxed">{text}</p> : (
         <ul className="mt-2 space-y-1.5 text-[15px] leading-relaxed">{sentences.map((s) => <li key={s}>{s}</li>)}</ul>
       )}

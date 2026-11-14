@@ -1,72 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
-import { LogOut, PanelLeftClose, PanelLeftOpen, Smartphone } from "lucide-react";
-import { fetchMe } from "@/lib/data";
-import { endSession } from "@/lib/session";
-import { isLocalMode } from "@/lib/mode";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { FinnosLogo } from "@/components/brand/FinnosLogo";
 import { NavMenu } from "@/components/layout/NavMenu";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-// Shared with other components on purpose (tiny helper next to its only user).
-// oxlint-disable-next-line react/only-export-components
-export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase();
-}
-
-interface AccountBlockProps {
-  compact?: boolean;
-  /** Collapsed rail: avatar and sign-out only. */
-  iconOnly?: boolean;
-}
-
-/** Profile + logout, shown at the top of the drawer and the bottom of the sidebar. */
-export function AccountBlock({ compact, iconOnly }: AccountBlockProps) {
-  const navigate = useNavigate();
-  const local = isLocalMode();
-  const { data: user } = useQuery({ queryKey: ["me"], queryFn: fetchMe, staleTime: 5 * 60 * 1000 });
-  if (!user) return null;
-
-  const signOut = async () => {
-    await endSession();
-    navigate("/login");
-  };
-  if (iconOnly) {
-    return (
-      <div className="flex flex-col items-center gap-2" data-testid="account-block">
-        <div title={user.name} className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 font-heading text-sm font-bold text-primary">
-          {local ? <Smartphone className="h-4 w-4" aria-hidden="true" /> : initials(user.name)}
-        </div>
-        <Button variant="ghost" size="icon" onClick={signOut} aria-label={local ? "Sair da conta local" : "Sair da conta"} title="Sair" data-testid="sidebar-logout-button">
-          <LogOut className="h-4 w-4" aria-hidden="true" />
-        </Button>
-      </div>
-    );
-  }
-  return (
-    <div className="flex items-center gap-3 rounded-2xl bg-muted/60 px-3 py-2.5" data-testid="account-block">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 font-heading text-sm font-bold text-primary">
-        {local ? <Smartphone className="h-4 w-4" aria-hidden="true" /> : initials(user.name)}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">{user.name}</p>
-        <p className="truncate text-xs text-muted-foreground">{local ? "Conta local" : user.email}</p>
-      </div>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        onClick={signOut}
-        aria-label={local ? "Sair da conta local" : "Sair da conta"}
-        data-testid={compact ? "drawer-logout-button" : "sidebar-logout-button"}
-      >
-        <LogOut className="h-4 w-4" aria-hidden="true" />
-      </Button>
-    </div>
-  );
-}
 
 const WIDTH_KEY = "finnos:sidebar-width";
 const RAIL = 72;
@@ -154,11 +91,8 @@ export function Sidebar() {
           <ToggleIcon className="h-[1.1rem] w-[1.1rem]" aria-hidden="true" />
         </Button>
       </div>
-      <div className={collapsed ? "flex-1 overflow-y-auto px-2 py-4" : "flex-1 overflow-y-auto px-3 py-4"} data-testid="sidebar-nav">
-        <NavMenu animate={false} collapsed={collapsed} />
-      </div>
-      <div className="border-t border-border p-3">
-        <AccountBlock iconOnly={collapsed} />
+      <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto pb-3 pt-3", collapsed ? "px-2" : "px-3")} data-testid="sidebar-nav">
+        <NavMenu surface="web" animate={false} collapsed={collapsed} testidPrefix="sidebar" />
       </div>
       {/* Drag the edge to resize; narrow past ~150px to snap to the icon rail. */}
       <div

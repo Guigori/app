@@ -5,8 +5,6 @@ import {
   ChartNoAxesCombined,
   Radar,
   Repeat,
-  Settings,
-  Sparkles,
   Tags,
   Landmark,
   Wallet,
@@ -21,50 +19,39 @@ export interface NavItem {
   slug: string;
 }
 
+/** A titled block of the menu. Items are slugs of MAIN_NAV, in their default order. */
 export interface NavGroup {
-  /** Section caption, Calen-style. `null` for the first (uncaptioned) block. */
+  /** Section caption. `null` for the first (uncaptioned) block. */
   label: string | null;
-  /** Dot colour beside the caption — the only decorative cue, never the sole signal. */
-  dot?: string;
-  items: NavItem[];
+  items: string[];
 }
 
-export const NAV_GROUPS: NavGroup[] = [
-  {
-    label: null,
-    items: [
-      { to: "/", label: "Início", icon: Home, slug: "inicio" },
-      { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
-      { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
-      { to: "/configuracoes#ia", label: "FINNOS IA", icon: Sparkles, slug: "ia" },
-    ],
-  },
-  {
-    label: "Planejar",
-    dot: "#10B981",
-    items: [
-      { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
-      { to: "/radar", label: "Radar", icon: Radar, slug: "radar" },
-      { to: "/patrimonio", label: "Patrimônio", icon: Landmark, slug: "patrimonio" },
-    ],
-  },
-  {
-    label: "Analisar",
-    dot: "#F97316",
-    items: [
-      { to: "/analise", label: "Análise", icon: ChartNoAxesCombined, slug: "analise" },
-      { to: "/categorias", label: "Categorias", icon: Tags, slug: "categorias" },
-      { to: "/assinaturas", label: "Assinaturas", icon: Repeat, slug: "assinaturas" },
-    ],
-  },
-  {
-    label: "Ajustes",
-    dot: "#6366F1",
-    items: [{ to: "/configuracoes", label: "Configurações do app", icon: Settings, slug: "configuracoes" }],
-  },
+/**
+ * Every place the navigation can lead to. The menu shows the places where you see and work on your
+ * money; how the app works (theme, categories, data…) lives in Configurações, and who you are
+ * (name, account, sign out) in Meu perfil.
+ */
+export const MAIN_NAV: NavItem[] = [
+  { to: "/", label: "Início", icon: Home, slug: "inicio" },
+  { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
+  { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
+  { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
+  { to: "/radar", label: "Radar", icon: Radar, slug: "radar" },
+  { to: "/patrimonio", label: "Patrimônio", icon: Landmark, slug: "patrimonio" },
+  { to: "/analise", label: "Análise", icon: ChartNoAxesCombined, slug: "analise" },
+  { to: "/assinaturas", label: "Assinaturas", icon: Repeat, slug: "assinaturas" },
+  // Not in the menu (it is set up once, in Configurações), but it can still be a bottom-bar tab.
+  { to: "/categorias", label: "Categorias", icon: Tags, slug: "categorias" },
 ];
 
-export const MAIN_NAV: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
+export const NAV_GROUPS: NavGroup[] = [
+  { label: null, items: ["inicio", "transacoes", "contas"] },
+  { label: "Planejar", items: ["orcamento", "radar", "patrimonio"] },
+  { label: "Analisar", items: ["analise", "assinaturas"] },
+];
+
+/** Every item the menu can show, in its default order. */
+export const MENU_SLUGS: string[] = NAV_GROUPS.flatMap((group) => group.items);
 
 /** Horizontal tab strip under the header (Calen's Início · Fluxo · Categorias …). */
 export const TOP_TABS: NavItem[] = [
