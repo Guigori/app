@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScreenHeader } from "@/components/layout/BackButton";
-import { ArrowLeft, Check, ChevronRight, Repeat, Sparkles, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Repeat, MessageCircleMore, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { fetchCalendar, fetchRadar, sendRadarFeedback, updateRadarSignal, fetchTransaction, fetchTransactions, updateTransaction } from "@/lib/data";
@@ -166,7 +166,7 @@ export default function RadarDetail() {
             </button>
           ) : null}
           <button type="button" onClick={askAi} className={cn(buttonVariants({ variant: "secondary" }), "h-11 w-full justify-between rounded-2xl")}>
-            Analisar com FINNOS IA<Sparkles className="h-4 w-4" aria-hidden="true" />
+            Analisar na Conversa<MessageCircleMore className="h-4 w-4" aria-hidden="true" />
           </button>
           <div className="grid grid-cols-2 gap-2 pt-1">
             <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate("resolve")} className={cn(buttonVariants({ variant: "outline" }), "h-10 rounded-full")}><Check className="h-4 w-4" aria-hidden="true" />Resolvido</button>

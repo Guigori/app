@@ -6,7 +6,7 @@ import { openRegisterSheet } from "@/lib/registerSheet";
 import { askAbout } from "@/lib/askAi";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CheckCircle2, Eye, EyeOff, Loader2, Paperclip, Search, RotateCcw, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, Loader2, Paperclip, Search, RotateCcw, MessageCircleMore } from "lucide-react";
 import { toast } from "sonner";
 import { fetchAccounts, fetchCards, fetchInvoice, undoInvoicePayment, creditInvoice, refundInvoiceToBank } from "@/lib/data";
 import { useBalanceHidden } from "@/lib/balance";
@@ -191,10 +191,10 @@ export default function CardInvoice() {
       <header className="flex items-center gap-3">
         <Link to="/contas?aba=cartoes" aria-label="Voltar" className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card"><ArrowLeft className="size-5" /></Link>
         <h1 className="min-w-0 flex-1 truncate font-heading text-xl font-bold" data-testid="invoice-card-name">{card ? `${card.institution || card.name} · Crédito` : invoice.card_name}</h1>
-        <button type="button" aria-label="Perguntar à FINNOS IA" className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card text-primary"
+        <button type="button" aria-label="Perguntar na Conversa" className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card text-primary"
           onClick={() => askAbout(`Me ajude a entender a fatura do ${invoice.card_name}: total, o que mais pesou e as parcelas.`,
             { cartao: invoice.card_name, total: invoice.total, em_aberto: owed, vence: invoice.due_date, compras: invoice.items.slice(0, 30).map((i) => ({ nome: i.name, valor: i.value, categoria: i.category_name })) })}>
-          <Sparkles className="size-[18px]" />
+          <MessageCircleMore className="size-[18px]" />
         </button>
         <button type="button" onClick={toggleHidden} aria-label={hidden ? "Mostrar valores" : "Ocultar valores"} className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card">
           {hidden ? <EyeOff className="size-5" /> : <Eye className="size-5" />}

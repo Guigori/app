@@ -1,6 +1,5 @@
-import { useTheme } from "next-themes";
 import { useNavigate } from "react-router-dom";
-import { Menu, Moon, Sparkles, Sun } from "lucide-react";
+import { Menu, MessageCircleMore, Search } from "lucide-react";
 import { useNavigationPreferences } from "@/lib/navigationPreferences";
 import { FinnosLogo } from "@/components/brand/FinnosLogo";
 import { NotificationsBell } from "@/components/layout/NotificationsBell";
@@ -12,7 +11,6 @@ interface HeaderProps {
 }
 
 export function Header({ onOpenMenu }: HeaderProps) {
-  const { resolvedTheme, setTheme } = useTheme();
   const navigate = useNavigate();
   const aiVisible = useNavigationPreferences().aiMobile;
 
@@ -35,29 +33,29 @@ export function Header({ onOpenMenu }: HeaderProps) {
           </button>
         </div>
         <div className="flex shrink-0 items-center gap-0 sm:gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11"
+            onClick={() => window.dispatchEvent(new CustomEvent("finnos-search-open"))}
+            aria-label="Buscar"
+            data-testid="header-search-button"
+          >
+            <Search className="h-5 w-5" aria-hidden="true" />
+          </Button>
           {aiVisible ? (
             <Button
               variant="ghost"
               size="icon"
               className="h-11 w-11 text-primary"
               onClick={() => window.dispatchEvent(new CustomEvent("finnos-ai-open"))}
-              aria-label="Abrir FINNOS IA"
+              aria-label="Conversa"
               data-testid="header-ai-button"
             >
-              <Sparkles className="h-5 w-5" aria-hidden="true" />
+              <MessageCircleMore className="h-5 w-5" aria-hidden="true" />
             </Button>
           ) : null}
           <NotificationsBell />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-            className="h-11 w-11"
-            aria-label={resolvedTheme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"}
-            data-testid="theme-toggle-button"
-          >
-            {resolvedTheme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </Button>
         </div>
       </header>
     </>

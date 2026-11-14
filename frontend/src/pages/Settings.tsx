@@ -4,7 +4,7 @@ import { ScreenHeader } from "@/components/layout/BackButton";
 import { RegisterDefaultCard } from "@/components/settings/RegisterDefaultCard";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Check, ChevronDown, ChevronUp, GitCommitHorizontal, Loader2, LogOut, Smartphone, Sparkles, Trash2 } from "lucide-react";
+import { BarChart3, Check, GitCommitHorizontal, Loader2, LogOut, Smartphone, MessageCircleMore, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -20,8 +20,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MAIN_NAV } from "@/components/layout/nav";
-import { defaultNavigationPreferences, resetNavigationPreferences, saveNavigationPreferences, useNavigationPreferences, type NavigationPreferences } from "@/lib/navigationPreferences";
+import { initials } from "@/components/layout/NavMenu";
+import { NavigationSettings } from "@/components/settings/NavigationSettings";
 import { resetLayout } from "@/lib/insights/layout";
 
 const THEME_OPTIONS = [
@@ -30,46 +30,17 @@ const THEME_OPTIONS = [
   { value: "system", label: "Sistema" },
 ];
 
-export default function Settings() {
+/** Configurações sections (/configuracoes/:section) and Meu perfil (/perfil). */
+export default function Settings({ forcedSection }: { forcedSection?: string } = {}) {
   const navigate = useNavigate();
   const { section } = useParams<{ section?: string }>();
-  const currentSection = section ?? "perfil";
+  const currentSection = forcedSection ?? section ?? "perfil";
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const visible = (...names: string[]) => names.includes(currentSection);
   const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
   const { data: user } = useQuery({ queryKey: ["me"], queryFn: fetchMe, staleTime: 5 * 60 * 1000 });
   const local = user ? user.session_mode === "local" || user.session_mode === "demo" : isLocalMode();
-
-  const savedNavigation = useNavigationPreferences();
-  // The preference hooks return a fresh object each render: compare them by value.
-  const savedNavigationKey = JSON.stringify(savedNavigation);
-  const [navigation, setNavigation] = useState<NavigationPreferences>(savedNavigation);
-  useEffect(() => setNavigation(JSON.parse(savedNavigationKey)), [savedNavigationKey]);
-
-  const mobileNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia" && item.slug !== "transacoes");
-  const webNavigation = MAIN_NAV.filter((item) => !item.soon && item.slug !== "inicio" && item.slug !== "ia" && item.slug !== "transacoes");
-  const updateNavigation = (target: "mobile" | "web", slug: string, enabled: boolean) => {
-    setNavigation((current) => {
-      const list = current[target];
-      const next = enabled ? [...list, slug] : list.filter((item) => item !== slug);
-      const normalized = target === "mobile" ? ["inicio", ...next.filter((x) => x !== "inicio")].slice(0, 4) : ["inicio", ...next.filter((x) => x !== "inicio")];
-      const value = { ...current, [target]: normalized };
-      saveNavigationPreferences(value);
-      return value;
-    });
-  };
-  const moveNavigation = (target: "mobile" | "web", slug: string, direction: -1 | 1) => {
-    setNavigation((current) => {
-      const list = [...current[target]];
-      const index = list.indexOf(slug);
-      const destination = index + direction;
-      if (slug === "inicio" || index < 1 || destination < 1 || destination >= list.length) return current;
-      [list[index], list[destination]] = [list[destination], list[index]];
-      const value = { ...current, [target]: list };
-      saveNavigationPreferences(value);
-      return value;
-    });
-  };
 
   const [name, setName] = useState("");
   useEffect(() => {
@@ -128,7 +99,7 @@ export default function Settings() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-5 pb-44 sm:pb-32 animate-fade-up">
-      <ScreenHeader title={({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", registro: "Novo registro", painel: "Painel da Home", navegacao: "Barra de navegação", dados: "Dados e backup", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"} subtitle="Gerencie suas preferências e informações com segurança." />
+      <ScreenHeader title={({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", registro: "Botão +", painel: "Tela de Início", navegacao: "Barra e menu", dados: "Dados e backup", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"} subtitle={visible("perfil", "seguranca") ? "Quem você é no FINNOS: nome, conta e saída." : "Como o FINNOS funciona para você."} />
 
       {visible("desenvolvedor") && !local && (
         <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
@@ -138,11 +109,17 @@ export default function Settings() {
         </p>
       )}
       {visible("perfil", "seguranca") && (<>
+      <section aria-label="Você" className="flex flex-col items-center pt-2 text-center" data-testid="profile-identity">
+        <span className="grid size-24 place-items-center rounded-full bg-primary/10 font-heading text-3xl font-bold text-primary dark:text-[#B3A6FF]">
+          {local ? <Smartphone className="size-9" aria-hidden="true" /> : initials(user?.name ?? "")}
+        </span>
+        <p className="mt-3 font-heading text-xl font-bold">{user?.name ?? ""}</p>
+        <p className="mt-0.5 text-sm text-muted-foreground" data-testid="settings-auth-provider">{authenticationLabel(user)}</p>
+      </section>
       <Card data-testid="settings-profile-card">
         <CardHeader>
-          <CardTitle className="font-heading">Perfil</CardTitle>
+          <CardTitle className="font-heading">Dados pessoais</CardTitle>
           <CardDescription>{user?.email ?? ""}</CardDescription>
-          <p className="text-sm text-muted-foreground" data-testid="settings-auth-provider">{authenticationLabel(user)}</p>
         </CardHeader>
         <CardContent>
           <form
@@ -247,106 +224,7 @@ export default function Settings() {
       </Card>
 
       </>)}
-      {visible("navegacao") && (<>
-      <Card id="navigation" data-testid="settings-navigation-card">
-        <CardHeader>
-          <CardTitle className="font-heading">Barra de navegação</CardTitle>
-          <CardDescription>Escolha e reordene os atalhos do mobile e da Web. Início é fixo e não pode ser removido.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {(["mobile", "web"] as const).map((target) => (
-            <div key={target} className="space-y-2">
-              <div>
-                <h3 className="text-sm font-semibold">{target === "mobile" ? "Mobile" : "Web"}</h3>
-                <p className="text-xs text-muted-foreground">{target === "mobile" ? "Até 4 atalhos, incluindo Início. O botão + continua separado." : "Escolha os itens exibidos na navegação principal."}</p>
-              </div>
-              <div className="rounded-2xl border border-border bg-card p-3" aria-label={`Prévia da navegação ${target}`}>
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <div>
-                    <h4 className="text-sm font-semibold">Prévia · {target === "mobile" ? "iPhone" : "Web"}</h4>
-                    <p className="text-xs text-muted-foreground">Atualiza imediatamente ao adicionar, remover ou reordenar.</p>
-                  </div>
-                  <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">Ao vivo</span>
-                </div>
-                {target === "mobile" ? (
-                  <div className="flex items-center gap-2 rounded-2xl bg-background p-2" data-testid="settings-mobile-dock-preview">
-                    <div className="grid min-w-0 flex-1 items-center rounded-full border border-white/50 bg-[#eeeeee]/75 p-[3px] shadow-[0_4px_22px_rgba(0,0,0,.08)] backdrop-blur-[28px] dark:border-white/15 dark:bg-[#161625]/75"
-                      style={{ gridTemplateColumns: navigation.mobile.map((_, index) => index === 0 ? "2.35fr" : "1fr").join(" ") }}>
-                      {navigation.mobile.map((slug, index) => {
-                        const item = MAIN_NAV.find((entry) => entry.slug === slug);
-                        return item ? <div key={slug} className={cn("flex h-[3.75rem] min-w-0 items-center justify-center overflow-hidden rounded-full px-1", index === 0 ? "bg-white text-[#080808] shadow-[0_1px_4px_rgba(0,0,0,.035)] dark:bg-white dark:text-black" : "text-[#626262] dark:text-white/70")}>
-                          <item.icon className="h-[1.55rem] w-[1.55rem] shrink-0" />
-                          {index === 0 ? <span className="ml-1 truncate text-xs font-semibold">{item.label}</span> : null}
-                        </div> : null;
-                      })}
-                    </div>
-                    <div className="flex h-[4.15rem] w-[4.15rem] shrink-0 items-center justify-center rounded-full bg-primary text-white shadow-[0_4px_18px_rgba(75,44,255,.18)]" aria-label="Prévia do botão adicionar">
-                      <span className="text-3xl font-light">+</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-[1.65rem] border border-white/20 bg-background/55 px-2 shadow-[0_10px_32px_rgba(0,0,0,.10)] backdrop-blur-[26px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-testid="settings-web-tabs-preview">
-                    <div className="flex w-max min-w-full items-center gap-1">
-                      {navigation.web.map((slug, index) => {
-                        const item = MAIN_NAV.find((entry) => entry.slug === slug);
-                        return item ? <div key={slug} className={cn("relative flex shrink-0 items-center gap-2 rounded-full px-3 py-3 text-sm font-medium", index === 0 ? "bg-primary/[.07] text-primary" : "text-muted-foreground")}>
-                          <item.icon className="h-[1.125rem] w-[1.125rem]" />{item.label}
-                          {index === 0 ? <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" /> : null}
-                        </div> : null;
-                      })}
-                    </div>
-                  </div>
-                )}
-                <p className="mt-2 text-xs text-muted-foreground">Prévia ilustrativa do estado inicial; no app, o item ativo acompanha a página aberta.</p>
-              </div>
-              <label className="flex items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5 shadow-[0_10px_32px_rgba(0,0,0,.10),inset_0_1px_0_rgba(255,255,255,.22)] backdrop-blur-[24px] supports-[backdrop-filter]:bg-background/45">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <span className="flex-1 text-sm font-medium">Mostrar FINNOS IA</span>
-                <input
-                  type="checkbox"
-                  checked={target === "mobile" ? navigation.aiMobile : navigation.aiWeb}
-                  onChange={(event) => {
-                    const value = { ...navigation, [target === "mobile" ? "aiMobile" : "aiWeb"]: event.target.checked };
-                    setNavigation(value);
-                    saveNavigationPreferences(value);
-                  }}
-                  className="h-4 w-4 accent-primary"
-                />
-              </label>
-              <div className="overflow-hidden rounded-xl border border-border bg-background shadow-[0_12px_36px_rgba(0,0,0,.10),inset_0_1px_0_rgba(255,255,255,.22)] backdrop-blur-[26px] supports-[backdrop-filter]:bg-background/45">
-                <div className="flex items-center gap-3 border-b border-border/55 px-3 py-2.5">
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="flex-1 text-sm font-medium">Início</span>
-                  <span className="text-xs text-muted-foreground">Fixo</span>
-                </div>
-                {(target === "mobile" ? mobileNavigation : webNavigation).map((item) => {
-                  const enabled = navigation[target].includes(item.slug);
-                  const position = navigation[target].indexOf(item.slug);
-                  const mobileFull = target === "mobile" && navigation.mobile.length >= 4;
-                  return (
-                    <div key={item.slug} className="flex items-center gap-2 border-b border-border/55 px-3 py-2 last:border-b-0 transition-colors hover:bg-background/35">
-                      <item.icon className="h-4 w-4 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
-                      {enabled ? (
-                        <>
-                          <button type="button" className="rounded-md p-1 text-muted-foreground disabled:opacity-30" disabled={position <= 1} onClick={() => moveNavigation(target, item.slug, -1)} aria-label={`Mover ${item.label} para cima`}><ChevronUp className="h-4 w-4" /></button>
-                          <button type="button" className="rounded-md p-1 text-muted-foreground disabled:opacity-30" disabled={position === navigation[target].length - 1} onClick={() => moveNavigation(target, item.slug, 1)} aria-label={`Mover ${item.label} para baixo`}><ChevronDown className="h-4 w-4" /></button>
-                        </>
-                      ) : null}
-                      <input type="checkbox" checked={enabled} disabled={!enabled && mobileFull} onChange={(event) => updateNavigation(target, item.slug, event.target.checked)} aria-label={`${enabled ? "Remover" : "Adicionar"} ${item.label} da navegação ${target}`} className="h-4 w-4 accent-primary" />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          <Button variant="outline" type="button" onClick={() => { resetNavigationPreferences(); setNavigation(defaultNavigationPreferences()); }}>
-            Restaurar padrão
-          </Button>
-        </CardContent>
-      </Card>
-
-      </>)}
+      {visible("navegacao") && <NavigationSettings />}
       {visible("orcamento") && (<>
       <Card data-testid="settings-budget-card">
         <CardHeader>
@@ -374,17 +252,17 @@ export default function Settings() {
 
       </>)}
       {visible("registro") && <RegisterDefaultCard />}
-      {visible("dados") && (<>
-      <DataBackupCard />
+      {visible("dados") && <DataBackupCard />}
+      {visible("perfil", "seguranca") && (<>
       <Card data-testid="settings-mode-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
             {local ? <Smartphone className="h-4.5 w-4.5 text-primary" aria-hidden="true" /> : null}
-            Modo de uso
+            Sua conta
           </CardTitle>
           <CardDescription>
             {local
-              ? "Você está na conta local: nada é enviado para servidores e os dados vivem só neste navegador. Limpar os dados do navegador apaga tudo, e a FINNOS IA não fica disponível."
+              ? "Você está na conta local: nada é enviado para servidores e os dados vivem só neste navegador. Limpar os dados do navegador apaga tudo, e a Conversa não fica disponível."
               : "Você está em uma conta completa: seus dados ficam protegidos no servidor, acessíveis de qualquer aparelho com o seu login."}
           </CardDescription>
         </CardHeader>
@@ -410,7 +288,7 @@ export default function Settings() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-heading">
             Dados de demonstração
-            <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+            <MessageCircleMore className="h-4 w-4 text-primary" aria-hidden="true" />
           </CardTitle>
           <CardDescription>
             Carregue um conjunto fictício (contas Nubank, Inter e Itaú, assinaturas, um parcelamento e dois meses de
@@ -436,20 +314,24 @@ export default function Settings() {
 
       </>)}
       {visible("perfil", "seguranca") && (<>
-      <Card data-testid="settings-session-card">
-        <CardHeader>
-          <CardTitle className="font-heading">Sessão</CardTitle>
-          <CardDescription>Encerre a sessão neste dispositivo.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={handleLogout} data-testid="settings-logout-button">
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-            Sair da conta
-          </Button>
-        </CardContent>
-      </Card>
+      <div data-testid="settings-session-card" className="pt-2 text-center">
+        <Button variant="outline" onClick={() => setConfirmLogout(true)} className="h-12 w-full rounded-full border-[#F3C4CD] text-[#BE123C] hover:bg-[#FDECEC] hover:text-[#BE123C] dark:border-[#BE123C]/40 dark:text-[#FB7185]" data-testid="settings-logout-button">
+          <LogOut className="h-4 w-4" aria-hidden="true" />
+          Sair da conta
+        </Button>
+        <p className="mt-2 text-xs text-muted-foreground">{local ? "Os dados deste aparelho continuam salvos nele." : "Seus dados continuam salvos na sua conta."}</p>
+      </div>
 
       </>)}
+      <ConfirmDialog
+        open={confirmLogout}
+        onOpenChange={setConfirmLogout}
+        title="Sair da conta?"
+        description={local ? "Os dados deste aparelho continuam salvos nele." : "Para voltar, é só entrar de novo. Nada é apagado."}
+        confirmLabel="Sair"
+        destructive
+        onConfirm={() => { setConfirmLogout(false); void handleLogout(); }}
+      />
       <ConfirmDialog
         open={confirmDemo}
         onOpenChange={setConfirmDemo}

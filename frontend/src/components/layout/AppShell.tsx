@@ -14,6 +14,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LocalNotificationPulse, NotificationPermissionPrompt } from "@/components/notifications/NotificationPermissionPrompt";
 import { usePageGestures, type PageGestureHandlers, type PageGestureKind } from "@/lib/gestures/usePageGestures";
 import { PullToRefresh } from "@/components/layout/PullToRefresh";
+import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { navItemsFor, useNavigationPreferences } from "@/lib/navigationPreferences";
 import { ConnectivityStatus } from "@/components/sync/ConnectivityStatus";
 import { StatementImportHost } from "@/components/import/StatementImportHost";
@@ -173,6 +174,7 @@ export function AppShell() {
         <div className="lg:hidden"><MobileNav /></div>
         <QuickActionFAB />
         <AiPanel />
+        <GlobalSearch />
         <ConnectivityStatus />
         <StatementImportHost />
         <NotificationPermissionPrompt />

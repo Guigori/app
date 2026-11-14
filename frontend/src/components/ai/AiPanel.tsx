@@ -2,7 +2,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { lazyRetry } from "@/lib/lazyRetry";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, Bell, ChartPie, Check, ChevronRight, Clock3, FileText, Lightbulb, Mic, PiggyBank, Plus, Sparkles, SquarePen, Wallet } from "lucide-react";
+import { ArrowUp, Bell, ChartPie, Check, ChevronRight, Clock3, FileText, Lightbulb, Mic, PiggyBank, Plus, MessageCircleMore, SquarePen, Wallet } from "lucide-react";
 import { ConversationHistory, MessageActions, RichText, Thinking } from "@/components/ai/AiThread";
 import { apiGet, apiPost } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -141,13 +141,13 @@ export function AiPanel() {
   const lastId=conversation.messages.at(-1)?.id;
   return <Sheet open={open} onOpenChange={setOpen}>
     {/* Phones open the assistant from the header (it no longer floats over content). */}
-    {showTrigger&&!isMobile?<SheetTrigger className="fixed bottom-[5.75rem] right-4 z-40 flex lg:hidden h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg transition-all duration-200 dashboard:md:bottom-[6.25rem] dashboard:md:right-6" style={{opacity:triggerVisible?1:0,pointerEvents:triggerVisible?"auto":"none"}} aria-label="Abrir FINNOS IA"><Sparkles className="h-5 w-5"/></SheetTrigger>:null}
+    {showTrigger&&!isMobile?<SheetTrigger className="fixed bottom-[5.75rem] right-4 z-40 flex lg:hidden h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-primary shadow-lg transition-all duration-200 dashboard:md:bottom-[6.25rem] dashboard:md:right-6" style={{opacity:triggerVisible?1:0,pointerEvents:triggerVisible?"auto":"none"}} aria-label="Abrir FINNOS IA"><MessageCircleMore className="h-5 w-5"/></SheetTrigger>:null}
     <SheetContent side="right" className="flex w-full flex-col gap-0 bg-background p-0 data-[side=right]:w-full sm:max-w-xl data-[side=right]:sm:max-w-xl [&>button]:hidden">
       <header className="flex items-center gap-3 border-b border-border/70 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         {/* Padrão FINNOS: voltar/fechar à esquerda, título ao lado, ações à direita. */}
         {historyOpen?<HeaderIconButton onClick={()=>setHistoryOpen(false)} label="Voltar"/>:<HeaderIconButton kind="close" onClick={()=>setOpen(false)} label="Fechar"/>}
         <div className="min-w-0 flex-1">
-          <h2 className="truncate font-heading text-lg font-bold">{historyOpen?"Conversas":conversation.messages.length?conversation.title:"FINNOS IA"}</h2>
+          <h2 className="truncate font-heading text-lg font-bold">{historyOpen?"Conversas":conversation.messages.length?conversation.title:"Conversa"}</h2>
           <p className="truncate text-xs text-muted-foreground">{historyOpen?(n=>`${n} ${n===1?"guardada":"guardadas"} neste dispositivo`)(history.filter(c=>c.messages.length).length):appMode==="demo"?"Com os dados da demonstração":appMode==="local"?"Com os dados deste dispositivo":activeProvider?`Com os seus dados · ${activeProvider}`:"Com os seus dados do FINNOS"}</p>
         </div>
         {!historyOpen?<><HeaderIconButton kind="custom" onClick={()=>setHistoryOpen(true)} label="Conversas anteriores"><Clock3 className="size-5"/></HeaderIconButton><HeaderIconButton kind="custom" onClick={startNew} label="Nova conversa"><SquarePen className="size-5"/></HeaderIconButton></>:null}
@@ -161,7 +161,7 @@ export function AiPanel() {
         <main ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain px-4 py-5" data-testid="ai-thread">
           {!conversation.messages.length?<div className="mx-auto max-w-lg space-y-6 pt-4">
             <div className="text-center">
-              <span className="mx-auto grid size-14 place-items-center rounded-full bg-gradient-to-br from-primary to-[var(--finnos-violet)] text-primary-foreground shadow-lg shadow-primary/25"><Sparkles className="size-7"/></span>
+              <span className="mx-auto grid size-14 place-items-center rounded-full bg-gradient-to-br from-primary to-[var(--finnos-violet)] text-primary-foreground shadow-lg shadow-primary/25"><MessageCircleMore className="size-7"/></span>
               <h3 className="mt-4 font-heading text-2xl font-bold">Como posso ajudar?</h3>
               <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">Pergunte sobre gastos, orçamento, faturas, metas ou qualquer análise. Eu respondo com os seus números e aviso quando não encontrar algo.</p>
             </div>
@@ -172,7 +172,7 @@ export function AiPanel() {
           </div>:<div className="mx-auto max-w-2xl space-y-6">{conversation.messages.map(m=>m.role==="user"?
             <div key={m.id} className="flex justify-end"><p className="max-w-[85%] whitespace-pre-line rounded-3xl rounded-br-lg bg-primary px-4 py-2.5 text-[15px] leading-relaxed text-primary-foreground">{m.content.length>600?`${m.content.slice(0,600)}…`:m.content}</p></div>:
             <article key={m.id} className="min-w-0" data-testid="ai-answer">
-              <div className="mb-2 flex items-center gap-2"><span className="grid size-6 place-items-center rounded-full bg-gradient-to-br from-primary to-[var(--finnos-violet)] text-primary-foreground"><Sparkles className="size-3.5"/></span><span className="text-xs font-semibold">FINNOS IA</span><span className="text-[11px] text-muted-foreground">{new Date(m.createdAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</span></div>
+              <div className="mb-2 flex items-center gap-2"><span className="grid size-6 place-items-center rounded-full bg-gradient-to-br from-primary to-[var(--finnos-violet)] text-primary-foreground"><MessageCircleMore className="size-3.5"/></span><span className="text-xs font-semibold">FINNOS IA</span><span className="text-[11px] text-muted-foreground">{new Date(m.createdAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</span></div>
               {m.steps?.length?<ul className="mb-2.5 flex flex-wrap gap-1.5" data-testid="ai-steps">{m.steps.map(step=><li key={step} className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground"><Check className="size-3 text-income" aria-hidden="true"/>{step}</li>)}</ul>:null}
               <RichText text={m.content}/>
               {m.proposal&&m.proposalState?<ProposalCard proposal={m.proposal} state={m.proposalState} categories={categoriesQuery.data??[]} accounts={accountsQuery.data??[]}
@@ -196,7 +196,7 @@ export function AiPanel() {
             <textarea ref={inputRef} rows={1} className="max-h-36 min-h-10 flex-1 resize-none bg-transparent px-1 py-2.5 text-[15px] leading-snug outline-none placeholder:text-muted-foreground" value={question} onChange={e=>setQuestion(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();void ask(question)}}} placeholder="Pergunte ao FINNOS…" maxLength={14000} aria-label="Pergunte ao FINNOS"/>
             {question.trim()?<Button type="submit" size="icon" className="rounded-full" disabled={askMutation.isPending||thinking} aria-label="Enviar"><ArrowUp className="h-4.5 w-4.5"/></Button>:<Button type="button" variant="ghost" size="icon" className="rounded-full" onClick={speak} aria-label="Ditado por voz"><Mic className={listening?"h-5 w-5 text-primary":"h-5 w-5"}/></Button>}
           </form>{attachOpen?<div className="absolute bottom-16 left-0 z-20 w-64 rounded-2xl border border-border bg-popover p-2 shadow-xl"><button onClick={()=>fileRef.current?.click()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-muted"><FileText className="h-4 w-4"/>Enviar arquivo ou comprovante</button><p className="px-3 py-2 text-xs text-muted-foreground">CSV/TXT podem ser analisados agora. Outros arquivos entram no fluxo de confirmação.</p></div>:null}<input ref={fileRef} type="file" className="hidden" accept=".csv,.txt,.pdf,image/*" onChange={e=>{const file=e.target.files?.[0];if(file)void attachFile(file);e.currentTarget.value=""}}/></div>
-          <p className="mt-2 text-center text-[11px] text-muted-foreground">A FINNOS IA responde com os seus dados e pode errar. Confira valores importantes.</p>
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">A Conversa responde com os seus dados e pode errar. Confira valores importantes.</p>
         </footer>
       </>}
     </SheetContent>

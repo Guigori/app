@@ -12,6 +12,7 @@ const SmartRegister = lazyRetry(() => import("@/pages/SmartRegister"));
 import { cn } from "@/lib/utils";
 import { type NavItem } from "@/components/layout/nav";
 import { navItemsFor, useNavigationPreferences } from "@/lib/navigationPreferences";
+import { useMenuBadges } from "@/lib/menuBadges";
 
 
 
@@ -20,7 +21,7 @@ function isSubPage(to: string, pathname: string) {
   return (to === "/transacoes" && pathname.startsWith("/fluxo")) || (to === "/contas" && pathname.startsWith("/cartoes/"));
 }
 
-function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: string) => void }) {
+function MobileTab({ item, onNavigate, count }: { item: NavItem; onNavigate: (to: string) => void; count?: number }) {
   const location = useLocation();
   return (
     <NavLink
@@ -36,7 +37,7 @@ function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: strin
           "relative flex h-[3.75rem] min-w-0 items-center justify-center overflow-hidden rounded-full px-1 transition-colors duration-200",
           isActive
             ? "bg-white text-primary shadow-[0_1px_4px_rgba(0,0,0,.035)] dark:bg-white/10 dark:text-[#A996FF] dark:shadow-none"
-            : "text-[#626262] dark:text-white/70"
+            : "text-[#45465F] dark:text-white/80"
         );
       }}
       data-testid={`mobile-nav-${item.slug}`}
@@ -47,7 +48,13 @@ function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: strin
           className="flex min-w-0 items-center justify-center gap-2"
           transition={{ type: "spring", stiffness: 380, damping: 34 }}
         >
-          <item.icon className="h-[1.55rem] w-[1.55rem] shrink-0" aria-hidden="true" />
+          <span className="relative grid shrink-0 place-items-center">
+            <item.icon className="h-[1.55rem] w-[1.55rem]" aria-hidden="true" />
+            {count ? (
+              <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full border-2 border-[#eeeeee] bg-[#BE123C] px-0.5 text-[10px] font-bold leading-none text-white dark:border-[#161625]"
+                aria-hidden="true" data-testid={`mobile-nav-${item.slug}-count`}>{count > 9 ? "9+" : count}</span>
+            ) : null}
+          </span>
           {isActive ? (
             <motion.span
               initial={{ opacity: 0, width: 0 }}
@@ -57,7 +64,7 @@ function MobileTab({ item, onNavigate }: { item: NavItem; onNavigate: (to: strin
               {item.label}
             </motion.span>
           ) : (
-            <span className="sr-only">{item.label}</span>
+            <span className="sr-only">{count ? `${item.label}, ${count} pendente${count > 1 ? "s" : ""}` : item.label}</span>
           )}
         </motion.span>
       ); }}
@@ -69,6 +76,7 @@ export function MobileNav() {
 
   const navigationPreferences = useNavigationPreferences();
   const mobileItems = navItemsFor(navigationPreferences.mobile);
+  const badges = useMenuBadges(true);
   const navigate = useNavigate();
   const location = useLocation();
   const activeIndex = mobileItems.findIndex((item) => item.to === location.pathname || isSubPage(item.to, location.pathname) || (item.to === "/" && location.pathname === "/"));
@@ -199,6 +207,8 @@ export function MobileNav() {
         )}
       </AnimatePresence>
 
+      {/* The end of the page fades out behind the bar instead of being cut by it. */}
+      <div aria-hidden="true" className={cn("pointer-events-none fixed inset-x-0 bottom-0 z-[39] h-28 bg-gradient-to-t from-background via-background/80 to-transparent transition-opacity duration-300 dashboard:hidden", (registerOpen || !visible) && "opacity-0")} />
       <motion.nav
         initial={false}
         animate={{ opacity: registerOpen || visible ? 1 : 0, y: registerOpen || visible ? 0 : 90, scale: registerOpen ? 1 : visible ? (compact ? 0.94 : 1) : 0.94 }}
@@ -213,11 +223,11 @@ export function MobileNav() {
           <div style={{ gridTemplateColumns: mobileItems.map((_, index) => `${index === activeIndex ? 2.35 : 1}fr`).join(" ") || "1fr" }}
           className={cn("grid min-w-0 flex-1 items-center rounded-full border border-white/50 bg-[#eeeeee]/75 p-[3px] shadow-[0_4px_22px_rgba(0,0,0,.08)] backdrop-blur-[28px] transition-[background-color,box-shadow] duration-300 dark:border-white/15 dark:bg-[#161625]/75", compact && "bg-[#eeeeee]/45 shadow-[0_2px_12px_rgba(0,0,0,.05)]", registerOpen && "invisible pointer-events-none opacity-0")}>
             {mobileItems.map((item) => (
-              <MobileTab key={item.to} item={item} onNavigate={navigateFromDock} />
+              <MobileTab key={item.to} item={item} onNavigate={navigateFromDock} count={badges[item.slug]?.count} />
             ))}
           </div>
 
-          <RegisterFab open={registerOpen} dirty={Boolean(entryDirty)} kind={controller?.kind ?? "Despesa"} success={registerOpen && controller?.view === "success"}
+          {navigationPreferences.fab || registerOpen ? <RegisterFab open={registerOpen} dirty={Boolean(entryDirty)} kind={controller?.kind ?? "Despesa"} success={registerOpen && controller?.view === "success"}
             testId="mobile-quick-action-button" discardTestId="mobile-quick-action-discard" onDiscard={() => setDiscardOpen(true)}
             onMain={() => {
               if (!registerOpen) { setRequest({}); setRequestKey((k) => k + 1); setRegisterOpen(true); return; }
@@ -227,7 +237,7 @@ export function MobileNav() {
                 return;
               }
               setRegisterOpen(false);
-            }} />
+            }} /> : null}
         </div>
       </motion.nav>
       <DiscardRegisterDialog open={discardOpen} kind={controller?.kind ?? "Despesa"} onKeep={() => setDiscardOpen(false)} onDiscard={() => setRegisterOpen(false)} />

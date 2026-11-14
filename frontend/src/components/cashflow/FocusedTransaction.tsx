@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Lightbulb, Sparkles, X } from "lucide-react";
+import { Lightbulb, MessageCircleMore, X } from "lucide-react";
 import {
   fetchBudget, fetchBudgetCycleProgress, fetchCalendar, fetchCurrentBudgetCycle, fetchSubscriptions, fetchTransaction, fetchTransactions,
 } from "@/lib/data";
@@ -111,7 +111,7 @@ export function FocusedTransaction({ id, monthRows, hidden, onClose }: { id: str
       ) : null}
 
       <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("finnos-ai-open", { detail: { question: `Evolução de ${tx.name} por mês` } }))} className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary" data-testid="focus-ask-ai">
-        <Sparkles className="h-4 w-4" aria-hidden="true" />Perguntar à FINNOS IA sobre {tx.name}
+        <MessageCircleMore className="h-4 w-4" aria-hidden="true" />Perguntar na Conversa sobre {tx.name}
       </button>
     </section>
   );

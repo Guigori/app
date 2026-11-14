@@ -26,13 +26,13 @@ export default function SettingsIntegrations() {
     },
     {
       id: "sua-ia", name: "Conectar sua IA", icon: KeyRound, status: local ? "conta" : "pronto",
-      description: "Use sua chave do ChatGPT, Claude ou Gemini para a FINNOS IA responder qualquer pergunta, com seus dados como contexto.",
+      description: "Use sua chave do ChatGPT, Claude ou Gemini para a Conversa responder qualquer pergunta, com seus dados como contexto.",
       body: local
         ? <p className="text-sm">No modo local a chave não tem onde ficar guardada com segurança. <Link to="/cadastro" className="font-semibold text-primary">Crie sua conta preservando seus dados</Link> para conectar sua IA.</p>
         : <AiKeysCard />,
     },
     {
-      id: "ia", name: "FINNOS IA", icon: BrainCircuit, status: "pronto",
+      id: "ia", name: "Conversa", icon: BrainCircuit, status: "pronto",
       description: "Pergunte sobre seus gastos, metas e orçamento, ou peça para registrar e organizar.",
       body: <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("finnos-ai-open"))} className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Abrir a FINNOS IA</button>,
     },
