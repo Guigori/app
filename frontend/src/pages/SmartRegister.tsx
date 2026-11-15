@@ -468,6 +468,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     const fromAccount = selectedAccount;
     const toAccount = accounts.find((a) => a.id === destination);
     const fromAfter = (fromAccount?.balance ?? 0) - amountValue;
+    const showRecent = !existing && !invoice && (desktop || !keypadOpen) && recentTemplates.length > 0;
     return <div className={embedded ? cn("relative flex h-full min-h-0 w-full flex-col gap-2.5 bg-background px-5 pb-4 pt-6 text-foreground", desktop && "gap-3 pb-5")  : "relative mx-auto flex h-[min(860px,calc(100dvh-8rem))] w-full max-w-md flex-col gap-2.5 overflow-hidden rounded-[36px] border border-border bg-background px-5 pb-4 pt-6 text-foreground shadow-2xl"} data-testid="quick-entry">
       {embedded ? null : <div className="absolute left-1/2 top-2 h-[5px] w-20 -translate-x-1/2 rounded-full bg-border" aria-hidden="true" />}
       {/* Header: calculator · type (icons, the chosen one named) · AI. */}
@@ -503,7 +504,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       {(() => {
         const top = <>
       {/* Amount: big, in the type's colour, with a caret while typing; the sum above it in calculator mode. */}
-      <button type="button" onClick={() => { if (swiped.current) { swiped.current = false; return; } setKeypadOpen(true); }} onPointerDown={(e) => { swipeStart.current = e.clientX; }} onPointerUp={(e) => { const dx = e.clientX - (swipeStart.current ?? e.clientX); swipeStart.current = null; if (existing && Math.abs(dx) > 70) { swiped.current = true; goSibling(dx < 0 ? 1 : -1); } }} aria-label="Valor: toque para digitar" data-gesture={existing ? "ignore" : undefined} className={cn("flex min-h-[60px] flex-col outline-none focus-visible:rounded-3xl focus-visible:bg-muted/50", insightMode && !keypadOpen ? "h-[88px] shrink-0" : "flex-1", " items-center justify-center gap-1", amountValue || ops ? tone.text : "text-[#5d5d75]")}>
+      <button type="button" onClick={() => { if (swiped.current) { swiped.current = false; return; } setKeypadOpen(true); }} onPointerDown={(e) => { swipeStart.current = e.clientX; }} onPointerUp={(e) => { const dx = e.clientX - (swipeStart.current ?? e.clientX); swipeStart.current = null; if (existing && Math.abs(dx) > 70) { swiped.current = true; goSibling(dx < 0 ? 1 : -1); } }} aria-label="Valor: toque para digitar" data-gesture={existing ? "ignore" : undefined} className={cn("flex min-h-[60px] flex-col outline-none focus-visible:rounded-3xl focus-visible:bg-muted/50", insightMode && !keypadOpen ? "h-[88px] shrink-0" : desktop && showRecent ? "h-[clamp(5.5rem,13dvh,8rem)] shrink-0" : "flex-1", " items-center justify-center gap-1", amountValue || ops ? tone.text : "text-[#5d5d75]")}>
         {ops && keypadOpen ? <span className="text-[17px] font-medium tabular-nums" aria-hidden="true">{expr.replace(/\./g, ",").replace(/\s*([+−×÷])\s*/g, " $1 ")}</span> : null}
         <span className={cn("flex items-center font-bold leading-none tracking-[-1px] tabular-nums", !keypadOpen ? (insightMode ? "text-[50px]" : "text-[64px]") : ops ? "text-[48px]" : "text-[56px]")}>
           <span data-testid="quick-entry-amount" aria-live="polite">{existing && hidden && !keypadOpen ? "R$ ••••" : typedAmount ?? formatBRL(amountValue).replace(/,00$/, "")}</span>
@@ -625,11 +626,12 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         </div>
       ) : null}
 
-      {!existing && !invoice && (desktop || !keypadOpen) && recentTemplates.length > 0 ? (
-        <div className="flex shrink-0 flex-col gap-1.5" data-testid="quick-entry-recent">
-          <div className="flex h-[18px] items-center justify-between text-[13px] text-muted-foreground"><span>Repetir um lançamento recente</span></div>
+      {showRecent ? (
+        // On the computer the list scrolls in the room left, so the account and date row is never pushed out.
+        <div className={cn("flex flex-col gap-1.5", desktop ? "min-h-0 flex-1 overflow-y-auto overscroll-contain" : "shrink-0")} data-testid="quick-entry-recent">
+          <div className="flex h-[18px] shrink-0 items-center justify-between text-[13px] text-muted-foreground"><span>Repetir um lançamento recente</span></div>
           {recentTemplates.map((t) => (
-            <button key={t.id} type="button" onClick={() => { setName(t.name); setExpr(String(t.value).replace(".", ",")); if (t.category_id) setCategory(t.category_id); }} className="flex h-10 items-center gap-2.5 rounded-full border border-border/70 bg-card pl-[5px] pr-3.5 text-sm">
+            <button key={t.id} type="button" onClick={() => { setName(t.name); setExpr(String(t.value).replace(".", ",")); if (t.category_id) setCategory(t.category_id); }} className="flex h-10 shrink-0 items-center gap-2.5 rounded-full border border-border/70 bg-card pl-[5px] pr-3.5 text-sm">
               <span className="grid size-[30px] shrink-0 place-items-center rounded-full" style={{ backgroundColor: `color-mix(in oklab, ${t.category_color ?? "#64748B"} 16%, transparent)`, color: t.category_color ?? "#64748B" }}><CategoryIcon name={t.category_icon ?? "more-horizontal"} className="size-4" /></span>
               <span className="min-w-0 flex-1 truncate text-left font-medium">{t.name}</span>
               <span className="text-muted-foreground tabular-nums">{formatBRL(t.value)}</span>
