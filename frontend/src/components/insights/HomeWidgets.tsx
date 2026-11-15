@@ -36,12 +36,12 @@ export function CalendarWidget({ size, className }: { size: WidgetSize; classNam
     const level = (v: number) => (v <= 0 || max <= 0 ? 0 : Math.min(5, Math.ceil((v / max) * 5)));
     return (
       <Tile title="Esta semana" className={className} testId="calendar-widget">
-        <div className="grid flex-1 grid-cols-7 gap-1.5">
+        <div className="grid flex-1 grid-cols-7 items-center gap-1.5">
           {week.map((date, i) => {
             const lv = level(move(date));
             return (
               <button key={date} type="button" onClick={() => open(date)} aria-label={`Ver lançamentos de ${date}`}
-                className={cn("flex flex-col items-center justify-center gap-1 rounded-xl border text-[13px] font-semibold tabular-nums", lv ? "border-transparent" : "border-border/70", lv >= 4 && "text-white", date === today && "ring-2 ring-primary ring-offset-2 ring-offset-card")}
+                className={cn("mx-auto flex aspect-square w-full max-w-12 flex-col items-center justify-center rounded-full border text-[13px] font-semibold leading-none tabular-nums", lv ? "border-transparent" : "border-border/70", lv >= 4 && "text-white", date === today && "ring-2 ring-primary ring-offset-2 ring-offset-card")}
                 style={lv ? { backgroundColor: HEAT[lv] } : undefined}>
                 <span className={cn("text-[10px] font-semibold", lv >= 4 ? "text-white/80" : "text-muted-foreground")}>{WEEK[i]}</span>
                 {Number(date.slice(8))}

@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { lazyRetry } from "@/lib/lazyRetry";
 import { AnimatePresence, motion } from "motion/react";
+import { cn } from "@/lib/utils";
 import { RegisterFab } from "@/components/layout/RegisterFab";
 import { toast } from "sonner";
 import { onRegisterSheet, type RegisterSheetRequest } from "@/lib/registerSheet";
@@ -20,6 +21,8 @@ export function QuickActionFAB() {
   useEffect(() => onRegisterSheet((r) => { setRequest(r); setRequestKey((k) => k + 1); setOpenRaw(true); }, true), []);
   const setOpen = (next: boolean) => { setOpenRaw(next); if (!next) { setController(null); setDiscardOpen(false); } };
   const dirty = open && controller?.view !== "success" && controller?.dirty;
+  // A new entry is a card as tall as its fields (no empty band); a saved one or an invoice gets the full height for its receipt.
+  const tall = Boolean(request.existing || request.invoice) || controller?.view === "other";
   const requestClose = () => { if (dirty) setDiscardOpen(true); else setOpen(false); };
 
   useEffect(() => {
@@ -47,9 +50,9 @@ export function QuickActionFAB() {
             <motion.button type="button" aria-label="Fechar registro" onClick={requestClose} className="fixed inset-0 z-[39] hidden bg-black/30 backdrop-blur-[6px] dashboard:block"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} />
             <motion.aside role="dialog" aria-modal="true" aria-label="Novo registro" data-testid="register-drawer"
-              className="fixed bottom-0 right-0 top-0 z-[40] hidden w-[26rem] max-w-full flex-col border-l border-border bg-background shadow-2xl dashboard:flex"
+              className={cn("fixed bottom-3 right-3 z-[40] hidden max-h-[calc(100dvh-1.5rem)] w-[27rem] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-[32px] border border-border bg-background shadow-2xl dashboard:flex", tall ? "top-3" : "h-auto")}
               initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 330, damping: 34 }}>
-              <div className="min-h-0 flex-1 overflow-hidden pb-24">
+              <div className="min-h-0 flex-1 overflow-hidden">
                 <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">Preparando o registro...</div>}>
                   <SmartRegister key={requestKey} existing={request.existing} siblings={request.siblings} template={request.template} initialKind={request.kind} invoice={request.invoice} embedded desktop onClose={() => setOpen(false)} onController={setController} />
                 </Suspense>
@@ -58,7 +61,7 @@ export function QuickActionFAB() {
           </>
         ) : null}
       </AnimatePresence>
-      <div className="fixed bottom-4 right-4 z-[41] hidden dashboard:md:bottom-8 dashboard:md:right-6 dashboard:block">
+      <div className="fixed bottom-4 right-4 z-[41] hidden dashboard:md:bottom-8 dashboard:md:right-7 dashboard:block">
         <RegisterFab size="md" open={open} dirty={Boolean(dirty)} kind={controller?.kind ?? "Despesa"} success={open && controller?.view === "success"}
           testId="quick-action-fab" discardTestId="quick-action-discard" onMain={onClick} onDiscard={() => setDiscardOpen(true)} />
       </div>

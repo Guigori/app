@@ -5,6 +5,7 @@ Deterministic by design: builds a personal 90-day baseline, detects anomalies,
 card pressure, future commitments and cash-flow opportunities without LLM cost.
 Signals are regenerated from current data; user state/feedback is persisted.
 """
+import logging
 import uuid
 from calendar import monthrange
 from collections import defaultdict
@@ -20,6 +21,7 @@ from finnos.models.radar import RadarActionIn, RadarFeedbackIn, RadarOut, RadarS
 from finnos.routers.auth import require_user
 from finnos.routers.cards import _build as build_card, _context as card_context
 router = APIRouter(prefix='/radar', tags=['radar'])
+logger = logging.getLogger(__name__)
 POSITIONS = [326, 34, 92, 178, 232, 286, 138]
 
 def brl(v: float) -> str:
@@ -40,6 +42,11 @@ def _settled_cash_balance(accounts: list[dict], txs: list[dict], today: str):
         for _, amount in balance_effects(tx, today):
             balance += amount
     return balance
+
+
+def _usable_subscription(sub: dict) -> bool:
+    """Subscriptions the forecast can read (an incomplete record would break the projection)."""
+    return bool(sub.get('next_charge')) and sub.get('value') is not None
 
 
 async def _state_map(user_id: str) -> dict:
@@ -100,7 +107,11 @@ async def _signals(user_id: str) -> list[dict]:
     elapsed = max(today.day, 1)
     # The active budget cycle owns the limit of the categories it plans; the
     # category's monthly limit is the fallback for the others.
-    (cycle_limits, cycle_end) = await _cycle_limits(user_id, today_s)
+    try:
+        (cycle_limits, cycle_end) = await _cycle_limits(user_id, today_s)
+    except Exception:
+        logger.exception('radar: budget cycle skipped')
+        (cycle_limits, cycle_end) = ({}, None)
     for (cid, (spent, planned)) in cycle_limits.items():
         found = _budget_signal(cid, cat_by_id.get(cid, {}).get('name', 'Categoria'), spent, planned, month, cycle_end, True)
         if found:
@@ -145,7 +156,11 @@ async def _signals(user_id: str) -> list[dict]:
             signals.append(dict(id=f'month-pace-{month}', type='deviation', severity='high' if pct >= 30 else 'medium', title='O mês está mais caro que o anterior', description=f'No ritmo atual, as despesas fecham em {brl(projected_month)} (+{pct}%)', explanation=f'Até hoje foram {brl(spent_now)} em {today.day} dias. Mantendo esse ritmo até o dia {days_total}, o mês passaria o anterior ({brl(spent_prev)}).', metric=f'+{brl(projected_month - spent_prev)}', impact=quantize_brl(D(projected_month) - D(spent_prev)), score=86 if pct >= 30 else 76, related_entity_type='cashflow', related_entity_id=None, expires_at=month_end(month), evidence=[{'label': 'Gasto até hoje', 'value': brl(spent_now)}, {'label': 'Projeção do mês', 'value': brl(projected_month)}, {'label': 'Mês anterior', 'value': brl(spent_prev)}]))
     (card_txs, accounts) = await card_context(user_id)
     for doc in active_cards:
-        card = await build_card(doc, card_txs, accounts)
+        try:
+            card = await build_card(doc, card_txs, accounts)
+        except Exception:
+            logger.exception('radar: card %s skipped', doc.get('id'))
+            continue
         close = days_until(card.next_closing)
         # A closed, unpaid invoice past its due date is the most urgent card signal.
         if card.payable_due and card.payable_invoice > 0 and card.payable_due < today_s:
@@ -180,10 +195,15 @@ async def _signals(user_id: str) -> list[dict]:
     # Same bank forecast semantics as Simulação: explicit unpaid movements,
     # installment portions, legacy recurring rows and subscriptions.
     from finnos.lib.cash_projection import project_scheduled_cash
-    subscriptions = await db.subscriptions.find({'user_id': user_id}).to_list(500)
-    forecast = project_scheduled_cash(
-        txs, cents(balance), today, today + timedelta(days=30), subscriptions, card_docs,
-    )
+    subscriptions = [s for s in await db.subscriptions.find({'user_id': user_id}).to_list(500) if _usable_subscription(s)]
+    try:
+        forecast = project_scheduled_cash(
+            txs, cents(balance), today, today + timedelta(days=30), subscriptions, card_docs,
+        )
+    except Exception:
+        # One odd record must not take the whole Radar down: the cash forecast is skipped this time.
+        logger.exception('radar: cash forecast skipped')
+        forecast = {"projected_cents": cents(balance), "first_negative_date": None, "event_count": 0}
     projected = D(forecast["projected_cents"]) / 100
     negative_date = forecast["first_negative_date"]
     future = forecast["event_count"]
@@ -191,7 +211,10 @@ async def _signals(user_id: str) -> list[dict]:
         signals.append(dict(id=f'cash-negative-{negative_date}', type='risk', severity='critical', title='Seu saldo projetado pode ficar negativo', description=f'Projeção indica saldo abaixo de zero em {negative_date[8:10]}/{negative_date[5:7]}', explanation='O FINNOS somou seu saldo atual aos lançamentos pendentes e agendados, parcelas e faturas que vencem nos próximos 30 dias.', metric=brl(projected), score=100, related_entity_type='cashflow', expires_at=negative_date, evidence=[{'label': 'Saldo atual', 'value': brl(balance)}, {'label': 'Projeção 30 dias', 'value': brl(projected)}]))
     elif future and projected > balance and (projected >= 200):
         signals.append(dict(id=f'cash-opportunity-{month}', type='opportunity', severity='normal', title='Sua projeção abre espaço para uma meta', description=f'Saldo projetado de {brl(projected)} nos próximos 30 dias', explanation='Considerando os lançamentos já programados, sua projeção permanece positiva. Você pode avaliar direcionar parte para uma meta.', metric=brl(projected), score=40, related_entity_type='cashflow', expires_at=(today + timedelta(days=7)).isoformat(), evidence=[{'label': 'Projeção 30 dias', 'value': brl(projected)}]))
-    signals.extend(await recurring_signals(user_id, month_end(month)))
+    try:
+        signals.extend(await recurring_signals(user_id, month_end(month)))
+    except Exception:
+        logger.exception('radar: recurring signals skipped')
     risky = {s.get('related_entity_id') for s in signals if s['id'].startswith('budget-')}
     signals = [s for s in signals if not (s['id'].startswith('pace-') and s.get('related_entity_id') in risky)]
     states = await _state_map(user_id)
@@ -203,7 +226,9 @@ async def _signals(user_id: str) -> list[dict]:
         if st.get('dont_show_similar'):
             continue
         s['state'] = st.get('state', 'new')
-        s['detected_at'] = st.get('detected_at') or datetime.now(timezone.utc).isoformat()
+        # Saved states keep a datetime (Firestore timestamp); the API speaks ISO text.
+        detected = st.get('detected_at') or datetime.now(timezone.utc)
+        s['detected_at'] = detected.isoformat() if hasattr(detected, 'isoformat') else str(detected)
         out.append(s)
     out.sort(key=lambda s: (-s['score'], s['id']))
     for (i, s) in enumerate(out):

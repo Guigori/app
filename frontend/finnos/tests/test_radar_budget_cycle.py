@@ -54,3 +54,27 @@ def test_cycle_limit_replaces_the_monthly_one(monkeypatch):
     assert alert["impact"] is None
     assert alert["expires_at"] == "2026-11-30"
     assert "no ciclo do orçamento" in alert["description"]
+
+
+def test_a_seen_signal_still_validates(monkeypatch):
+    """Opening a signal saves its state with a datetime; the Radar must keep loading after that."""
+    from datetime import datetime, timezone
+    from finnos.models.radar import RadarSignalOut
+    seen = datetime(2026, 11, 4, 12, tzinfo=timezone.utc)
+
+    async def states(uid): return {"budget-shop-2026-11": {"state": "viewed", "detected_at": seen}}
+    tx = {"id": "t1", "name": "Loja", "type": "despesa", "status": "pago", "date": "2026-11-03",
+          "value": 800, "account_id": "bank", "category_id": "shop"}
+    docs = {"transactions": [tx], "categories": CATEGORY, "cards": [], "subscriptions": [{"id": "broken"}],
+            "accounts": [{"id": "bank", "initial_balance": 5000}], "budget_cycles": []}
+    monkeypatch.setattr(radar, "today_iso", lambda: "2026-11-05")
+    monkeypatch.setattr(radar, "db", SimpleNamespace(**{k: Collection(v) for k, v in docs.items()}))
+    async def nothing(*args): return []
+    async def context(uid): return [tx], {"bank": docs["accounts"][0]}
+    monkeypatch.setattr(radar, "_state_map", states)
+    monkeypatch.setattr(radar, "recurring_signals", nothing)
+    monkeypatch.setattr(radar, "card_context", context)
+    items = [RadarSignalOut(**s) for s in asyncio.run(radar._signals("owner"))]
+    budget = next(s for s in items if s.id == "budget-shop-2026-11")
+    assert budget.state == "viewed"
+    assert budget.detected_at.startswith("2026-11-04")

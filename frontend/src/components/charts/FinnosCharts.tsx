@@ -299,8 +299,8 @@ export function Heatmap({ month, values, today, format, compact = false, onOpenD
               initial={{ opacity: 0, scale: 0.6 }} animate={seen ? { opacity: sel && sel !== date ? 0.35 : 1, scale: sel === date ? 1.12 : 1 } : { opacity: 0, scale: 0.6 }}
               transition={{ delay: seen && !sel ? i * 0.012 : 0, duration: 0.25 }}
               onClick={() => setSel(sel === date ? null : date)}
-              className={cn("relative aspect-square rounded-[6px] text-[10px] font-semibold tabular-nums", compact && "rounded-[4px]", lv >= 4 ? "text-white" : "text-muted-foreground", future && "border border-dashed border-border bg-transparent", date === today && "ring-2 ring-foreground/70 ring-offset-1 ring-offset-card")}
-              style={future ? undefined : { backgroundColor: HEAT[lv] }}>
+              className={cn("relative mx-auto aspect-square w-full max-w-12 rounded-full text-[11px] font-semibold tabular-nums", lv >= 4 ? "text-white" : lv > 0 ? "text-foreground" : "text-foreground/70", future ? "border border-dashed border-border bg-transparent" : lv === 0 && "border border-border/70", date === today && "ring-2 ring-primary ring-offset-2 ring-offset-card")}
+              style={future || lv === 0 ? undefined : { backgroundColor: HEAT[lv] }}>
               {compact ? null : Number(date.slice(8))}
             </motion.button>
           );

@@ -1,5 +1,5 @@
 import {
-  GitCompareArrows,
+  ArrowDownUp,
   Home,
   PieChart,
   ChartNoAxesCombined,
@@ -33,7 +33,7 @@ export interface NavGroup {
  */
 export const MAIN_NAV: NavItem[] = [
   { to: "/", label: "Início", icon: Home, slug: "inicio" },
-  { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
+  { to: "/transacoes", label: "Fluxo", icon: ArrowDownUp, slug: "transacoes" },
   { to: "/contas", label: "Carteira", icon: Wallet, slug: "contas" },
   { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
   { to: "/radar", label: "Radar", icon: Radar, slug: "radar" },
@@ -56,7 +56,7 @@ export const MENU_SLUGS: string[] = NAV_GROUPS.flatMap((group) => group.items);
 /** Horizontal tab strip under the header (Calen's Início · Fluxo · Categorias …). */
 export const TOP_TABS: NavItem[] = [
   { to: "/", label: "Início", icon: Home, slug: "inicio" },
-  { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
+  { to: "/transacoes", label: "Fluxo", icon: ArrowDownUp, slug: "transacoes" },
   { to: "/analise", label: "Análise", icon: ChartNoAxesCombined, slug: "analise" },
   { to: "/orcamento", label: "Orçamento", icon: PieChart, slug: "orcamento" },
   { to: "/categorias", label: "Categorias", icon: Tags, slug: "categorias" },
@@ -66,7 +66,7 @@ export const TOP_TABS: NavItem[] = [
 /** Bottom bar on mobile — the central "+" sits between these two pairs. */
 export const BOTTOM_LEFT: NavItem[] = [
   { to: "/", label: "Início", icon: Home, slug: "inicio" },
-  { to: "/transacoes", label: "Fluxo", icon: GitCompareArrows, slug: "transacoes" },
+  { to: "/transacoes", label: "Fluxo", icon: ArrowDownUp, slug: "transacoes" },
 ];
 
 export const BOTTOM_RIGHT: NavItem[] = [

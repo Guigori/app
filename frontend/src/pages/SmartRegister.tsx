@@ -468,7 +468,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
     const fromAccount = selectedAccount;
     const toAccount = accounts.find((a) => a.id === destination);
     const fromAfter = (fromAccount?.balance ?? 0) - amountValue;
-    return <div className={embedded ? "relative flex h-full min-h-0 w-full flex-col gap-2.5 bg-background px-5 pb-4 pt-6 text-foreground" : "relative mx-auto flex h-[min(860px,calc(100dvh-8rem))] w-full max-w-md flex-col gap-2.5 overflow-hidden rounded-[36px] border border-border bg-background px-5 pb-4 pt-6 text-foreground shadow-2xl"} data-testid="quick-entry">
+    return <div className={embedded ? cn("relative flex h-full min-h-0 w-full flex-col gap-2.5 bg-background px-5 pb-4 pt-6 text-foreground", desktop && "gap-3 pb-7")  : "relative mx-auto flex h-[min(860px,calc(100dvh-8rem))] w-full max-w-md flex-col gap-2.5 overflow-hidden rounded-[36px] border border-border bg-background px-5 pb-4 pt-6 text-foreground shadow-2xl"} data-testid="quick-entry">
       {embedded ? null : <div className="absolute left-1/2 top-2 h-[5px] w-20 -translate-x-1/2 rounded-full bg-border" aria-hidden="true" />}
       {/* Header: calculator · type (icons, the chosen one named) · AI. */}
       {insightMode && expanded ? (
@@ -503,7 +503,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       {(() => {
         const top = <>
       {/* Amount: big, in the type's colour, with a caret while typing; the sum above it in calculator mode. */}
-      <button type="button" onClick={() => { if (swiped.current) { swiped.current = false; return; } setKeypadOpen(true); }} onPointerDown={(e) => { swipeStart.current = e.clientX; }} onPointerUp={(e) => { const dx = e.clientX - (swipeStart.current ?? e.clientX); swipeStart.current = null; if (existing && Math.abs(dx) > 70) { swiped.current = true; goSibling(dx < 0 ? 1 : -1); } }} aria-label="Valor: toque para digitar" data-gesture={existing ? "ignore" : undefined} className={cn("flex min-h-[60px] flex-col", insightMode && !keypadOpen ? "h-[88px] shrink-0" : "flex-1", " items-center justify-center gap-1", amountValue || ops ? tone.text : "text-[#5d5d75]")}>
+      <button type="button" onClick={() => { if (swiped.current) { swiped.current = false; return; } setKeypadOpen(true); }} onPointerDown={(e) => { swipeStart.current = e.clientX; }} onPointerUp={(e) => { const dx = e.clientX - (swipeStart.current ?? e.clientX); swipeStart.current = null; if (existing && Math.abs(dx) > 70) { swiped.current = true; goSibling(dx < 0 ? 1 : -1); } }} aria-label="Valor: toque para digitar" data-gesture={existing ? "ignore" : undefined} className={cn("flex min-h-[60px] flex-col", insightMode && !keypadOpen ? "h-[88px] shrink-0" : desktop ? "h-[clamp(7rem,18dvh,10rem)] shrink-0" : "flex-1", " items-center justify-center gap-1", amountValue || ops ? tone.text : "text-[#5d5d75]")}>
         {ops && keypadOpen ? <span className="text-[17px] font-medium tabular-nums" aria-hidden="true">{expr.replace(/\./g, ",").replace(/\s*([+−×÷])\s*/g, " $1 ")}</span> : null}
         <span className={cn("flex items-center font-bold leading-none tracking-[-1px] tabular-nums", !keypadOpen ? (insightMode ? "text-[50px]" : "text-[64px]") : ops ? "text-[48px]" : "text-[56px]")}>
           <span data-testid="quick-entry-amount" aria-live="polite">{existing && hidden && !keypadOpen ? "R$ ••••" : typedAmount ?? formatBRL(amountValue).replace(/,00$/, "")}</span>
@@ -625,7 +625,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
         </div>
       ) : null}
 
-      {!existing && !invoice && !keypadOpen && !desktop && recentTemplates.length > 0 ? (
+      {!existing && !invoice && (desktop || !keypadOpen) && recentTemplates.length > 0 ? (
         <div className="flex shrink-0 flex-col gap-1.5" data-testid="quick-entry-recent">
           <div className="flex h-[18px] items-center justify-between text-[13px] text-muted-foreground"><span>Repetir um lançamento recente</span></div>
           {recentTemplates.map((t) => (
@@ -639,7 +639,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
       ) : null}
 
       {/* ⋮ · wallet · date */}
-      <div className={cn("flex h-12 shrink-0 items-center gap-2", insightMode && expanded && "hidden")}>
+      <div className={cn("flex h-12 shrink-0 items-center gap-2", desktop && cn("mt-auto transition-[padding] duration-200", dirty ? "pr-[7.25rem]" : "pr-[4.25rem]"), insightMode && expanded && "hidden")}>
         <button type="button" onClick={() => go("more")} aria-label="Mais opções" data-testid="quick-entry-more" className="grid size-12 shrink-0 place-items-center rounded-full border border-border bg-card"><MoreVertical size={20} /></button>
         {kind !== "Transferência" && !invoice ? <button type="button" onClick={() => go("pay")} className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-muted px-1.5 text-left" data-testid="quick-entry-account">
           <span className={cn("grid size-9 shrink-0 place-items-center rounded-full", selectedCard ? "bg-primary/15 text-primary" : "bg-income/15 text-income dark:bg-[#0d2a22] dark:text-[#10b981]")}>{selectedCard ? <CreditCard size={17} /> : <Wallet size={17} />}</span>
