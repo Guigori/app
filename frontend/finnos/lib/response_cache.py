@@ -64,7 +64,8 @@ def revision_cached(name: str, response_type: Any):
                 return await fn(*args, **kwargs)
             result = await fn(*args, **kwargs)
             try:
-                body = adapter.dump_json(result).decode()
+                # A route may return a plain dict; FastAPI would validate it against the same model.
+                body = adapter.dump_json(adapter.validate_python(result)).decode()
                 if len(body) <= MAX_BYTES:
                     await run_in_threadpool(lambda: ref.set({"v": SCHEMA, "n": name, "r": revision, "d": day, "body": body}))
             except Exception:

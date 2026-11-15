@@ -183,10 +183,9 @@ def query_rows(db, uid, name, query):
     clauses = _pushdown(query)
     if not clauses:
         return [d for d in rows(db, uid, name) if matches(d, query)]
-    from google.cloud.firestore_v1.base_query import FieldFilter
     ref = root(db, uid).collection(name)
     for field, op, value in clauses:
-        ref = ref.where(filter=FieldFilter(field, op, value))
+        ref = ref.where(field, op, value)
     try:
         snapshots = list(ref.limit(20001).stream(timeout=15))
     except Exception as exc:  # e.g. FailedPrecondition: an index this combination would need
