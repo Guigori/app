@@ -20,6 +20,7 @@ import { ConnectivityStatus } from "@/components/sync/ConnectivityStatus";
 import { StatementImportHost } from "@/components/import/StatementImportHost";
 import { InstallAppPrompt } from "@/components/layout/InstallAppPrompt";
 import { startPreferencesSync } from "@/lib/preferencesSync";
+import { startLiveUpdates } from "@/lib/liveUpdates";
 import { rechargeBenefits } from "@/lib/data";
 import { queryClient } from "@/lib/queryClient";
 import { useTheme } from "next-themes";
@@ -43,6 +44,8 @@ export function AppShell() {
   const navigationType = useNavigationType();
   // Dock shortcuts, Início panel and the "+" default follow the account to every device.
   useEffect(() => startPreferencesSync(), []);
+  // Listens to the one revision document: data refreshes when something changes, not on a timer.
+  useEffect(() => startLiveUpdates(), []);
   // Benefit recharges that came due (each one exists once, so running it again is harmless).
   useEffect(() => {
     const run = () => {

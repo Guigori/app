@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useState } from "react";
+import { useLiveUpdates } from "@/lib/liveUpdates";
 import { lazyRetry } from "@/lib/lazyRetry";
 import { Link } from "react-router-dom";
 import { createPortal } from "react-dom";
@@ -241,6 +242,7 @@ function AutoRow({ entry, categories }: { entry: AutoRegisteredCapture; categori
  * Shows nothing when there is nothing to review.
  */
 export function PendingCaptures({ limit }: { limit?: number } = {}) {
+  const live = useLiveUpdates();
   const enabled = getMode() === "account";
   const pending = useQuery({
     queryKey: ["pending-captures"],
@@ -250,7 +252,7 @@ export function PendingCaptures({ limit }: { limit?: number } = {}) {
     staleTime: 10_000,
     refetchOnWindowFocus: "always",
     // Coming back to the app already refetches; the timer is only a safety net (each check is a server read).
-    refetchInterval: 5 * 60_000,
+    refetchInterval: live ? false : 5 * 60_000,
   });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, enabled, staleTime: 30_000 });
   const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards, enabled, staleTime: 30_000 });

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { STALE_LISTENING, useLiveUpdates } from "@/lib/liveUpdates";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Bell, CalendarClock, CreditCard, LayoutGrid, Wallet, Radar as RadarIcon, ReceiptText, X } from "lucide-react";
 import { useWidgetAlerts } from "@/components/insights/useWidgetAlerts";
@@ -20,6 +21,7 @@ const ICON: Record<NotificationKind, typeof Bell> = {
 /** Bell with a live badge: scheduled/pending entries coming due, overdue ones and card
  *  invoices closing within the next week. */
 export function NotificationsBell() {
+  const live = useLiveUpdates();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -45,14 +47,14 @@ export function NotificationsBell() {
     queryFn: fetchNotifications,
     // Each check reads the person's data on the server: every 15 minutes while the tab is visible is enough
     // for reminders (a hidden tab does not poll), and saving anything refreshes them at once.
-    refetchInterval: 15 * 60 * 1000,
-    staleTime: 5 * 60_000,
+    refetchInterval: live ? false : 15 * 60 * 1000,
+    staleTime: live ? STALE_LISTENING : 5 * 60_000,
   });
   const { data: radar } = useQuery({
     queryKey: ["radar"],
     queryFn: fetchRadar,
-    refetchInterval: 15 * 60 * 1000,
-    staleTime: 5 * 60_000,
+    refetchInterval: live ? false : 15 * 60 * 1000,
+    staleTime: live ? STALE_LISTENING : 5 * 60_000,
   });
   const items = data?.items ?? [];
   const radarItems = (radar?.items ?? [])
