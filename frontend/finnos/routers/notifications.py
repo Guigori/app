@@ -4,6 +4,7 @@ from finnos.lib.money import D
 import logging
 from datetime import date
 from fastapi import APIRouter, Depends, Query
+from finnos.lib.response_cache import revision_cached
 from starlette.concurrency import run_in_threadpool
 from finnos.lib import pending_captures as pending
 from finnos.lib.cards import cycle_bounds, due_date
@@ -45,6 +46,7 @@ async def _pending_items(uid: str, dismissed: set) -> list[NotificationItem]:
 
 
 @router.get("", response_model=NotificationsOut)
+@revision_cached("notifications", NotificationsOut)
 async def notifications(
     window_days: int = Query(default=7, ge=1, le=60), user: dict = Depends(require_user)
 ) -> NotificationsOut:

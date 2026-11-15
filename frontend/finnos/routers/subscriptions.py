@@ -11,6 +11,7 @@ from decimal import ROUND_HALF_UP
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Header
+from finnos.lib.response_cache import revision_cached
 from pydantic import Field
 
 from finnos.lib.db import db
@@ -100,6 +101,7 @@ async def _validate(uid: str, payload: SubscriptionIn):
 
 
 @router.get("", response_model=SubscriptionsOut)
+@revision_cached("subscriptions", SubscriptionsOut)
 async def list_subscriptions(user: dict = Depends(require_user)):
     uid = user["id"]
     subscriptions = await db.subscriptions.find({"user_id": uid}).to_list(500)

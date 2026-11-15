@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Response, Header
+from finnos.lib.response_cache import revision_cached
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import aware
@@ -125,6 +126,7 @@ def _payload(payload: AccountIn) -> dict:
 
 
 @router.get("", response_model=List[AccountOut])
+@revision_cached("accounts", List[AccountOut])
 async def list_accounts(user: dict = Depends(require_user)) -> list[AccountOut]:
     return await _enriched_accounts(user["id"])
 

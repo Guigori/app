@@ -149,6 +149,56 @@ def rows(db, uid, name, transaction=None):
 
 
 
+# Filters Firestore can apply before reading (each document returned is a billed read). Only plain string
+# values on fields stored as-is: never money (stored as *_cents), never None (Firestore's == None does not
+# match a missing field, while the Python filter treats missing as None).
+_PUSH_RANGE_FIELDS = frozenset({"date"})
+_RANGE_OPS = {"$gte": ">=", "$gt": ">", "$lte": "<=", "$lt": "<"}
+
+
+def _pushdown(query):
+    """The where-clauses for `query` that select a superset of what `matches` keeps, or [] for none."""
+    equals, ranges = [], []
+    for key, expected in query.items():
+        if key in ("user_id", "$or", "id") or key.startswith("$") or key in MONEY_FIELDS or key.endswith("_cents"):
+            continue
+        if isinstance(expected, str):
+            equals.append((key, "==", expected))
+        elif isinstance(expected, dict):
+            ins = expected.get("$in")
+            if set(expected) == {"$in"} and isinstance(ins, (list, tuple)) and 0 < len(ins) <= 30 and all(isinstance(v, str) for v in ins):
+                equals.append((key, "in", list(ins)))
+            elif key in _PUSH_RANGE_FIELDS and set(expected) <= set(_RANGE_OPS) and all(isinstance(v, str) for v in expected.values()):
+                ranges.extend((key, _RANGE_OPS[op], v) for op, v in expected.items())
+    # Without composite indexes Firestore serves: equalities alone (one "in" at most), or one range alone.
+    if ranges:
+        return ranges
+    ins = [c for c in equals if c[1] == "in"]
+    return [c for c in equals if c[1] == "=="] + ins[:1]
+
+
+def query_rows(db, uid, name, query):
+    """Documents matching `query`, letting Firestore filter first when it can. Same result as filtering every
+    row in Python (the Python filter still runs), only cheaper; any query Firestore refuses falls back to it."""
+    clauses = _pushdown(query)
+    if not clauses:
+        return [d for d in rows(db, uid, name) if matches(d, query)]
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    ref = root(db, uid).collection(name)
+    for field, op, value in clauses:
+        ref = ref.where(filter=FieldFilter(field, op, value))
+    try:
+        snapshots = list(ref.limit(20001).stream(timeout=15))
+    except Exception as exc:  # e.g. FailedPrecondition: an index this combination would need
+        if exc.__class__.__name__ not in {"FailedPrecondition", "InvalidArgument"}:
+            raise
+        return [d for d in rows(db, uid, name) if matches(d, query)]
+    if len(snapshots) > 20000:
+        raise HTTPException(413, "Volume financeiro exige paginação; nenhum total parcial foi exibido.")
+    docs = [dict(decode(s.to_dict()), id=s.id, user_id=uid) for s in snapshots]
+    return [d for d in docs if matches(d, query)]
+
+
 def card_purchase_rows(db, uid, card_id, transaction):
     """Read only this card's purchases *inside* the finance transaction.
 
@@ -405,11 +455,7 @@ class Cursor:
         uid = scoped(self.query)
 
         def read():
-            docs = [
-                d
-                for d in rows(client(), uid, self.collection.name)
-                if matches(d, self.query)
-            ]
+            docs = query_rows(client(), uid, self.collection.name, self.query)
             for key, direction in reversed(self.order):
                 docs.sort(key=lambda d: str(d.get(key) or ""), reverse=direction == -1)
             if len(docs) > maximum and not allow_truncate:

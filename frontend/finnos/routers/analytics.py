@@ -3,6 +3,7 @@ from finnos.lib.money import D, installment_portion, installment_schedule, quant
 """Analytics: month-over-month trends and the monthly budget view."""
 from typing import Annotated, List, Optional
 from fastapi import APIRouter, Depends, Query
+from finnos.lib.response_cache import revision_cached
 from finnos.lib.db import db
 from finnos.lib.account_balances import finance_revision, stream_cash_history
 from finnos.lib.financial_summaries import stream_financial_window
@@ -52,6 +53,7 @@ def _label(month: str) -> str:
 
 
 @router.get("/trends", response_model=TrendsOut)
+@revision_cached("trends", TrendsOut)
 async def trends(
     months: int = Query(default=6, ge=2, le=24),
     end_month: Optional[str] = Query(default=None, pattern="^\\d{4}-\\d{2}$"),
@@ -84,6 +86,7 @@ async def trends(
 
 
 @router.get("/budget", response_model=BudgetSummary)
+@revision_cached("budget", BudgetSummary)
 async def budget(
     month: Optional[str] = Query(default=None, pattern="^\\d{4}-\\d{2}$"),
     user: dict = Depends(require_user),
@@ -215,6 +218,7 @@ def _upcoming(txs, subscriptions, source_txs, month, cat_by_id) -> list[Upcoming
 
 
 @router.get("/flow", response_model=FlowOut)
+@revision_cached("flow", FlowOut)
 async def flow(
     month: Optional[str] = Query(default=None, pattern="^\\d{4}-\\d{2}$"),
     months: int = Query(default=12, ge=2, le=24),
@@ -343,6 +347,7 @@ async def flow(
 
 
 @router.get("/balance-history", response_model=BalanceHistoryOut)
+@revision_cached("balance-history", BalanceHistoryOut)
 async def balance_history(
     month: Optional[str] = Query(default=None, pattern="^\\d{4}-\\d{2}$"),
     user: dict = Depends(require_user),
@@ -360,6 +365,7 @@ async def balance_history(
 
 
 @router.get("/calendar", response_model=CalendarOut)
+@revision_cached("calendar", CalendarOut)
 async def calendar_month(
     month: Optional[str] = Query(default=None, pattern="^\\d{4}-\\d{2}$"),
     user: dict = Depends(require_user),

@@ -81,14 +81,16 @@ def test_reads_per_route(monkeypatch):
         transport = httpx.ASGITransport(app=api.app, raise_app_exceptions=False)
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver", headers=HEADERS, timeout=60) as client:
             for label, url in ROUTES:
-                response = await client.get(url)
-                rows.append((label, url, response.status_code, response.headers.get("X-Finnos-Reads", "?")))
+                first = await client.get(url)
+                again = await client.get(url)
+                rows.append((label, url, first.status_code, first.headers.get("X-Finnos-Reads", "?"), again.headers.get("X-Finnos-Reads", "?")))
     asyncio.run(scenario())
 
-    table = [f"### Leituras do Firestore por rota ({N} lançamentos sintéticos)", "", "| Tela | Rota | Status | Leituras |", "| --- | --- | --- | --- |"]
-    table += [f"| {label} | `{url}` | {status} | {reads} |" for label, url, status, reads in rows]
+    table = [f"### Leituras do Firestore por rota ({N} lançamentos sintéticos)", "", "| Tela | Rota | Status | 1ª abertura | Abrir de novo (sem mudança) |", "| --- | --- | --- | --- | --- |"]
+    table += [f"| {label} | `{url}` | {status} | {reads} | {again} |" for label, url, status, reads, again in rows]
     total = sum(int(r[3]) for r in rows if str(r[3]).isdigit())
-    table += [f"| **Total** | | | **{total}** |", ""]
+    total_again = sum(int(r[4]) for r in rows if str(r[4]).isdigit())
+    table += [f"| **Total** | | | **{total}** | **{total_again}** |", ""]
     text = "\n".join(table)
     print(text)
     summary = os.getenv("GITHUB_STEP_SUMMARY")
@@ -96,4 +98,4 @@ def test_reads_per_route(monkeypatch):
         with open(summary, "a", encoding="utf-8") as fh:
             fh.write(text + "\n")
     # The table is the result; a route that fails on the synthetic seed shows its status instead of stopping CI.
-    assert sum(status < 500 for _, _, status, _ in rows) >= len(rows) // 2, rows
+    assert sum(status < 500 for _, _, status, _, _ in rows) >= len(rows) // 2, rows
