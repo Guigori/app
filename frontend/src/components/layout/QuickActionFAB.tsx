@@ -21,7 +21,8 @@ export function QuickActionFAB() {
   useEffect(() => onRegisterSheet((r) => { setRequest(r); setRequestKey((k) => k + 1); setOpenRaw(true); }, true), []);
   const setOpen = (next: boolean) => { setOpenRaw(next); if (!next) { setController(null); setDiscardOpen(false); } };
   const dirty = open && controller?.view !== "success" && controller?.dirty;
-  // A new entry is a card as tall as its fields (no empty band); a saved one or an invoice gets the full height for its receipt.
+  // The card ends at its last row; the ✕ / ✓ buttons float below it, on the blurred page. A new entry is as tall as
+  // its fields, a saved one or an invoice gets the full height for its receipt.
   const tall = Boolean(request.existing || request.invoice) || controller?.view === "other";
   const requestClose = () => { if (dirty) setDiscardOpen(true); else setOpen(false); };
 
@@ -50,7 +51,7 @@ export function QuickActionFAB() {
             <motion.button type="button" aria-label="Fechar registro" onClick={requestClose} className="fixed inset-0 z-[39] hidden bg-black/30 backdrop-blur-[6px] dashboard:block"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} />
             <motion.aside role="dialog" aria-modal="true" aria-label="Novo registro" data-testid="register-drawer"
-              className={cn("fixed bottom-3 right-3 z-[40] hidden max-h-[calc(100dvh-1.5rem)] w-[27rem] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-[32px] border border-border bg-background shadow-2xl dashboard:flex", tall ? "top-3" : "h-auto")}
+              className={cn("fixed bottom-[6.75rem] right-3 z-[40] hidden max-h-[calc(100dvh-7.5rem)] w-[27rem] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-[32px] border border-border bg-background shadow-2xl dashboard:flex", tall ? "top-3" : "h-auto")}
               initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 330, damping: 34 }}>
               <div className="min-h-0 flex-1 overflow-hidden">
                 <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">Preparando o registro...</div>}>
