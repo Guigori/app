@@ -13,6 +13,7 @@ from firebase_admin import firestore
 from google.auth.credentials import AnonymousCredentials
 
 from finnos.lib import db as store
+from finnos.lib import tx_pack
 
 pytestmark = pytest.mark.skipif(
     not (os.getenv("FIRESTORE_EMULATOR_HOST") and os.getenv("FIREBASE_PROJECT_ID") == "demo-finnos"),
@@ -89,16 +90,21 @@ def test_reads_per_route(monkeypatch):
     async def scenario():
         transport = httpx.ASGITransport(app=api.app, raise_app_exceptions=False)
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver", headers=HEADERS, timeout=60) as client:
+            async def get(url):
+                # Each request as if it reached a fresh server (no pack kept in memory): the cautious count.
+                tx_pack._memo.clear()
+                return await client.get(url)
+
             for label, url in ROUTES:
-                first = await client.get(url)
-                again = await client.get(url)
+                first = await get(url)
+                again = await get(url)
                 rows.append([label, url, first.status_code, first.headers.get("X-Finnos-Reads", "?"), again.headers.get("X-Finnos-Reads", "?")])
             # One new lançamento, then every screen again: what a person pays after each registro.
             created = await client.post("/api/transactions", json=NEW_TX, headers={"X-Finnos-Operation-Id": "reads-after-change"})
             assert created.status_code == 201, created.text[:500]
             changes.append(created.json()["id"])
             for row in rows:
-                after = await client.get(row[1])
+                after = await get(row[1])
                 row.append(after.headers.get("X-Finnos-Reads", "?"))
     asyncio.run(scenario())
 
