@@ -36,7 +36,7 @@ function Receipt({ tx }: { tx: Transaction }) {
   ];
   return (
     <motion.section data-testid="transaction-detail-receipt" aria-label="Comprovante"
-      className="overflow-hidden rounded-2xl border border-dashed border-border bg-card"
+      className="overflow-hidden rounded-2xl border border-dashed border-border bg-transparent"
       initial={reduce ? false : { clipPath: "inset(0 0 100% 0)", opacity: 0.6 }} animate={{ clipPath: "inset(0 0 0% 0)", opacity: 1 }}
       transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}>
       <dl className="divide-y divide-dashed divide-border px-3.5">
@@ -132,9 +132,9 @@ export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, on
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side={side} className={cn("gap-0 overflow-y-auto p-0", side === "bottom" ? "max-h-[90svh] rounded-t-3xl" : "w-full sm:max-w-md")} data-testid="transaction-detail">
+      <SheetContent side={side} className={cn("gap-0 overflow-y-auto p-0", side === "bottom" ? "max-h-[90svh] rounded-t-3xl" : "w-full sm:max-w-[34rem]")} data-testid="transaction-detail">
         {side === "bottom" ? <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30" aria-hidden="true" /> : null}
-        <div className="space-y-4 p-5 pb-8">
+        <div className={cn("space-y-4 p-5 pb-8", side === "right" && "space-y-5 p-6 pt-4")}>
           <header className="flex items-start gap-3 pl-12">
             <span className="grid size-11 shrink-0 place-items-center rounded-2xl" style={{ backgroundColor: `color-mix(in oklab, ${tx.category_color ?? "#64748B"} 16%, transparent)`, color: tx.category_color ?? "#64748B" }}>
               <CategoryIcon name={tx.category_icon ?? "more-horizontal"} className="h-5 w-5" />
@@ -146,7 +146,7 @@ export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, on
               </SheetDescription>
             </div>
           </header>
-          <p className={cn("font-heading text-3xl font-bold tabular-nums", tone)} data-testid="transaction-detail-value">
+          <p className={cn("font-heading text-3xl font-bold tracking-tight tabular-nums", side === "right" && "text-4xl", tone)} data-testid="transaction-detail-value">
             {hidden ? formatHiddenBRL() : tx.type === "transferencia" ? formatBRL(tx.value) : formatSignedBRL(signedAmount(tx))}
           </p>
 
@@ -198,6 +198,7 @@ export function TransactionDetailSheet({ transaction: tx, open, onOpenChange, on
             ) : null}
           </section>
 
+          {tx.type !== "transferencia" && !month_ && calendar.isPending ? <div className="h-20 animate-pulse rounded-2xl bg-muted" aria-label="Calculando o impacto" /> : null}
           {month_ ? (
             <section className="rounded-2xl bg-muted/60 p-3.5" data-testid="transaction-detail-impact">
               <h3 className="text-xs font-medium text-muted-foreground">Impacto em {monthLabel(month)}</h3>

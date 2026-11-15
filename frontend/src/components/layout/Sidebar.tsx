@@ -40,6 +40,12 @@ export function Sidebar() {
   useEffect(() => {
     document.documentElement.style.setProperty("--sidebar-w", `${width}px`);
   }, [width]);
+  // "Começar com o menu recolhido" (Configurações › Barra e menu) folds or opens it right away.
+  useEffect(() => {
+    const onCollapse = (event: Event) => commit((event as CustomEvent<boolean>).detail ? RAIL : lastOpen.current);
+    window.addEventListener("finnos-sidebar-collapse", onCollapse);
+    return () => window.removeEventListener("finnos-sidebar-collapse", onCollapse);
+  }, [commit]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {

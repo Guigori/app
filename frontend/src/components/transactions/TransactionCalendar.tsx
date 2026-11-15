@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { addMonth, monthLabel, todayISO } from "@/lib/format";
+import { HEAT } from "@/components/charts/FinnosCharts";
 import { cn } from "@/lib/utils";
 import { useBalanceHidden } from "@/lib/balance";
 import { Button } from "@/components/ui/button";
@@ -70,12 +71,8 @@ export function TransactionCalendar({
     if (ratio <= 0.85) return 4;
     return 5;
   };
-  const heatBackground = (level: number) => {
-    if (level === 0) return undefined;
-    // Softer, single-hue scale: the calendar reads as a quiet heatmap, not a mosaic.
-    const mix = [0, 10, 20, 32, 46, 62][level] ?? 62;
-    return `color-mix(in srgb, var(--finnos-purple-live) ${mix}%, var(--card))`;
-  };
+  // Same purple scale as Ritmo do mês, so every heat map in the app reads the same way.
+  const heatBackground = (level: number) => (level === 0 ? undefined : HEAT[level]);
   const cells = buildCells(month);
   const weeks: Cell[][] = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
@@ -86,7 +83,7 @@ export function TransactionCalendar({
   const visibleWeeks = expanded || compact ? trimmed : trimmed.slice(compactStart, compactStart + weekCount);
 
   return (
-    <section className={cn("rounded-3xl border border-border bg-card px-3 pb-2 pt-4", compact && "flex flex-col rounded-2xl pb-4", className)} data-testid="transaction-calendar">
+    <section className={cn("rounded-3xl border border-border bg-card px-3 pb-2 pt-4", compact && "flex flex-col px-4 pb-4 shadow-sm", className)} data-testid="transaction-calendar">
       <div className="flex items-center justify-center gap-2">
         <Button
           size="icon-sm"
@@ -145,20 +142,28 @@ export function TransactionCalendar({
                   // phone screen and became huge, almost empty tiles on desktop. The colour
                   // carries the intensity; exact amounts live in the day list (and the tooltip).
                   "relative flex flex-col items-center justify-center rounded-xl border text-sm font-semibold tabular-nums transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                  compact ? "h-full min-h-9 rounded-lg text-xs" : "h-11 sm:h-12",
+                  compact ? "h-full min-h-11 rounded-[10px] text-[13px]" : "h-11 sm:h-12",
                   selected
-                    ? "border-foreground bg-foreground text-background shadow-md"
+                    ? "border-primary bg-primary text-primary-foreground shadow-md shadow-primary/25"
                     : cell.outside
-                      ? "border-transparent bg-transparent text-muted-foreground/40"
-                      : level >= 5
+                      ? "border-transparent bg-transparent text-muted-foreground/35"
+                      : level >= 4
                         ? "border-transparent text-white hover:brightness-110"
-                        : "border-transparent text-foreground hover:brightness-95",
-                  !selected && cell.date === today ? "font-extrabold ring-2 ring-primary ring-offset-1 ring-offset-card" : undefined,
+                        : level > 0
+                          ? "border-transparent text-foreground hover:brightness-95"
+                          : "border-border/70 bg-transparent text-foreground/80 hover:bg-muted/60",
+                  !selected && cell.date === today ? "font-extrabold ring-2 ring-primary ring-offset-2 ring-offset-card" : undefined,
                 )}
-                style={!cell.outside && !selected ? { backgroundColor: level > 0 ? heatBackground(level) : "color-mix(in srgb, var(--finnos-app) 6%, var(--card))" } : undefined}
+                style={!cell.outside && !selected && level > 0 ? { backgroundColor: heatBackground(level) } : undefined}
                 data-testid={`calendar-day-${cell.date}`}
               >
                 <span>{Number(cell.date.slice(8, 10))}</span>
+                {!cell.outside && flow && (flow.income > 0 || flow.expense > 0 || flow.projected_income > 0 || flow.projected_expense > 0) ? (
+                  <span className="absolute bottom-1 flex gap-0.5" aria-hidden="true">
+                    {flow.income > 0 || flow.projected_income > 0 ? <span className={cn("size-1 rounded-full", level >= 4 || selected ? "bg-white" : "bg-income")} /> : null}
+                    {flow.expense > 0 || flow.projected_expense > 0 ? <span className={cn("size-1 rounded-full", level >= 4 || selected ? "bg-white/70" : "bg-expense")} /> : null}
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -171,7 +176,7 @@ export function TransactionCalendar({
         {[1, 2, 3, 4, 5].map((level) => (
           <span
             key={level}
-            className="h-3 w-3 rounded-[4px] border border-border/20"
+            className="h-3 w-3 rounded-[4px]"
             style={{ backgroundColor: heatBackground(level) }}
             aria-hidden="true"
           />
@@ -179,6 +184,7 @@ export function TransactionCalendar({
         <span>Mais</span>
       </div>
 
+      {compact ? <p className="mt-1 px-1 text-[11px] text-muted-foreground"><span className="mr-1 inline-block size-1.5 rounded-full bg-income align-middle" />entrada <span className="ml-2 mr-1 inline-block size-1.5 rounded-full bg-expense align-middle" />saída</p> : null}
       {compact ? null : <p className="mt-2 hidden px-2 text-xs leading-relaxed text-muted-foreground sm:block">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>}
 
       {/* Drag the handle up to collapse to the week, down to show the whole month. */}

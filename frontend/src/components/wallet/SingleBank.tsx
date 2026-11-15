@@ -32,7 +32,8 @@ export function SingleBank({ bank, hidden, onAdd }: { bank: BankRow; hidden: boo
   const tile = "rounded-2xl bg-white/15 px-3 py-2.5";
 
   return (
-    <div className="space-y-3" data-testid="wallet-single-bank">
+    <div className="space-y-3 lg:grid lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-start lg:gap-6 lg:space-y-0" data-testid="wallet-single-bank">
+      <div className="min-w-0 space-y-3">
       <Link to={`/contas/banco/${encodeURIComponent(bank.key)}`} className="block rounded-[28px] p-5 text-white" style={{ background: cardGradient(bank.color) }} data-testid="wallet-single-bank-card">
         <span className="flex items-center gap-2.5">
           <span className="grid size-10 place-items-center rounded-[13px] bg-white/20 font-heading font-bold">{bank.initials}</span>
@@ -63,7 +64,9 @@ export function SingleBank({ bank, hidden, onAdd }: { bank: BankRow; hidden: boo
         </div>
       ) : null}
 
-      <h2 className="mx-1 pt-3 font-heading text-lg font-bold">Este mês</h2>
+      </div>
+      <div className="min-w-0 space-y-3">
+      <h2 className="mx-1 pt-3 font-heading text-lg font-bold lg:pt-0">Este mês</h2>
       <div className="rounded-3xl border border-border bg-card p-4" data-testid="wallet-single-month">
         {total > 0 ? (<>
           <div className="flex h-3 gap-0.5 overflow-hidden rounded-full" aria-hidden="true">
@@ -88,6 +91,7 @@ export function SingleBank({ bank, hidden, onAdd }: { bank: BankRow; hidden: boo
             <button key={kind} type="button" onClick={() => onAdd(kind)} className="h-[42px] flex-1 rounded-full border border-border bg-card text-[13px] font-bold" data-testid={`wallet-single-add-${kind}`}>{label}</button>
           ))}
         </div>
+      </div>
       </div>
     </div>
   );

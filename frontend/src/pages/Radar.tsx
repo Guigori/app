@@ -67,7 +67,7 @@ export default function Radar() {
   });
 
   const list = (rows: RadarSignal[]) => (
-    <div className="space-y-2.5">
+    <div className="space-y-2.5 xl:grid xl:grid-cols-2 xl:items-start xl:gap-3 xl:space-y-0">
       {rows.map((signal, index) => (
         <motion.div key={signal.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index, 6) * 0.04, duration: 0.25 }}>
           <SignalCard signal={signal} onDismiss={() => dismiss.mutate(signal)} />
@@ -77,7 +77,7 @@ export default function Radar() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 animate-fade-up">
+    <div className="mx-auto max-w-3xl space-y-5 animate-fade-up lg:max-w-[1280px] min-[1800px]:max-w-[1480px]">
       <div>
         <h1 className="font-heading text-2xl font-bold">Radar</h1>
         <p className="mt-1 text-sm text-muted-foreground">O que merece sua atenção no seu dinheiro agora.</p>
@@ -103,7 +103,9 @@ export default function Radar() {
       ) : null}
 
       {!isPending && !isError && items.length > 0 ? (
-        <>
+        // Computer: the summary and the filters stay on the left while the signals fill the rest.
+        <div className="space-y-5 lg:grid lg:grid-cols-[19rem_minmax(0,1fr)] lg:items-start lg:gap-6 lg:space-y-0">
+          <aside className="space-y-4 lg:sticky lg:top-6">
           <section className="rounded-[24px] border border-border bg-card p-5" data-testid="radar-summary">
             <p className="text-sm text-muted-foreground">{items.length} {items.length === 1 ? "sinal ativo" : "sinais ativos"}</p>
             <p className="mt-1 font-heading text-2xl font-bold">
@@ -117,7 +119,7 @@ export default function Radar() {
             ) : null}
           </section>
 
-          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0" role="tablist" aria-label="Filtrar sinais">
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 lg:flex-wrap lg:overflow-visible" role="tablist" aria-label="Filtrar sinais">
             {(["todos", ...RADAR_TYPES.filter((t) => counts[t])] as const).map((key) => (
               <button key={key} type="button" role="tab" aria-selected={filter === key} onClick={() => setFilter(key)} data-testid={`radar-filter-${key}`}
                 className={cn("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors", filter === key ? "border-foreground bg-foreground text-background" : "border-border bg-card text-muted-foreground hover:text-foreground")}>
@@ -127,16 +129,20 @@ export default function Radar() {
               </button>
             ))}
           </div>
+          <p className="hidden text-xs text-muted-foreground lg:block">Os sinais são recalculados a partir dos seus lançamentos, cartões e orçamentos. O que você dispensa não volta, a menos que a situação mude.</p>
+          </aside>
 
+          <div className="min-w-0 space-y-5">
           {filter === "todos" && urgent.length > 0 && urgent.length < items.length ? (
             <>
               <section aria-labelledby="radar-now"><h2 id="radar-now" className="mb-2 px-1 text-sm font-semibold text-muted-foreground">Agora</h2>{list(urgent)}</section>
               <section aria-labelledby="radar-later"><h2 id="radar-later" className="mb-2 px-1 text-sm font-semibold text-muted-foreground">Para acompanhar</h2>{list(items.filter((s) => !needsAttention(s)))}</section>
             </>
           ) : list(visible)}
+          </div>
 
-          <p className="text-xs text-muted-foreground">Os sinais são recalculados a partir dos seus lançamentos, cartões e orçamentos. O que você dispensa não volta, a menos que a situação mude.</p>
-        </>
+          <p className="text-xs text-muted-foreground lg:hidden">Os sinais são recalculados a partir dos seus lançamentos, cartões e orçamentos. O que você dispensa não volta, a menos que a situação mude.</p>
+        </div>
       ) : null}
     </div>
   );

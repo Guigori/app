@@ -73,7 +73,7 @@ export function WidgetBoard({ surface, slots, header, emptyText }: { surface: Su
           <span className="text-sm text-muted-foreground">{emptyText ?? "Escolha na biblioteca e monte do seu jeito."}</span>
         </button>
       ) : (
-        <div className="grid grid-flow-row-dense grid-cols-4 gap-3 dashboard:auto-rows-[8px] dashboard:grid-cols-12" data-testid="widget-grid">
+        <div className="grid grid-flow-row-dense grid-cols-4 gap-3 dashboard:auto-rows-[12rem] dashboard:grid-cols-12 dashboard:gap-4 min-[1600px]:auto-rows-[13rem]" data-testid="widget-grid">
           {list.map((w, i) => (
             <BoardItem key={w.key} widget={w} index={i} editing={editing} slots={slots}
               onHold={start} onRemove={() => remove(w.key)} onResize={() => resize(w.key)} onOver={(overKey) => moveTo(w.key, overKey)}
@@ -118,20 +118,10 @@ function BoardItem({ widget: w, index, editing, slots, onHold, onRemove, onResiz
   const held = useRef(false);
   // Swap once per widget passed over, not on every frame above it.
   const lastOver = useRef<string | null>(null);
-  // Mural on larger screens: the widget spans as many 8px rows (+12px gaps) as its content needs.
-  const inner = useRef<HTMLDivElement>(null);
-  const [span, setSpan] = useState<number | null>(null);
-  useEffect(() => {
-    const el = inner.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const mq = window.matchMedia("(min-width: 768px), (orientation: landscape)");
-    const measure = () => setSpan(mq.matches ? Math.ceil((el.getBoundingClientRect().height + 12) / 20) : null);
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    mq.addEventListener?.("change", measure);
-    measure();
-    return () => { ro.disconnect(); mq.removeEventListener?.("change", measure); };
-  }, []);
+  // Larger screens: a lattice of equal rows. Pequeno/Médio take one row, Grande two (three for the few that need it),
+  // so every widget lines up with its neighbours and nothing is cut.
+  const tall = (w.size === "L" || w.size === "XL") ? def.tallRows ?? 2 : 1;
+  const span = tall;
 
   // While dragging, the page must not scroll under the finger (non-passive so it can be prevented).
   useEffect(() => {
@@ -187,8 +177,8 @@ function BoardItem({ widget: w, index, editing, slots, onHold, onRemove, onResiz
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={cancel} onPointerCancel={cancel} onClick={open}
       role={editing ? undefined : "link"} aria-label={editing ? undefined : `Abrir ${def.title}`}
       // manipulation: the page scrolls and the swipeable widgets (Descobertas) still swipe sideways.
-      style={{ touchAction: dragging ? "none" : "manipulation", gridRowEnd: span ? `span ${span}` : undefined, WebkitTouchCallout: "none" }}>
-      <div ref={inner} className={cn("h-full dashboard:flex dashboard:h-auto dashboard:flex-col", w.size === "L" || w.size === "XL" ? "dashboard:min-h-[23rem]" : "dashboard:min-h-[11rem]", editing ? "pointer-events-none" : "cursor-pointer transition-transform active:scale-[0.985]")}>
+      style={{ touchAction: dragging ? "none" : "manipulation", ["--rows" as string]: span, WebkitTouchCallout: "none" }}>
+      <div className={cn("h-full dashboard:flex dashboard:flex-col dashboard:overflow-hidden dashboard:rounded-3xl", editing ? "pointer-events-none" : "cursor-pointer transition-transform active:scale-[0.985]")}>
         <InsightWidget id={w.id} size={w.size} config={w.config} slots={slots} className="h-full dashboard:flex-1" />
       </div>
       {editing ? (

@@ -20,6 +20,7 @@ import { BudgetInsight, GoalsInsight } from "@/components/insights/PlanInsights"
 import { CatalogInsight } from "@/components/insights/CatalogInsight";
 import { DiscoveriesInsight } from "@/components/insights/Discoveries";
 import { DailyInsight } from "@/components/insights/DailyInsight";
+import { CalendarWidget, RecentWidget } from "@/components/insights/HomeWidgets";
 import { READERS } from "@/lib/insights/catalog";
 import { AccountsInsight, HabitsInsight, IncomeInsight, MonthsInsight } from "@/components/insights/MoreInsights";
 import { useCalendar, useCards } from "@/components/insights/useInsightData";
@@ -182,6 +183,8 @@ export function InsightWidget({ id, size, config = {}, slots, className }: { id:
     case "metas": return <GoalsInsight size={size} to={to} className={className} />;
     case "categorias": return <CategoriesWidget size={size} to={to} className={className} />;
     case "radar": return <RadarWidget size={size} to={to} className={className} />;
+    case "calendario": return <CalendarWidget size={size} className={className} />;
+    case "movimentacoes": return <RecentWidget size={size} to={to} className={className} />;
     default: return READERS[id] ? <CatalogInsight id={id} size={size} to={to} className={className} /> : null;
   }
 }

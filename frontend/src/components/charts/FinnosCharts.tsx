@@ -255,7 +255,8 @@ export function Donut({ slices, size = 176, selectedId, onSelect, centerLabel = 
   );
 }
 
-const HEAT = [
+/** The app's heat scale (Ritmo do mês, calendário do Fluxo e do Início): from no movement to the strongest day. */
+export const HEAT = [
   "var(--muted)",
   "color-mix(in srgb, var(--finnos-purple) 20%, var(--background))",
   "color-mix(in srgb, var(--finnos-purple) 38%, var(--background))",

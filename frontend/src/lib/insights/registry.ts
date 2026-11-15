@@ -33,6 +33,8 @@ export interface InsightDef {
   star?: boolean;
   /** The analysis already has a full screen elsewhere (one place per thing): tapping it opens that screen. */
   canonical?: (config: WidgetConfig) => string;
+  /** Rows a Grande takes on the computer grid when two are not enough (default 2). */
+  tallRows?: number;
 }
 
 import { CATALOG_DEFS } from "@/lib/insights/catalogDefs";
@@ -41,7 +43,7 @@ export const INSIGHTS: InsightDef[] = [
   { id: "gastar-hoje", title: "Quanto posso gastar hoje", description: "O que sobra do mês por dia, depois do que já saiu e do que está agendado.", theme: "Orçamento", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/orcamento", toLabel: "Ver orçamento",
     how: "Pegamos o orçamento do mês (ou a renda, se não houver orçamento), tiramos o que já saiu e o que está agendado até o fim do mês e dividimos pelos dias que faltam, contando hoje.",
     questions: ["Por que hoje passei do ritmo?", "Onde posso cortar para fechar o mês?", "Como fica se eu gastar R$ 100 hoje?"] },
-  { id: "habitos", title: "Ritmo do mês", description: "Quanto você gasta por dia, onde o mês fecha se continuar assim e o mês em mapa de calor: dia da semana mais caro, maior gasto e dias sem gastar.", theme: "Gastos", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/transacoes", toLabel: "Ver no calendário do Fluxo",
+  { id: "habitos", title: "Ritmo do mês", description: "Quanto você gasta por dia, onde o mês fecha se continuar assim e o mês em mapa de calor: dia da semana mais caro, maior gasto e dias sem gastar.", theme: "Gastos", sizes: ["S", "M", "L"], defaultSize: "M", tallRows: 3, to: () => "/transacoes", toLabel: "Ver no calendário do Fluxo",
     how: "Somamos as despesas de cada dia do mês até hoje. A estimativa de fechamento repete a média por dia até o fim do mês (linha tracejada). No mapa, quanto mais se gastou no dia, mais forte o roxo. A média por dia da semana divide o que saiu em cada dia da semana pelo número de vezes que ele já apareceu no mês.",
     questions: ["Por que gasto mais nesse dia da semana?", "Como ter mais dias sem gastar?", "O que pesou no meu dia mais caro?"] },
   { id: "renda", title: "Renda do mês", description: "O que já entrou, o que ainda vai entrar e quanto dela os gastos do mês levam.", theme: "Renda", sizes: ["S", "M", "L"], defaultSize: "M", to: () => `/transacoes?metric=receitas`, toLabel: "Ver receitas no Fluxo",
@@ -85,6 +87,14 @@ export const INSIGHTS: InsightDef[] = [
   { id: "radar", title: "Radar", description: "Os avisos do FINNOS que pedem atenção agora.", theme: "Alertas", sizes: ["S", "M", "L"], defaultSize: "M", to: () => "/radar", toLabel: "Ver Radar",
     how: "O Radar cruza orçamento, faturas, contas agendadas e o seu histórico e avisa o que foge do padrão ou pede ação.",
     questions: ["Qual aviso devo resolver primeiro?", "Por que esse aviso apareceu?", "Como evito isso no próximo mês?"] },
+  { id: "calendario", title: "Calendário do mês", description: "O mês em mapa de calor: quanto mais roxo, mais movimento no dia. Toque num dia para ver os lançamentos.", theme: "Gastos", sizes: ["M", "L"], defaultSize: "L", to: () => `/transacoes?month=${currentMonth()}`, toLabel: "Ver no Fluxo",
+    canonical: () => `/transacoes?month=${currentMonth()}`,
+    how: "Somamos entradas e saídas (feitas e agendadas) de cada dia. O dia com mais movimento fica no roxo mais forte; os pontos mostram se houve entrada (verde) ou saída (vermelho).",
+    questions: ["Qual foi o dia mais caro do mês?", "Em que dias da semana eu mais gasto?"] },
+  { id: "movimentacoes", title: "Movimentações recentes", description: "Os últimos lançamentos do mês, com valor e categoria.", theme: "Gastos", sizes: ["S", "M", "L"], defaultSize: "M", to: () => `/transacoes?month=${currentMonth()}`, toLabel: "Ver no Fluxo",
+    canonical: () => `/transacoes?month=${currentMonth()}`,
+    how: "Os lançamentos mais recentes do mês, do mais novo para o mais antigo.",
+    questions: ["Algum desses gastos foge do normal?", "Quanto gastei nos últimos dias?"] },
   ...CATALOG_DEFS,
 ];
 
@@ -100,9 +110,10 @@ export function nextSize(def: InsightDef, size: WidgetSize): WidgetSize {
 
 /** Grid placement: 4 columns on the phone (Pequeno = half), 12 on the computer. */
 export const SIZE_CLASS: Record<WidgetSize, string> = {
-  // On the larger screens the board is a mural (masonry): each widget takes the height it needs, no holes.
-  S: "col-span-2 dashboard:col-span-3 h-[11rem] dashboard:h-auto",
-  M: "col-span-4 dashboard:col-span-6 h-[11rem] dashboard:h-auto",
-  L: "col-span-4 dashboard:col-span-6 min-h-[23rem] dashboard:min-h-0",
-  XL: "col-span-4 dashboard:col-span-6 min-h-[23rem] dashboard:min-h-0",
+  // On the larger screens the board is a grid of equal rows (like the iPhone): Pequeno and Médio take one row,
+  // Grande two, so every widget lines up with its neighbours and no gaps open between them.
+  S: "col-span-2 dashboard:col-span-4 h-[11rem] dashboard:h-auto dashboard:row-[span_var(--rows)/span_var(--rows)]",
+  M: "col-span-4 dashboard:col-span-6 h-[11rem] dashboard:h-auto dashboard:row-[span_var(--rows)/span_var(--rows)]",
+  L: "col-span-4 dashboard:col-span-6 min-h-[23rem] dashboard:min-h-0 dashboard:row-[span_var(--rows)/span_var(--rows)]",
+  XL: "col-span-4 dashboard:col-span-6 min-h-[23rem] dashboard:min-h-0 dashboard:row-[span_var(--rows)/span_var(--rows)]",
 };

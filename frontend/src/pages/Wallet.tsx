@@ -161,7 +161,7 @@ export default function Wallet() {
   const iconButton = "grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card text-foreground";
 
   return (
-    <div className="mx-auto w-full max-w-[560px] space-y-5 animate-fade-up" data-testid="wallet-v2">
+    <div className="mx-auto w-full max-w-[560px] space-y-5 animate-fade-up lg:max-w-[1280px] min-[1800px]:max-w-[1480px]" data-testid="wallet-v2">
       <header className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
           <h1 className="font-heading text-[28px] font-bold tracking-[-0.03em]">Carteira</h1>
@@ -207,7 +207,7 @@ export default function Wallet() {
         </div>
       ) : null}
       {otherWarnings.length ? (
-        <ul className="space-y-2" data-testid="wallet-warnings">
+        <ul className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 xl:grid-cols-3" data-testid="wallet-warnings">
           {otherWarnings.slice(0, 3).map((w) => (
             <li key={w.key}>
               <Link to={w.to} className={cn("flex items-center gap-3 rounded-[20px] border bg-card px-3.5 py-3 text-[13px]", w.tone === "danger" ? "border-destructive/40" : "border-amber-300")}
@@ -234,7 +234,7 @@ export default function Wallet() {
       ) : (
         <>
           {tab === "tudo" ? <WalletIndicators ind={indicators} investedCents={investedCents} hidden={hidden} /> : null}
-          <div className="grid grid-cols-4 gap-1 rounded-full bg-muted p-1" role="tablist" aria-label="Mostrar">
+          <div className="grid grid-cols-4 gap-1 rounded-full bg-muted p-1 lg:max-w-xl" role="tablist" aria-label="Mostrar">
             {TABS.map(({ key, label }) => (
               <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} data-testid={`wallet-tab-${key}`}
                 className={cn("h-10 min-w-0 truncate rounded-full px-1 text-[13px] font-semibold", tab === key ? "bg-card text-primary shadow-[0_1px_4px_rgba(7,15,82,0.14)]" : "text-muted-foreground")}>
@@ -242,11 +242,17 @@ export default function Wallet() {
               </button>
             ))}
           </div>
+          {/* Computer: two columns (cards and invoices beside the banks and benefits) instead of the phone's single column. */}
+          <div className={cn("space-y-5", tab === "tudo" ? "lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:items-start lg:gap-6 lg:space-y-0" : "lg:max-w-3xl")}>
+            <div className="min-w-0 space-y-5">
           {tab === "tudo" || tab === "cartoes" ? (
             cards.some((c) => c.active) ? <CardCarousel cards={cards} hidden={hidden} /> : tab === "cartoes" ? (
               <EmptyBlock title="Nenhum cartão de crédito" text="Cadastre um cartão para acompanhar a fatura, o limite e o melhor dia de compra." action="Adicionar cartão" onClick={() => add("cartao")} testId="cards-empty-create-button" />
             ) : null
           ) : null}
+          {tab === "tudo" ? <UpcomingInvoices invoices={invoices} hidden={hidden} /> : tab === "cartoes" ? <UpcomingInvoices invoices={invoices} hidden={hidden} limit={12} /> : null}
+            </div>
+            <div className="min-w-0 space-y-5">
           {tab === "tudo" || tab === "contas" ? (
             <BankList accounts={accounts} cards={cards} institutions={institutions} investments={investments} methods={methodsQuery.data ?? {}}
               hidden={hidden} onOpenCash={setSelected} onManageInstitutions={() => setInstitutionManagerOpen(true)} />
@@ -256,7 +262,8 @@ export default function Wallet() {
               <EmptyBlock title="Nenhum benefício cadastrado" text="VR, VA ou um cartão multi com até 8 benefícios, cada um com saldo e recarga." action="Adicionar benefício" onClick={() => add("beneficio")} testId="wallet-benefits-empty" />
             ) : null
           ) : null}
-          {tab === "tudo" ? <UpcomingInvoices invoices={invoices} hidden={hidden} /> : tab === "cartoes" ? <UpcomingInvoices invoices={invoices} hidden={hidden} limit={12} /> : null}
+            </div>
+          </div>
         </>
       )}
 
