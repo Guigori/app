@@ -23,6 +23,7 @@ const move = (list: string[], i: number, d: number) => { const a = [...list]; [a
 export function NavigationSettings() {
   const prefs = useNavigationPreferences();
   const [device, setDevice] = useState<"mobile" | "web">("mobile");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return window.localStorage.getItem("finnos:sidebar-width") === "72"; } catch { return false; } });
   const save = (patch: Partial<NavigationPreferences>) => saveNavigationPreferences({ ...prefs, ...patch });
   const label = (slug: string) => MAIN_NAV.find((i) => i.slug === slug)?.label ?? slug;
   const bar = navItemsFor(prefs.mobile);
@@ -107,7 +108,7 @@ export function NavigationSettings() {
                 <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary dark:text-[#B3A6FF]"><item.icon className="size-[1.1rem]" aria-hidden="true" /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold">{item.label}</span>
-                  <span className="block text-xs text-muted-foreground">{inBar ? "Já está na barra de baixo" : `${group.label ?? "Principal"} · ${on ? "aparece no menu" : "escondido"}`}</span>
+                  <span className="block text-xs text-muted-foreground">{inBar ? "Já está na barra de baixo" : on ? "Aparece no menu" : "Escondido"}</span>
                 </span>
                 {device === "web" ? (
                   <button type="button" className={ICON_BTN} disabled={pos <= 0}
@@ -129,16 +130,17 @@ export function NavigationSettings() {
             ? [
               { key: "menuDedupe" as const, label: "Não repetir no menu o que está na barra", note: "Deixa o menu mais curto" },
               { key: "fab" as const, label: "Botão + de novo registro", note: "Ao lado da barra de baixo" },
-              { key: "aiMobile" as const, label: "Botão Conversa", note: "No topo da tela e no menu" },
-              { key: "menuBadges" as const, label: "Avisos e valores no menu", note: "Ex.: 2 vencendo, R$ 89/mês" },
+              { key: "aiMobile" as const, label: "Botão Conversa", note: "Aparece quando a conversa está ativada" },
             ]
             : [
-              { key: "menuBadges" as const, label: "Avisos e valores no menu", note: "Ex.: 2 vencendo, R$ 89/mês" },
-              { key: "aiWeb" as const, label: "Botão Conversa", note: "No topo do menu" },
+              { key: "menuBadges" as const, label: "Valores e avisos ao lado dos itens", note: "Ex.: 2 vencendo, R$ 89/mês" },
+              { key: "sidebarCollapsed" as const, label: "Começar com o menu recolhido", note: "Só os ícones, até você abrir" },
+              { key: "aiWeb" as const, label: "Botão Conversa", note: "Aparece quando a conversa está ativada" },
             ]).map((o) => (
             <div key={o.key} className="flex min-h-14 items-center gap-3 border-b border-border px-4 py-2 last:border-b-0">
               <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{o.label}</span><span className="block text-xs text-muted-foreground">{o.note}</span></span>
-              <Switch checked={prefs[o.key]} label={o.label} onChange={(v) => save({ [o.key]: v })} testId={`settings-option-${o.key}`} />
+              <Switch checked={o.key === "sidebarCollapsed" ? sidebarCollapsed : prefs[o.key]} label={o.label} testId={`settings-option-${o.key}`}
+                onChange={(v) => { if (o.key === "sidebarCollapsed") { setSidebarCollapsed(v); window.dispatchEvent(new CustomEvent("finnos-sidebar-collapse", { detail: v })); } else save({ [o.key]: v }); }} />
             </div>
           ))}
         </div>

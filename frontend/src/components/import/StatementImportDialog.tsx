@@ -178,7 +178,7 @@ export function StatementImportDialog({ open, onOpenChange, initialTarget }: { o
                 <li key={row.id} className={cn("px-3 py-2.5", row.decision === null && "bg-amber-500/5")} data-testid={`import-row-${row.match.level}`}>
                   <div className="flex items-center gap-3">
                     {row.match.level === "new" ? (
-                      <input type="checkbox" aria-label={`Importar ${row.description}`} disabled={row.blocked} checked={row.decision === "import"} onChange={(e) => decide(row.id, e.target.checked ? "import" : "skip")} />
+                      <input data-checkbox className="size-4 accent-primary" type="checkbox" aria-label={`Importar ${row.description}`} disabled={row.blocked} checked={row.decision === "import"} onChange={(e) => decide(row.id, e.target.checked ? "import" : "skip")} />
                     ) : null}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{row.description}</span>

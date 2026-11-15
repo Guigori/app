@@ -4,13 +4,14 @@ import { ScreenHeader } from "@/components/layout/BackButton";
 import { RegisterDefaultCard } from "@/components/settings/RegisterDefaultCard";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Check, GitCommitHorizontal, Loader2, LogOut, Smartphone, MessageCircleMore, Trash2 } from "lucide-react";
+import { BarChart3, Check, Cloud, GitCommitHorizontal, Loader2, LogOut, Mail, Smartphone, MessageCircleMore, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { getApiErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { endSession } from "@/lib/session";
 import { authenticationLabel } from "@/lib/profileIdentity";
+import type { User } from "@/types/finnos";
 import { clearMyData, fetchMe, loadDemoData, updateMyName } from "@/lib/data";
 import { disableLocalMode, getMode, isLocalMode } from "@/lib/mode";
 import { AiKeysCard } from "@/components/ai/AiKeysCard";
@@ -29,6 +30,15 @@ const THEME_OPTIONS = [
   { value: "dark", label: "Escuro" },
   { value: "system", label: "Sistema" },
 ];
+
+/** "Conta com Google · desde março de 2026": how the person signs in, in plain words. */
+function profileSubtitle(user: User | undefined, local: boolean): string {
+  if (!user) return authenticationLabel(user);
+  if (local) return user.session_mode === "demo" ? "Demonstração neste aparelho" : "Conta neste aparelho";
+  const how = user.auth_provider === "google.com" ? "Conta com Google" : user.auth_provider === "password" ? "Conta com e-mail e senha" : "Conta FINNOS";
+  const since = user.created_at ? new Date(user.created_at).toLocaleDateString("pt-BR", { month: "long", year: "numeric" }) : "";
+  return since && since !== "Invalid Date" ? `${how} · desde ${since}` : how;
+}
 
 /** Configurações sections (/configuracoes/:section) and Meu perfil (/perfil). */
 export default function Settings({ forcedSection }: { forcedSection?: string } = {}) {
@@ -99,7 +109,7 @@ export default function Settings({ forcedSection }: { forcedSection?: string } =
 
   return (
     <div className="mx-auto max-w-2xl space-y-5 pb-44 sm:pb-32 animate-fade-up">
-      <ScreenHeader title={({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", registro: "Botão +", painel: "Tela de Início", navegacao: "Barra e menu", dados: "Dados e backup", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"} subtitle={visible("perfil", "seguranca") ? "Quem você é no FINNOS: nome, conta e saída." : "Como o FINNOS funciona para você."} />
+      <ScreenHeader title={({ perfil: "Meu perfil", versao: "Sobre o FINNOS", aparencia: "Aparência", registro: "Botão +", painel: "Tela de Início", navegacao: "Personalizar navegação", dados: "Dados e backup", notificacoes: "Notificações", seguranca: "Segurança e privacidade", suporte: "Ajuda e suporte" } as Record<string,string>)[currentSection] ?? "Configurações"} subtitle={visible("perfil", "seguranca") ? undefined : visible("navegacao") ? "Escolha o que aparece e em que ordem" : "Como o FINNOS funciona para você."} keepSubtitle={visible("navegacao")} onBack={forcedSection === "perfil" || section === "seguranca" ? () => (window.history.length > 1 ? navigate(-1) : navigate("/")) : undefined} />
 
       {visible("desenvolvedor") && !local && (
         <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
@@ -110,36 +120,31 @@ export default function Settings({ forcedSection }: { forcedSection?: string } =
       )}
       {visible("perfil", "seguranca") && (<>
       <section aria-label="Você" className="flex flex-col items-center pt-2 text-center" data-testid="profile-identity">
-        <span className="grid size-24 place-items-center rounded-full bg-primary/10 font-heading text-3xl font-bold text-primary dark:text-[#B3A6FF]">
+        <span className="grid size-[5.75rem] place-items-center rounded-full bg-primary/10 font-heading text-[2rem] font-bold text-primary dark:text-[#B3A6FF]">
           {local ? <Smartphone className="size-9" aria-hidden="true" /> : initials(user?.name ?? "")}
         </span>
-        <p className="mt-3 font-heading text-xl font-bold">{user?.name ?? ""}</p>
-        <p className="mt-0.5 text-sm text-muted-foreground" data-testid="settings-auth-provider">{authenticationLabel(user)}</p>
+        <p className="mt-3 font-heading text-[1.3rem] font-bold">{user?.name ?? ""}</p>
+        <p className="mt-0.5 text-[13px] text-muted-foreground" data-testid="settings-auth-provider">{profileSubtitle(user, local)}</p>
       </section>
-      <Card data-testid="settings-profile-card">
-        <CardHeader>
-          <CardTitle className="font-heading">Dados pessoais</CardTitle>
-          <CardDescription>{user?.email ?? ""}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="flex flex-col gap-3 sm:flex-row sm:items-end"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (name.trim().length >= 2) nameMutation.mutate();
-            }}
-            data-testid="settings-profile-form"
-          >
-            <div className="flex-1 space-y-2">
-              <Label htmlFor="settings-name">Nome</Label>
-              <Input id="settings-name" value={name} onChange={(e) => setName(e.target.value)} minLength={2} maxLength={80} data-testid="settings-name-input" />
-            </div>
-            <Button type="submit" disabled={nameMutation.isPending || (user?.name ?? "") === name.trim()} data-testid="settings-save-name-button">
+      <p className="px-2 pt-2 text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Dados pessoais</p>
+      <div className="rounded-[18px] border border-border bg-card p-3.5" data-testid="settings-profile-card">
+        <form onSubmit={(e) => { e.preventDefault(); if (name.trim().length >= 2) nameMutation.mutate(); }} data-testid="settings-profile-form">
+          <Label htmlFor="settings-name" className="text-xs font-semibold text-muted-foreground">Nome</Label>
+          <div className="mt-1.5 flex gap-2">
+            <Input id="settings-name" value={name} onChange={(e) => setName(e.target.value)} minLength={2} maxLength={80} className="h-[46px] min-w-0 flex-1 rounded-xl text-[15px]" data-testid="settings-name-input" />
+            <Button type="submit" className="h-[46px] rounded-xl px-4 font-bold" disabled={nameMutation.isPending || (user?.name ?? "") === name.trim()} data-testid="settings-save-name-button">
               {nameMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : "Salvar"}
             </Button>
-          </form>
-        </CardContent>
-      </Card>
+          </div>
+        </form>
+        {local ? null : (
+          <div className="mt-3.5 flex items-center gap-3 border-t border-border pt-3.5">
+            <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-primary/10 text-primary dark:text-[#B3A6FF]"><Mail className="size-[1.1rem]" aria-hidden="true" /></span>
+            <span className="min-w-0 flex-1"><span className="block text-[15px] font-semibold">E-mail</span><span className="block truncate text-xs text-muted-foreground">{user?.email ?? ""}</span></span>
+            {user?.auth_provider === "google.com" ? <span className="text-xs text-muted-foreground">Pelo Google</span> : null}
+          </div>
+        )}
+      </div>
 
       </>)}
       {visible("versao") && (<>
@@ -254,29 +259,23 @@ export default function Settings({ forcedSection }: { forcedSection?: string } =
       {visible("registro") && <RegisterDefaultCard />}
       {visible("dados") && <DataBackupCard />}
       {visible("perfil", "seguranca") && (<>
-      <Card data-testid="settings-mode-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 font-heading">
-            {local ? <Smartphone className="h-4.5 w-4.5 text-primary" aria-hidden="true" /> : null}
-            Sua conta
-          </CardTitle>
-          <CardDescription>
-            {local
-              ? "Você está na conta local: nada é enviado para servidores e os dados vivem só neste navegador. Limpar os dados do navegador apaga tudo, e a Conversa não fica disponível."
-              : "Você está em uma conta completa: seus dados ficam protegidos no servidor, acessíveis de qualquer aparelho com o seu login."}
-          </CardDescription>
-        </CardHeader>
+      <p className="px-2 pt-2 text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Sua conta</p>
+      <div className="overflow-hidden rounded-[18px] border border-border bg-card" data-testid="settings-mode-card">
+        <div className="flex min-h-[60px] items-center gap-3 px-3.5 py-2.5">
+          <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-primary/10 text-primary dark:text-[#B3A6FF]">{local ? <Smartphone className="size-[1.1rem]" aria-hidden="true" /> : <Cloud className="size-[1.1rem]" aria-hidden="true" />}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold">{local ? "Neste aparelho" : "Na nuvem"}</span>
+            <span className="block text-xs text-muted-foreground">{local ? "Os dados vivem só neste navegador. Limpar o navegador apaga tudo." : "Seus dados ficam salvos e sincronizados"}</span>
+          </span>
+          {local ? null : <span className="rounded-full bg-[#E9FBF2] px-2.5 py-1 text-[11px] font-bold text-[#047857] dark:bg-[#047857]/20 dark:text-[#34D399]">Sincronizado</span>}
+        </div>
         {local ? (
-          <CardContent>
-            <Link to="/cadastro" className={buttonVariants({ variant: "outline" })} data-testid="settings-upgrade-account-link">
-              Criar conta completa
-            </Link>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Ao criar sua conta, o FINNOS importa com segurança os dados deste aparelho para a nova conta. Os dados locais só deixam de ser usados depois que a importação for confirmada.
-            </p>
-          </CardContent>
+          <div className="border-t border-border px-3.5 py-3">
+            <Link to="/cadastro" className={buttonVariants({ variant: "outline" })} data-testid="settings-upgrade-account-link">Criar conta completa</Link>
+            <p className="mt-2 text-xs text-muted-foreground">Ao criar sua conta, o FINNOS importa com segurança os dados deste aparelho para a nova conta.</p>
+          </div>
         ) : null}
-      </Card>
+      </div>
 
       </>)}
       {visible("notificacoes") && <NotificationsCard />}

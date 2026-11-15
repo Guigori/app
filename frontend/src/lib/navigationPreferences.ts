@@ -30,6 +30,9 @@ const HOME = "inicio";
 export const MOBILE_MIN = 2;
 export const MOBILE_MAX = 4;
 const MOBILE_DEFAULT = ["inicio", "transacoes", "orcamento", "contas"];
+/** The bar before the new navigation. A saved bar still equal to it was never chosen by the person. */
+const OLD_MOBILE_DEFAULT = ["inicio", "transacoes", "analise", "contas"];
+const VERSION = 3;
 const WEB_DEFAULT = ["inicio", "transacoes", "analise", "orcamento", "categorias", "contas"];
 
 function validSlugs() {
@@ -55,7 +58,10 @@ export function getNavigationPreferences(): NavigationPreferences {
     const menu = new Set(MENU_SLUGS);
     const withHome = (list: string[]) => [HOME, ...list.filter((x) => x !== HOME)];
     // "fluxo" (cash flow) now lives inside Fluxo; saved shortcuts move to Análise.
-    const migrated = Array.isArray(raw.mobile) ? raw.mobile.map((x) => (x === "fluxo" ? "analise" : x)) : null;
+    let migrated = Array.isArray(raw.mobile) ? raw.mobile.map((x) => (x === "fluxo" ? "analise" : x)) : null;
+    // Saved before the new navigation with the old default bar: it moves to the new default.
+    const version = (raw as { v?: number }).v ?? 2;
+    if (version < VERSION && migrated && migrated.join() === OLD_MOBILE_DEFAULT.join()) migrated = [...MOBILE_DEFAULT];
     const mobile = withHome(strings(migrated, valid) ?? MOBILE_DEFAULT).slice(0, MOBILE_MAX);
     const savedOrder = strings(raw.webOrder, menu) ?? [];
     return {
@@ -94,6 +100,7 @@ function subscribe(callback: () => void) {
 export function saveNavigationPreferences(next: NavigationPreferences) {
   const normalized = {
     ...next,
+    v: VERSION,
     mobile: [HOME, ...next.mobile.filter((x) => x !== HOME)].slice(0, MOBILE_MAX),
     web: [HOME, ...next.web.filter((x) => x !== HOME)],
   };

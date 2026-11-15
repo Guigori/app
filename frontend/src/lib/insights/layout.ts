@@ -67,6 +67,16 @@ export function offerDaily(layouts: Layouts): Layouts {
   return { ...layouts, inicio: [...layouts.inicio.slice(0, at), item, ...layouts.inicio.slice(at)] };
 }
 
+/** Início on the computer: the calendar, the latest entries and the accounts became widgets of the painel (first in it). */
+export const HOME_WIDGETS_RELEASE = "inicio-widgets-2026-11";
+export function offerHomeWidgets(layouts: Layouts): Layouts {
+  const items: Array<[string, WidgetSize]> = [["calendario", "L"], ["movimentacoes", "M"], ["contas", "M"]];
+  const fresh = items.filter(([id]) => !layouts.inicio.some((w) => w.id === id)).map(([id, size]) => ({ key: newKey(), id, size }));
+  return { ...layouts, inicio: [...fresh, ...layouts.inicio] };
+}
+const RELEASES = [FEATURED_RELEASE, ANALYSIS_RELEASE, DAILY_RELEASE];
+let extraOffered: string[] = [];
+
 export function readLayouts(): Layouts {
   const base = defaultLayouts();
   try {
@@ -74,12 +84,13 @@ export function readLayouts(): Layouts {
     if (!raw) return base;
     const layouts = { inicio: raw.inicio ? clean(raw.inicio) : base.inicio, analise: raw.analise ? clean(raw.analise) : base.analise };
     const offered = raw.offered ?? [];
+    extraOffered = offered.filter((r) => !RELEASES.includes(r));
     let next = layouts;
     if (!offered.includes(FEATURED_RELEASE)) next = offerFeatured(next);
     if (!offered.includes(ANALYSIS_RELEASE)) next = offerAnalysisTop(next);
     if (!offered.includes(DAILY_RELEASE)) next = offerDaily(next);
     if ([FEATURED_RELEASE, ANALYSIS_RELEASE, DAILY_RELEASE].every((r) => offered.includes(r))) return layouts;
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...next, offered: [FEATURED_RELEASE, ANALYSIS_RELEASE, DAILY_RELEASE] }));
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...next, offered: [...RELEASES, ...extraOffered] }));
     return next;
   } catch { return base; }
 }
@@ -95,9 +106,17 @@ function subscribe(cb: () => void) {
 
 export function saveLayout(surface: Surface, widgets: PlacedWidget[]) {
   const next = { ...readLayouts(), [surface]: widgets };
-  localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...next, offered: [FEATURED_RELEASE, ANALYSIS_RELEASE, DAILY_RELEASE] }));
+  localStorage.setItem(LAYOUT_KEY, JSON.stringify({ ...next, offered: [...RELEASES, ...extraOffered] }));
   snapshot = JSON.stringify(next);
   window.dispatchEvent(new Event(LAYOUT_EVENT));
+}
+
+/** Once per account, on the computer's Início. */
+export function offerHomeWidgetsOnce() {
+  const current = readLayouts();
+  if (extraOffered.includes(HOME_WIDGETS_RELEASE)) return;
+  extraOffered = [...extraOffered, HOME_WIDGETS_RELEASE];
+  saveLayout("inicio", offerHomeWidgets(current).inicio);
 }
 
 export function resetLayout(surface: Surface) { saveLayout(surface, defaultLayouts()[surface]); }

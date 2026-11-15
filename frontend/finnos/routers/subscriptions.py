@@ -4,6 +4,7 @@ Previously this endpoint mixed *every* fixed expense with subscriptions.
 Legacy fixed transactions remain intact in Flow but are not silently converted.
 """
 import calendar
+import logging
 import uuid
 from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_UP
@@ -18,6 +19,7 @@ from finnos.lib.money import D, FinanceModel, Money
 from finnos.models.notify import SubscriptionItem, SubscriptionsOut
 from finnos.routers.auth import require_user
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
 
@@ -102,7 +104,13 @@ async def list_subscriptions(user: dict = Depends(require_user)):
     uid = user["id"]
     subscriptions = await db.subscriptions.find({"user_id": uid}).to_list(500)
     accounts, categories, cards = await _maps(uid)
-    items = [_out(doc, accounts, categories, cards) for doc in subscriptions]
+    items = []
+    for doc in subscriptions:
+        # One malformed plan (missing date, value or account) must not take the whole list down.
+        try:
+            items.append(_out(doc, accounts, categories, cards))
+        except Exception:  # noqa: BLE001 - skipped and logged, never shown half-built
+            logger.warning("subscriptions: skipped malformed document %s", doc.get("id"))
     items.sort(key=lambda item: (not item.active, item.next_charge, item.name.lower()))
 
     active = [item for item in items if item.active]
@@ -118,8 +126,14 @@ async def list_subscriptions(user: dict = Depends(require_user)):
         "date": {"$regex": f"^{month}"},
     }).to_list(20000)
     # A settled card refund is a bank receipt, not recurring salary.
-    income = sum((D(tx["value"]) for tx in realized_income
-                  if not tx.get("invoice_refund")), D(0))
+    income = D(0)
+    for tx in realized_income:
+        if tx.get("invoice_refund"):
+            continue
+        try:
+            income += D(tx.get("value") or 0)
+        except Exception:  # noqa: BLE001 - a bad amount must not break the subscriptions screen
+            logger.warning("subscriptions: ignored income with invalid value %s", tx.get("id"))
     percent = _money(monthly / income * 100) if income > 0 else D(0)
     return SubscriptionsOut(
         items=items, monthly_total=monthly, yearly_total=yearly,

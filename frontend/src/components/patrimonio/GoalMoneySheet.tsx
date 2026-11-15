@@ -140,7 +140,7 @@ export function GoalMoneySheet({ goal, goals, accounts, userId, mode, open, onOp
 
           {canTransfer ? (
             <label className="flex items-start gap-2 rounded-xl bg-muted/60 p-3 text-sm">
-              <input type="checkbox" checked={alsoTransfer} onChange={(e) => setAlsoTransfer(e.target.checked)} className="mt-0.5" data-testid="goal-money-transfer" />
+              <input type="checkbox" checked={alsoTransfer} onChange={(e) => setAlsoTransfer(e.target.checked)} className="mt-0.5 shrink-0" data-testid="goal-money-transfer" />
               <span>Registrar também a transferência de {mode === "aporte" ? chosenAccount!.name : goalAccount!.name} para {mode === "aporte" ? goalAccount!.name : chosenAccount!.name}, que muda o saldo das contas.</span>
             </label>
           ) : null}

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchNotifications, fetchRadar, fetchSubscriptions } from "@/lib/data";
+import { fetchAccounts, fetchNotifications, fetchRadar, fetchSubscriptions } from "@/lib/data";
 import { formatBRL } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 
@@ -14,6 +14,7 @@ export function useMenuBadges(enabled: boolean): Partial<Record<string, MenuBadg
   const notifications = useQuery({ queryKey: ["notifications"], queryFn: fetchNotifications, ...opts });
   const radar = useQuery({ queryKey: ["radar"], queryFn: fetchRadar, ...opts });
   const subscriptions = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions, ...opts });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, ...opts });
   const { hidden } = useBalanceHidden();
   if (!enabled) return {};
   const badges: Partial<Record<string, MenuBadge>> = {};
@@ -25,5 +26,12 @@ export function useMenuBadges(enabled: boolean): Partial<Record<string, MenuBadg
   const monthly = subscriptions.data?.monthly_total ?? 0;
   // With values hidden, the amount stays out of the menu too.
   if (monthly > 0 && !hidden) badges.assinaturas = { text: `${formatBRL(monthly).replace(/,00$/, "")}/mês`, tone: "info" };
+  // Carteira and Patrimônio show what is in the accounts today (the same number Patrimônio shows).
+  if (accounts.data && !hidden) {
+    const wallet = accounts.data.filter((a) => a.active).reduce((sum, a) => sum + a.balance, 0);
+    const text = formatBRL(wallet).replace(/,\d\d$/, "");
+    badges.contas = { text, tone: "info" };
+    badges.patrimonio = { text, tone: "info" };
+  }
   return badges;
 }

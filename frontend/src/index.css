@@ -292,3 +292,27 @@
 @media (max-width: 1023px) {
   html, body { overscroll-behavior-y: none; }
 }
+
+/* One on/off control everywhere: native checkboxes are drawn as switches, like the rest of the app. */
+input[type="checkbox"]:not(.sr-only):not([data-checkbox]) {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 44px;
+  height: 26px;
+  margin: 0;
+  border-radius: 9999px;
+  background-color: color-mix(in oklab, var(--muted-foreground) 32%, transparent);
+  background-image: radial-gradient(circle at 13px 50%, #fff 0, #fff 10px, transparent 10.5px);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background-color 0.15s ease, background-position 0.15s ease;
+}
+input[type="checkbox"]:not(.sr-only):not([data-checkbox]):checked {
+  background-color: var(--primary);
+  background-image: radial-gradient(circle at calc(100% - 13px) 50%, #fff 0, #fff 10px, transparent 10.5px);
+}
+input[type="checkbox"]:not(.sr-only):not([data-checkbox]):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+input[type="checkbox"]:not(.sr-only):not([data-checkbox]):disabled { opacity: 0.45; cursor: not-allowed; }

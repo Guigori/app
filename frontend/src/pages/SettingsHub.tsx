@@ -1,7 +1,7 @@
 import { useTheme } from "next-themes";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { ComponentType } from "react";
-import { BarChart3, Bell, ChevronRight, CircleHelp, Cloud, Info, LayoutDashboard, MessageCircleMore, Palette, PanelBottom, PenLine, Smartphone, Tags, Trash2, Zap } from "lucide-react";
+import { BarChart3, Bell, ChevronLeft, ChevronRight, CircleHelp, Cloud, Info, LayoutDashboard, MessageCircleMore, Palette, PanelBottom, PenLine, Smartphone, Tags, Trash2, Zap } from "lucide-react";
 import { saveNavigationPreferences, useNavigationPreferences } from "@/lib/navigationPreferences";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +33,7 @@ const groups: { title: string; items: Item[] }[] = [
   ] },
 ];
 
-const THEMES = [{ value: "light", label: "Claro" }, { value: "dark", label: "Escuro" }, { value: "system", label: "Do aparelho" }];
+const THEMES = [{ value: "light", label: "Claro" }, { value: "dark", label: "Escuro" }, { value: "system", label: "Do celular" }];
 
 function Row({ item, first }: { item: Item; first: boolean }) {
   return (
@@ -56,13 +56,20 @@ const CAPTION = "px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-mut
 
 export function SettingsHub() {
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const prefs = useNavigationPreferences();
   const conversa = prefs.aiMobile || prefs.aiWeb;
   const [first, ...rest] = groups;
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6 pb-28 text-foreground animate-fade-up" data-testid="settings-hub">
       <header className="space-y-1">
-        <h1 className="font-heading text-2xl font-bold">Configurações</h1>
+        <div className="flex items-center gap-2.5">
+          <button type="button" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))} aria-label="Voltar"
+            className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-card text-foreground hover:bg-muted lg:hidden" data-testid="settings-back">
+            <ChevronLeft className="size-5" aria-hidden="true" />
+          </button>
+          <h1 className="font-heading text-2xl font-bold">Configurações</h1>
+        </div>
         <p data-keep className="text-sm text-muted-foreground">Como o FINNOS funciona para você. Nome, conta e saída ficam em <Link to="/perfil" className="font-semibold text-primary underline-offset-2 hover:underline dark:text-[#B3A6FF]" data-testid="settings-profile-link">Meu perfil</Link>.</p>
       </header>
 
@@ -106,9 +113,8 @@ export function SettingsHub() {
               <span className="block text-sm font-semibold">Conversa</span>
               <span className="block text-xs text-muted-foreground">{conversa ? "Ativada · aparece no menu e no topo" : "Desativada · o botão some do menu"}</span>
             </span>
-            <input type="checkbox" role="switch" className="peer sr-only" checked={conversa}
+            <input type="checkbox" role="switch" checked={conversa}
               onChange={(e) => saveNavigationPreferences({ ...prefs, aiMobile: e.target.checked, aiWeb: e.target.checked })} data-testid="settings-conversa-switch" />
-            <span aria-hidden="true" className="relative h-[30px] w-[50px] shrink-0 rounded-full bg-border transition-colors after:absolute after:left-[3px] after:top-[3px] after:size-6 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:bg-primary peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-primary" />
           </label>
           <Row item={{ label: "Integrações e automações", description: "Chave do provedor, Apple Pay e Atalhos", icon: Zap, href: "/configuracoes/integracoes" }} first={false} />
         </div>
