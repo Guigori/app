@@ -108,6 +108,7 @@ def test_disabled_pack_falls_back(instance, monkeypatch):
     rev = _revision(parent)
     assert tx_pack.raw_transactions(parent, rev) == full(parent)
     assert parent.collection("_meta").document("tx_pack").get().to_dict().get("disabled") is True
+    tx_pack._memo.clear()
     assert tx_pack.current_pack(parent, rev) is None
     assert tx_pack.raw_transactions(parent, rev) == full(parent)
 
@@ -139,7 +140,7 @@ def test_screens_answer_the_same_with_and_without_the_pack(instance, monkeypatch
         for url in ROUTES:
             response = await client.get(url)
             # Times stamped at the moment of the answer ("…T12:00:07.307902Z") are not data.
-            out[url] = (response.status_code, re.sub(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+Z", "<agora>", response.text))
+            out[url] = (response.status_code, re.sub(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+(Z|\+00:00)", "<agora>", response.text))
         return out
 
     async def scenario():
