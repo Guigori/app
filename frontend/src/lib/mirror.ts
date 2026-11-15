@@ -267,3 +267,14 @@ export async function refreshMirror(): Promise<StoredMirror | null> {
   await clearMirror();
   return syncMirror();
 }
+
+/** "atualizado há 3 min" for the copy's fetch time. */
+export function deviceCopyAge(iso: string | null): string {
+  if (!iso) return "ainda não atualizado";
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return "atualizado agora";
+  if (minutes < 60) return `atualizado há ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `atualizado há ${hours} h`;
+  return `atualizado em ${new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`;
+}

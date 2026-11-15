@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { DataBackupCard } from "@/components/settings/DataBackupCard";
+import { deviceCopyAge, mirrorStatus } from "@/lib/mirror";
 import { ScreenHeader } from "@/components/layout/BackButton";
 import { RegisterDefaultCard } from "@/components/settings/RegisterDefaultCard";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Check, Cloud, GitCommitHorizontal, Loader2, LogOut, Mail, Smartphone, MessageCircleMore, Trash2 } from "lucide-react";
+import { BarChart3, Check, ChevronRight, Cloud, RefreshCw, GitCommitHorizontal, Loader2, LogOut, Mail, Smartphone, MessageCircleMore, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -43,6 +44,14 @@ function profileSubtitle(user: User | undefined, local: boolean): string {
 /** Configurações sections (/configuracoes/:section) and Meu perfil (/perfil). */
 export default function Settings({ forcedSection }: { forcedSection?: string } = {}) {
   const navigate = useNavigate();
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
+  }, []);
+  const deviceCopy = useQuery({ queryKey: ["device-copy-status"], queryFn: mirrorStatus, staleTime: 0, enabled: !isLocalMode() });
   const { section } = useParams<{ section?: string }>();
   const currentSection = forcedSection ?? section ?? "perfil";
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -267,8 +276,20 @@ export default function Settings({ forcedSection }: { forcedSection?: string } =
             <span className="block text-[15px] font-semibold">{local ? "Neste aparelho" : "Na nuvem"}</span>
             <span className="block text-xs text-muted-foreground">{local ? "Os dados vivem só neste navegador. Limpar o navegador apaga tudo." : "Seus dados ficam salvos e sincronizados"}</span>
           </span>
-          {local ? null : <span className="rounded-full bg-[#E9FBF2] px-2.5 py-1 text-[11px] font-bold text-[#047857] dark:bg-[#047857]/20 dark:text-[#34D399]">Sincronizado</span>}
+          {local ? null : online
+            ? <span className="rounded-full bg-[#E9FBF2] px-2.5 py-1 text-[11px] font-bold text-[#047857] dark:bg-[#047857]/20 dark:text-[#34D399]">Sincronizado</span>
+            : <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">Sem conexão</span>}
         </div>
+        {local ? null : (
+          <Link to="/configuracoes/dados#este-aparelho" className="flex min-h-[52px] items-center gap-3 border-t border-border px-3.5 py-2.5 hover:bg-muted/50" data-testid="settings-device-copy-link">
+            <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-primary/10 text-primary dark:text-[#B3A6FF]"><RefreshCw className="size-[1.1rem]" aria-hidden="true" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-semibold">Dados deste aparelho</span>
+              <span className="block text-xs text-muted-foreground">{deviceCopy.data?.enabled && deviceCopy.data.fetchedAt ? `Cópia ${deviceCopyAge(deviceCopy.data.fetchedAt).replace("atualizado", "atualizada")}` : "Atualizar ou conferir com o servidor"}</span>
+            </span>
+            <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
+          </Link>
+        )}
         {local ? (
           <div className="border-t border-border px-3.5 py-3">
             <Link to="/cadastro" className={buttonVariants({ variant: "outline" })} data-testid="settings-upgrade-account-link">Criar conta completa</Link>

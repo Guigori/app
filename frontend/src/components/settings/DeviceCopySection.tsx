@@ -2,21 +2,14 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RefreshCw, Smartphone } from "lucide-react";
-import { mirrorStatus, refreshMirror, refreshWait } from "@/lib/mirror";
+import { deviceCopyAge, mirrorStatus, refreshMirror, refreshWait } from "@/lib/mirror";
 import { getApiErrorMessage } from "@/lib/errors";
-
-function since(iso: string | null): string {
-  if (!iso) return "ainda não atualizado";
-  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (minutes < 1) return "atualizado agora";
-  if (minutes < 60) return `atualizado há ${minutes} min`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `atualizado há ${hours} h`;
-  return `atualizado em ${new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`;
-}
 
 /** Configurações → Dados e backup → Este aparelho: the account's copy kept on this device (lib/mirror.ts). */
 export function DeviceCopySection() {
+  useEffect(() => {
+    if (window.location.hash === "#este-aparelho") document.getElementById("este-aparelho")?.scrollIntoView({ block: "center" });
+  }, []);
   const queryClient = useQueryClient();
   const status = useQuery({ queryKey: ["device-copy-status"], queryFn: mirrorStatus, staleTime: 0 });
   const [busy, setBusy] = useState(false);
@@ -49,7 +42,7 @@ export function DeviceCopySection() {
   };
 
   return (
-    <div className="border-t border-border px-4 py-4" data-testid="settings-device-copy">
+    <div id="este-aparelho" className="scroll-mt-24 border-t border-border px-4 py-4" data-testid="settings-device-copy">
       <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-2 text-sm font-medium"><Smartphone className="h-4 w-4 text-primary" />Este aparelho</p>
         <button type="button" disabled={busy || wait > 0} onClick={() => void refresh()}
@@ -62,7 +55,7 @@ export function DeviceCopySection() {
         O FINNOS guarda uma cópia dos seus dados neste aparelho e a busca de novo só quando algo muda. Use "Atualizar agora" se algum número parecer desatualizado.
       </p>
       <dl className="mt-3 space-y-1.5 rounded-xl border border-border px-3 py-2.5 text-xs" data-testid="settings-device-status">
-        <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Cópia</dt><dd className="font-medium">{status.isPending ? "…" : since(status.data?.fetchedAt ?? null)}</dd></div>
+        <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Cópia</dt><dd className="font-medium">{status.isPending ? "…" : deviceCopyAge(status.data?.fetchedAt ?? null)}</dd></div>
         <div className="flex justify-between gap-3">
           <dt className="text-muted-foreground">Conferência com o servidor</dt>
           <dd className="text-right font-medium">
