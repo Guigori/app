@@ -25,7 +25,7 @@ export function useCatalogCtx(needList: string[]): Ctx | null {
   const range = monthRange(month), prevRange = monthRange(prevMonth);
   const tx = useQuery({ queryKey: ["transactions", "month", range.start, range.end], queryFn: () => fetchTransactions({ start_date: range.start, end_date: range.end }), ...stale, enabled: needs.has("tx") });
   const prevTx = useQuery({ queryKey: ["transactions", "month", prevRange.start, prevRange.end], queryFn: () => fetchTransactions({ start_date: prevRange.start, end_date: prevRange.end }), ...stale, enabled: needs.has("prevTx") });
-  const allTx = useQuery({ queryKey: ["transactions", "analysis-all"], queryFn: () => fetchTransactions({ start_date: "1900-01-01", end_date: "2999-12-31" }), ...stale, enabled: needs.has("allTx") });
+  const allTx = useQuery({ queryKey: ["transactions", "analysis-all"], queryFn: () => fetchTransactions({ start_date: `${addMonth(month, -11)}-01`, end_date: "2999-12-31" }), ...stale, enabled: needs.has("allTx") });
   const dashboard = useQuery({ queryKey: ["dashboard", month], queryFn: () => fetchDashboard(month), ...stale, enabled: needs.has("dashboard") });
   const prevDashboard = useQuery({ queryKey: ["dashboard", prevMonth], queryFn: () => fetchDashboard(prevMonth), ...stale, enabled: needs.has("prevDashboard") });
   const subs = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions, ...stale, enabled: needs.has("subs") });

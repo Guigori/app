@@ -3,7 +3,7 @@ import { useEffect, useMemo } from "react";
 import { CalendarDays } from "lucide-react";
 import { todayISO } from "@/lib/format";
 import { dailyPick } from "@/lib/insights/daily";
-import { DISCOVERY_NEEDS } from "@/lib/insights/discoveries";
+import { DISCOVERY_NEEDS, DISCOVERY_SOURCES } from "@/lib/insights/discoveries";
 import { useLayout } from "@/lib/insights/layout";
 import { insightById, type WidgetSize } from "@/lib/insights/registry";
 import { READERS } from "@/lib/insights/catalog";
@@ -17,14 +17,17 @@ export function DailyInsight({ size, className }: { size: WidgetSize; className?
   const today = todayISO();
   const home = useLayout("inicio"), board = useLayout("analise");
   const placed = useMemo(() => [...home, ...board].map((w) => w.id), [home, board]);
-  // Every analysis of the catalog can be the day's one, so it loads what they need (shared cache with the rest).
-  const needs = useMemo(() => [...new Set([...DISCOVERY_NEEDS, ...Object.keys(READERS).flatMap((id) => READERS[id].needs)])], []);
+  // The day's analysis comes from the ones that work on recent months, like Descobertas: those that need every
+  // lançamento ever (recorrentes escondidos, aumentos de preço, juros e tarifas) stay for when the person places them,
+  // so opening Início never downloads the whole history just to choose one.
+  const needs = useMemo(() => [...new Set([...DISCOVERY_NEEDS, ...DISCOVERY_SOURCES.flatMap((id) => READERS[id].needs)])], []);
+  const historyOnly = useMemo(() => Object.keys(READERS).filter((rid) => READERS[rid].needs.includes("allTx")), []);
   const ctx = useCatalogCtx(needs);
   // One pick per day: kept once chosen, so the widget does not jump while the data loads.
   const id = useMemo(() => {
-    try { const saved = JSON.parse(localStorage.getItem(KEY) ?? "null"); if (saved?.date === today && saved.id && !placed.includes(saved.id)) return saved.id as string; } catch { /* storage unavailable */ }
-    return ctx ? dailyPick(ctx, placed, today) : null;
-  }, [ctx, placed, today]);
+    try { const saved = JSON.parse(localStorage.getItem(KEY) ?? "null"); if (saved?.date === today && saved.id && !placed.includes(saved.id) && !historyOnly.includes(saved.id)) return saved.id as string; } catch { /* storage unavailable */ }
+    return ctx ? dailyPick(ctx, placed, today, historyOnly) : null;
+  }, [ctx, placed, today, historyOnly]);
   useEffect(() => { if (id) { try { localStorage.setItem(KEY, JSON.stringify({ date: today, id })); } catch { /* storage unavailable */ } } }, [id, today]);
 
   if (!ctx && !id) return <div className={cn("h-full min-h-40 animate-pulse rounded-3xl bg-muted", className)} />;

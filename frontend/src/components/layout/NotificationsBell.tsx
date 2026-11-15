@@ -43,14 +43,16 @@ export function NotificationsBell() {
   const { data } = useQuery({
     queryKey: ["notifications"],
     queryFn: fetchNotifications,
-    refetchInterval: 5 * 60 * 1000,
-    staleTime: 60_000,
+    // Each check reads the person's data on the server: every 15 minutes while the tab is visible is enough
+    // for reminders (a hidden tab does not poll), and saving anything refreshes them at once.
+    refetchInterval: 15 * 60 * 1000,
+    staleTime: 5 * 60_000,
   });
   const { data: radar } = useQuery({
     queryKey: ["radar"],
     queryFn: fetchRadar,
-    refetchInterval: 5 * 60 * 1000,
-    staleTime: 60_000,
+    refetchInterval: 15 * 60 * 1000,
+    staleTime: 5 * 60_000,
   });
   const items = data?.items ?? [];
   const radarItems = (radar?.items ?? [])

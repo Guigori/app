@@ -133,6 +133,10 @@ async def _low_balance_alerts(uid: str, today, dismissed: set) -> list[Notificat
     from finnos.routers.accounts import _enriched_accounts
 
     found = []
+    # The balances come from the whole history (a full scan): only worth it when some account has an alert on.
+    raw = await db.accounts.find({"user_id": uid}).to_list(500)
+    if not any(a.get("active", True) and (a.get("low_balance_alert") or a.get("benefit_runout_alert") or a.get("benefit_recharge_alert")) for a in raw):
+        return []
     enriched = await _enriched_accounts(uid)
     for account in enriched:
         if account.type == "beneficio" and account.active:
