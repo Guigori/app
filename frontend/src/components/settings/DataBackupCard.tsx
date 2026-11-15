@@ -5,6 +5,7 @@ import { CloudUpload, Download, FileSpreadsheet, FileUp, Server, Upload } from "
 import { downloadBackup, downloadServerBackup, downloadTransactionsCsv, listServerBackups, restoreBackup, saveServerBackup } from "@/lib/backup";
 import { getApiErrorMessage } from "@/lib/errors";
 import { isLocalMode } from "@/lib/mode";
+import { DeviceCopySection } from "@/components/settings/DeviceCopySection";
 import { StatementImportDialog } from "@/components/import/StatementImportDialog";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,12 +57,12 @@ export function DataBackupCard() {
             <div className="flex items-center justify-between gap-3">
               <p className="flex items-center gap-2 text-sm font-medium"><Server className="h-4 w-4 text-primary" />Cópias guardadas no servidor</p>
               <button type="button" disabled={Boolean(busy)} onClick={() => void run("snapshot", async () => { await saveServerBackup(); await serverCopies.refetch(); toast.success("Cópia guardada no servidor."); })}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-xs font-semibold hover:bg-muted disabled:opacity-50" data-testid="settings-save-server-backup">
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-border px-3 text-xs font-semibold hover:bg-muted disabled:opacity-50" data-testid="settings-save-server-backup">
                 <CloudUpload className="h-4 w-4" />{busy === "snapshot" ? "Guardando…" : "Guardar agora"}
               </button>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Toda segunda-feira o FINNOS guarda uma cópia e mantém as {serverCopies.data?.keep ?? 8} mais recentes.</p>
-            {serverCopies.isPending ? <p className="mt-3 text-xs text-muted-foreground">Carregando…</p> : serverCopies.isError ? <p className="mt-3 text-xs text-destructive">Não foi possível listar as cópias.</p> : serverCopies.data?.items.length ? (
+            <p className="mt-1 text-xs text-muted-foreground">Toda segunda-feira o FINNOS guarda uma cópia no servidor e mantém as {serverCopies.data?.keep ?? 8} mais recentes. "Guardar agora" faz uma cópia na hora.</p>
+            {serverCopies.isPending && serverCopies.fetchStatus === "paused" ? <p className="mt-3 text-xs text-muted-foreground">Sem conexão. A lista aparece quando a internet voltar.</p> : serverCopies.isPending ? <p className="mt-3 text-xs text-muted-foreground">Carregando…</p> : serverCopies.isError ? <p className="mt-3 text-xs text-destructive">Não foi possível listar as cópias.</p> : serverCopies.data?.items.length ? (
               <ul className="mt-3 divide-y divide-border rounded-xl border border-border">
                 {serverCopies.data.items.map((copy) => (
                   <li key={copy.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
@@ -76,6 +77,7 @@ export function DataBackupCard() {
             ) : <p className="mt-3 text-xs text-muted-foreground">Nenhuma cópia ainda. A primeira é feita na próxima segunda, ou agora em "Guardar agora".</p>}
           </div>
         ) : null}
+        {!local ? <DeviceCopySection /> : null}
         <input ref={fileInput} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { setPendingRestore(e.target.files?.[0] ?? null); e.target.value = ""; }} />
       </CardContent>
       <StatementImportDialog open={importOpen} onOpenChange={setImportOpen} />
