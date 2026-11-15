@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Banknote, Search } from "lucide-react";
+import { Banknote, LayoutGrid, LayoutList, Search } from "lucide-react";
+import { cardGradient } from "@/lib/cardGradient";
 import { bankRows, type BankSort } from "@/lib/walletSummary";
 import { formatBRL, formatHiddenBRL } from "@/lib/format";
 import type { Account, CreditCard, Institution } from "@/types/finnos";
 import { cn } from "@/lib/utils";
+
+const VIEW_KEY = "finnos:wallet-banks-view";
+const readView = (): "list" | "cards" => { try { return window.localStorage.getItem(VIEW_KEY) === "cards" ? "cards" : "list"; } catch { return "list"; } };
 
 const SORTS: { key: BankSort; label: string }[] = [{ key: "saldo", label: "Maior saldo" }, { key: "az", label: "A–Z" }, { key: "cartao", label: "Com cartão" }];
 
@@ -23,6 +27,9 @@ export function BankList({ accounts, cards, institutions, investments, methods, 
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<BankSort>("saldo");
   const [showEmpty, setShowEmpty] = useState(false);
+  // Same choice as the cards: a list, or a card per bank. Remembered on this device.
+  const [view, setViewRaw] = useState(readView);
+  const setView = (next: "list" | "cards") => { setViewRaw(next); try { window.localStorage.setItem(VIEW_KEY, next); } catch { /* ok */ } };
   const money = (cents: number) => (hidden ? formatHiddenBRL() : formatBRL(cents / 100));
   const all = bankRows(accounts, cards, institutions, { investments, methods });
   const many = all.length > 4;
@@ -37,7 +44,12 @@ export function BankList({ accounts, cards, institutions, investments, methods, 
     <section aria-label="Bancos e contas" data-testid="wallet-institutions">
       <div className="mx-1 mb-3 flex items-baseline justify-between gap-2">
         <h2 className="font-heading text-lg font-bold">Bancos e contas</h2>
-        <span className="text-[13px] text-muted-foreground"><span className="tabular-nums">{money(available)}</span> disponível</span>
+        <span className="flex items-center gap-2 text-[13px] text-muted-foreground"><span><span className="tabular-nums">{money(available)}</span> disponível</span>
+          <button type="button" onClick={() => setView(view === "list" ? "cards" : "list")} aria-pressed={view === "cards"}
+            aria-label={view === "list" ? "Ver bancos em cartões" : "Ver bancos em lista"} className="grid size-8 place-items-center rounded-full hover:bg-muted" data-testid="wallet-view-banks">
+            {view === "list" ? <LayoutGrid className="size-4" /> : <LayoutList className="size-4" />}
+          </button>
+        </span>
       </div>
       {many ? (
         <>
@@ -56,6 +68,36 @@ export function BankList({ accounts, cards, institutions, investments, methods, 
           </div>
         </>
       ) : null}
+      {view === "cards" ? (
+        <div className={cn("grid gap-3 sm:grid-cols-2", many && "mt-3")} data-testid="wallet-grid-banks">
+          {visible.map((r) => (
+            <Link key={r.key} to={`/contas/banco/${encodeURIComponent(r.key)}`} className="flex min-h-[8.5rem] flex-col justify-between rounded-3xl p-4 text-white shadow-sm transition-transform hover:-translate-y-0.5"
+              style={{ background: cardGradient(r.color) }} data-testid={`wallet-bank-${r.key}`}>
+              <span className="flex items-center gap-2">
+                <span className="grid size-9 shrink-0 place-items-center rounded-[12px] bg-white/20 font-heading text-sm font-bold">{r.initials}</span>
+                <strong className="min-w-0 flex-1 truncate text-[15px]">{r.name}</strong>
+                {r.isDefault ? <span className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold">Padrão</span> : null}
+              </span>
+              <span>
+                <span className="block text-[11px] opacity-80">{r.products}</span>
+                <span className="block font-heading text-xl font-bold tabular-nums">{r.accountsCents === null ? "sem conta" : money(r.accountsCents)}</span>
+              </span>
+            </Link>
+          ))}
+          {!query ? cash.map((a) => (
+            <button key={a.id} type="button" onClick={() => onOpenCash(a)} className="flex min-h-[8.5rem] flex-col justify-between rounded-3xl border border-border bg-card p-4 text-left hover:bg-muted/40" data-testid={`wallet-account-${a.id}`}>
+              <span className="flex items-center gap-2"><span className="grid size-9 place-items-center rounded-[12px] bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"><Banknote className="size-[18px]" aria-hidden="true" /></span><strong className="text-[15px]">{a.name || "Dinheiro"}</strong></span>
+              <span className="font-heading text-xl font-bold tabular-nums">{money(Math.round(a.balance * 100))}</span>
+            </button>
+          )) : null}
+          {query && visible.length === 0 ? <p className="col-span-full px-4 py-5 text-center text-sm text-muted-foreground">Nada com esse nome.</p> : null}
+          {many && emptyCount > 0 && !query ? (
+            <button type="button" onClick={() => setShowEmpty(!showEmpty)} className="col-span-full rounded-full border border-border bg-card px-4 py-3 text-sm font-semibold" data-testid="wallet-show-empty-banks">
+              {showEmpty ? "Recolher bancos sem saldo" : `Mostrar ${emptyCount} ${emptyCount === 1 ? "banco sem saldo" : "bancos sem saldo"}`}
+            </button>
+          ) : null}
+        </div>
+      ) : (
       <div className={cn("overflow-hidden rounded-3xl border border-border bg-card", many && "mt-3")}>
         {visible.map((r, i) => (
           <Link key={r.key} to={`/contas/banco/${encodeURIComponent(r.key)}`} className={cn("flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40", i > 0 && "border-t border-border/60")}
@@ -101,6 +143,7 @@ export function BankList({ accounts, cards, institutions, investments, methods, 
         )) : null}
         {all.length === 0 && cash.length === 0 ? <p className="px-4 py-5 text-center text-sm text-muted-foreground">Nenhum banco cadastrado ainda.</p> : null}
       </div>
+      )}
       {many ? <p className="mx-1 mt-2.5 text-xs text-muted-foreground">Bancos sem saldo nem fatura ficam recolhidos para a lista não crescer demais.</p> : null}
       <button type="button" onClick={onManageInstitutions} className="mx-1 mt-2.5 text-[13px] font-semibold text-primary">Instituições</button>
     </section>

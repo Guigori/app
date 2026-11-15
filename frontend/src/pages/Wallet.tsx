@@ -184,8 +184,10 @@ export default function Wallet() {
             {hidden ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
           </button>
         </> : null}
-        <button type="button" onClick={() => setAddOpen(true)} aria-label="Adicionar à Carteira" className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground" data-testid="wallet-add">
-          <Plus className="size-5" />
+        {/* Adding a bank, card or benefit is not registering money: a light button with its name, so it is not
+            mistaken for the + that registers a lançamento. */}
+        <button type="button" onClick={() => setAddOpen(true)} aria-label="Adicionar à Carteira" className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-4 text-sm font-semibold text-primary hover:bg-primary/15" data-testid="wallet-add">
+          <Plus className="size-4" aria-hidden="true" /><span>Adicionar<span className="hidden sm:inline"> conta ou cartão</span></span>
         </button>
       </header>
 
@@ -243,26 +245,27 @@ export default function Wallet() {
               </button>
             ))}
           </div>
-          {/* Computer: two columns (cards and invoices beside the banks and benefits) instead of the phone's single column. */}
-          <div className={cn("space-y-5", tab === "tudo" ? "lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:items-start lg:gap-6 lg:space-y-0" : "lg:max-w-3xl")}>
-            <div className="min-w-0 space-y-5">
+          {/* The cards take the whole width (chosen card in the middle, its details beside it); underneath,
+              the banks and, beside them, the invoices and benefits. Tabs other than Tudo use the whole width. */}
           {tab === "tudo" || tab === "cartoes" ? (
             cards.some((c) => c.active) ? <CardCarousel cards={cards} hidden={hidden} /> : tab === "cartoes" ? (
               <EmptyBlock title="Nenhum cartão de crédito" text="Cadastre um cartão para acompanhar a fatura, o limite e o melhor dia de compra." action="Adicionar cartão" onClick={() => add("cartao")} testId="cards-empty-create-button" />
             ) : null
           ) : null}
-          {tab === "tudo" ? <UpcomingInvoices invoices={invoices} hidden={hidden} /> : tab === "cartoes" ? <UpcomingInvoices invoices={invoices} hidden={hidden} limit={12} /> : null}
-            </div>
+          <div className={cn("space-y-5", tab === "tudo" && "lg:grid lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:items-start lg:gap-6 lg:space-y-0")}>
+            {tab === "tudo" || tab === "contas" ? (
+              <div className="min-w-0">
+                <BankList accounts={accounts} cards={cards} institutions={institutions} investments={investments} methods={methodsQuery.data ?? {}}
+                  hidden={hidden} onOpenCash={setSelected} onManageInstitutions={() => setInstitutionManagerOpen(true)} />
+              </div>
+            ) : null}
             <div className="min-w-0 space-y-5">
-          {tab === "tudo" || tab === "contas" ? (
-            <BankList accounts={accounts} cards={cards} institutions={institutions} investments={investments} methods={methodsQuery.data ?? {}}
-              hidden={hidden} onOpenCash={setSelected} onManageInstitutions={() => setInstitutionManagerOpen(true)} />
-          ) : null}
-          {tab === "tudo" || tab === "beneficios" ? (
-            benefitCount ? <BenefitList accounts={accounts} hidden={hidden} /> : tab === "beneficios" ? (
-              <EmptyBlock title="Nenhum benefício cadastrado" text="VR, VA ou um cartão multi com até 8 benefícios, cada um com saldo e recarga." action="Adicionar benefício" onClick={() => add("beneficio")} testId="wallet-benefits-empty" />
-            ) : null
-          ) : null}
+              {tab === "tudo" ? <UpcomingInvoices invoices={invoices} hidden={hidden} /> : tab === "cartoes" ? <UpcomingInvoices invoices={invoices} hidden={hidden} limit={12} /> : null}
+              {tab === "tudo" || tab === "beneficios" ? (
+                benefitCount ? <BenefitList accounts={accounts} hidden={hidden} /> : tab === "beneficios" ? (
+                  <EmptyBlock title="Nenhum benefício cadastrado" text="VR, VA ou um cartão multi com até 8 benefícios, cada um com saldo e recarga." action="Adicionar benefício" onClick={() => add("beneficio")} testId="wallet-benefits-empty" />
+                ) : null
+              ) : null}
             </div>
           </div>
         </>

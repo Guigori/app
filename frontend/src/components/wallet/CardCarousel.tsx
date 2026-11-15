@@ -19,7 +19,9 @@ export function CardCarousel({ cards, hidden }: { cards: CreditCard[]; hidden: b
   const [view, setViewRaw] = useState(readView);
   const setView = (next: "carousel" | "list") => { setViewRaw(next); try { window.localStorage.setItem(VIEW_KEY, next); } catch { /* ok */ } };
   const [picked, setPicked] = useState<number | null>(null);
-  const start = Math.max(0, live.findIndex((c) => c.is_default));
+  // The default card opens in the middle; without one, the most used.
+  const mostUsed = live.reduce((best, c, i) => ((c.used ?? 0) > (live[best]?.used ?? 0) ? i : best), 0);
+  const start = live.findIndex((c) => c.is_default) >= 0 ? live.findIndex((c) => c.is_default) : mostUsed;
   const sel = Math.min(picked ?? start, Math.max(0, live.length - 1));
   const swipe = useRef<number | null>(null);
   const money = (v: number) => (hidden ? formatHiddenBRL() : formatBRL(v));
@@ -56,16 +58,21 @@ export function CardCarousel({ cards, hidden }: { cards: CreditCard[]; hidden: b
           ))}
         </ul>
       ) : (
-        <>
+        // Computer: the cards on the left with the chosen one in the middle, its limit and actions beside them.
+        <div className="lg:grid lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-center lg:gap-8">
+          <div className="min-w-0">
           <div className="relative -mx-4 h-[204px] overflow-hidden sm:mx-0 lg:[mask-image:linear-gradient(to_right,transparent,black_14%,black_86%,transparent)]" aria-roledescription="carrossel" aria-label="Cartões de crédito" data-testid="wallet-carousel" data-gesture="ignore"
             onPointerDown={(e) => { swipe.current = e.clientX; }}
             onPointerUp={(e) => {
               if (swipe.current === null) return;
               const dx = e.clientX - swipe.current; swipe.current = null;
-              if (Math.abs(dx) > 40) setPicked(Math.max(0, Math.min(live.length - 1, sel + (dx < 0 ? 1 : -1))));
+              if (Math.abs(dx) > 40) setPicked((sel + (dx < 0 ? 1 : -1) + live.length) % live.length);
             }}>
             {live.map((c, i) => {
-              const d = i - sel;
+              // In a loop: the last card sits to the left of the first, so dragging never hits an end.
+              const n = live.length;
+              let d = ((i - sel) % n + n) % n;
+              if (d > n / 2 || (n > 2 && d === n / 2 && i < sel)) d -= n;
               const far = Math.abs(d) > 1;
               const invoice = c.payable_invoice ? c.payable_invoice : c.current_invoice;
               return (
@@ -99,7 +106,8 @@ export function CardCarousel({ cards, hidden }: { cards: CreditCard[]; hidden: b
               </button>
             ))}
           </div>
-          <div className="mt-2 rounded-3xl border border-border bg-card p-4" data-testid="wallet-carousel-info">
+          </div>
+          <div className="mt-2 rounded-3xl border border-border bg-card p-4 lg:mt-0 lg:p-5" data-testid="wallet-carousel-info">
             <p className="sr-only" aria-live="polite">{card.name}</p>
             <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">Limite usado</span>
               <strong className="tabular-nums">{hidden ? formatHiddenBRL() : `${usedPct}% de ${formatBRL(card.limit)}`}</strong></div>
@@ -117,7 +125,7 @@ export function CardCarousel({ cards, hidden }: { cards: CreditCard[]; hidden: b
               <Paperclip className="size-4" aria-hidden="true" />Conferir com a fatura do banco
             </Link>
           </div>
-        </>
+        </div>
       )}
     </section>
   );
