@@ -176,10 +176,11 @@ export default function Wallet() {
           ) : null}
         </div>
         {!empty ? <>
-          <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} aria-label={dark ? "Usar tema claro" : "Usar tema escuro"} className={iconButton}>
+          {/* Theme and hide values live in the computer's side menu and on Início; here only on the phone. */}
+          <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} aria-label={dark ? "Usar tema claro" : "Usar tema escuro"} className={cn(iconButton, "lg:hidden")}>
             {dark ? <Sun className="size-[19px]" /> : <Moon className="size-[19px]" />}
           </button>
-          <button type="button" onClick={toggle} aria-label={hidden ? "Mostrar valores" : "Ocultar valores"} aria-pressed={hidden} className={iconButton}>
+          <button type="button" onClick={toggle} aria-label={hidden ? "Mostrar valores" : "Ocultar valores"} aria-pressed={hidden} className={cn(iconButton, "lg:hidden")}>
             {hidden ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
           </button>
         </> : null}

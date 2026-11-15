@@ -316,3 +316,6 @@ input[type="checkbox"]:not(.sr-only):not([data-checkbox]):checked {
 }
 input[type="checkbox"]:not(.sr-only):not([data-checkbox]):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 input[type="checkbox"]:not(.sr-only):not([data-checkbox]):disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Conversa: the dictation wave. */
+@keyframes finnos-wave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }

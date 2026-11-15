@@ -1,6 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
 import { addMonth, monthLabel, todayISO } from "@/lib/format";
 import { HEAT } from "@/components/charts/FinnosCharts";
 import { cn } from "@/lib/utils";
@@ -40,8 +39,7 @@ interface TransactionCalendarProps {
   className?: string;
 }
 
-/** Fluid month calendar. The bottom handle is the only expansion control: drag upward
- *  to reduce the visible weeks and downward to progressively reveal the month. */
+/** Fluid month calendar. The bottom handle opens the whole month (drag down or tap) and closes it to the week (drag up or tap). */
 export function TransactionCalendar({
   month,
   days,
@@ -77,11 +75,9 @@ export function TransactionCalendar({
   const weeks: Cell[][] = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   const trimmed = weeks.filter((week) => week.some((cell) => !cell.outside));
-  const [weekCount, setWeekCount] = useState<1 | 2 | 3>(1);
+  // Collapsed: only the week of the chosen day. Expanded: the whole month. One drag goes all the way.
   const selectedWeekIndex = Math.max(0, trimmed.findIndex((week) => week.some((cell) => cell.date === selectedDate)));
-  const compactStart = Math.min(Math.max(0, selectedWeekIndex - Math.floor((weekCount - 1) / 2)), Math.max(0, trimmed.length - weekCount));
-  const visibleWeeks = expanded || compact ? trimmed : trimmed.slice(compactStart, compactStart + weekCount);
-
+  const visibleWeeks = expanded || compact ? trimmed : trimmed.slice(selectedWeekIndex, selectedWeekIndex + 1);
   return (
     <section className={cn("rounded-3xl border border-border bg-card px-3 pb-2 pt-4", compact && "flex flex-col px-4 pb-4 shadow-sm", className)} data-testid="transaction-calendar">
       <div className="flex items-center justify-center gap-2">
@@ -114,69 +110,68 @@ export function TransactionCalendar({
         ))}
       </div>
 
-      <AnimatePresence initial={false} mode="wait">
-        <motion.div
-          key={`${month}-${expanded ? "full" : `weeks-${weekCount}`}`}
-          initial={{ opacity: 0, y: expanded ? -6 : 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-          className={cn("mt-1", compact && "flex flex-1 flex-col")}
-        >
-          <div className={cn("grid grid-cols-7", compact ? "flex-1 auto-rows-fr gap-1" : "gap-1.5 sm:gap-2")}>
-          {visibleWeeks.flat().map((cell) => {
-            const flow = byDate.get(cell.date);
-            const selected = cell.date === selectedDate;
-            const movement = (flow?.income ?? 0) + (flow?.expense ?? 0) + (flow?.projected_income ?? 0) + (flow?.projected_expense ?? 0);
-            const level = cell.outside ? 0 : heatLevel(movement);
-            return (
-              <button
-                key={cell.date}
-                type="button"
-                onClick={() => onSelectDate(cell.date)}
-                aria-label={`Ver lançamentos de ${cell.date}`}
-                title={!hidden && flow && (flow.income || flow.expense) ? `Entrou ${flow.income.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · Saiu ${flow.expense.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}` : undefined}
-                aria-current={selected ? "date" : undefined}
-                className={cn(
-                  // Fixed heights per breakpoint: a square of width/7 filled the whole
-                  // phone screen and became huge, almost empty tiles on desktop. The colour
-                  // carries the intensity; exact amounts live in the day list (and the tooltip).
-                  "relative flex flex-col items-center justify-center rounded-xl border text-sm font-semibold tabular-nums transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                  compact ? "h-full min-h-11 rounded-[10px] text-[13px]" : "h-11 sm:h-12",
-                  selected
-                    ? "border-primary bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                    : cell.outside
-                      ? "border-transparent bg-transparent text-muted-foreground/35"
-                      : level >= 4
-                        ? "border-transparent text-white hover:brightness-110"
-                        : level > 0
-                          ? "border-transparent text-foreground hover:brightness-95"
-                          : "border-border/70 bg-transparent text-foreground/80 hover:bg-muted/60",
-                  !selected && cell.date === today ? "font-extrabold ring-2 ring-primary ring-offset-2 ring-offset-card" : undefined,
-                )}
-                style={!cell.outside && !selected && level > 0 ? { backgroundColor: heatBackground(level) } : undefined}
-                data-testid={`calendar-day-${cell.date}`}
-              >
-                <span>{Number(cell.date.slice(8, 10))}</span>
-                {!cell.outside && flow && (flow.income > 0 || flow.expense > 0 || flow.projected_income > 0 || flow.projected_expense > 0) ? (
-                  <span className="absolute bottom-1 flex gap-0.5" aria-hidden="true">
-                    {flow.income > 0 || flow.projected_income > 0 ? <span className={cn("size-1 rounded-full", level >= 4 || selected ? "bg-white" : "bg-income")} /> : null}
-                    {flow.expense > 0 || flow.projected_expense > 0 ? <span className={cn("size-1 rounded-full", level >= 4 || selected ? "bg-white/70" : "bg-expense")} /> : null}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-          </div>
-        </motion.div>
-      </AnimatePresence>
+      {/* Each week slides open or closed on its own, so collapsing and expanding is one smooth motion. */}
+      <motion.div key={month} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }} className={cn("mt-1", compact && "flex flex-1 flex-col justify-between")}>
+        <AnimatePresence initial={false}>
+          {visibleWeeks.map((week) => (
+            <motion.div key={week[0].date} layout="position"
+              initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
+              <div className={cn("grid grid-cols-7", compact ? "gap-1 py-0.5" : "gap-1.5 py-[3px] sm:gap-2")}>
+                {week.map((cell) => {
+                  const flow = byDate.get(cell.date);
+                  const selected = cell.date === selectedDate;
+                  const movement = (flow?.income ?? 0) + (flow?.expense ?? 0) + (flow?.projected_income ?? 0) + (flow?.projected_expense ?? 0);
+                  const level = cell.outside ? 0 : heatLevel(movement);
+                  return (
+                    <button
+                      key={cell.date}
+                      type="button"
+                      onClick={() => onSelectDate(cell.date)}
+                      aria-label={`Ver lançamentos de ${cell.date}`}
+                      title={!hidden && flow && (flow.income || flow.expense) ? `Entrou ${flow.income.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · Saiu ${flow.expense.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}` : undefined}
+                      aria-current={selected ? "date" : undefined}
+                      className={cn(
+                        // One look for every heat-map calendar: round days, the purple scale, dots for in and out.
+                        "relative mx-auto flex aspect-square w-full flex-col items-center justify-center rounded-full border font-semibold tabular-nums transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                        compact ? "max-w-10 text-[13px]" : "max-w-12 text-sm",
+                        selected
+                          ? "border-primary bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                          : cell.outside
+                            ? "border-transparent bg-transparent text-muted-foreground/35"
+                            : level >= 4
+                              ? "border-transparent text-white hover:brightness-110"
+                              : level > 0
+                                ? "border-transparent text-foreground hover:brightness-95"
+                                : "border-border/70 bg-transparent text-foreground/80 hover:bg-muted/60",
+                        !selected && cell.date === today ? "font-extrabold ring-2 ring-primary ring-offset-2 ring-offset-card" : undefined,
+                      )}
+                      style={!cell.outside && !selected && level > 0 ? { backgroundColor: heatBackground(level) } : undefined}
+                      data-testid={`calendar-day-${cell.date}`}
+                    >
+                      <span>{Number(cell.date.slice(8, 10))}</span>
+                      {!cell.outside && flow && (flow.income > 0 || flow.expense > 0 || flow.projected_income > 0 || flow.projected_expense > 0) ? (
+                        <span className="absolute bottom-[18%] flex gap-0.5" aria-hidden="true">
+                          {flow.income > 0 || flow.projected_income > 0 ? <span className={cn("size-1 rounded-full", level >= 4 || selected ? "bg-white" : "bg-income")} /> : null}
+                          {flow.expense > 0 || flow.projected_expense > 0 ? <span className={cn("size-1 rounded-full", level >= 4 || selected ? "bg-white/70" : "bg-expense")} /> : null}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </motion.div>
 
-      <div className={cn("mt-3 flex items-center justify-end gap-1.5 px-2 text-xs text-muted-foreground", compact && "mt-3")} data-testid="calendar-heatmap-legend">
+      <div className={cn("mt-3 flex items-center justify-end gap-1.5 px-2 text-xs text-muted-foreground", compact && "mt-2")} data-testid="calendar-heatmap-legend">
+        {compact ? <span className="mr-auto flex items-center gap-2"><span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-income" />entrada</span><span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-expense" />saída</span></span> : null}
         <span>Menos</span>
         {[1, 2, 3, 4, 5].map((level) => (
           <span
             key={level}
-            className="h-3 w-3 rounded-[4px]"
+            className="size-3 rounded-full"
             style={{ backgroundColor: heatBackground(level) }}
             aria-hidden="true"
           />
@@ -184,7 +179,6 @@ export function TransactionCalendar({
         <span>Mais</span>
       </div>
 
-      {compact ? <p className="mt-1 px-1 text-[11px] text-muted-foreground"><span className="mr-1 inline-block size-1.5 rounded-full bg-income align-middle" />entrada <span className="ml-2 mr-1 inline-block size-1.5 rounded-full bg-expense align-middle" />saída</p> : null}
       {compact ? null : <p className="mt-2 hidden px-2 text-xs leading-relaxed text-muted-foreground sm:block">Quanto mais roxo, maior foi a movimentação financeira do dia.</p>}
 
       {/* Drag the handle up to collapse to the week, down to show the whole month. */}
@@ -194,23 +188,14 @@ export function TransactionCalendar({
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={0.25}
         onDragEnd={(_, info) => {
-          if (info.offset.y < -18) {
-            if (expanded) onToggleExpanded();
-            else setWeekCount((value) => (value === 3 ? 2 : 1));
-          }
-          if (info.offset.y > 18) {
-            if (!expanded && weekCount < 3) setWeekCount((value) => (value === 1 ? 2 : 3));
-            else if (!expanded) onToggleExpanded();
-          }
+          // Up closes to the week, down opens the month: one drag, all the way.
+          if (info.offset.y < -12 && expanded) onToggleExpanded();
+          if (info.offset.y > 12 && !expanded) onToggleExpanded();
         }}
-        onClick={() => {
-          if (expanded) onToggleExpanded();
-          else if (weekCount < 3) setWeekCount((value) => (value === 1 ? 2 : 3));
-          else onToggleExpanded();
-        }}
+        onClick={onToggleExpanded}
         whileTap={{ scaleX: 1.15 }}
         className="mx-auto mt-1 flex h-7 w-full max-w-32 cursor-grab items-center justify-center active:cursor-grabbing"
-        aria-label={expanded ? "Recolher calendário" : "Mostrar mais semanas do calendário"}
+        aria-label={expanded ? "Recolher calendário" : "Mostrar o mês inteiro"}
         aria-expanded={expanded}
         data-testid="calendar-toggle-expanded"
       >

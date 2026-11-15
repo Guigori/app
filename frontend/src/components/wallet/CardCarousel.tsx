@@ -57,7 +57,7 @@ export function CardCarousel({ cards, hidden }: { cards: CreditCard[]; hidden: b
         </ul>
       ) : (
         <>
-          <div className="relative -mx-4 h-[204px] overflow-hidden sm:mx-0" aria-roledescription="carrossel" aria-label="Cartões de crédito" data-testid="wallet-carousel" data-gesture="ignore"
+          <div className="relative -mx-4 h-[204px] overflow-hidden sm:mx-0 lg:[mask-image:linear-gradient(to_right,transparent,black_14%,black_86%,transparent)]" aria-roledescription="carrossel" aria-label="Cartões de crédito" data-testid="wallet-carousel" data-gesture="ignore"
             onPointerDown={(e) => { swipe.current = e.clientX; }}
             onPointerUp={(e) => {
               if (swipe.current === null) return;

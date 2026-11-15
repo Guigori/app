@@ -53,7 +53,22 @@ export function AiPanel() {
     return [...new Set([...mine,...BASE_SUGGESTIONS])].filter(s=>!used.some(u=>u.includes(s.toLowerCase().slice(0,12)))).slice(0,4);
   },[conversation.messages]);
 
-  const speak=()=>{const w=window as any;const SR=w.SpeechRecognition||w.webkitSpeechRecognition;if(!SR){setError("Ditado por voz não está disponível neste navegador.");return}const rec=new SR();rec.lang="pt-BR";rec.interimResults=false;rec.onstart=()=>setListening(true);rec.onend=()=>setListening(false);rec.onerror=()=>setListening(false);rec.onresult=(e:any)=>setQuestion((v)=>[v,e.results[0][0].transcript].filter(Boolean).join(" "));rec.start()};
+  // Voice dictation: while it listens the composer shows a live wave, what was heard so far and a stop button.
+  const recRef=useRef<any>(null);
+  const [heard,setHeard]=useState("");
+  const [seconds,setSeconds]=useState(0);
+  useEffect(()=>{if(!listening)return;setSeconds(0);const id=window.setInterval(()=>setSeconds(v=>v+1),1000);return()=>window.clearInterval(id)},[listening]);
+  useEffect(()=>()=>recRef.current?.abort?.(),[]);
+  const speak=()=>{const w=window as any;const SR=w.SpeechRecognition||w.webkitSpeechRecognition;if(!SR){setError("Ditado por voz não está disponível neste navegador.");return}
+    setError(null);setHeard("");const rec=new SR();recRef.current=rec;rec.lang="pt-BR";rec.interimResults=true;rec.continuous=true;
+    let finalText="";
+    rec.onstart=()=>setListening(true);
+    rec.onresult=(e:any)=>{let interim="";for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];if(r.isFinal)finalText=[finalText,r[0].transcript.trim()].filter(Boolean).join(" ");else interim+=r[0].transcript}setHeard([finalText,interim.trim()].filter(Boolean).join(" "))};
+    rec.onerror=(e:any)=>{setListening(false);if(e?.error==="not-allowed"||e?.error==="service-not-allowed")setError("Permita o uso do microfone no navegador para ditar.");else if(e?.error&&e.error!=="aborted"&&e.error!=="no-speech")setError("Não foi possível ouvir agora. Tente de novo.")};
+    rec.onend=()=>{setListening(false);recRef.current=null;if(finalText)setQuestion(v=>[v,finalText].filter(Boolean).join(" "));setHeard("");window.setTimeout(()=>inputRef.current?.focus(),0)};
+    try{rec.start()}catch{setListening(false)}};
+  const stopSpeaking=()=>recRef.current?.stop?.();
+  const cancelSpeaking=()=>{const rec=recRef.current;if(!rec)return;rec.onend=()=>{setListening(false);recRef.current=null;setHeard("")};rec.abort?.()};
   const attachFile=async(file:File)=>{setAttachOpen(false);if(file.size>2_000_000){setError("Use um arquivo de até 2 MB nesta versão.");return}if(file.type.startsWith("text/")||/\\.(csv|txt)$/i.test(file.name)){const body=await file.text();setQuestion(`Analise este arquivo ${file.name} e identifique possíveis lançamentos. Não registre nada sem minha confirmação.\\n\\n${body.slice(0,12000)}`)}else{setQuestion(`Quero analisar o arquivo "${file.name}" para registrar gastos. Mostre uma prévia e peça minha confirmação antes de salvar.`);setError("A leitura automática de imagens/PDFs será concluída pelo processador de documentos do servidor; nenhum lançamento será salvo automaticamente.")}};
   const feedback=(id:string,rating:"up"|"down")=>{
     const message=conversation.messages.find(m=>m.id===id);
@@ -192,9 +207,18 @@ export function AiPanel() {
         </main>
         <footer className="border-t border-border/70 bg-background px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
           <div className="relative mx-auto max-w-2xl"><form className="flex items-end gap-1 rounded-3xl border border-border bg-card p-1.5 shadow-sm focus-within:border-primary/50" onSubmit={e=>{e.preventDefault();void ask(question)}}>
+            {listening?<div className="flex min-h-10 flex-1 items-center gap-3 pl-2" role="status" aria-live="polite" data-testid="ai-listening">
+              <button type="button" onClick={cancelSpeaking} className="shrink-0 rounded-full px-2 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted" aria-label="Cancelar ditado">Cancelar</button>
+              <span className="flex h-6 shrink-0 items-center gap-[3px]" aria-hidden="true">{[0,1,2,3,4].map(i=><span key={i} className="w-[3px] rounded-full bg-primary motion-safe:animate-[finnos-wave_0.9s_ease-in-out_infinite]" style={{height:"100%",animationDelay:`${i*0.12}s`}}/>)}</span>
+              <span className="min-w-0 flex-1 truncate text-[15px] text-foreground/80">{heard||"Ouvindo… fale sua pergunta"}</span>
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{Math.floor(seconds/60)}:{String(seconds%60).padStart(2,"0")}</span>
+              <button type="button" onClick={stopSpeaking} className="relative grid size-10 shrink-0 place-items-center rounded-full bg-expense text-white" aria-label="Parar de gravar" data-testid="ai-stop-listening">
+                <span className="absolute inset-0 rounded-full bg-expense/40 motion-safe:animate-ping" aria-hidden="true"/><span className="relative size-3.5 rounded-[3px] bg-white"/>
+              </button>
+            </div>:<>
             <Button type="button" variant="ghost" size="icon" className="rounded-full" onClick={()=>setAttachOpen(v=>!v)} aria-label="Adicionar"><Plus className="h-5 w-5"/></Button>
             <textarea ref={inputRef} rows={1} className="max-h-36 min-h-10 flex-1 resize-none bg-transparent px-1 py-2.5 text-[15px] leading-snug outline-none placeholder:text-muted-foreground" value={question} onChange={e=>setQuestion(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();void ask(question)}}} placeholder="Pergunte ao FINNOS…" maxLength={14000} aria-label="Pergunte ao FINNOS"/>
-            {question.trim()?<Button type="submit" size="icon" className="rounded-full" disabled={askMutation.isPending||thinking} aria-label="Enviar"><ArrowUp className="h-4.5 w-4.5"/></Button>:<Button type="button" variant="ghost" size="icon" className="rounded-full" onClick={speak} aria-label="Ditado por voz"><Mic className={listening?"h-5 w-5 text-primary":"h-5 w-5"}/></Button>}
+            {question.trim()?<Button type="submit" size="icon" className="rounded-full" disabled={askMutation.isPending||thinking} aria-label="Enviar"><ArrowUp className="h-4.5 w-4.5"/></Button>:<Button type="button" variant="ghost" size="icon" className="rounded-full" onClick={speak} aria-label="Ditado por voz"><Mic className="h-5 w-5"/></Button>}</>}
           </form>{attachOpen?<div className="absolute bottom-16 left-0 z-20 w-64 rounded-2xl border border-border bg-popover p-2 shadow-xl"><button onClick={()=>fileRef.current?.click()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-muted"><FileText className="h-4 w-4"/>Enviar arquivo ou comprovante</button><p className="px-3 py-2 text-xs text-muted-foreground">CSV/TXT podem ser analisados agora. Outros arquivos entram no fluxo de confirmação.</p></div>:null}<input ref={fileRef} type="file" className="hidden" accept=".csv,.txt,.pdf,image/*" onChange={e=>{const file=e.target.files?.[0];if(file)void attachFile(file);e.currentTarget.value=""}}/></div>
           <p className="mt-2 text-center text-[11px] text-muted-foreground">A Conversa responde com os seus dados e pode errar. Confira valores importantes.</p>
         </footer>

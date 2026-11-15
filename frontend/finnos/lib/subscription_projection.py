@@ -36,7 +36,11 @@ def subscription_occurrence(sub: dict, month: str) -> date | None:
     """Billing date for a month, preserving the initial day across February."""
     if not sub.get("active", True):
         return None
-    anchor = date.fromisoformat(sub["next_charge"])
+    try:
+        anchor = date.fromisoformat(str(sub["next_charge"])[:10])
+    except (KeyError, TypeError, ValueError):
+        # An incomplete subscription has no date to project from.
+        return None
     year, number = map(int, month.split("-"))
     idx = year * 12 + number - 1
     anchor_idx = anchor.year * 12 + anchor.month - 1

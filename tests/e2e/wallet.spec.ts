@@ -19,7 +19,7 @@ async function createCheckingAccount(page: import("@playwright/test").Page) {
   await expect(page.getByTestId("wallet-single-bank-card")).toContainText("Banco Inter");
 }
 
-test("creates an institution-linked account and hides all balance figures", async ({ page }) => {
+test("creates an institution-linked account and hides all balance figures", async ({ page, isMobile }) => {
   await createCheckingAccount(page);
   // Tela 15 (prototype "Com 1 banco"): the Carteira is that bank's card, the month and the invite to add more.
   const bankCard = page.getByTestId("wallet-single-bank-card");
@@ -27,10 +27,15 @@ test("creates an institution-linked account and hides all balance figures", asyn
   await expect(page.getByTestId("wallet-counts")).toContainText("1 banco");
   await expect(page.getByTestId("wallet-single-month")).toBeVisible();
   await expect(page.getByTestId("wallet-single-add-banco")).toBeVisible();
-  await page.getByRole("button", { name: "Ocultar valores" }).click();
+  // Phone: the eye is on the Carteira. Computer: the eye lives on Início and the choice holds everywhere.
+  const toggle = async (name: string) => {
+    if (isMobile) return page.getByRole("button", { name }).click();
+    await page.goto("/"); await page.getByRole("button", { name }).first().click(); await page.goto("/contas");
+  };
+  await toggle("Ocultar valores");
   await expect(bankCard).toContainText("••••");
   await expect(bankCard).not.toContainText("350,15");
-  await page.getByRole("button", { name: "Mostrar valores" }).click();
+  await toggle("Mostrar valores");
   await expect(bankCard).toContainText("350,15");
 });
 
