@@ -73,7 +73,12 @@ export function startLiveUpdates(): () => void {
   if (!firebaseAuth || isLocalMode()) return () => undefined;
   const off = onAuthStateChanged(firebaseAuth, (user) => {
     if (user) void listen(user).catch(() => setLive(false));
-    else { stopListening?.(); stopListening = null; }
+    else {
+      stopListening?.();
+      stopListening = null;
+      // The device copy of the account (lib/mirror.ts) never outlives the session.
+      void import("@/lib/mirror").then((m) => m.clearMirror()).catch(() => undefined);
+    }
   });
   return () => { off(); stopListening?.(); stopListening = null; };
 }

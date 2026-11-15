@@ -19,6 +19,7 @@ from starlette.concurrency import run_in_threadpool
 from finnos.lib import db as store
 from finnos.lib.account_balances import finance_revision
 from finnos.lib.db import db
+from finnos.lib.response_cache import revision_cached
 from finnos.routers.auth import require_user
 
 router = APIRouter(prefix="/finance", tags=["backup"])
@@ -97,6 +98,20 @@ def _remap(value, ids: dict):
     if isinstance(value, dict):
         return {key: _remap(item, ids) for key, item in value.items()}
     return value
+
+
+@router.get("/mirror")
+async def device_mirror(user: dict = Depends(require_user)):
+    """Everything the app needs to keep its own copy on the device (camada 6): the same complete, consistent backup
+    a person downloads, tagged with the finance revision. The app asks for it again only when the revision moves."""
+    return await _device_mirror(user=user)
+
+
+@revision_cached("device-mirror", dict)
+async def _device_mirror(user: dict):
+    data = await build_backup(user["id"])
+    return {"revision": data["finance_revision"], "checksum_sha256": data["checksum_sha256"],
+            "collections": data["collections"]}
 
 
 @router.post("/restore")

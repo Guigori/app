@@ -11,6 +11,7 @@ import { isLocalMode, getMode } from "@/lib/mode";
 import { loadSessionProfile } from "@/lib/profileIdentity";
 import { queueTransaction, queueTransactionDelete, queueEntityCreate, queueEntityMutation, flushSyncQueue, listSyncOperations, isTransactionSyncOperation, type OperationSource } from "@/lib/sync/queue";
 import { cacheGet, cacheSet, cachedFetch } from "@/lib/offline/accountCache";
+import { shadowCheck } from "@/lib/mirror";
 import { withIntent } from "@/lib/sync/intent";
 import {
   localFinanceHistory,
@@ -198,7 +199,9 @@ function applyPendingToDashboard(base: Dashboard, pending: { id: string; payload
 
 export async function fetchDashboard(month: string | null): Promise<Dashboard> {
   if (isLocalMode()) return localDashboard(month);
-  const base = await cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(month ? `/dashboard?month=${month}` : "/dashboard"));
+  const path = month ? `/dashboard?month=${month}` : "/dashboard";
+  const base = await cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(path));
+  shadowCheck("dashboard", path, base, () => localDashboard(month));
   const pending = (await listSyncOperations()).filter(isTransactionSyncOperation).filter((o) => o.kind === "transaction.create");
   return applyPendingToDashboard(base, pending);
 }
@@ -281,13 +284,19 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
 /** Saldo das contas dia a dia no mês (a linha "Saldo" do gráfico do Início). */
 export async function fetchBalanceHistory(month: string): Promise<BalanceHistory> {
   if (isLocalMode()) return localBalanceHistory(month);
-  return cachedFetch(`balance-history:${month}`, () => apiGet<BalanceHistory>(`/analytics/balance-history?month=${month}`));
+  const path = `/analytics/balance-history?month=${month}`;
+  const server = await cachedFetch(`balance-history:${month}`, () => apiGet<BalanceHistory>(path));
+  shadowCheck("balanceHistory", path, server, () => localBalanceHistory(month));
+  return server;
 }
 
 export async function fetchCalendar(month: string, categoryId?: string): Promise<CalendarMonth> {
   if (isLocalMode()) return localCalendar(month, categoryId);
   const category = categoryId ? `&category_id=${encodeURIComponent(categoryId)}` : "";
-  return cachedFetch(`calendar:${month}${categoryId ? `:${categoryId}` : ""}`, () => apiGet<CalendarMonth>(`/analytics/calendar?month=${month}${category}`));
+  const path = `/analytics/calendar?month=${month}${category}`;
+  const server = await cachedFetch(`calendar:${month}${categoryId ? `:${categoryId}` : ""}`, () => apiGet<CalendarMonth>(path));
+  shadowCheck("calendar", path, server, () => localCalendar(month, categoryId));
+  return server;
 }
 
 
@@ -382,7 +391,9 @@ export async function deleteInstitution(id: string): Promise<void> {
 
 export async function fetchAccounts(): Promise<Account[]> {
   if (isLocalMode()) return localListAccounts();
-  return cachedFetch("accounts", () => apiGet<Account[]>("/accounts"));
+  const server = await cachedFetch("accounts", () => apiGet<Account[]>("/accounts"));
+  shadowCheck("accounts", "/accounts", server, () => localListAccounts());
+  return server;
 }
 
 export async function fetchAccount(id: string): Promise<AccountDetail> {

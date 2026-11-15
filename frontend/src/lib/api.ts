@@ -19,6 +19,13 @@ export class ApiError extends Error {
 
 type JsonBody = unknown;
 
+/** Finance revision each GET answer was computed at (header X-Finnos-Revision), by path. Lets the device copy
+ *  compare itself only against answers from the same revision. */
+const servedRevisions = new Map<string, number>();
+export function servedRevision(path: string): number | undefined {
+  return servedRevisions.get(path);
+}
+
 async function request<T>(method: string, path: string, body?: JsonBody, extraHeaders?: Record<string, string>): Promise<T> {
   const requestUid = firebaseAuth?.currentUser?.uid;
   // Auth rides the httpOnly session cookie automatically — never add auth headers here.
@@ -38,6 +45,8 @@ async function request<T>(method: string, path: string, body?: JsonBody, extraHe
   }
 
   if (res.status === 204) return undefined as T;
+  const revision = res.headers?.get?.("X-Finnos-Revision");
+  if (method === "GET" && revision !== null && revision !== undefined && revision !== "") servedRevisions.set(path, Number(revision));
   return (await res.json()) as T;
 }
 

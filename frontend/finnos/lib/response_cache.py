@@ -53,6 +53,8 @@ def revision_cached(name: str, response_type: Any):
                 from finnos.lib.dates import today_iso
                 from starlette.concurrency import run_in_threadpool
                 revision = await finance_revision(uid)
+                from finnos.lib import read_meter
+                read_meter.served_revision(revision)
                 day = today_iso()
                 ref = store.root(store.client(), uid).collection("_cache").document(_key(name, params))
                 snap = await run_in_threadpool(ref.get)

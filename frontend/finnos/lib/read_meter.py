@@ -12,10 +12,11 @@ logger = logging.getLogger("finnos.reads")
 
 
 class Meter:
-    __slots__ = ("reads",)
+    __slots__ = ("reads", "revision")
 
     def __init__(self):
         self.reads = 0
+        self.revision = None  # finance revision the answer was computed at, when the route knows it
 
 
 _meter: ContextVar[Meter | None] = ContextVar("finnos_read_meter", default=None)
@@ -25,6 +26,12 @@ def start() -> Meter:
     meter = Meter()
     _meter.set(meter)
     return meter
+
+
+def served_revision(revision: int) -> None:
+    meter = _meter.get()
+    if meter is not None:
+        meter.revision = revision
 
 
 def count(n: int = 1) -> None:

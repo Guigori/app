@@ -72,6 +72,8 @@ def mount(app, firebase_app, verified_claims, same_origin):
         response = await call_next(request)
         if request.url.path.startswith("/api/"):
             response.headers["X-Finnos-Reads"] = str(meter.reads)
+            if meter.revision is not None:
+                response.headers["X-Finnos-Revision"] = str(meter.revision)
             read_meter.report(request.url.path, meter)
         return response
 

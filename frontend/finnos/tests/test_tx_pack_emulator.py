@@ -196,3 +196,56 @@ def test_daily_export_for_the_mongo_copy(instance, monkeypatch):
     assert len(data["collections"]["transactions"]) == 30
     again = asyncio.run(export({uid: first["revision"]}))[uid]
     assert again == {"uid": uid, "revision": first["revision"], "unchanged": True}
+
+
+def test_writes_fixtures_for_the_device_copy_parity(instance, monkeypatch):
+    """Writes the device copy (/api/finance/mirror) and the server's answers for the same revision; the job then runs
+    src/lib/mirror.parity.test.ts, which computes the same screens with the app's local engine and compares."""
+    import json
+    out = os.getenv("SHADOW_FIXTURES")
+    if not out:
+        pytest.skip("SHADOW_FIXTURES não definido")
+    uid = "test-mirror-parity"
+    seed(instance, uid, n=150)
+    monkeypatch.setattr(store, "client", lambda: instance)
+    monkeypatch.setenv("VERCEL_ENV", "development")
+    from api import index as api
+    import finnos.lib.dates as dates
+    from finnos.routers import transactions as tx_router
+    monkeypatch.setattr(api, "verified_claims", lambda token, session=False: {"uid": uid, "email": "t@example.invalid", "email_verified": True})
+    monkeypatch.setattr(dates, "today_iso", lambda: "2026-11-15")
+    monkeypatch.setattr(tx_router, "today_iso", lambda: "2026-11-15", raising=False)
+    headers = {"Origin": "http://testserver", "Authorization": "Bearer synthetic", "X-Finnos-User-Id": uid}
+    extra = [
+        {"name": "Aluguel", "value": 1500, "type": "despesa", "status": "pendente", "date": "2026-11-20", "account_id": "bank", "category_id": "food"},
+        {"name": "Notebook", "value": 3000, "type": "despesa", "status": "pago", "date": "2026-10-10", "account_id": "bank",
+         "card_id": "card", "category_id": "food", "installment": True, "total_installments": 6, "current_installment": 1},
+        {"name": "Salário", "value": 5200, "type": "receita", "status": "agendado", "date": "2026-11-28", "account_id": "bank", "category_id": "food"},
+    ]
+    screens = {"dashboard": ["/api/dashboard?month=2026-11", "/api/dashboard?month=2026-10", "/api/dashboard?month=2026-06"],
+               "calendar": ["/api/analytics/calendar?month=2026-11", "/api/analytics/calendar?month=2026-12"],
+               "balanceHistory": ["/api/analytics/balance-history?month=2026-11", "/api/analytics/balance-history?month=2026-09"],
+               "accounts": ["/api/accounts"]}
+
+    async def scenario():
+        transport = httpx.ASGITransport(app=api.app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver", headers=headers, timeout=60) as client:
+            for n, body in enumerate(extra):
+                r = await client.post("/api/transactions", json=body, headers={"X-Finnos-Operation-Id": f"parity-{n}"})
+                assert r.status_code == 201, r.text[:500]
+            mirror = (await client.get("/api/finance/mirror")).json()
+            answers = {}
+            for screen, urls in screens.items():
+                for url in urls:
+                    r = await client.get(url)
+                    assert r.status_code == 200, (url, r.text[:300])
+                    assert r.headers.get("X-Finnos-Revision") == str(mirror["revision"]), url
+                    answers.setdefault(screen, {})[url] = r.json()
+            return mirror, answers
+
+    mirror, answers = asyncio.run(scenario())
+    os.makedirs(out, exist_ok=True)
+    with open(os.path.join(out, "mirror.json"), "w", encoding="utf-8") as fh:
+        json.dump(mirror, fh)
+    with open(os.path.join(out, "answers.json"), "w", encoding="utf-8") as fh:
+        json.dump({"today": "2026-11-15", "answers": answers}, fh)
