@@ -162,3 +162,37 @@ def test_screens_answer_the_same_with_and_without_the_pack(instance, monkeypatch
                 for url in ROUTES:
                     assert with_pack[url] == without[url], (step, url, with_pack[url][1][:300], without[url][1][:300])
     asyncio.run(scenario())
+
+
+def test_daily_export_for_the_mongo_copy(instance, monkeypatch):
+    import base64
+    import gzip
+    import json
+    from finnos.routers.backup import checksum
+    uid = "test-pack-export"
+    seed(instance, uid, n=30)
+    monkeypatch.setattr(store, "client", lambda: instance)
+    monkeypatch.setenv("VERCEL_ENV", "development")
+    monkeypatch.setenv("CRON_SECRET", "c" * 24)
+    from api import index as api
+    auth = {"Authorization": "Bearer " + "c" * 24, "Origin": "http://testserver"}
+
+    async def export(known):
+        transport = httpx.ASGITransport(app=api.app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver", timeout=60) as client:
+            items, after = [], None
+            while True:
+                r = await client.post("/api/finance/backups-export", json={"after": after, "limit": 10, "known": known}, headers=auth)
+                assert r.status_code == 200, r.text[:500]
+                body = r.json()
+                items += body["items"]
+                after = body["next"]
+                if not after:
+                    return {i["uid"]: i for i in items}
+
+    first = asyncio.run(export({}))[uid]
+    data = json.loads(gzip.decompress(base64.b64decode(first["gzip_b64"])))
+    assert data["checksum_sha256"] == checksum(data["collections"]) == first["checksum_sha256"]
+    assert len(data["collections"]["transactions"]) == 30
+    again = asyncio.run(export({uid: first["revision"]}))[uid]
+    assert again == {"uid": uid, "revision": first["revision"], "unchanged": True}

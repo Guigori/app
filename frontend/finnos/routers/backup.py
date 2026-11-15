@@ -248,3 +248,53 @@ async def run_weekly_snapshots(authorization: str | None = Header(default=None))
         finally:
             store.active_uid.reset(token)
     return {"users": len(users), "saved": saved, "skipped": skipped, "failed": failed}
+
+
+# --- Daily copy outside Firestore (camada 7) --------------------------------------------------------------
+# GitHub Actions (Bearer FINNOS_CRON_SECRET) pages through the users and stores each backup in a MongoDB
+# database of its own (scripts/backup_to_mongo.py). The serverless runtime never talks to MongoDB: this route only
+# hands out the same complete, checksummed backup a person can download, compressed. A user whose finance revision
+# equals the one the job already holds costs one read and is not exported again.
+EXPORT_PAGE_MAX = 10
+
+
+@router.post("/backups-export")
+async def export_backups_page(payload: dict, authorization: str | None = Header(default=None)):
+    from finnos.lib.push_transport import require_cron_secret
+
+    require_cron_secret(authorization)
+    after = payload.get("after") or None
+    limit = max(1, min(int(payload.get("limit") or 5), EXPORT_PAGE_MAX))
+    known = payload.get("known") or {}
+    if not isinstance(known, dict):
+        raise HTTPException(422, "known deve mapear usuário → revisão.")
+
+    def page():
+        # list_documents includes users whose own document does not exist (only subcollections), like the weekly job.
+        ids = sorted(ref.id for ref in store.client().collection("users").list_documents(page_size=CRON_USER_LIMIT + 1))
+        if len(ids) > CRON_USER_LIMIT:
+            raise HTTPException(503, "Mais usuários que o limite do backup; paginação necessária.")
+        return [uid for uid in ids if after is None or uid > after][:limit]
+
+    users = await run_in_threadpool(page)
+    items = []
+    for uid in users:
+        token = store.active_uid.set(uid)
+        try:
+            revision = await finance_revision(uid)
+            if known.get(uid) == revision:
+                items.append({"uid": uid, "revision": revision, "unchanged": True})
+                continue
+            data = await build_backup(uid)
+            items.append({
+                "uid": uid, "revision": data["finance_revision"], "exported_at": data["exported_at"],
+                "counts": data["counts"], "checksum_sha256": data["checksum_sha256"],
+                "gzip_b64": "".join(encode_snapshot(data)),
+            })
+        except HTTPException as exc:  # 409: changed during the copy; the next run takes it
+            items.append({"uid": uid, "error": exc.status_code})
+        except Exception:
+            items.append({"uid": uid, "error": 500})
+        finally:
+            store.active_uid.reset(token)
+    return {"items": items, "next": users[-1] if len(users) == limit else None}
