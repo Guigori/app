@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 
 from finnos.lib import db as store
+from finnos.lib import tx_pack
 from finnos.lib.account_balances import PAGE_SIZE, _revision
 
 
@@ -45,34 +46,12 @@ async def read_projection_history(
 
     def read():
         parent = store.root(store.client(), user_id)
-        collection = parent.collection("transactions")
         selected = []
-        last = None
-        last_id = None
-        while True:
-            query = collection.order_by("__name__")
-            if last is not None:
-                query = query.start_after(last)
-            snapshots = list(query.limit(PAGE_SIZE).stream(timeout=15))
-            if len(snapshots) > PAGE_SIZE:
-                raise HTTPException(503, "Página de projeção inválida.")
-            for snap in snapshots:
-                if last_id is not None and snap.id <= last_id:
-                    raise HTTPException(503, "Ordenação da projeção inválida.")
-                raw = snap.to_dict()
-                if not isinstance(raw, dict):
-                    raise HTTPException(503, "Registro financeiro inválido.")
-                # Filter cheap date/series flags before decoding monetary fields.
-                # Referenced originals must never be lost to this predicate.
-                candidate = dict(raw, id=snap.id)
-                if projection_relevant(candidate, periods, originals):
-                    selected.append(
-                        dict(store.decode(raw), id=snap.id, user_id=user_id)
-                    )
-                last_id = snap.id
-            if len(snapshots) < PAGE_SIZE:
-                break
-            last = snapshots[-1]
+        for tx_id, raw in tx_pack.raw_transactions(parent, expected_revision):
+            # Filter cheap date/series flags before decoding monetary fields.
+            # Referenced originals must never be lost to this predicate.
+            if projection_relevant(dict(raw, id=tx_id), periods, originals):
+                selected.append(dict(store.decode(raw), id=tx_id, user_id=user_id))
         if _revision(parent) != expected_revision:
             raise HTTPException(
                 409, "Histórico alterado durante a projeção; atualize para recalcular."

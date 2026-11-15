@@ -115,7 +115,7 @@ function CategoriesWidget({ size, to, className }: { size: WidgetSize; to?: stri
 /** Radar: S how many ask for attention, M the summary, L the top signals (each opens where it points). */
 function RadarWidget({ size, to, className }: { size: WidgetSize; to?: string; className?: string }) {
   const navigate = useNavigate();
-  const radar = useQuery({ queryKey: ["radar", currentMonth()], queryFn: fetchRadar, staleTime: 60_000 });
+  const radar = useQuery({ queryKey: ["radar"], queryFn: fetchRadar, staleTime: 60_000 });
   if (size === "XL") return <RadarSection signals={radar.data?.items ?? []} totalCount={radar.data?.count ?? 0} loading={radar.isPending} error={radar.isError} onRetry={() => void radar.refetch()} />;
   if (!radar.data) return <div className={cn("h-full min-h-40 animate-pulse rounded-3xl bg-muted", className)} />;
   const items = sortSignals(radar.data.items);

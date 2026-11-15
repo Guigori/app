@@ -62,6 +62,21 @@ def mount(app, firebase_app, verified_claims, same_origin):
         router.include_router(module.router)
     app.include_router(router)
 
+    # How many Firestore documents each request read (header + one log line): the way to measure the cost.
+    from finnos.lib import read_meter
+    read_meter.install()
+
+    @app.middleware("http")
+    async def count_reads(request, call_next):
+        meter = read_meter.start()
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["X-Finnos-Reads"] = str(meter.reads)
+            if meter.revision is not None:
+                response.headers["X-Finnos-Revision"] = str(meter.revision)
+            read_meter.report(request.url.path, meter)
+        return response
+
     # Mutation CSRF applies to finance routes; cookie auth is never sufficient on its own.
     @app.middleware("http")
     async def finance_origin(request, call_next):

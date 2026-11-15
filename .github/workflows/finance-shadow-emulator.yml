@@ -14,6 +14,9 @@ on:
       - 'docs/finance/SHADOW-EMULATOR-GATE-20261027.md'
   pull_request:
     paths:
+      - 'frontend/src/lib/mirror.ts'
+      - 'frontend/src/lib/mirror.parity.test.ts'
+      - 'frontend/src/lib/local/**'
       - 'frontend/finnos/**'
       - '.github/workflows/finance-shadow-emulator.yml'
       - '.github/workflows/firestore-adapter-tests.yml'
@@ -57,4 +60,11 @@ jobs:
             --project demo-finnos \
             --config .github/test-fixtures/firebase.shadow.json \
             --only firestore \
-            'FIRESTORE_EMULATOR_HOST=127.0.0.1:8089 python -m pytest -q frontend/finnos/tests/test_finance_shadow_emulator_live.py frontend/finnos/tests/test_finance_shadow_emulator_routes.py frontend/finnos/tests/test_backup_restore_emulator.py'
+            'FIRESTORE_EMULATOR_HOST=127.0.0.1:8089 SHADOW_FIXTURES=$RUNNER_TEMP/shadow python -m pytest -q frontend/finnos/tests/test_finance_shadow_emulator_live.py frontend/finnos/tests/test_finance_shadow_emulator_routes.py frontend/finnos/tests/test_backup_restore_emulator.py frontend/finnos/tests/test_tx_pack_emulator.py frontend/finnos/tests/test_reads_baseline_emulator.py -s'
+      - name: Device copy parity (local engine against the server's answers)
+        if: always()
+        working-directory: frontend
+        run: |
+          if [ ! -f "$RUNNER_TEMP/shadow/mirror.json" ]; then echo "Sem fixtures de paridade."; exit 1; fi
+          npm ci --no-audit --no-fund
+          SHADOW_FIXTURES=$RUNNER_TEMP/shadow npx vitest run src/lib/mirror.parity.test.ts

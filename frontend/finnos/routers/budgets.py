@@ -4,6 +4,7 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from finnos.lib.response_cache import revision_cached
 from finnos.lib.db import db
 from finnos.lib.account_balances import finance_revision
 from finnos.lib.financial_summaries import stream_financial_window
@@ -179,6 +180,7 @@ async def next_cycle(user: dict=Depends(require_user)):
     return await _out(cycle) if cycle else None
 
 @router.get('/{cycle_id}/progress', response_model=BudgetCycleProgress)
+@revision_cached("budget-progress", BudgetCycleProgress)
 async def cycle_progress(cycle_id: str, user: dict=Depends(require_user)) -> BudgetCycleProgress:
     cycle = await db.budget_cycles.find_one({'id': cycle_id, 'user_id': user['id']})
     if not cycle:

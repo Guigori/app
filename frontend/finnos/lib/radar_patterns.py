@@ -10,8 +10,11 @@ def _brl(value: float) -> str:
     raw = f'{value:,.2f}'
     return 'R$ ' + raw.replace(',', 'X').replace('.', ',').replace('X', '.')
 
-async def recurring_signals(user_id: str, month_end: str) -> list[dict]:
-    txs = await db.transactions.find({'user_id': user_id, 'type': 'despesa', 'status': 'pago'}).to_list(20000)
+async def recurring_signals(user_id: str, month_end: str, transactions: list[dict] | None = None) -> list[dict]:
+    # The Radar passes the transactions it already read, so they are not read from Firestore a second time.
+    if transactions is None:
+        transactions = await db.transactions.find({'user_id': user_id, 'type': 'despesa', 'status': 'pago'}).to_list(20000)
+    txs = [t for t in transactions if t.get('type') == 'despesa' and t.get('status') == 'pago']
     groups = defaultdict(list)
     for tx in txs:
         name = ' '.join(str(tx.get('name') or '').lower().split())

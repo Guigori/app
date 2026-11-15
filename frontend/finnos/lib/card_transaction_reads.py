@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 
 from finnos.lib import db as store
+from finnos.lib import tx_pack
 from finnos.lib.account_balances import PAGE_SIZE, _revision
 
 
@@ -19,6 +20,13 @@ async def read_card_purchases(
 
     def read():
         parent = store.root(store.client(), user_id)
+        packed = tx_pack.current_pack(parent, expected_revision)
+        if packed is not None:
+            results = [dict(store.decode(raw), id=tx_id, user_id=user_id)
+                       for tx_id, raw in packed if raw.get("card_id") == card_id]
+            if _revision(parent) != expected_revision:
+                raise HTTPException(409, "Fatura alterada durante a consulta; atualize para recalcular.")
+            return results
         collection = parent.collection("transactions")
         results = []
         previous = None

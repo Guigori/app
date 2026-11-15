@@ -3,6 +3,7 @@ from finnos.lib.money import D, quantize_brl
 """Dashboard aggregate: total balance, month stats, category donut, 50/30/20 rule, recent."""
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
+from finnos.lib.response_cache import revision_cached
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.account_balances import finance_revision
@@ -23,6 +24,7 @@ GROUP_SHARES = {"necessidades": D("0.5"), "desejos": D("0.3"), "metas": D("0.2")
 
 
 @router.get("", response_model=DashboardOut)
+@revision_cached("dashboard", DashboardOut)
 async def dashboard(
     month: Optional[str] = Query(default=None, pattern="^\\d{4}-\\d{2}$"),
     user: dict = Depends(require_user),

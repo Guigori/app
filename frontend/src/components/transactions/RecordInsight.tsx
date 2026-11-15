@@ -89,7 +89,7 @@ export function RecordInsight({ tx, onDeleted, onLeave, onSettle, settling, onCh
   const month = tx.date.slice(0, 7);
   const enabled = !tx.id.startsWith("offline:");
   const spends = enabled && tx.type === "despesa";
-  const historyQuery = useQuery({ queryKey: ["transaction-history", tx.id, tx.version], queryFn: () => fetchTransactionHistory(tx.id), enabled, retry: 1 });
+  const historyQuery = useQuery({ queryKey: ["transaction-history", tx.id, tx.version], queryFn: () => fetchTransactionHistory(tx.id), enabled, retry: 1, staleTime: 0 });
   const budget = useQuery({ queryKey: ["budget", month], queryFn: () => fetchBudget(month), enabled: spends, staleTime: 60_000 });
   const cycle = useQuery({ queryKey: ["budget-v2-current"], queryFn: fetchCurrentBudgetCycle, enabled: spends, staleTime: 60_000 });
   const cycleProgress = useQuery({ queryKey: ["budget-v2-progress", cycle.data?.id], queryFn: () => fetchBudgetCycleProgress(cycle.data!.id), enabled: spends && Boolean(cycle.data?.id) });

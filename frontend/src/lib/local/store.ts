@@ -178,7 +178,22 @@ export async function initializeLocalPersistence(): Promise<void> {
   }
 }
 
+/** While set, the engine reads this copy instead of the local database (the device copy of an account, compared
+ *  against the server). It is read-only: any write while it is set is a bug and throws. */
+let readOnlyOverride: LocalDb | null = null;
+
+export function withReadOnlyDb<T>(db: LocalDb, run: () => T): T {
+  const previous = readOnlyOverride;
+  readOnlyOverride = db;
+  try {
+    return run();
+  } finally {
+    readOnlyOverride = previous;
+  }
+}
+
 export function readDb(): LocalDb {
+  if (readOnlyOverride) return readOnlyOverride;
   const key = storageKey();
   const cached = memory.get(key);
   if (cached) return cached;
@@ -194,6 +209,7 @@ export function readDb(): LocalDb {
 }
 
 export function writeDb(db: LocalDb): void {
+  if (readOnlyOverride) throw new Error("A cópia do aparelho é somente leitura.");
   const key = storageKey();
   const next: LocalDb = { ...db, revision: Math.max(memory.get(key)?.revision ?? 0, db.revision ?? 0) + 1 };
   memory.set(key, next);
@@ -206,6 +222,7 @@ export function writeDb(db: LocalDb): void {
 }
 
 export function wipeDb(): void {
+  if (readOnlyOverride) throw new Error("A cópia do aparelho é somente leitura.");
   const key = storageKey();
   memory.delete(key);
   window.localStorage.removeItem(key);

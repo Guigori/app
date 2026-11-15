@@ -9,8 +9,6 @@ import { WidgetBoard } from "@/components/insights/WidgetBoard";
 import { currentMonth, firstName, monthLabel } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 import { BalanceHeroCard } from "@/components/dashboard/BalanceHeroCard";
-import { PendingCaptures } from "@/components/pending/PendingCaptures";
-import { HOME_LIMIT } from "@/lib/pendingCaptures";
 import { offerHomeWidgetsOnce } from "@/lib/insights/layout";
 import { HomeFinancialChart } from "@/components/dashboard/HomeFinancialChart";
 import { CHART_RANGES, pickOne, useChartPreference } from "@/lib/chartPreferences";
@@ -93,7 +91,6 @@ export default function DashboardWeb() {
         </section>
       ) : null}
 
-      <PendingCaptures limit={HOME_LIMIT} />
       <WidgetBoard surface="inicio" header={<h2 className="font-heading text-lg font-semibold">Seu painel</h2>} />
     </div>
   );

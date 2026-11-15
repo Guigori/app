@@ -1,0 +1,30 @@
+name: FINNOS · Cópia diária no MongoDB
+
+# Every day 07:20 UTC (04:20 in Brasília). Copies each user's complete backup into a MongoDB database used only for
+# backups (BACKUP_DB_NAME, default finnos_backup). It never writes to the historical database. Without the secrets
+# the job is skipped, never failing open.
+on:
+  schedule:
+    - cron: "20 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  daily-mongo-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install "pymongo[srv]==4.10.1"
+      - name: Copy backups to MongoDB
+        env:
+          MONGO_URL: ${{ secrets.MONGO_URL }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          BACKUP_DB_NAME: ${{ vars.BACKUP_DB_NAME }}
+          FINNOS_CRON_SECRET: ${{ secrets.FINNOS_CRON_SECRET }}
+        run: python scripts/backup_to_mongo.py

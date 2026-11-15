@@ -4,6 +4,7 @@ from finnos.lib.money import D
 import logging
 from datetime import date
 from fastapi import APIRouter, Depends, Query
+from finnos.lib.response_cache import revision_cached
 from starlette.concurrency import run_in_threadpool
 from finnos.lib import pending_captures as pending
 from finnos.lib.cards import cycle_bounds, due_date
@@ -45,6 +46,7 @@ async def _pending_items(uid: str, dismissed: set) -> list[NotificationItem]:
 
 
 @router.get("", response_model=NotificationsOut)
+@revision_cached("notifications", NotificationsOut)
 async def notifications(
     window_days: int = Query(default=7, ge=1, le=60), user: dict = Depends(require_user)
 ) -> NotificationsOut:
@@ -133,6 +135,10 @@ async def _low_balance_alerts(uid: str, today, dismissed: set) -> list[Notificat
     from finnos.routers.accounts import _enriched_accounts
 
     found = []
+    # The balances come from the whole history (a full scan): only worth it when some account has an alert on.
+    raw = await db.accounts.find({"user_id": uid}).to_list(500)
+    if not any(a.get("active", True) and (a.get("low_balance_alert") or a.get("benefit_runout_alert") or a.get("benefit_recharge_alert")) for a in raw):
+        return []
     enriched = await _enriched_accounts(uid)
     for account in enriched:
         if account.type == "beneficio" and account.active:

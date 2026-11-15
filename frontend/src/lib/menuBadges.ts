@@ -10,7 +10,8 @@ export type MenuBadge = { text: string; tone: "alert" | "warn" | "info"; count?:
  * monthly cost in Assinaturas. Shares the cache of the screens that already load the same data.
  */
 export function useMenuBadges(enabled: boolean): Partial<Record<string, MenuBadge>> {
-  const opts = { enabled, staleTime: 60_000, retry: false } as const;
+  // Badges are a glance, not live data: 5 minutes is fresh enough and keeps the reads down.
+  const opts = { enabled, staleTime: 300_000, retry: false } as const;
   const notifications = useQuery({ queryKey: ["notifications"], queryFn: fetchNotifications, ...opts });
   const radar = useQuery({ queryKey: ["radar"], queryFn: fetchRadar, ...opts });
   const subscriptions = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions, ...opts });

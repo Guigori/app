@@ -12,6 +12,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from statistics import mean
 from fastapi import APIRouter, Depends, HTTPException
+from finnos.lib.response_cache import revision_cached
 from finnos.lib.db import db
 from finnos.lib.dates import today_iso
 from finnos.lib.stats import add_months, month_portion, balance_effects
@@ -212,7 +213,7 @@ async def _signals(user_id: str) -> list[dict]:
     elif future and projected > balance and (projected >= 200):
         signals.append(dict(id=f'cash-opportunity-{month}', type='opportunity', severity='normal', title='Sua projeção abre espaço para uma meta', description=f'Saldo projetado de {brl(projected)} nos próximos 30 dias', explanation='Considerando os lançamentos já programados, sua projeção permanece positiva. Você pode avaliar direcionar parte para uma meta.', metric=brl(projected), score=40, related_entity_type='cashflow', expires_at=(today + timedelta(days=7)).isoformat(), evidence=[{'label': 'Projeção 30 dias', 'value': brl(projected)}]))
     try:
-        signals.extend(await recurring_signals(user_id, month_end(month)))
+        signals.extend(await recurring_signals(user_id, month_end(month), txs))
     except Exception:
         logger.exception('radar: recurring signals skipped')
     risky = {s.get('related_entity_id') for s in signals if s['id'].startswith('budget-')}
@@ -236,9 +237,12 @@ async def _signals(user_id: str) -> list[dict]:
     return out
 
 @router.get('', response_model=RadarOut)
+@revision_cached("radar", RadarOut)
 async def radar(user: dict=Depends(require_user)) -> RadarOut:
+    # Kept until the person's data or the day changes (finnos.lib.response_cache): dismissing a signal is a write.
     items = [RadarSignalOut(**s) for s in await _signals(user['id'])]
     return RadarOut(items=items, count=len(items), active_count=len(items))
+
 
 @router.post('/{signal_id}/action')
 async def radar_action(signal_id: str, payload: RadarActionIn, user: dict=Depends(require_user)):
