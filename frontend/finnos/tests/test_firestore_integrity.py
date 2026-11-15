@@ -20,7 +20,7 @@ def test_query_does_not_silently_truncate_transactions(monkeypatch):
             {"id": str(i), "user_id": uid} for i in range(3)
         ])
         # Whole-history reads of lançamentos come from the monthly pack; same rows here.
-        monkeypatch.setattr(adapter, "_all_transactions", lambda db, uid: adapter.rows(db, uid, "transactions"))
+        monkeypatch.setattr(adapter, "_all_transactions", lambda db, uid, only_if_current=False: adapter.rows(db, uid, "transactions"))
         with pytest.raises(HTTPException) as error:
             asyncio.run(adapter.db.transactions.find({"user_id": "uid-alpha"}).to_list(2))
         assert error.value.status_code == 413
@@ -37,7 +37,7 @@ def test_recent_previews_are_explicitly_bounded(monkeypatch):
             for i in range(1, 11)
         ])
         # Whole-history reads of lançamentos come from the monthly pack; same rows here.
-        monkeypatch.setattr(adapter, "_all_transactions", lambda db, uid: adapter.rows(db, uid, "transactions"))
+        monkeypatch.setattr(adapter, "_all_transactions", lambda db, uid, only_if_current=False: adapter.rows(db, uid, "transactions"))
         query = adapter.db.transactions.find({"user_id": "uid-alpha"})
         with pytest.raises(HTTPException) as error:
             asyncio.run(query.to_list(6))

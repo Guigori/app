@@ -17,6 +17,8 @@ So a stale pack can only cost one full read; it can never show different data.
 import json
 import logging
 import os
+import threading
+from collections import OrderedDict
 from contextvars import ContextVar
 
 logger = logging.getLogger(__name__)
@@ -38,6 +40,26 @@ def month_of(raw: dict) -> str:
     if isinstance(value, str) and len(value) >= 7 and value[4] == "-":
         return value[:7]
     return "sem-data"
+
+
+# The pack at one revision never changes, so a warm server keeps the last few in memory: opening another screen
+# costs only the revision read that every route already does.
+_memo: "OrderedDict[tuple[str, int], list]" = OrderedDict()
+_memo_lock = threading.Lock()
+MEMO_SIZE = 6
+
+
+def _remember(parent, revision: int, items: list) -> None:
+    with _memo_lock:
+        _memo[(parent.path, revision)] = items
+        _memo.move_to_end((parent.path, revision))
+        while len(_memo) > MEMO_SIZE:
+            _memo.popitem(last=False)
+
+
+def _recall(parent, revision: int):
+    with _memo_lock:
+        return _memo.get((parent.path, revision))
 
 
 def _meta_ref(parent):
@@ -70,6 +92,9 @@ def _stream_all(parent):
 
 
 def _read_pack(parent, expected_revision: int):
+    remembered = _recall(parent, expected_revision)
+    if remembered is not None:
+        return remembered
     meta_snap = _meta_ref(parent).get()
     meta = meta_snap.to_dict() if meta_snap.exists else None
     if not meta or meta.get("v") != SCHEMA or meta.get("rev") != expected_revision or meta.get("disabled"):
@@ -83,6 +108,7 @@ def _read_pack(parent, expected_revision: int):
             return None
         items.extend((data.get("items") or {}).items())
     items.sort(key=lambda item: item[0])
+    _remember(parent, expected_revision, items)
     return items
 
 
@@ -90,7 +116,7 @@ def _too_big(month_docs: dict, index_size: int) -> bool:
     return index_size > MAX_INDEX or any(len(json.dumps(v, default=str)) > MAX_MONTH_BYTES for v in month_docs.values())
 
 
-def _build(parent, items, revision: int) -> None:
+def _build(parent, items, revision: int) -> bool:
     """Writes the pack for `items` (all of them) as revision `revision`, if it still is the current one."""
     from google.cloud import firestore
     by_month: dict[str, dict] = {}
@@ -107,12 +133,13 @@ def _build(parent, items, revision: int) -> None:
         finance = parent.collection("_meta").document("finance").get(transaction=tr)
         current = (finance.to_dict() or {}) if finance.exists else {}
         if current.get("revision", 0) != revision:
-            return
+            return False
         for month, month_items in by_month.items():
             tr.set(parent.collection(PACK).document(month), {"stamp": revision, "items": month_items})
         tr.set(_meta_ref(parent), meta)
+        return True
 
-    run(parent._client.transaction(max_attempts=1))
+    return bool(run(parent._client.transaction(max_attempts=1)))
 
 
 def current_pack(parent, expected_revision: int):
@@ -139,7 +166,9 @@ def raw_transactions(parent, expected_revision: int):
     items = _stream_all(parent)
     if enabled():
         try:
-            _build(parent, items, expected_revision)
+            if _build(parent, items, expected_revision):
+                # Confirmed at the revision after the whole stream: this is exactly the history at it.
+                _remember(parent, expected_revision, items)
         except Exception:
             logger.warning("tx pack not rebuilt", exc_info=True)
     return items

@@ -3,6 +3,7 @@ exactly what a full read of the collection returns, and every screen must answer
 Synthetic demo project and UIDs only; runs in CI's emulator job."""
 import asyncio
 import os
+import re
 from unittest.mock import patch
 
 import firebase_admin
@@ -53,12 +54,16 @@ def test_pack_follows_every_write(instance):
     first = tx_pack.raw_transactions(parent, rev)          # streams and builds
     assert first == full(parent)
 
-    meter = read_meter.start()
     read_meter.install()
-    again = tx_pack.raw_transactions(parent, rev)          # from the pack
-    assert again == full(parent)
+    meter = read_meter.start()
+    assert tx_pack.raw_transactions(parent, rev) == first  # same server, same revision: from memory
+    assert meter.reads == 0, meter.reads
+    tx_pack._memo.clear()                                  # another server: the meta and one document per month
+    again = tx_pack.raw_transactions(parent, rev)
+    reads = meter.reads
     months = len(parent.collection("_meta").document("tx_pack").get().to_dict()["months"])
-    assert meter.reads <= months + 1, (meter.reads, months)
+    assert reads == months + 1, (reads, months)
+    assert again == full(parent)
 
     col = parent.collection("transactions")
     base = {"name": "Novo", "value_cents": 990, "type": "despesa", "status": "pago", "date": "2026-11-02",
@@ -75,6 +80,7 @@ def test_pack_follows_every_write(instance):
     ]
     for label, write in writes:
         store.atomic(instance, uid, write)
+        tx_pack._memo.clear()
         assert packed(parent) == full(parent), label
 
 
@@ -132,7 +138,8 @@ def test_screens_answer_the_same_with_and_without_the_pack(instance, monkeypatch
         out = {}
         for url in ROUTES:
             response = await client.get(url)
-            out[url] = (response.status_code, response.text)
+            # Times stamped at the moment of the answer ("…T12:00:07.307902Z") are not data.
+            out[url] = (response.status_code, re.sub(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+Z", "<agora>", response.text))
         return out
 
     async def scenario():

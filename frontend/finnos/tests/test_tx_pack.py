@@ -68,10 +68,21 @@ def test_watch_records_and_still_writes():
 def test_broad_transaction_queries_use_the_pack(monkeypatch):
     every = [{"id": "a", "user_id": "u", "type": "despesa", "status": "pago", "date": "2026-11-01"},
              {"id": "b", "user_id": "u", "type": "receita", "status": "pago", "date": "2026-11-02"}]
-    monkeypatch.setattr(store, "_all_transactions", lambda db, uid: [dict(d) for d in every])
+    monkeypatch.setattr(store, "_all_transactions", lambda db, uid, only_if_current=False: [dict(d) for d in every])
     monkeypatch.setattr(store, "rows", lambda *a, **k: (_ for _ in ()).throw(AssertionError("full scan")))
     assert [d["id"] for d in store.query_rows(None, "u", "transactions", {"user_id": "u"})] == ["a", "b"]
     assert [d["id"] for d in store.query_rows(None, "u", "transactions", {"type": "despesa", "status": "pago"})] == ["a"]
+
+
+def test_which_queries_read_the_pack():
+    choice = store._pack_choice
+    assert choice([]) == "pack"
+    assert choice([("type", "==", "despesa"), ("status", "==", "pago")]) == "pack"
+    assert choice([("card_id", "==", "c")]) == "pack-if-current"
+    assert choice([("account_id", "==", "a"), ("type", "==", "despesa")]) == "pack-if-current"
+    assert choice([("status", "in", ["agendado", "pendente"])]) == "query"
+    assert choice([("date", ">=", "2026-11-01"), ("date", "<=", "2026-11-30")]) == "query"
+    assert choice([("name", "==", "Mercado")]) == "query"
 
 
 def test_selective_queries_and_other_collections_do_not(monkeypatch):

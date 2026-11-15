@@ -24,6 +24,12 @@ HEADERS = {"Origin": "http://testserver", "Authorization": "Bearer synthetic", "
 TODAY = "2026-11-15"
 N = 300
 
+# Read budget (300 lançamentos): CI fails when a change makes a screen read more than this. "again" is opening
+# it once more with nothing new; "after" is opening it right after one new lançamento.
+BUDGET_AGAIN = 3
+BUDGET_AFTER = 45
+UNCACHED = {"/api/transactions?start_date=2026-11-01&end_date=2026-11-30": 25}   # list of the month: one read each
+
 ROUTES = [
     ("Início · resumo do mês", "/api/dashboard?month=2026-11"),
     ("Início · resumo do mês anterior", "/api/dashboard?month=2026-10"),
@@ -106,5 +112,13 @@ def test_reads_per_route(monkeypatch):
     if summary:
         with open(summary, "a", encoding="utf-8") as fh:
             fh.write(text + "\n")
-    # The table is the result; a route that fails on the synthetic seed shows its status instead of stopping CI.
-    assert sum(row[2] < 500 for row in rows) >= len(rows) // 2, rows
+    assert all(row[2] == 200 for row in rows), rows
+    over = []
+    for label, url, _, _, again, after in rows:
+        limit_again = UNCACHED.get(url, BUDGET_AGAIN)
+        limit_after = UNCACHED.get(url, BUDGET_AFTER)
+        if not str(again).isdigit() or int(again) > limit_again:
+            over.append(f"{label}: abrir de novo leu {again} (limite {limit_again})")
+        if not str(after).isdigit() or int(after) > limit_after:
+            over.append(f"{label}: depois de um lançamento leu {after} (limite {limit_after})")
+    assert not over, "Orçamento de leituras excedido:\n" + "\n".join(over)

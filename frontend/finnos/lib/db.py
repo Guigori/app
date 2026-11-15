@@ -177,17 +177,31 @@ def _pushdown(query):
     return [c for c in equals if c[1] == "=="] + ins[:1]
 
 
-# Filters that still leave most lançamentos (paid expenses, say): the monthly pack is cheaper than the query.
-_BROAD_FIELDS = frozenset({"type", "status", "origin", "recurrence"})
+def _pack_choice(clauses) -> str:
+    """How a query on lançamentos is cheapest: "pack" when it keeps most of them (paid expenses, say) — read
+    the monthly pack, rebuilding it if needed; "pack-if-current" when it may keep many (one card, one account) —
+    the pack only if it is already current; "query" when Firestore narrows it well (a date range, pending ones)."""
+    if any(op in ("<", "<=", ">", ">=") for _, op, _ in clauses):
+        return "query"
+    if all(field == "type" or (field == "status" and op == "==" and value == "pago") for field, op, value in clauses):
+        return "pack"
+    if all(field in ("card_id", "account_id", "to_account_id", "category_id", "type", "status")
+           for field, _, _ in clauses) and not any(f == "status" and v != "pago" for f, _, v in clauses):
+        return "pack-if-current"
+    return "query"
 
 
-def _all_transactions(db, uid):
+def _all_transactions(db, uid, only_if_current=False):
     """Every lançamento from the monthly pack (finnos.lib.tx_pack): one read per month instead of one per
-    lançamento. Streams (and rebuilds the pack) when it is not current."""
+    lançamento. Streams (and rebuilds the pack) when it is not current, or returns None if only_if_current."""
     from finnos.lib import tx_pack
     from finnos.lib.account_balances import _revision
     parent = root(db, uid)
-    items = tx_pack.raw_transactions(parent, _revision(parent))
+    revision = _revision(parent)
+    items = (tx_pack.current_pack(parent, revision) if only_if_current
+             else tx_pack.raw_transactions(parent, revision))
+    if items is None:
+        return None
     if len(items) > 20000:
         raise HTTPException(413, "Volume financeiro exige paginação; nenhum total parcial foi exibido.")
     return [dict(decode(raw), id=tx_id, user_id=uid) for tx_id, raw in items]
@@ -197,10 +211,13 @@ def query_rows(db, uid, name, query):
     """Documents matching `query`, letting Firestore filter first when it can. Same result as filtering every
     row in Python (the Python filter still runs), only cheaper; any query Firestore refuses falls back to it."""
     clauses = _pushdown(query)
-    if name == "transactions" and all(field in _BROAD_FIELDS for field, _, _ in clauses):
+    if name == "transactions":
         from finnos.lib import tx_pack
-        if tx_pack.enabled():
-            return [d for d in _all_transactions(db, uid) if matches(d, query)]
+        choice = _pack_choice(clauses) if tx_pack.enabled() else "query"
+        if choice != "query":
+            docs = _all_transactions(db, uid, only_if_current=choice == "pack-if-current")
+            if docs is not None:
+                return [d for d in docs if matches(d, query)]
     if not clauses:
         return [d for d in rows(db, uid, name) if matches(d, query)]
     ref = root(db, uid).collection(name)
