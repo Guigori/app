@@ -212,7 +212,7 @@ async def _signals(user_id: str) -> list[dict]:
     elif future and projected > balance and (projected >= 200):
         signals.append(dict(id=f'cash-opportunity-{month}', type='opportunity', severity='normal', title='Sua projeção abre espaço para uma meta', description=f'Saldo projetado de {brl(projected)} nos próximos 30 dias', explanation='Considerando os lançamentos já programados, sua projeção permanece positiva. Você pode avaliar direcionar parte para uma meta.', metric=brl(projected), score=40, related_entity_type='cashflow', expires_at=(today + timedelta(days=7)).isoformat(), evidence=[{'label': 'Projeção 30 dias', 'value': brl(projected)}]))
     try:
-        signals.extend(await recurring_signals(user_id, month_end(month)))
+        signals.extend(await recurring_signals(user_id, month_end(month), txs))
     except Exception:
         logger.exception('radar: recurring signals skipped')
     risky = {s.get('related_entity_id') for s in signals if s['id'].startswith('budget-')}
@@ -235,19 +235,46 @@ async def _signals(user_id: str) -> list[dict]:
         s['radar_position'] = POSITIONS[i % len(POSITIONS)]
     return out
 
+# The Radar reads every transaction of the person. The menu badge, the Radar widget and the Radar screen
+# ask for it close together, so a warm instance answers repeats from memory for a short while (dismissing or
+# acting on a signal clears it).
+_CACHE: dict[str, tuple[float, object, RadarOut]] = {}
+CACHE_SECONDS = 90
+
+
+def _forget(user_id: str) -> None:
+    _CACHE.pop(user_id, None)
+
+
 @router.get('', response_model=RadarOut)
 async def radar(user: dict=Depends(require_user)) -> RadarOut:
+    import time
+    # A new lançamento or account change moves the finance revision (one small read), so it is never served stale.
+    try:
+        from finnos.lib.account_balances import finance_revision
+        revision = await finance_revision(user['id'])
+    except Exception:
+        revision = None
+    hit = _CACHE.get(user['id'])
+    if hit and revision is not None and hit[1] == revision and time.monotonic() - hit[0] < CACHE_SECONDS:
+        return hit[2]
     items = [RadarSignalOut(**s) for s in await _signals(user['id'])]
-    return RadarOut(items=items, count=len(items), active_count=len(items))
+    out = RadarOut(items=items, count=len(items), active_count=len(items))
+    _CACHE[user['id']] = (time.monotonic(), revision, out)
+    if len(_CACHE) > 500:
+        _CACHE.pop(next(iter(_CACHE)))
+    return out
 
 @router.post('/{signal_id}/action')
 async def radar_action(signal_id: str, payload: RadarActionIn, user: dict=Depends(require_user)):
     state = {'view': 'viewed', 'dismiss': 'dismissed', 'resolve': 'resolved'}[payload.action]
+    _forget(user['id'])
     await db.radar_states.update_one({'user_id': user['id'], 'signal_id': signal_id}, {'$set': {'state': state, 'updated_at': datetime.now(timezone.utc)}, '$setOnInsert': {'detected_at': datetime.now(timezone.utc)}}, upsert=True)
     return {'ok': True, 'state': state}
 
 @router.post('/{signal_id}/feedback')
 async def radar_feedback(signal_id: str, payload: RadarFeedbackIn, user: dict=Depends(require_user)):
+    _forget(user['id'])
     doc = {'id': str(uuid.uuid4()), 'user_id': user['id'], 'signal_id': signal_id, 'feedback': payload.feedback, 'note': payload.note, 'created_at': datetime.now(timezone.utc)}
     await db.radar_feedback.insert_one(doc)
     update = {'last_feedback': payload.feedback, 'updated_at': datetime.now(timezone.utc)}

@@ -249,7 +249,8 @@ export function PendingCaptures({ limit }: { limit?: number } = {}) {
     // A purchase made seconds ago must show when the person comes back from Wallet.
     staleTime: 10_000,
     refetchOnWindowFocus: "always",
-    refetchInterval: 60_000,
+    // Coming back to the app already refetches; the timer is only a safety net (each check is a server read).
+    refetchInterval: 5 * 60_000,
   });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, enabled, staleTime: 30_000 });
   const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards, enabled, staleTime: 30_000 });
