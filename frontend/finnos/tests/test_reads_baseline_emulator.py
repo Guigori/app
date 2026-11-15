@@ -37,9 +37,12 @@ ROUTES = [
     ("Assinaturas", "/api/subscriptions"),
 ]
 
+NEW_TX = {"name": "Padaria", "value": 12.5, "type": "despesa", "status": "pago", "date": "2026-11-14",
+          "account_id": "bank", "category_id": "food"}
 
-def seed(instance):
-    owner = store.root(instance, UID)
+
+def seed(instance, uid=UID, n=N):
+    owner = store.root(instance, uid)
     owner.collection("_meta").document("finance").set({"revision": 1})
     owner.collection("accounts").document("bank").set({"name": "Conta", "type": "corrente", "institution": "Banco", "initial_balance_cents": 500000, "active": True, "created_at": "2025-12-01T00:00:00+00:00"})
     owner.collection("categories").document("food").set({"name": "Mercado", "color": "#84cc16", "icon": "shopping-cart", "group": "necessidades", "monthly_budget_cents": 60000, "monthly_goal_cents": 0, "created_at": "2025-12-01T00:00:00+00:00"})
@@ -49,8 +52,8 @@ def seed(instance):
     })
     start = date(2025, 12, 1)
     batch = instance.batch()
-    for i in range(N):
-        day = start + timedelta(days=(i * 350) // N)
+    for i in range(n):
+        day = start + timedelta(days=(i * 350) // n)
         on_card = i % 3 == 0
         batch.set(owner.collection("transactions").document(f"t{i:04d}"), {
             "name": f"Compra {i % 25}", "value_cents": 1000 + (i % 40) * 137, "type": "despesa" if i % 10 else "receita",
@@ -75,7 +78,7 @@ def test_reads_per_route(monkeypatch):
     monkeypatch.setattr(api, "verified_claims", lambda token, session=False: {"uid": UID, "email": "t@example.invalid", "email_verified": True})
     monkeypatch.setattr(dates, "today_iso", lambda: TODAY)
 
-    rows = []
+    rows, changes = [], []
 
     async def scenario():
         transport = httpx.ASGITransport(app=api.app, raise_app_exceptions=False)
@@ -83,14 +86,20 @@ def test_reads_per_route(monkeypatch):
             for label, url in ROUTES:
                 first = await client.get(url)
                 again = await client.get(url)
-                rows.append((label, url, first.status_code, first.headers.get("X-Finnos-Reads", "?"), again.headers.get("X-Finnos-Reads", "?")))
+                rows.append([label, url, first.status_code, first.headers.get("X-Finnos-Reads", "?"), again.headers.get("X-Finnos-Reads", "?")])
+            # One new lançamento, then every screen again: what a person pays after each registro.
+            created = await client.post("/api/transactions", json=NEW_TX, headers={"X-Finnos-Operation-Id": "reads-after-change"})
+            assert created.status_code == 201, created.text[:500]
+            changes.append(created.json()["id"])
+            for row in rows:
+                after = await client.get(row[1])
+                row.append(after.headers.get("X-Finnos-Reads", "?"))
     asyncio.run(scenario())
 
-    table = [f"### Leituras do Firestore por rota ({N} lançamentos sintéticos)", "", "| Tela | Rota | Status | 1ª abertura | Abrir de novo (sem mudança) |", "| --- | --- | --- | --- | --- |"]
-    table += [f"| {label} | `{url}` | {status} | {reads} | {again} |" for label, url, status, reads, again in rows]
-    total = sum(int(r[3]) for r in rows if str(r[3]).isdigit())
-    total_again = sum(int(r[4]) for r in rows if str(r[4]).isdigit())
-    table += [f"| **Total** | | | **{total}** | **{total_again}** |", ""]
+    table = [f"### Leituras do Firestore por rota ({N} lançamentos sintéticos)", "", "| Tela | Rota | Status | 1ª abertura | Abrir de novo (sem mudança) | Depois de 1 lançamento novo |", "| --- | --- | --- | --- | --- | --- |"]
+    table += [f"| {label} | `{url}` | {status} | {reads} | {again} | {after} |" for label, url, status, reads, again, after in rows]
+    totals = [sum(int(r[i]) for r in rows if str(r[i]).isdigit()) for i in (3, 4, 5)]
+    table += [f"| **Total** | | | **{totals[0]}** | **{totals[1]}** | **{totals[2]}** |", ""]
     text = "\n".join(table)
     print(text)
     summary = os.getenv("GITHUB_STEP_SUMMARY")
@@ -98,4 +107,4 @@ def test_reads_per_route(monkeypatch):
         with open(summary, "a", encoding="utf-8") as fh:
             fh.write(text + "\n")
     # The table is the result; a route that fails on the synthetic seed shows its status instead of stopping CI.
-    assert sum(status < 500 for _, _, status, _, _ in rows) >= len(rows) // 2, rows
+    assert sum(row[2] < 500 for row in rows) >= len(rows) // 2, rows

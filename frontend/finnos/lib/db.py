@@ -177,10 +177,30 @@ def _pushdown(query):
     return [c for c in equals if c[1] == "=="] + ins[:1]
 
 
+# Filters that still leave most lançamentos (paid expenses, say): the monthly pack is cheaper than the query.
+_BROAD_FIELDS = frozenset({"type", "status", "origin", "recurrence"})
+
+
+def _all_transactions(db, uid):
+    """Every lançamento from the monthly pack (finnos.lib.tx_pack): one read per month instead of one per
+    lançamento. Streams (and rebuilds the pack) when it is not current."""
+    from finnos.lib import tx_pack
+    from finnos.lib.account_balances import _revision
+    parent = root(db, uid)
+    items = tx_pack.raw_transactions(parent, _revision(parent))
+    if len(items) > 20000:
+        raise HTTPException(413, "Volume financeiro exige paginação; nenhum total parcial foi exibido.")
+    return [dict(decode(raw), id=tx_id, user_id=uid) for tx_id, raw in items]
+
+
 def query_rows(db, uid, name, query):
     """Documents matching `query`, letting Firestore filter first when it can. Same result as filtering every
     row in Python (the Python filter still runs), only cheaper; any query Firestore refuses falls back to it."""
     clauses = _pushdown(query)
+    if name == "transactions" and all(field in _BROAD_FIELDS for field, _, _ in clauses):
+        from finnos.lib import tx_pack
+        if tx_pack.enabled():
+            return [d for d in _all_transactions(db, uid) if matches(d, query)]
     if not clauses:
         return [d for d in rows(db, uid, name) if matches(d, query)]
     ref = root(db, uid).collection(name)
@@ -269,6 +289,9 @@ def matching_rows(db, uid, name, query, transaction=None):
     return [doc for doc in rows(db, uid, name, transaction) if matches(doc, query)]
 
 def atomic(db, uid, action):
+    from finnos.lib import tx_pack
+    attempt = {}
+
     @firestore.transactional
     def execute(transaction):
         revision = root(db, uid).collection("_meta").document("finance")
@@ -276,15 +299,24 @@ def atomic(db, uid, action):
         version = (before.to_dict() or {}).get("revision", 0)
         from finnos.lib import finance_shadow_outbox
         token = finance_shadow_outbox.begin(uid, version)
+        pack_token = tx_pack.begin()
+        tx_pack.watch_transaction(transaction)
         try:
             result = action(transaction)
             finance_shadow_outbox.finish(transaction, root(db, uid), version)
             transaction.set(revision, {"revision": version + 1})
+            attempt.update(version=version, changes=tx_pack.take(pack_token))
+            pack_token = None
             return result
         finally:
+            if pack_token is not None:
+                tx_pack.take(pack_token)
             finance_shadow_outbox.end(token)
 
-    return execute(db.transaction(max_attempts=5))
+    result = execute(db.transaction(max_attempts=5))
+    if attempt:
+        tx_pack.apply_changes(db, uid, attempt["version"], attempt["changes"])
+    return result
 
 
 _TRANSFER_KEYS = ("value", "account_id", "to_account_id", "status", "date", "type")

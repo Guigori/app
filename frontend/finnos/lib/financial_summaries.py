@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 
 from finnos.lib import db as store
+from finnos.lib import tx_pack
 from finnos.lib.account_balances import PAGE_SIZE, AccountLedger, _revision
 from finnos.lib.competency import credit_events
 from finnos.lib.money import D, cents
@@ -126,28 +127,8 @@ async def stream_financial_window(
         window = FinancialWindow(
             months, cards, accounts=accounts, today=today, recent_month=recent_month,
         )
-        collection = parent.collection("transactions")
-        previous = None
-        previous_id = None
-        while True:
-            query = collection.order_by("__name__")
-            if previous is not None:
-                query = query.start_after(previous)
-            snapshots = list(query.limit(PAGE_SIZE).stream(timeout=15))
-            if len(snapshots) > PAGE_SIZE:
-                raise HTTPException(503, "Página financeira inválida.")
-            for snapshot in snapshots:
-                if previous_id is not None and snapshot.id <= previous_id:
-                    raise HTTPException(503, "Ordenação financeira inválida.")
-                raw = snapshot.to_dict()
-                if not isinstance(raw, dict):
-                    raise HTTPException(503, "Lançamento financeiro inválido.")
-                tx = dict(store.decode(raw), id=snapshot.id, user_id=user_id)
-                window.add(tx)
-                previous_id = snapshot.id
-            if len(snapshots) < PAGE_SIZE:
-                break
-            previous = snapshots[-1]
+        for tx_id, raw in tx_pack.raw_transactions(parent, expected_revision):
+            window.add(dict(store.decode(raw), id=tx_id, user_id=user_id))
         if _revision(parent) != expected_revision:
             raise HTTPException(
                 409, "Histórico alterado durante a consulta; atualize para recalcular."

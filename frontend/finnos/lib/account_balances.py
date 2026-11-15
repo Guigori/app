@@ -74,29 +74,11 @@ async def finance_revision(user_id: str) -> int:
     return await run_in_threadpool(read)
 
 
-def _fold_transactions(parent, user_id: str, fold) -> None:
-    """Every transaction of the user, in bounded pages ordered by document ID."""
-    collection = parent.collection("transactions")
-    previous_snapshot = None
-    previous_id = None
-    while True:
-        query = collection.order_by("__name__")
-        if previous_snapshot is not None:
-            query = query.start_after(previous_snapshot)
-        snapshots = list(query.limit(PAGE_SIZE).stream(timeout=15))
-        if len(snapshots) > PAGE_SIZE:
-            raise HTTPException(503, "Página financeira inválida.")
-        for snapshot in snapshots:
-            if previous_id is not None and snapshot.id <= previous_id:
-                raise HTTPException(503, "Ordenação do histórico financeiro inválida.")
-            raw = snapshot.to_dict()
-            if not isinstance(raw, dict):
-                raise HTTPException(503, "Registro financeiro inválido.")
-            fold(dict(store.decode(raw), id=snapshot.id, user_id=user_id))
-            previous_id = snapshot.id
-        if len(snapshots) < PAGE_SIZE:
-            break
-        previous_snapshot = snapshots[-1]
+def _fold_transactions(parent, user_id: str, fold, expected_revision: int) -> None:
+    """Every transaction of the user (the monthly pack when current, else bounded pages ordered by ID)."""
+    from finnos.lib import tx_pack
+    for tx_id, raw in tx_pack.raw_transactions(parent, expected_revision):
+        fold(dict(store.decode(raw), id=tx_id, user_id=user_id))
 
 
 async def stream_cash_history(user_id: str, accounts: list[dict], month: str, today: str, expected_revision: int) -> dict:
@@ -108,7 +90,7 @@ async def stream_cash_history(user_id: str, accounts: list[dict], month: str, to
     def read():
         parent = store.root(store.client(), user_id)
         history = CashHistory(accounts, month, today)
-        _fold_transactions(parent, user_id, history.add)
+        _fold_transactions(parent, user_id, history.add, expected_revision)
         if _revision(parent) != expected_revision:
             raise HTTPException(409, "Histórico alterado durante a conciliação; atualize para recalcular.")
         return history.result()
@@ -131,28 +113,7 @@ async def stream_account_balances(
     def read():
         parent = store.root(store.client(), user_id)
         ledger = AccountLedger(accounts, today)
-        collection = parent.collection("transactions")
-        previous_snapshot = None
-        previous_id = None
-        while True:
-            query = collection.order_by("__name__")
-            if previous_snapshot is not None:
-                query = query.start_after(previous_snapshot)
-            snapshots = list(query.limit(PAGE_SIZE).stream(timeout=15))
-            if len(snapshots) > PAGE_SIZE:
-                raise HTTPException(503, "Página financeira inválida.")
-            for snapshot in snapshots:
-                if previous_id is not None and snapshot.id <= previous_id:
-                    raise HTTPException(503, "Ordenação do histórico financeiro inválida.")
-                raw = snapshot.to_dict()
-                if not isinstance(raw, dict):
-                    raise HTTPException(503, "Registro financeiro inválido.")
-                tx = dict(store.decode(raw), id=snapshot.id, user_id=user_id)
-                ledger.add(tx)
-                previous_id = snapshot.id
-            if len(snapshots) < PAGE_SIZE:
-                break
-            previous_snapshot = snapshots[-1]
+        _fold_transactions(parent, user_id, ledger.add, expected_revision)
         if _revision(parent) != expected_revision:
             raise HTTPException(
                 409, "Histórico alterado durante a conciliação; atualize para recalcular."
