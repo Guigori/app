@@ -19,6 +19,19 @@ export const STALE_LISTENING = 30 * 60_000;
 export const STALE_POLLING = 120_000;
 
 let live = false;
+let latestRevision: number | null = null;
+let latestRevisionAt: number | null = null;
+
+/** When the listener last reported a new revision (ms). */
+export function revisionSeenAt(): number | null {
+  return latestRevisionAt;
+}
+
+/** The finance revision the listener last saw, or null when the app is not listening (then nothing may assume
+ *  that a copy kept on the device is current). */
+export function knownRevision(): number | null {
+  return live ? latestRevision : null;
+}
 const subscribers = new Set<() => void>();
 const setLive = (next: boolean) => {
   if (live === next) return;
@@ -58,6 +71,8 @@ async function listen(user: User) {
     (snap) => {
       const revision = Number((snap.data() as { revision?: number } | undefined)?.revision ?? 0);
       last = onRevision(last, revision);
+      if (revision !== latestRevision) latestRevisionAt = Date.now();
+      latestRevision = revision;
       setLive(true);
       keepDeviceCopy(revision);
     },

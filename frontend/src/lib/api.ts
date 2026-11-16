@@ -1,5 +1,6 @@
 import { firebaseAuth } from "@/lib/firebase";
 import { QUOTA_CODE, isQuotaBody, markQuotaExhausted, quotaBlockedUntil } from "@/lib/quota";
+import { markServerWrite } from "@/lib/writeMark";
 // Typed fetch layer over the FastAPI backend. Base is the relative "/api" prefix so the
 // same code works in dev (Vite proxies /api → the Firestore API on :8002) and behind a single origin in prod.
 const BASE = "/api";
@@ -55,6 +56,7 @@ async function request<T>(method: string, path: string, body?: JsonBody, extraHe
     throw new ApiError(res.status, errBody);
   }
 
+  if (method !== "GET") markServerWrite();
   if (res.status === 204) return undefined as T;
   const revision = res.headers?.get?.("X-Finnos-Revision");
   if (method === "GET" && revision !== null && revision !== undefined && revision !== "") servedRevisions.set(path, Number(revision));

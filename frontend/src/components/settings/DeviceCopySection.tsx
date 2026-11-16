@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RefreshCw, Smartphone } from "lucide-react";
-import { deviceCopyAge, mirrorStatus, refreshMirror, refreshWait } from "@/lib/mirror";
+import { DEVICE_FIRST_AFTER, deviceCopyAge, deviceFirstScreens, mirrorStatus, refreshMirror, refreshWait } from "@/lib/mirror";
 import { getApiErrorMessage } from "@/lib/errors";
 
 const SCREEN_NAMES: Record<string, string> = {
@@ -73,6 +73,17 @@ export function DeviceCopySection() {
               : <span className="text-amber-600 dark:text-amber-400">{differences} {differences === 1 ? "diferença" : "diferenças"} em {report.checked} telas</span>}
           </dd>
         </div>
+        {report && report.checked > 0 ? (
+          <div className="flex justify-between gap-3" data-testid="settings-device-first">
+            <dt className="text-muted-foreground">Abrindo pelo aparelho</dt>
+            <dd className="text-right font-medium">
+              {(() => {
+                const ready = deviceFirstScreens(report).map((name) => SCREEN_NAMES[name] ?? name);
+                return ready.length ? ready.join(", ") : `ainda conferindo (${DEVICE_FIRST_AFTER} acertos por tela)`;
+              })()}
+            </dd>
+          </div>
+        ) : null}
         {differences > 0 ? <p className="pt-1 text-muted-foreground">Os números que você vê continuam vindo do servidor; as diferenças só servem para conferir a cópia.</p> : null}
         {differences > 0 && report?.last.length ? (
           <details className="pt-1" data-testid="settings-device-differences">

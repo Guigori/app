@@ -12,7 +12,7 @@ import { isLocalMode, getMode } from "@/lib/mode";
 import { loadSessionProfile } from "@/lib/profileIdentity";
 import { queueTransaction, queueTransactionDelete, queueEntityCreate, queueEntityMutation, flushSyncQueue, listSyncOperations, isTransactionSyncOperation, type OperationSource } from "@/lib/sync/queue";
 import { cacheGet, cacheSet, cachedFetch } from "@/lib/offline/accountCache";
-import { computeFromDeviceCopy, shadowCheck } from "@/lib/mirror";
+import { computeFromDeviceCopy, deviceFirst, shadowCheck } from "@/lib/mirror";
 import { withIntent } from "@/lib/sync/intent";
 import {
   localFinanceHistory,
@@ -201,8 +201,10 @@ function applyPendingToDashboard(base: Dashboard, pending: { id: string; payload
 export async function fetchDashboard(month: string | null): Promise<Dashboard> {
   if (isLocalMode()) return localDashboard(month);
   const path = month ? `/dashboard?month=${month}` : "/dashboard";
-  const base = await cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(path), () => computeFromDeviceCopy(() => localDashboard(month)));
-  shadowCheck("dashboard", path, base, () => localDashboard(month));
+  const device = await deviceFirst("dashboard", () => localDashboard(month));
+  const base = device && "value" in device ? device.value
+    : await cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(path), () => computeFromDeviceCopy(() => localDashboard(month)));
+  if (!(device && "value" in device)) shadowCheck("dashboard", path, base, () => localDashboard(month), !!device);
   const pending = (await listSyncOperations()).filter(isTransactionSyncOperation).filter((o) => o.kind === "transaction.create");
   return applyPendingToDashboard(base, pending);
 }
@@ -286,8 +288,10 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
 export async function fetchBalanceHistory(month: string): Promise<BalanceHistory> {
   if (isLocalMode()) return localBalanceHistory(month);
   const path = `/analytics/balance-history?month=${month}`;
+  const device = await deviceFirst("balanceHistory", () => localBalanceHistory(month));
+  if (device && "value" in device) return device.value;
   const server = await cachedFetch(`balance-history:${month}`, () => apiGet<BalanceHistory>(path), () => computeFromDeviceCopy(() => localBalanceHistory(month)));
-  shadowCheck("balanceHistory", path, server, () => localBalanceHistory(month));
+  shadowCheck("balanceHistory", path, server, () => localBalanceHistory(month), !!device);
   return server;
 }
 
@@ -295,8 +299,10 @@ export async function fetchCalendar(month: string, categoryId?: string): Promise
   if (isLocalMode()) return localCalendar(month, categoryId);
   const category = categoryId ? `&category_id=${encodeURIComponent(categoryId)}` : "";
   const path = `/analytics/calendar?month=${month}${category}`;
+  const device = await deviceFirst("calendar", () => localCalendar(month, categoryId));
+  if (device && "value" in device) return device.value;
   const server = await cachedFetch(`calendar:${month}${categoryId ? `:${categoryId}` : ""}`, () => apiGet<CalendarMonth>(path), () => computeFromDeviceCopy(() => localCalendar(month, categoryId)));
-  shadowCheck("calendar", path, server, () => localCalendar(month, categoryId));
+  shadowCheck("calendar", path, server, () => localCalendar(month, categoryId), !!device);
   return server;
 }
 
@@ -392,8 +398,10 @@ export async function deleteInstitution(id: string): Promise<void> {
 
 export async function fetchAccounts(): Promise<Account[]> {
   if (isLocalMode()) return localListAccounts();
+  const device = await deviceFirst("accounts", () => localListAccounts());
+  if (device && "value" in device) return device.value;
   const server = await cachedFetch("accounts", () => apiGet<Account[]>("/accounts"), () => computeFromDeviceCopy(() => localListAccounts()));
-  shadowCheck("accounts", "/accounts", server, () => localListAccounts());
+  shadowCheck("accounts", "/accounts", server, () => localListAccounts(), !!device);
   return server;
 }
 

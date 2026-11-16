@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { asLocalDb, comparisons } from "@/lib/mirror";
 import { freshDb, withReadOnlyDb, writeDb, readDb } from "@/lib/local/store";
 import type { Dashboard } from "@/types/finnos";
@@ -38,5 +38,33 @@ describe("device copy", () => {
     expect(() => withReadOnlyDb(copy, () => writeDb(freshDb()))).toThrow("somente leitura");
     const other = asLocalDb({ revision: 8, checksum_sha256: "", collections: {} });
     expect(withReadOnlyDb(other, () => readDb())).toBe(other);
+  });
+});
+
+describe("screens opened from the device", () => {
+  it("only screens with enough matches and no difference", async () => {
+    const { deviceFirstScreens, DEVICE_FIRST_AFTER } = await import("@/lib/mirror");
+    const report = { checked: 0, matched: 0, skipped: 0, errors: 0, last: [], byScreen: {
+      dashboard: { checked: DEVICE_FIRST_AFTER, matched: DEVICE_FIRST_AFTER },
+      calendar: { checked: DEVICE_FIRST_AFTER + 5, matched: DEVICE_FIRST_AFTER + 4 },
+      accounts: { checked: 3, matched: 3 },
+    } };
+    const store = new Map<string, string>();
+    vi.stubGlobal("window", { localStorage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) } });
+    vi.stubGlobal("indexedDB", {});
+    expect(deviceFirstScreens(report)).toEqual(["dashboard"]);
+    store.set("finnos:device-first", "off");
+    expect(deviceFirstScreens(report)).toEqual([]);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("a save not yet seen by the listener", () => {
+  it("keeps screens asking the server until the new revision arrives", async () => {
+    const { markServerWrite, writeNotYetSeen } = await import("@/lib/writeMark");
+    markServerWrite();
+    expect(writeNotYetSeen(Date.now() - 60_000)).toBe(true);
+    expect(writeNotYetSeen(Date.now() + 1)).toBe(false);
+    expect(writeNotYetSeen(null)).toBe(false);
   });
 });

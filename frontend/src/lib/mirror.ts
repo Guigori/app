@@ -259,12 +259,12 @@ function record(update: (r: ShadowReport) => void) {
  * After the server answered `path`, computes the same screen on the device and records whether they match.
  * Runs when the browser is idle; never changes what is shown and never throws.
  */
-export function shadowCheck<T>(screen: keyof typeof comparisons, path: string, server: T, device: () => T): void {
+export function shadowCheck<T>(screen: keyof typeof comparisons, path: string, server: T, device: () => T, force = false): void {
   if (!mirrorEnabled() || !canSync()) return;
   const run = async () => {
     try {
       const done = shadowReport().byScreen[screen];
-      if (done && done.checked >= SHADOW_ENOUGH && done.checked === done.matched) return; // proven for this screen
+      if (!force && done && done.checked >= SHADOW_ENOUGH && done.checked === done.matched) return; // proven for this screen
       const revision = servedRevision(path);
       if (revision === undefined) { record((r) => { r.skipped += 1; }); return; }
       const mirror = await syncMirror(revision);
@@ -357,6 +357,63 @@ export async function computeFromDeviceCopy<T>(run: () => T): Promise<T | null> 
   const { withReadOnlyDb } = await import("@/lib/local/store");
   try {
     return withReadOnlyDb(asLocalDb(current), run);
+  } catch {
+    return null;
+  }
+}
+
+
+// --- Screens opened from the device copy ----------------------------------------------------------------
+
+/** A screen is opened from the device once it matched the server this many times without one difference. */
+export const DEVICE_FIRST_AFTER = 20;
+/** Even then, one opening in this many still asks the server and compares, so a new difference is caught. */
+export const DEVICE_FIRST_SAMPLE = 10;
+
+export function deviceFirstEnabled(): boolean {
+  try {
+    return mirrorEnabled() && window.localStorage.getItem("finnos:device-first") !== "off";
+  } catch {
+    return false;
+  }
+}
+
+/** Screens the device copy already opens by itself (proven and not switched off). */
+export function deviceFirstScreens(report = shadowReport()): string[] {
+  if (!deviceFirstEnabled()) return [];
+  return Object.entries(report.byScreen)
+    .filter(([, s]) => s.checked >= DEVICE_FIRST_AFTER && s.matched === s.checked)
+    .map(([name]) => name);
+}
+
+function sampleNow(screen: string): boolean {
+  try {
+    const key = `finnos:device-first-count:${screen}`;
+    const count = Number(window.localStorage.getItem(key) ?? 0) + 1;
+    window.localStorage.setItem(key, String(count));
+    return count % DEVICE_FIRST_SAMPLE === 0;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * The screen computed on the device, without asking the server: only when it is proven for that screen, the app
+ * knows the current revision (listening to changes) and the copy is at exactly that revision (fetched if needed,
+ * only what changed). Null means "ask the server as usual" (and the caller then compares, `force`d).
+ */
+export async function deviceFirst<T>(screen: keyof typeof comparisons, compute: () => T): Promise<{ value: T } | { sample: true } | null> {
+  if (!canSync() || !deviceFirstScreens().includes(screen)) return null;
+  const { knownRevision, revisionSeenAt } = await import("@/lib/liveUpdates");
+  const { writeNotYetSeen } = await import("@/lib/writeMark");
+  const revision = knownRevision();
+  if (revision === null || writeNotYetSeen(revisionSeenAt())) return null;
+  if (sampleNow(screen)) return { sample: true };
+  const mirror = await syncMirror(revision).catch(() => null);
+  if (!mirror || mirror.revision !== revision) return null;
+  const { withReadOnlyDb } = await import("@/lib/local/store");
+  try {
+    return { value: withReadOnlyDb(asLocalDb(mirror), compute) };
   } catch {
     return null;
   }
