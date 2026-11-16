@@ -10,7 +10,7 @@ import { SyncEntityReviewDialog } from "./SyncEntityReviewDialog";
 import type { TransactionInput } from "@/types/finnos";
 import { queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { canSync, quotaBlockedUntil } from "@/lib/quota";
+import { canSync, clearQuotaBlock, quotaBlockedUntil, useQuotaBlock } from "@/lib/quota";
 
 type NetworkState = "online" | "offline" | "paused";
 
@@ -23,7 +23,19 @@ export function ConnectivityStatus() {
   const [expanded, setExpanded] = useState(false);
   const collapseTimer = useRef<number | null>(null);
   const pending = operations.length;
-  const presentation = describeSyncQueue(operations, state, syncing);
+  const { until: pausedUntil } = useQuotaBlock();
+  const presentation = describeSyncQueue(operations, state, syncing, pausedUntil);
+
+  // When the database's daily limit reopens: drop the pause, reload every screen and send what was saved here.
+  useEffect(() => {
+    if (!pausedUntil) return;
+    const wait = Math.max(0, pausedUntil - Date.now()) + 30_000;
+    const timer = window.setTimeout(() => {
+      clearQuotaBlock();
+      void queryClient.invalidateQueries();
+    }, Math.min(wait, 2_147_000_000));
+    return () => window.clearTimeout(timer);
+  }, [pausedUntil]);
   const blocker = presentation.blocker;
 
   const collapseLater = useCallback((delay = 4200) => {

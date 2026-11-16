@@ -20,6 +20,7 @@ export function describeSyncQueue(
   operations: readonly SyncOperation[],
   connection: ConnectionState,
   syncing: boolean,
+  pausedUntil = 0,
 ): { text: string; ariaLabel: string; blocker: SyncOperation | null } {
   const transactionCount = operations.filter((op) => op.kind.startsWith("transaction.")).length;
   const entityCount = operations.length - transactionCount;
@@ -41,9 +42,12 @@ export function describeSyncQueue(
     };
   }
   if (connection === "paused") {
+    const head = pausedUntil
+      ? `Sincronização pausada até ${new Date(pausedUntil).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+      : "Sincronização pausada";
     const text = operations.length
-      ? `Sincronização pausada · ${items} ${operations.length === 1 ? "salvo" : "salvos"} neste aparelho, ${operations.length === 1 ? "vai" : "vão"} para a nuvem quando voltar`
-      : "Sincronização pausada · você está usando os dados deste aparelho";
+      ? `${head} · ${items} ${operations.length === 1 ? "salvo" : "salvos"} neste aparelho, ${operations.length === 1 ? "vai" : "vão"} para a nuvem quando voltar`
+      : `${head} · você está usando os dados deste aparelho`;
     return { blocker: null, text, ariaLabel: text };
   }
   if (connection === "offline") {

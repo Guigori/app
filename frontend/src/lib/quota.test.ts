@@ -54,6 +54,7 @@ describe("paused synchronisation message", () => {
   it("says records stay on this device and go to the cloud later", async () => {
     const { describeSyncQueue } = await import("@/lib/sync/presentation");
     expect(describeSyncQueue([], "paused", false).text).toBe("Sincronização pausada · você está usando os dados deste aparelho");
+    expect(describeSyncQueue([], "paused", false, Date.parse("2026-11-16T08:00:00Z")).text).toMatch(/^Sincronização pausada até \d\d:\d\d · /);
     const op = { id: "1", kind: "transaction.create", status: "pending" } as never;
     expect(describeSyncQueue([op], "paused", false).text).toContain("1 lançamento salvo neste aparelho, vai para a nuvem quando voltar");
   });
