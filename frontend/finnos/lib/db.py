@@ -321,6 +321,8 @@ def atomic(db, uid, action):
         try:
             result = action(transaction)
             finance_shadow_outbox.finish(transaction, root(db, uid), version)
+            from finnos.lib import change_log
+            change_log.write(transaction, root(db, uid), version + 1, tx_pack.touched())
             transaction.set(revision, {"revision": version + 1})
             attempt.update(version=version, changes=tx_pack.take(pack_token))
             pack_token = None

@@ -189,13 +189,20 @@ def _plain(value) -> bool:
     return not type(value).__module__.startswith("google.cloud.firestore_v1.transforms")
 
 
+_touched: ContextVar[set | None] = ContextVar("finnos_touched_docs", default=None)
+
+
 def record_write(ref, data=None, *, deleted=False, partial=False) -> None:
-    """Called for every write inside db.atomic; keeps the lançamentos it touched."""
+    """Called for every write inside db.atomic; keeps the lançamentos it touched (for the pack) and every
+    document of the account it touched (for the change log the device copy follows, finnos.lib.change_log)."""
     sink = _changes.get()
     if sink is None:
         return
     path = getattr(ref, "path", "") or ""
     parts = path.split("/")
+    touched = _touched.get()
+    if touched is not None and len(parts) == 4 and parts[0] == "users" and not parts[2].startswith("_"):
+        touched.add((parts[2], parts[3]))
     if len(parts) >= 4 and parts[-2] == "transactions":
         sink[parts[-1]] = None if deleted else (
             REREAD if partial or not isinstance(data, dict) or not _plain(data) else dict(data))
@@ -228,12 +235,19 @@ def watch_transaction(transaction):
 
 
 def begin():
-    return _changes.set({})
+    return _changes.set({}), _touched.set(set())
+
+
+def touched() -> set:
+    """(collection, id) of every account document written so far in this attempt."""
+    return set(_touched.get() or ())
 
 
 def take(token) -> dict:
+    tx_token, touched_token = token
     changes = _changes.get() or {}
-    _changes.reset(token)
+    _changes.reset(tx_token)
+    _touched.reset(touched_token)
     return changes
 
 

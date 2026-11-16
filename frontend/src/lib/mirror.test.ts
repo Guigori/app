@@ -24,6 +24,14 @@ describe("device copy", () => {
     const c = [{ id: "y", balance: 21 }, { id: "x", balance: 10 }] as never;
     expect(comparisons.accounts(a, c)).toEqual([{ field: "balances", server: { y: 2000 }, device: { y: 2100 } }]);
   });
+  it("applying the changes gives the new copy", async () => {
+    const { applyChanges } = await import("@/lib/mirror");
+    const base = { revision: 3, checksum_sha256: "x", collections: { transactions: [{ id: "a", v: 1 }, { id: "b", v: 2 }], accounts: [{ id: "k" }] } };
+    const next = applyChanges(base, { full: false, revision: 5, upserts: { transactions: [{ id: "b", v: 20 }, { id: "c", v: 3 }] }, deletes: { transactions: ["a"], accounts: ["k"] } });
+    expect(next.revision).toBe(5);
+    expect(next.collections.transactions).toEqual([{ id: "b", v: 20 }, { id: "c", v: 3 }]);
+    expect(next.collections.accounts).toEqual([]);
+  });
   it("the copy is read-only while the engine reads it", () => {
     const copy = asLocalDb({ revision: 7, checksum_sha256: "", collections: { accounts: [{ id: "a" }] } });
     expect(withReadOnlyDb(copy, () => readDb().accounts.length)).toBe(1);
