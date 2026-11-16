@@ -58,7 +58,10 @@ describe.skipIf(!dir)("device copy gives the server's numbers", () => {
         const rule = (comparisons as Record<string, ((a: unknown, b: unknown) => unknown[]) | undefined>)[screen];
         const diff = rule ? rule(server, device) : compareWhole(server, device);
         if (required.has(screen)) expect(diff).toEqual([]);
-        else if (process.env.GITHUB_STEP_SUMMARY) {
+        else {
+          console.log(`PARIDADE ${screen} ${url}: ${diff.length ? `diferente ${JSON.stringify(diff).slice(0, 600)}` : "igual"}`);
+        }
+        if (!required.has(screen) && process.env.GITHUB_STEP_SUMMARY) {
           appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n#### ${screen} ${url}: ${diff.length ? "diferente" : "igual"}\n\n\`\`\`\n${JSON.stringify(diff, null, 1).slice(0, 3000)}\n\`\`\`\n`);
         }
       });
