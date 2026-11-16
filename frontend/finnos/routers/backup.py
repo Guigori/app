@@ -107,6 +107,40 @@ async def device_mirror(user: dict = Depends(require_user)):
     return await _device_mirror(user=user)
 
 
+@router.get("/mirror/changes")
+async def device_mirror_changes(since: int, user: dict = Depends(require_user)):
+    """What changed in the account after revision `since`: the documents written since then (upserts) and the ones
+    removed (deletes), read through the change log (finnos.lib.change_log): a few reads instead of the whole copy.
+    {"full": true} when the log cannot say for sure; the device then fetches /finance/mirror."""
+    from finnos.lib import change_log
+
+    uid = user["id"]
+    current = await finance_revision(uid)
+
+    def collect():
+        changed = change_log.read(uid, since, current)
+        if changed is None:
+            return None
+        wanted = [(name, doc_id) for name, doc_id in changed if name in COLLECTIONS]
+        client = store.client()
+        parent = store.root(client, uid)
+        refs = {parent.collection(name).document(doc_id).path: (name, doc_id) for name, doc_id in wanted}
+        upserts, deletes = {}, {}
+        for snap in (client.get_all([parent.collection(n).document(d) for n, d in wanted]) if wanted else []):
+            name, doc_id = refs[snap.reference.path]
+            if snap.exists:
+                upserts.setdefault(name, []).append(_clean(dict(store.decode(snap.to_dict()), id=doc_id)))
+            else:
+                deletes.setdefault(name, []).append(doc_id)
+        return upserts, deletes
+
+    result = await run_in_threadpool(collect)
+    if result is None or await finance_revision(uid) != current:
+        return {"full": True, "revision": current}
+    upserts, deletes = result
+    return {"full": False, "since": since, "revision": current, "upserts": upserts, "deletes": deletes}
+
+
 @revision_cached("device-mirror", dict)
 async def _device_mirror(user: dict):
     data = await build_backup(user["id"])

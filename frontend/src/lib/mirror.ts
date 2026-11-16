@@ -26,6 +26,32 @@ interface MirrorPayload {
 interface StoredMirror extends MirrorPayload {
   uid: string;
   fetched_at: string;
+  /** Changes applied since the last whole download (the whole copy is fetched again every FULL_EVERY). */
+  deltas?: number;
+}
+
+interface MirrorChanges {
+  full: boolean;
+  revision: number;
+  upserts?: Record<string, Record<string, unknown>[]>;
+  deletes?: Record<string, string[]>;
+}
+
+const FULL_EVERY = 25;
+/** A screen that matched the server this many times in a row is not compared any more. */
+export const SHADOW_ENOUGH = 50;
+
+/** The copy at `base` plus the documents that changed after it (GET /finance/mirror/changes). */
+export function applyChanges(base: MirrorPayload, changes: MirrorChanges): MirrorPayload {
+  const collections: Record<string, Record<string, unknown>[]> = {};
+  const names = new Set([...Object.keys(base.collections), ...Object.keys(changes.upserts ?? {}), ...Object.keys(changes.deletes ?? {})]);
+  for (const name of names) {
+    const rows = new Map((base.collections[name] ?? []).map((row) => [String(row.id), row]));
+    for (const row of changes.upserts?.[name] ?? []) rows.set(String(row.id), row);
+    for (const id of changes.deletes?.[name] ?? []) rows.delete(String(id));
+    collections[name] = [...rows.values()].sort((a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
+  }
+  return { revision: changes.revision, checksum_sha256: "", collections };
 }
 
 export interface ShadowDifference {
@@ -94,9 +120,21 @@ export async function syncMirror(revision?: number): Promise<StoredMirror | null
   if (syncing) return syncing;
   syncing = (async () => {
     try {
-      const payload = await apiGet<MirrorPayload>("/finance/mirror");
+      let next: StoredMirror | null = null;
+      const base = current;
+      // Only what changed since the copy's revision (a few reads); the whole copy when the log cannot say,
+      // when there is no copy yet, and every FULL_EVERY changes as a safety net.
+      if (base && revision !== undefined && (base.deltas ?? 0) < FULL_EVERY) {
+        const changes = await apiGet<MirrorChanges>(`/finance/mirror/changes?since=${base.revision}`);
+        if (!changes.full && changes.revision >= base.revision) {
+          next = { ...applyChanges(base, changes), uid, fetched_at: new Date().toISOString(), deltas: (base.deltas ?? 0) + 1 };
+        }
+      }
+      if (!next) {
+        const payload = await apiGet<MirrorPayload>("/finance/mirror");
+        next = { ...payload, uid, fetched_at: new Date().toISOString(), deltas: 0 };
+      }
       if (firebaseAuth?.currentUser?.uid !== uid) return null; // signed out or switched meanwhile
-      const next: StoredMirror = { ...payload, uid, fetched_at: new Date().toISOString() };
       current = next;
       await idb("readwrite", (s) => s.put(next, uid)).catch(() => undefined);
       return next;
@@ -221,10 +259,12 @@ function record(update: (r: ShadowReport) => void) {
  * After the server answered `path`, computes the same screen on the device and records whether they match.
  * Runs when the browser is idle; never changes what is shown and never throws.
  */
-export function shadowCheck<T>(screen: keyof typeof comparisons, path: string, server: T, device: () => T): void {
+export function shadowCheck<T>(screen: keyof typeof comparisons, path: string, server: T, device: () => T, force = false): void {
   if (!mirrorEnabled() || !canSync()) return;
   const run = async () => {
     try {
+      const done = shadowReport().byScreen[screen];
+      if (!force && done && done.checked >= SHADOW_ENOUGH && done.checked === done.matched) return; // proven for this screen
       const revision = servedRevision(path);
       if (revision === undefined) { record((r) => { r.skipped += 1; }); return; }
       const mirror = await syncMirror(revision);
@@ -317,6 +357,63 @@ export async function computeFromDeviceCopy<T>(run: () => T): Promise<T | null> 
   const { withReadOnlyDb } = await import("@/lib/local/store");
   try {
     return withReadOnlyDb(asLocalDb(current), run);
+  } catch {
+    return null;
+  }
+}
+
+
+// --- Screens opened from the device copy ----------------------------------------------------------------
+
+/** A screen is opened from the device once it matched the server this many times without one difference. */
+export const DEVICE_FIRST_AFTER = 20;
+/** Even then, one opening in this many still asks the server and compares, so a new difference is caught. */
+export const DEVICE_FIRST_SAMPLE = 10;
+
+export function deviceFirstEnabled(): boolean {
+  try {
+    return mirrorEnabled() && window.localStorage.getItem("finnos:device-first") !== "off";
+  } catch {
+    return false;
+  }
+}
+
+/** Screens the device copy already opens by itself (proven and not switched off). */
+export function deviceFirstScreens(report = shadowReport()): string[] {
+  if (!deviceFirstEnabled()) return [];
+  return Object.entries(report.byScreen)
+    .filter(([, s]) => s.checked >= DEVICE_FIRST_AFTER && s.matched === s.checked)
+    .map(([name]) => name);
+}
+
+function sampleNow(screen: string): boolean {
+  try {
+    const key = `finnos:device-first-count:${screen}`;
+    const count = Number(window.localStorage.getItem(key) ?? 0) + 1;
+    window.localStorage.setItem(key, String(count));
+    return count % DEVICE_FIRST_SAMPLE === 0;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * The screen computed on the device, without asking the server: only when it is proven for that screen, the app
+ * knows the current revision (listening to changes) and the copy is at exactly that revision (fetched if needed,
+ * only what changed). Null means "ask the server as usual" (and the caller then compares, `force`d).
+ */
+export async function deviceFirst<T>(screen: keyof typeof comparisons, compute: () => T): Promise<{ value: T } | { sample: true } | null> {
+  if (!canSync() || !deviceFirstScreens().includes(screen)) return null;
+  const { knownRevision, revisionSeenAt } = await import("@/lib/liveUpdates");
+  const { writeNotYetSeen } = await import("@/lib/writeMark");
+  const revision = knownRevision();
+  if (revision === null || writeNotYetSeen(revisionSeenAt())) return null;
+  if (sampleNow(screen)) return { sample: true };
+  const mirror = await syncMirror(revision).catch(() => null);
+  if (!mirror || mirror.revision !== revision) return null;
+  const { withReadOnlyDb } = await import("@/lib/local/store");
+  try {
+    return { value: withReadOnlyDb(asLocalDb(mirror), compute) };
   } catch {
     return null;
   }

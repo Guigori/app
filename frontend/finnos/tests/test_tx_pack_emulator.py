@@ -255,3 +255,50 @@ def test_writes_fixtures_for_the_device_copy_parity(instance, monkeypatch):
         json.dump(mirror, fh)
     with open(os.path.join(out, "answers.json"), "w", encoding="utf-8") as fh:
         json.dump({"today": "2026-11-15", "answers": answers}, fh)
+
+
+def test_device_copy_follows_the_change_log(instance, monkeypatch):
+    """Old copy + /finance/mirror/changes == the new full copy, after creates, edits and deletes; and a gap in the
+    log answers full."""
+    uid = "test-mirror-changes"
+    parent = seed(instance, uid, n=40)
+    monkeypatch.setattr(store, "client", lambda: instance)
+    monkeypatch.setenv("VERCEL_ENV", "development")
+    monkeypatch.setenv("FINNOS_RESPONSE_CACHE", "0")
+    from api import index as api
+    monkeypatch.setattr(api, "verified_claims", lambda token, session=False: {"uid": uid, "email": "t@example.invalid", "email_verified": True})
+    headers = {"Origin": "http://testserver", "Authorization": "Bearer synthetic", "X-Finnos-User-Id": uid}
+    col = parent.collection("transactions")
+    base = {"name": "Novo", "value_cents": 990, "type": "despesa", "status": "pago", "date": "2026-11-02",
+            "account_id": "bank", "category_id": "food", "version": 1}
+
+    def apply(copy, delta):
+        out = {name: {row["id"]: row for row in rows} for name, rows in copy.items()}
+        for name, rows in delta["upserts"].items():
+            out.setdefault(name, {}).update({row["id"]: row for row in rows})
+        for name, ids in delta["deletes"].items():
+            for doc_id in ids:
+                out.get(name, {}).pop(doc_id, None)
+        return {name: sorted(rows.values(), key=lambda r: str(r["id"])) for name, rows in out.items()}
+
+    async def scenario():
+        transport = httpx.ASGITransport(app=api.app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver", headers=headers, timeout=60) as client:
+            old = (await client.get("/api/finance/mirror")).json()
+            store.atomic(instance, uid, lambda tr: tr.create(col.document("c1"), dict(base)))
+            store.atomic(instance, uid, lambda tr: tr.update(col.document("t0002"), {"value_cents": 4321}))
+            store.atomic(instance, uid, lambda tr: (tr.delete(col.document("t0003")),
+                                                   tr.update(parent.collection("accounts").document("bank"), {"name": "Banco novo"})))
+            delta = (await client.get(f"/api/finance/mirror/changes?since={old['revision']}")).json()
+            new = (await client.get("/api/finance/mirror")).json()
+            assert delta["full"] is False and delta["revision"] == new["revision"] == old["revision"] + 3, delta
+            applied = apply(old["collections"], delta)
+            for name, rows in new["collections"].items():
+                assert applied.get(name, []) == rows, name
+            same = (await client.get(f"/api/finance/mirror/changes?since={new['revision']}")).json()
+            assert same == {"full": False, "since": new["revision"], "revision": new["revision"], "upserts": {}, "deletes": {}}
+            # A revision raised without a log entry (a write the log never saw): the device must download it all.
+            parent.collection("_meta").document("finance").set({"revision": new["revision"] + 1})
+            gap = (await client.get(f"/api/finance/mirror/changes?since={new['revision']}")).json()
+            assert gap["full"] is True
+    asyncio.run(scenario())
