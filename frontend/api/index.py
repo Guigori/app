@@ -22,6 +22,9 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+from finnos.lib import quota as _quota  # noqa: E402
+
+_quota.install(app)
 COOKIE = "finnos_firebase_session"
 TTL = timedelta(days=5)
 

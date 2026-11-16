@@ -1,4 +1,5 @@
 import { firebaseAuth } from "@/lib/firebase";
+import { canSync } from "@/lib/quota";
 import { cachedFetch } from "@/lib/offline/accountCache";
 import type { Transaction, TransactionInput, AccountInput, CategoryInput, CardInput, SubscriptionInput } from "@/types/finnos";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
@@ -230,7 +231,7 @@ function serverReason(error: unknown): string {
 
 let flushing = false;
 export async function flushSyncQueue(): Promise<void> {
-  if (flushing || !navigator.onLine) return;
+  if (flushing || !canSync()) return;
   flushing = true;
   window.dispatchEvent(new CustomEvent("finnos:sync-state"));
   try {
@@ -239,7 +240,7 @@ export async function flushSyncQueue(): Promise<void> {
       // create/update. Never skip a rejected operation and send its successors.
       // Conflicts and validation errors require explicit resolution.
       if (op.status === "conflict") break;
-      if (!navigator.onLine || op.uid !== firebaseAuth?.currentUser?.uid) break;
+      if (!canSync() || op.uid !== firebaseAuth?.currentUser?.uid) break;
       const current = { ...op, status: "syncing" as const, attempts: op.attempts + 1, lastError: undefined };
       await saveSyncOperation(current);
       window.dispatchEvent(new CustomEvent("finnos:sync-state"));

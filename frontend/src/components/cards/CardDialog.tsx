@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { canSync } from "@/lib/quota";
 import { offerStatementImport } from "@/lib/importOffer";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -87,7 +88,7 @@ export function CardDialog({ open, onOpenChange, card, initialName }: CardDialog
     mutationFn: async (input: CardInput) => {
       // Offline registration is a draft. Do not attempt to create a related
       // financial institution before the primary entity has been synced.
-      const resolved = !navigator.onLine && !card
+      const resolved = !canSync() && !card
         ? { institution: input.institution, institution_id: institutionChoice === "new" ? null : input.institution_id }
         : await resolveInstitutionChoice(institutionChoice, input.institution, institutions);
       const payload = { ...input, ...resolved };

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { canSync } from "@/lib/quota";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { editRecurrence, type RecurrenceEditScope } from "@/lib/data";
@@ -56,7 +57,7 @@ export function RecurrenceScopeDialog({ open, onOpenChange, transaction, onSaved
       setError("A série precisa de um identificador estável antes desta edição.");
       return;
     }
-    if (!navigator.onLine) {
+    if (!canSync()) {
       setError("A edição de séries requer conexão. Nenhuma alteração foi enviada.");
       return;
     }

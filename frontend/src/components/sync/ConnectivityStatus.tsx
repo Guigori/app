@@ -10,12 +10,13 @@ import { SyncEntityReviewDialog } from "./SyncEntityReviewDialog";
 import type { TransactionInput } from "@/types/finnos";
 import { queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { canSync, quotaBlockedUntil } from "@/lib/quota";
 
-type NetworkState = "online" | "offline";
+type NetworkState = "online" | "offline" | "paused";
 
 export function ConnectivityStatus() {
   const { openTransaction } = useDialogs();
-  const [state, setState] = useState<NetworkState>(() => navigator.onLine ? "online" : "offline");
+  const [state, setState] = useState<NetworkState>(() => !navigator.onLine ? "offline" : quotaBlockedUntil() ? "paused" : "online");
   const [operations, setOperations] = useState<SyncOperation[]>([]);
   const [reviewEntity, setReviewEntity] = useState<SyncOperation | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -38,6 +39,7 @@ export function ConnectivityStatus() {
 
   const runSync = useCallback(async (announceReconnect = false) => {
     if (!navigator.onLine) return;
+    if (!canSync()) { setState("paused"); void refresh(); return; }
     setState("online");
     const syncUid = firebaseAuth?.currentUser?.uid;
     if (!syncUid) {
@@ -126,12 +128,17 @@ export function ConnectivityStatus() {
       void refresh();
     };
     const online = () => void runSync(true);
+    // The database's daily limit (lib/quota.ts): work like offline until it reopens, then send what was saved here.
+    const paused = () => { setState("paused"); setSyncing(false); setExpanded(true); collapseLater(); void refresh(); };
+    const resumed = () => void runSync(true);
     const visible = () => {
       if (document.visibilityState === "visible" && navigator.onLine) void runSync(false);
     };
 
     window.addEventListener("offline", offline);
     window.addEventListener("online", online);
+    window.addEventListener("finnos:server-paused", paused);
+    window.addEventListener("finnos:server-resumed", resumed);
     window.addEventListener("finnos:sync-state", syncState);
     window.addEventListener("finnos:sync-success", syncSuccess);
     window.addEventListener("finnos:sync-error", syncError);
@@ -147,12 +154,15 @@ export function ConnectivityStatus() {
         })
       : () => {};
     if (!navigator.onLine) offline();
+    else if (quotaBlockedUntil()) paused();
     else void runSync(false);
 
     return () => {
       stopAuth();
       window.removeEventListener("offline", offline);
       window.removeEventListener("online", online);
+      window.removeEventListener("finnos:server-paused", paused);
+      window.removeEventListener("finnos:server-resumed", resumed);
       window.removeEventListener("finnos:sync-state", syncState);
       window.removeEventListener("finnos:sync-success", syncSuccess);
       window.removeEventListener("finnos:sync-error", syncError);
@@ -189,7 +199,7 @@ export function ConnectivityStatus() {
       className={cn(
         "fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-[70] flex -translate-x-1/2 select-none items-center justify-center overflow-hidden rounded-full border bg-background/92 text-xs font-medium text-foreground shadow-md backdrop-blur-xl transition-[width,padding,transform,opacity] duration-300 touch-manipulation",
         expanded ? "w-auto max-w-[calc(100vw-2rem)] gap-2 px-4 py-2.5" : "size-10 p-0",
-        state === "offline" || blocker ? "border-amber-500/35" : "border-primary/25",
+        state !== "online" || blocker ? "border-amber-500/35" : "border-primary/25",
       )}
       role="status"
       aria-live="polite"
@@ -200,7 +210,7 @@ export function ConnectivityStatus() {
       <span className="grid size-5 shrink-0 place-items-center">
         {syncing ? <Loader2 className="size-4 animate-spin text-primary" /> :
           blocker ? <TriangleAlert className="size-4 text-amber-500" /> :
-          state === "offline" ? <CloudOff className="size-4 text-amber-500" /> :
+          state !== "online" ? <CloudOff className="size-4 text-amber-500" /> :
           <Cloud className="size-4 text-primary" />}
       </span>
       {expanded && (
@@ -217,7 +227,7 @@ export function ConnectivityStatus() {
 export function SyncStateLabel({ pending = 0, syncing = false, error = false }: { pending?: number; syncing?: boolean; error?: boolean }) {
   if (error) return <span className="inline-flex items-center gap-1 text-xs text-destructive"><TriangleAlert className="size-3.5" /> Falha ao sincronizar</span>;
   if (syncing) return <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Sincronizando…</span>;
-  if (!navigator.onLine) return <span className="inline-flex items-center gap-1 text-xs text-amber-500"><CloudOff className="size-3.5" /> {pending ? `${pending} aguardando sincronização` : "Offline"}</span>;
+  if (!canSync()) return <span className="inline-flex items-center gap-1 text-xs text-amber-500"><CloudOff className="size-3.5" /> {pending ? `${pending} aguardando sincronização` : navigator.onLine ? "Sincronização pausada" : "Offline"}</span>;
   if (pending) return <span className="inline-flex items-center gap-1 text-xs text-amber-500"><Cloud className="size-3.5" /> {pending} aguardando sincronização</span>;
   return <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Cloud className="size-3.5" /> Tudo sincronizado</span>;
 }

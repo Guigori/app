@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { canSync } from "@/lib/quota";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTheme } from "next-themes";
@@ -59,7 +60,7 @@ export default function Wallet() {
   const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: async () => {
     try { return await fetchCards(); }
     catch (error) {
-      if (!navigator.onLine && error instanceof Error && error.message === "FINNOS_OFFLINE_NO_CACHE") return [];
+      if (!canSync() && error instanceof Error && error.message === "FINNOS_OFFLINE_NO_CACHE") return [];
       throw error;
     }
   } });
@@ -67,7 +68,7 @@ export default function Wallet() {
   const me = useQuery({ queryKey: ["me"], queryFn: fetchMe, retry: false });
   const investmentsQuery = useQuery({ queryKey: ["investments", me.data?.id], queryFn: () => listInvestments(me.data!.id), enabled: !!me.data, retry: false });
   // Only for the warning; a failure here must not hide the Carteira.
-  const openRecQuery = useQuery({ queryKey: ["reconciliations", "open"], queryFn: fetchOpenReconciliations, retry: false, enabled: navigator.onLine || isLocalMode() });
+  const openRecQuery = useQuery({ queryKey: ["reconciliations", "open"], queryFn: fetchOpenReconciliations, retry: false, enabled: canSync() || isLocalMode() });
   const pendingSync = useQuery({ queryKey: ["sync-operations", "count"], queryFn: async () => (isLocalMode() ? 0 : (await listSyncOperations()).length), refetchInterval: 15_000 });
   const accounts = accountsQuery.data ?? [];
   const cards = cardsQuery.data ?? [];
@@ -121,7 +122,7 @@ export default function Wallet() {
   // Older accounts and cards only carry the bank name as text: link them to an institution once (idempotent).
   const linking = useRef(false);
   useEffect(() => {
-    if (linking.current || !accountsQuery.isSuccess || !cardsQuery.isSuccess || !navigator.onLine) return;
+    if (linking.current || !accountsQuery.isSuccess || !cardsQuery.isSuccess || !canSync()) return;
     const unlinked = [...(accountsQuery.data ?? []).filter((a) => a.type !== "carteira"), ...(cardsQuery.data ?? [])].some((x) => !x.institution_id && (x.institution ?? "").trim().length >= 2);
     if (!unlinked) return;
     linking.current = true;

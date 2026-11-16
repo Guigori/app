@@ -1,4 +1,5 @@
 import { firebaseAuth } from "@/lib/firebase";
+import { QUOTA_CODE, isQuotaBody, markQuotaExhausted, quotaBlockedUntil } from "@/lib/quota";
 // Typed fetch layer over the FastAPI backend. Base is the relative "/api" prefix so the
 // same code works in dev (Vite proxies /api → the Firestore API on :8002) and behind a single origin in prod.
 const BASE = "/api";
@@ -26,7 +27,16 @@ export function servedRevision(path: string): number | undefined {
   return servedRevisions.get(path);
 }
 
+/** While the database's daily limit is used up, asking again only fails: answer at once, without a request. */
+function quotaShortCircuit(path: string): void {
+  if (path.startsWith("/auth/")) return; // the session check never touches the database
+  const until = quotaBlockedUntil();
+  if (until) throw new ApiError(503, { code: QUOTA_CODE, retry_at: new Date(until).toISOString(),
+    detail: "O limite diário do banco de dados foi atingido. Os dados voltam a carregar sozinhos." });
+}
+
 async function request<T>(method: string, path: string, body?: JsonBody, extraHeaders?: Record<string, string>): Promise<T> {
+  quotaShortCircuit(path);
   const requestUid = firebaseAuth?.currentUser?.uid;
   // Auth rides the httpOnly session cookie automatically — never add auth headers here.
   const res = await fetch(`${BASE}${path}`, {
@@ -41,6 +51,7 @@ async function request<T>(method: string, path: string, body?: JsonBody, extraHe
   // FastAPI reports request-validation failures as 422 with a {detail: [...]} body.
   if (!res.ok) {
     const errBody = await res.json().catch(() => null);
+    if (res.status === 503 && isQuotaBody(errBody)) markQuotaExhausted(errBody.retry_at);
     throw new ApiError(res.status, errBody);
   }
 
@@ -70,6 +81,7 @@ export async function apiPostWithBearer<T>(path: string, token: string, body?: J
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => null);
+    if (res.status === 503 && isQuotaBody(errBody)) markQuotaExhausted(errBody.retry_at);
     throw new ApiError(res.status, errBody);
   }
   if (res.status === 204) return undefined as T;

@@ -17,6 +17,7 @@ import { PullToRefresh } from "@/components/layout/PullToRefresh";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { navItemsFor, useNavigationPreferences } from "@/lib/navigationPreferences";
 import { ConnectivityStatus } from "@/components/sync/ConnectivityStatus";
+import { QuotaBanner } from "@/components/sync/QuotaBanner";
 import { StatementImportHost } from "@/components/import/StatementImportHost";
 import { InstallAppPrompt } from "@/components/layout/InstallAppPrompt";
 import { startPreferencesSync } from "@/lib/preferencesSync";
@@ -147,6 +148,7 @@ export function AppShell() {
         <div className="transition-[padding] duration-200 ease-out lg:pl-[var(--sidebar-w,16rem)]">
           <div className="lg:hidden"><Header onOpenMenu={() => setMenuOpen(true)} /></div>
           <main className="mx-auto w-full max-w-[1600px] px-4 py-5 pb-32 sm:px-6 lg:px-8 dashboard:pb-28">
+            <QuotaBanner />
             {hasScreenHeader || /^\/radar\/[^/]+$/.test(location.pathname) ? null : <BackButton />}
             {/* Each route fades/slides in, so navigation feels continuous instead of a jump. */}
             <div ref={surfaceRef} data-testid="page-surface">
