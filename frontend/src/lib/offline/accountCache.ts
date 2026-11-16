@@ -1,4 +1,5 @@
 import { firebaseAuth } from "@/lib/firebase";
+import { isQuotaError, noteStaleShown } from "@/lib/quota";
 const DB_NAME = "finnos-account-cache";
 const DB_VERSION = 1;
 const STORE = "snapshots";
@@ -49,8 +50,19 @@ export async function cachedFetch<T>(key: string, online: () => Promise<T>): Pro
   const uid = firebaseAuth?.currentUser?.uid;
   const scopedKey = uid ? `firebase:${uid}:${key}` : null;
   if (navigator.onLine) {
-    // Auth/server failures must remain visible; never substitute another snapshot.
-    const value = await online();
+    // Auth/server failures must remain visible; never substitute another snapshot. The one exception is the
+    // database's daily limit: then the last snapshot of this same account is shown, marked as not current.
+    let value: T;
+    try {
+      value = await online();
+    } catch (error) {
+      if (!scopedKey || !isQuotaError(error)) throw error;
+      const cached = await cacheGet<T>(scopedKey).catch(() => null);
+      if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+      if (cached === null) throw error;
+      noteStaleShown();
+      return cached;
+    }
     if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
     if (scopedKey) await cacheSet(scopedKey, value);
     if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
