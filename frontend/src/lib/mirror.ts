@@ -147,10 +147,11 @@ export async function syncMirror(revision?: number): Promise<StoredMirror | null
   return syncing;
 }
 
-/** Erases every copy kept on this device (sign-out). */
-export async function clearMirror(): Promise<void> {
+/** Erases every copy kept on this device. On sign-out the comparison report goes too; "Atualizar agora" keeps it
+ *  (it is the proof that lets screens open from the device). */
+export async function clearMirror(keepReport = false): Promise<void> {
   current = null;
-  try { window.localStorage.removeItem(REPORT_KEY); } catch { /* ignore */ }
+  if (!keepReport) try { window.localStorage.removeItem(REPORT_KEY); } catch { /* ignore */ }
   await idb("readwrite", (s) => s.clear()).catch(() => undefined);
 }
 
@@ -326,7 +327,7 @@ export function refreshWait(now = Date.now()): number {
 export async function refreshMirror(): Promise<StoredMirror | null> {
   if (refreshWait() > 0) throw new Error("Aguarde um minuto para atualizar de novo.");
   try { window.localStorage.setItem(REFRESHED_KEY, String(Date.now())); } catch { /* ignore */ }
-  await clearMirror();
+  await clearMirror(true);
   return syncMirror();
 }
 
