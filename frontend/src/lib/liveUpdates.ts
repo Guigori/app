@@ -59,6 +59,7 @@ async function listen(user: User) {
       const revision = Number((snap.data() as { revision?: number } | undefined)?.revision ?? 0);
       last = onRevision(last, revision);
       setLive(true);
+      keepDeviceCopy(revision);
     },
     () => {
       // No rule yet, offline for good, or signed out: back to the timed refreshes.
@@ -68,11 +69,26 @@ async function listen(user: User) {
   stopListening = () => { unsubscribe(); setLive(false); };
 }
 
+let copyTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Keeps this device's copy of the account (lib/mirror.ts) at the newest revision, without the person opening any
+ *  screen: a few seconds after each change (several quick changes fetch once), and once when the app opens. */
+function keepDeviceCopy(revision?: number) {
+  if (copyTimer) clearTimeout(copyTimer);
+  copyTimer = setTimeout(() => {
+    copyTimer = null;
+    void import("@/lib/mirror").then((m) => m.syncMirror(revision)).catch(() => undefined);
+  }, revision === undefined ? 8_000 : 3_000);
+}
+
 /** Starts with the session and follows sign-in and sign-out. Returns the cleanup. */
 export function startLiveUpdates(): () => void {
   if (!firebaseAuth || isLocalMode()) return () => undefined;
   const off = onAuthStateChanged(firebaseAuth, (user) => {
-    if (user) void listen(user).catch(() => setLive(false));
+    if (user) {
+      keepDeviceCopy();
+      void listen(user).catch(() => setLive(false));
+    }
     else {
       stopListening?.();
       stopListening = null;
