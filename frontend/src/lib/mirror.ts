@@ -265,22 +265,22 @@ function normalize(value: unknown, key = ""): unknown {
   return value;
 }
 
-function walk(server: unknown, device: unknown, path: string, out: Pair[]) {
-  if (out.length >= 6) return;
+function walk(server: unknown, device: unknown, path: string, out: Pair[], limit = 6) {
+  if (out.length >= limit) return;
   if (isMap(server) && isMap(device)) {
-    for (const k of [...new Set([...Object.keys(server), ...Object.keys(device)])].sort()) walk(server[k], device[k], path ? `${path}.${k}` : k, out);
+    for (const k of [...new Set([...Object.keys(server), ...Object.keys(device)])].sort()) walk(server[k], device[k], path ? `${path}.${k}` : k, out, limit);
     return;
   }
   if (Array.isArray(server) && Array.isArray(device) && server.length === device.length) {
-    server.forEach((item, i) => walk(item, device[i], `${path}[${i}]`, out));
+    server.forEach((item, i) => walk(item, device[i], `${path}[${i}]`, out, limit));
     return;
   }
   if (stable(server) !== stable(device)) out.push({ field: path || "(tudo)", server: server ?? null, device: device ?? null });
 }
 
-export function compareWhole(server: unknown, device: unknown): Pair[] {
+export function compareWhole(server: unknown, device: unknown, limit = 6): Pair[] {
   const out: Pair[] = [];
-  walk(normalize(server), normalize(device), "", out);
+  walk(normalize(server), normalize(device), "", out, limit);
   return out;
 }
 
