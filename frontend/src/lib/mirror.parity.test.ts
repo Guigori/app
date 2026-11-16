@@ -57,6 +57,11 @@ describe.skipIf(!dir)("device copy gives the server's numbers", () => {
         }
         const rule = (comparisons as Record<string, ((a: unknown, b: unknown) => unknown[]) | undefined>)[screen];
         const diff = rule ? rule(server, device) : compareWhole(server, device, 60);
+        if (screen === "radar") {
+          const ids = (v: unknown) => ((v as { items?: { id: string; severity?: string }[] })?.items ?? []).map((i) => `${i.id}:${i.severity ?? ""}`).sort();
+          console.log(`RADAR servidor ${JSON.stringify(ids(server))}`);
+          console.log(`RADAR aparelho ${JSON.stringify(ids(device))}`);
+        }
         if (required.has(screen)) expect(diff).toEqual([]);
         else {
           console.log(`PARIDADE ${screen} ${url}: ${diff.length ? `diferente ${JSON.stringify(diff).slice(0, 20000)}` : "igual"}`);

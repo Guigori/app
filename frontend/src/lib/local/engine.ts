@@ -297,12 +297,19 @@ function withWallets(db: LocalDb, input: AccountInput, existing?: Account): Part
   return { wallets: wallets as unknown as Account["wallets"], ...(wallets.length ? { initial_balance: round2(wallets.reduce((s, w) => s + w.initial_balance, 0)) } : {}) };
 }
 
-function enrich(db: LocalDb, tx: Transaction): Transaction {
+function enrich(db: LocalDb, raw: Transaction): Transaction {
+  // Only what the server shows for a lançamento (TransactionOut): bookkeeping fields stay out.
+  const { operation_id: _op, source: _src, user_id: _uid, updated_at: _upd, ...tx } = raw as Transaction & Record<string, unknown>;
+  void _op; void _src; void _uid; void _upd;
+  const card = tx.card_id ? db.cards.find((c) => c.id === tx.card_id) : undefined;
   const account = db.accounts.find((a) => a.id === tx.account_id);
   const to = tx.to_account_id ? db.accounts.find((a) => a.id === tx.to_account_id) : undefined;
   const category = tx.category_id ? db.categories.find((c) => c.id === tx.category_id) : undefined;
   return {
-    ...tx,
+    ...(tx as Transaction),
+    version: (tx as { version?: number }).version ?? 1,
+    notify_enabled: (tx as { notify_enabled?: boolean }).notify_enabled ?? true,
+    card_name: card?.name ?? null,
     account_name: account?.name ?? "",
     to_account_name: to?.name ?? null,
     category_name: category?.name ?? null,
@@ -495,7 +502,8 @@ export function localDeleteAccount(id: string): void {
 // --- Categories -------------------------------------------------------------
 
 export function localListCategories(): Category[] {
-  return readDb().categories;
+  // The server's defaults for older documents (CategoryOut).
+  return readDb().categories.map((c) => ({ version: 1, ...c } as Category));
 }
 
 export function localCreateCategory(input: CategoryInput): Category {
@@ -1370,9 +1378,13 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
     if (cycle > closing) future = round2(future + outstanding);
   }
   const invoice = round2(Math.max(0, (totals.get(closing) ?? 0) - settled(closing)));
-  // The invoice that already closed (the cycle before the open one) and what is still owed on it.
-  const previousClosing = addDays(start, -1);
-  const payable = round2(Math.max(0, (totals.get(previousClosing) ?? 0) - settled(previousClosing)));
+  // Like the server (finnos/lib/invoices.py default_invoice_cycle): the oldest closed invoice still owing,
+  // otherwise the open one.
+  const closedCycles = [...new Set([...totals.keys(), ...Object.keys((doc as { invoice_cycles?: Record<string, unknown> }).invoice_cycles ?? {})])]
+    .filter((cycle) => cycle < today).sort();
+  const owing = closedCycles.find((cycle) => round2((totals.get(cycle) ?? 0) - settled(cycle)) > 0);
+  const payableCycle = owing ?? closing;
+  const payable = round2(Math.max(0, (totals.get(payableCycle) ?? 0) - (paidCycles[payableCycle]?.amount ?? 0)));
   const account = accounts.find((a) => a.id === doc.payment_account_id);
   return {
     ...doc,
@@ -1389,8 +1401,8 @@ function buildCard(doc: LocalCard, txs: Transaction[], accounts: Account[]): Cre
     next_due: dueDate(closing, doc.closing_day, doc.due_day),
     best_purchase_day: addDays(closing, 1),
     payable_invoice: payable,
-    payable_cycle: payable > 0 ? previousClosing : null,
-    payable_due: payable > 0 ? dueDate(previousClosing, doc.closing_day, doc.due_day) : null,
+    payable_cycle: payableCycle,
+    payable_due: dueDate(payableCycle, doc.closing_day, doc.due_day),
   };
 }
 export function localListCards(): CreditCard[] {
@@ -1400,7 +1412,13 @@ export function localListCards(): CreditCard[] {
   return db.cards.map((card) => {
     const built = buildCard(card, db.transactions, db.accounts);
     const institution = institutions.get(card.institution_id ?? "");
-    return { ...built, institution: institution?.name ?? built.institution, color: institution?.color ?? built.color, is_default: defaults.has(card.id) };
+    return {
+      ...built, institution: institution?.name ?? built.institution, color: institution?.color ?? built.color ?? "#5B3FE4",
+      is_default: defaults.has(card.id),
+      // The server's defaults for older documents (finnos/routers/cards.py).
+      version: (built as { version?: number }).version ?? 1,
+      invoice_reminder: (built as { invoice_reminder?: boolean }).invoice_reminder !== false,
+    } as CreditCard;
   });
 }
 
