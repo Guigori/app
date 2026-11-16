@@ -211,7 +211,7 @@ export async function fetchDashboard(month: string | null): Promise<Dashboard> {
 
 export async function fetchRadar(): Promise<Radar | null> {
   if (isLocalMode()) return localRadar();
-  return cachedFetch("radar", () => apiGet<Radar>("/radar"));
+  return cachedFetch("radar", () => apiGet<Radar>("/radar"), () => computeFromDeviceCopy(() => localRadar()));
 }
 
 export async function updateRadarSignal(signalId: string, action: "view" | "dismiss" | "resolve") {
@@ -230,7 +230,7 @@ export async function fetchTrends(months: number, endMonth?: string): Promise<Tr
   if (isLocalMode()) return localTrends(months, endMonth);
   const params = new URLSearchParams({ months: String(months) });
   if (endMonth) params.set("end_month", endMonth);
-  return cachedFetch(`trends:${params.toString()}`, () => apiGet<Trends>(`/analytics/trends?${params.toString()}`));
+  return cachedFetch(`trends:${params.toString()}`, () => apiGet<Trends>(`/analytics/trends?${params.toString()}`), () => computeFromDeviceCopy(() => localTrends(months, endMonth)));
 }
 
 /** FIN-09 historical invoice review reads only the authenticated user's records.
@@ -256,7 +256,7 @@ export async function fetchFinanceHistory(limit = 50, before?: string): Promise<
 
 export async function fetchBudget(month: string): Promise<BudgetSummary> {
   if (isLocalMode()) return localBudget(month);
-  return cachedFetch(`budget:${month}`, () => apiGet<BudgetSummary>(`/analytics/budget?month=${month}`));
+  return cachedFetch(`budget:${month}`, () => apiGet<BudgetSummary>(`/analytics/budget?month=${month}`), () => computeFromDeviceCopy(() => localBudget(month)));
 }
 
 export async function fetchFlow(params: FlowParams): Promise<Flow> {
@@ -265,7 +265,7 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
   for (const [key, value] of Object.entries(params)) {
     if (value) search.set(key, String(value));
   }
-  const base = await cachedFetch(`flow:${search.toString()}`, () => apiGet<Flow>(`/analytics/flow?${search.toString()}`));
+  const base = await cachedFetch(`flow:${search.toString()}`, () => apiGet<Flow>(`/analytics/flow?${search.toString()}`), () => computeFromDeviceCopy(() => localFlow(params)));
   const pending = (await listSyncOperations()).filter(isTransactionSyncOperation).filter((o) => o.kind === "transaction.create" && o.payload.status === "pago");
   let incomeDelta = 0, expenseDelta = 0;
   const series = base.series.map((point) => {
@@ -340,7 +340,7 @@ export async function updateBudgetCycle(id: string, payload: BudgetCyclePayload)
 export async function fetchInstitutions(): Promise<Institution[]> {
   if (isLocalMode()) return localListInstitutions();
   try {
-    return await cachedFetch("institutions", () => apiGet<Institution[]>("/institutions"));
+    return await cachedFetch("institutions", () => apiGet<Institution[]>("/institutions"), () => computeFromDeviceCopy(() => localListInstitutions()));
   } catch (error) {
     // A legacy account can already have cached accounts but no institution catalog yet.
     // Offline fallback is display-only; never hide an online authentication/API error.
@@ -399,7 +399,7 @@ export async function fetchAccounts(): Promise<Account[]> {
 
 export async function fetchAccount(id: string): Promise<AccountDetail> {
   if (isLocalMode()) return localGetAccount(id);
-  return cachedFetch(`account:${id}`, () => apiGet<AccountDetail>(`/accounts/${id}`));
+  return cachedFetch(`account:${id}`, () => apiGet<AccountDetail>(`/accounts/${id}`), () => computeFromDeviceCopy(() => localGetAccount(id)));
 }
 
 export async function createAccount(input: AccountInput): Promise<Account> {
@@ -443,7 +443,7 @@ export async function deleteAccount(id: string): Promise<void> {
 
 export async function fetchCategories(): Promise<Category[]> {
   if (isLocalMode()) return localListCategories();
-  return cachedFetch("categories", () => apiGet<Category[]>("/categories"));
+  return cachedFetch("categories", () => apiGet<Category[]>("/categories"), () => computeFromDeviceCopy(() => localListCategories()));
 }
 
 export async function createCategory(input: CategoryInput): Promise<Category> {
@@ -689,7 +689,7 @@ export async function clearMyData(): Promise<void> {
 
 export async function fetchCards(): Promise<CreditCard[]> {
   if (isLocalMode()) return localListCards();
-  return cachedFetch("cards", () => apiGet<CreditCard[]>("/cards"));
+  return cachedFetch("cards", () => apiGet<CreditCard[]>("/cards"), () => computeFromDeviceCopy(() => localListCards()));
 }
 
 export async function createCard(input: CardInput): Promise<CreditCard> {
@@ -739,7 +739,7 @@ export async function fetchNotifications(): Promise<Notifications> {
     const items = local.items.filter((item) => !dismissed.has(item.id));
     return { items, count: items.length };
   }
-  return cachedFetch("notifications", () => apiGet<Notifications>("/notifications"));
+  return cachedFetch("notifications", () => apiGet<Notifications>("/notifications"), () => computeFromDeviceCopy(() => localNotifications()));
 }
 
 /** Purchases the Apple Pay Shortcut left waiting. They live on the server, so only full accounts have them. */
@@ -851,7 +851,7 @@ export async function clearNotifications(ids: string[]): Promise<void> {
 export async function fetchInvoice(cardId: string, cycle?: string): Promise<Invoice> {
   if (isLocalMode()) return localInvoice(cardId, cycle);
   const parameter = cycle ? `?cycle=${encodeURIComponent(cycle)}` : "";
-  return cachedFetch(`invoice:${cardId}:${cycle ?? "default"}`, () => apiGet<Invoice>(`/cards/${cardId}/invoice${parameter}`));
+  return cachedFetch(`invoice:${cardId}:${cycle ?? "default"}`, () => apiGet<Invoice>(`/cards/${cardId}/invoice${parameter}`), () => computeFromDeviceCopy(() => localInvoice(cardId, cycle)));
 }
 
 export async function payInvoice(cardId: string, input: PayInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
@@ -941,7 +941,7 @@ export async function fetchOrigins(): Promise<{ label: string; count: number }[]
 
 export async function fetchSubscriptions(): Promise<Subscriptions> {
   if (isLocalMode()) return localSubscriptions();
-  return cachedFetch("subscriptions:v2", () => apiGet<Subscriptions>("/subscriptions"));
+  return cachedFetch("subscriptions:v2", () => apiGet<Subscriptions>("/subscriptions"), () => computeFromDeviceCopy(() => localSubscriptions()));
 }
 
 export async function createSubscription(input: SubscriptionInput): Promise<SubscriptionItem> {

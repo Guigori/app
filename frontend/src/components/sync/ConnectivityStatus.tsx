@@ -172,6 +172,9 @@ export function ConnectivityStatus() {
   }, [collapseLater, openTransaction, refresh, runSync]);
 
   if (state === "online" && pending === 0 && !syncing && !reviewEntity) return null;
+  // While the database's daily limit pauses synchronisation the banner at the top of the screen says so (with the
+  // count of records waiting); a floating cloud on top of it would only cover the page. A blocked record still shows.
+  if (state === "paused" && !blocker && !reviewEntity) return null;
 
   const expand = () => {
     setExpanded(true);
