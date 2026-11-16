@@ -5,6 +5,15 @@ import { RefreshCw, Smartphone } from "lucide-react";
 import { deviceCopyAge, mirrorStatus, refreshMirror, refreshWait } from "@/lib/mirror";
 import { getApiErrorMessage } from "@/lib/errors";
 
+const SCREEN_NAMES: Record<string, string> = {
+  dashboard: "Início", calendar: "Calendário", balanceHistory: "Evolução do saldo", accounts: "Contas",
+};
+
+function short(value: unknown): string {
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return text && text.length > 160 ? `${text.slice(0, 160)}…` : String(text);
+}
+
 /** Configurações → Dados e backup → Este aparelho: the account's copy kept on this device (lib/mirror.ts). */
 export function DeviceCopySection() {
   useEffect(() => {
@@ -65,6 +74,29 @@ export function DeviceCopySection() {
           </dd>
         </div>
         {differences > 0 ? <p className="pt-1 text-muted-foreground">Os números que você vê continuam vindo do servidor; as diferenças só servem para conferir a cópia.</p> : null}
+        {differences > 0 && report?.last.length ? (
+          <details className="pt-1" data-testid="settings-device-differences">
+            <summary className="cursor-pointer font-medium text-primary">Ver diferenças</summary>
+            <ul className="mt-2 space-y-2">
+              {report.last.slice(0, 3).map((d) => (
+                <li key={`${d.at}-${d.params}`} className="rounded-lg bg-muted/50 px-2.5 py-2">
+                  <p className="font-semibold">{SCREEN_NAMES[d.screen] ?? d.screen} <span className="font-normal text-muted-foreground">· {d.params}</span></p>
+                  {d.fields.map((f) => (
+                    <p key={f.field} className="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">
+                      {f.field}: servidor {short(f.server)} · aparelho {short(f.device)}
+                    </p>
+                  ))}
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="mt-2 text-xs font-semibold text-primary" data-testid="settings-device-copy-differences"
+              onClick={() => void navigator.clipboard?.writeText(JSON.stringify(report.last.slice(0, 5), null, 1))
+                .then(() => toast.success("Diferenças copiadas. Cole na conversa para conferirmos."))
+                .catch(() => toast.error("Não foi possível copiar."))}>
+              Copiar detalhes
+            </button>
+          </details>
+        ) : null}
       </dl>
     </div>
   );

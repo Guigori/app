@@ -142,8 +142,20 @@ function differ(a: unknown, b: unknown): boolean {
   return JSON.stringify(a ?? null) !== JSON.stringify(b ?? null);
 }
 
+const isMap = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/** Only what differs; for per-day or per-category maps, only the keys that differ (at most 5). */
 function collect(pairs: Pair[]): Pair[] {
-  return pairs.filter((p) => differ(p.server, p.device));
+  return pairs.filter((p) => differ(p.server, p.device)).map((p) => {
+    if (!isMap(p.server) || !isMap(p.device)) return p;
+    const keys = [...new Set([...Object.keys(p.server), ...Object.keys(p.device)])].sort()
+      .filter((k) => differ((p.server as Record<string, unknown>)[k], (p.device as Record<string, unknown>)[k])).slice(0, 5);
+    return {
+      field: p.field,
+      server: Object.fromEntries(keys.map((k) => [k, (p.server as Record<string, unknown>)[k] ?? null])),
+      device: Object.fromEntries(keys.map((k) => [k, (p.device as Record<string, unknown>)[k] ?? null])),
+    };
+  });
 }
 
 export const comparisons = {
