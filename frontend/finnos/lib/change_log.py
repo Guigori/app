@@ -1,7 +1,8 @@
 """Which documents each finance revision changed, so a device can follow the account without downloading it all.
 
 Every write goes through db.atomic, which raises the finance revision by one. In the same transaction it writes
-`users/{uid}/_changes/{revision:012d}` = {"rev": revision, "docs": [[collection, id], ...]}. A device that holds the
+`users/{uid}/_changes/{revision:012d}` = {"rev": revision, "docs": ["collection/id", ...]} (Firestore does not
+store nested arrays). A device that holds the
 copy at revision R asks for R+1..current and gets only those documents (GET /api/finance/mirror/changes). Any gap,
 a log entry missing or too many revisions behind, answers "full": the device downloads the whole copy instead.
 """
@@ -17,7 +18,7 @@ def ref(parent, revision: int):
 
 
 def write(transaction, parent, revision: int, docs: set) -> None:
-    entries = sorted([list(item) for item in docs])[:MAX_DOCS]
+    entries = sorted(f"{name}/{doc_id}" for name, doc_id in docs)[:MAX_DOCS]
     transaction.set(ref(parent, revision), {"rev": revision, "docs": entries, "truncated": len(docs) > MAX_DOCS})
 
 
@@ -36,7 +37,7 @@ def read(uid: str, since: int, current: int):
         if not data or data.get("truncated"):
             return None
         found += 1
-        seen.update(tuple(item) for item in data.get("docs") or [])
+        seen.update(tuple(str(item).split("/", 1)) for item in data.get("docs") or [] if "/" in str(item))
     if found != len(refs) or len(seen) > MAX_DOCS:
         return None
     return sorted(seen)
