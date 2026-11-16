@@ -17,6 +17,13 @@ describe("device copy", () => {
     const diff = comparisons.dashboard(dash(), dash({ expense: 25, categories: [] }));
     expect(diff.map((d) => d.field)).toEqual(["expense", "categories"]);
   });
+  it("the same balances in another order are not a difference", () => {
+    const a = [{ id: "x", balance: 10 }, { id: "y", balance: 20 }] as never;
+    const b = [{ id: "y", balance: 20 }, { id: "x", balance: 10 }] as never;
+    expect(comparisons.accounts(a, b)).toEqual([]);
+    const c = [{ id: "y", balance: 21 }, { id: "x", balance: 10 }] as never;
+    expect(comparisons.accounts(a, c)).toEqual([{ field: "balances", server: { y: 2000 }, device: { y: 2100 } }]);
+  });
   it("the copy is read-only while the engine reads it", () => {
     const copy = asLocalDb({ revision: 7, checksum_sha256: "", collections: { accounts: [{ id: "a" }] } });
     expect(withReadOnlyDb(copy, () => readDb().accounts.length)).toBe(1);

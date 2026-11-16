@@ -47,7 +47,7 @@ export interface ShadowReport {
 
 const IDB_NAME = "finnos-mirror";
 const IDB_STORE = "copies";
-const REPORT_KEY = "finnos:shadow-report";
+const REPORT_KEY = "finnos:shadow-report:v2"; // v1 counted the same balances in another order as a difference
 const TOLERANCE = 0.005; // centavos: the server rounds to cents
 
 let current: StoredMirror | null = null;
@@ -137,9 +137,18 @@ export function asLocalDb(mirror: MirrorPayload): LocalDb {
 
 type Pair = { field: string; server: unknown; device: unknown };
 
+/** JSON with object keys sorted: the same balances listed in another order are the same balances. */
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${stable((value as Record<string, unknown>)[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
 function differ(a: unknown, b: unknown): boolean {
   if (typeof a === "number" && typeof b === "number") return Math.abs(a - b) > TOLERANCE;
-  return JSON.stringify(a ?? null) !== JSON.stringify(b ?? null);
+  return stable(a) !== stable(b);
 }
 
 const isMap = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
