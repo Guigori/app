@@ -8,7 +8,7 @@ import { getApiErrorMessage } from "@/lib/errors";
 const SCREEN_NAMES: Record<string, string> = {
   dashboard: "Início", balanceHistory: "Evolução do saldo", calendar: "Calendário", transactions: "Lançamentos",
   flow: "Fluxo", trends: "Análise", budget: "Orçamento", accounts: "Carteira · contas", account: "Conta",
-  cards: "Carteira · cartões", invoice: "Fatura", subscriptions: "Assinaturas", radar: "Radar",
+  cards: "Carteira · cartões", invoice: "Fatura", subscriptions: "Assinaturas",
   notifications: "Notificações", categories: "Categorias", institutions: "Bancos", transactionHistory: "Histórico",
   goals: "Patrimônio · metas", investments: "Patrimônio · investimentos",
 };

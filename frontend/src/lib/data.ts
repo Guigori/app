@@ -226,7 +226,10 @@ export async function fetchDashboard(month: string | null): Promise<Dashboard> {
 
 export async function fetchRadar(): Promise<Radar | null> {
   if (isLocalMode()) return localRadar();
-  return screenData("radar", "radar", "/radar", () => apiGet<Radar>("/radar"), () => localRadar());
+  // The server's Radar uses more than the device copy has (budget cycles, dismissed signals, the 30-day cash
+  // forecast), so it is not recalculated here: the last answer is kept on the device and shown when the server
+  // cannot answer. On the server it is kept per revision (~2 reads when nothing changed).
+  return cachedFetch("radar", () => apiGet<Radar>("/radar"));
 }
 
 export async function updateRadarSignal(signalId: string, action: "view" | "dismiss" | "resolve") {
