@@ -1,7 +1,6 @@
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { isLocalMode } from "@/lib/mode";
-import { cachedFetch } from "@/lib/offline/accountCache";
-import { fetchDashboard } from "@/lib/data";
+import { fetchDashboard, screenData } from "@/lib/data";
 import { addMonth, currentMonth } from "@/lib/format";
 /** Older records have only date and value: they are contributions. */
 export type GoalMovement = {
@@ -53,7 +52,10 @@ export async function saveGoal(userId: string, goal: FinnosGoal): Promise<void> 
 }
 
 export async function listGoals(userId: string): Promise<FinnosGoal[]> {
-  return isLocalMode() ? localGoals(userId) : cachedFetch("goals", () => apiGet<FinnosGoal[]>("/goals"));
+  if (isLocalMode()) return localGoals(userId);
+  const { mirrorRows } = await import("@/lib/mirror");
+  return screenData("goals", "goals", "/goals", () => apiGet<FinnosGoal[]>("/goals"),
+    () => mirrorRows<FinnosGoal & { user_id?: string; updated_at?: string }>("goals").map(({ user_id: _u, updated_at: _a, ...goal }) => goal));
 }
 export type GoalSuggestion = { income:number; expense:number; reserved:number; capacity:number; months_observed:number; strategies:{id:string;label:string;amount:number}[] };
 const monthlyEquivalent = (goal: FinnosGoal) => goal.contribution * (goal.frequency === "Semanal" ? 52 : goal.frequency === "Quinzenal" ? 26 : 12) / 12;

@@ -198,6 +198,19 @@ function applyPendingToDashboard(base: Dashboard, pending: { id: string; payload
     recent: [...recent, ...base.recent].slice(0, Math.max(base.recent.length, 5)) };
 }
 
+/**
+ * One screen of the account: opened from this device's copy when that screen is proven (lib/mirror.ts deviceFirst),
+ * otherwise asked to the server (or the last answer kept here, or the copy, when the server cannot answer), and
+ * then compared with the same screen computed on the device.
+ */
+export async function screenData<T>(screen: string, key: string, path: string, server: () => Promise<T>, local: () => T): Promise<T> {
+  const device = await deviceFirst(screen, local);
+  if (device && "value" in device) return device.value;
+  const value = await cachedFetch(key, server, () => computeFromDeviceCopy(local));
+  shadowCheck(screen, path, value, local, !!device);
+  return value;
+}
+
 export async function fetchDashboard(month: string | null): Promise<Dashboard> {
   if (isLocalMode()) return localDashboard(month);
   const path = month ? `/dashboard?month=${month}` : "/dashboard";
@@ -213,7 +226,7 @@ export async function fetchDashboard(month: string | null): Promise<Dashboard> {
 
 export async function fetchRadar(): Promise<Radar | null> {
   if (isLocalMode()) return localRadar();
-  return cachedFetch("radar", () => apiGet<Radar>("/radar"), () => computeFromDeviceCopy(() => localRadar()));
+  return screenData("radar", "radar", "/radar", () => apiGet<Radar>("/radar"), () => localRadar());
 }
 
 export async function updateRadarSignal(signalId: string, action: "view" | "dismiss" | "resolve") {
@@ -232,7 +245,7 @@ export async function fetchTrends(months: number, endMonth?: string): Promise<Tr
   if (isLocalMode()) return localTrends(months, endMonth);
   const params = new URLSearchParams({ months: String(months) });
   if (endMonth) params.set("end_month", endMonth);
-  return cachedFetch(`trends:${params.toString()}`, () => apiGet<Trends>(`/analytics/trends?${params.toString()}`), () => computeFromDeviceCopy(() => localTrends(months, endMonth)));
+  return screenData("trends", `trends:${params.toString()}`, `/analytics/trends?${params.toString()}`, () => apiGet<Trends>(`/analytics/trends?${params.toString()}`), () => localTrends(months, endMonth));
 }
 
 /** FIN-09 historical invoice review reads only the authenticated user's records.
@@ -253,12 +266,12 @@ export async function fetchFinanceHistory(limit = 50, before?: string): Promise<
   if (isLocalMode()) return localFinanceHistory(limit, before);
   const params = new URLSearchParams({ limit: String(limit) });
   if (before) params.set("before", before);
-  return apiGet<FinanceHistoryPage>(`/finance/history?${params.toString()}`);
+  return cachedFetch(`finance-history:${params.toString()}`, () => apiGet<FinanceHistoryPage>(`/finance/history?${params.toString()}`));
 }
 
 export async function fetchBudget(month: string): Promise<BudgetSummary> {
   if (isLocalMode()) return localBudget(month);
-  return cachedFetch(`budget:${month}`, () => apiGet<BudgetSummary>(`/analytics/budget?month=${month}`), () => computeFromDeviceCopy(() => localBudget(month)));
+  return screenData("budget", `budget:${month}`, `/analytics/budget?month=${month}`, () => apiGet<BudgetSummary>(`/analytics/budget?month=${month}`), () => localBudget(month));
 }
 
 export async function fetchFlow(params: FlowParams): Promise<Flow> {
@@ -267,7 +280,7 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
   for (const [key, value] of Object.entries(params)) {
     if (value) search.set(key, String(value));
   }
-  const base = await cachedFetch(`flow:${search.toString()}`, () => apiGet<Flow>(`/analytics/flow?${search.toString()}`), () => computeFromDeviceCopy(() => localFlow(params)));
+  const base = await screenData("flow", `flow:${search.toString()}`, `/analytics/flow?${search.toString()}`, () => apiGet<Flow>(`/analytics/flow?${search.toString()}`), () => localFlow(params));
   const pending = (await listSyncOperations()).filter(isTransactionSyncOperation).filter((o) => o.kind === "transaction.create" && o.payload.status === "pago");
   let incomeDelta = 0, expenseDelta = 0;
   const series = base.series.map((point) => {
@@ -314,18 +327,19 @@ export async function fetchBudgetSuggestion(): Promise<BudgetSuggestion | null> 
 
 export async function fetchCurrentBudgetCycle(): Promise<BudgetCycle | null> {
   if (isLocalMode()) return null;
-  return apiGet<BudgetCycle | null>("/budgets/current");
+  // Shown from the last answer kept on this device when the server cannot answer (no recalculation here).
+  return cachedFetch("budget-cycle:current", () => apiGet<BudgetCycle | null>("/budgets/current"));
 }
 export async function fetchNextBudgetCycle(): Promise<BudgetCycle | null> {
   if (isLocalMode()) return null;
-  return apiGet<BudgetCycle | null>("/budgets/next");
+  return cachedFetch("budget-cycle:next", () => apiGet<BudgetCycle | null>("/budgets/next"));
 }
 export async function fetchBudgetCycles(): Promise<BudgetCycle[]> {
   if (isLocalMode()) return [];
-  return apiGet<BudgetCycle[]>("/budgets");
+  return cachedFetch("budget-cycles", () => apiGet<BudgetCycle[]>("/budgets"));
 }
 export async function fetchBudgetCycleProgress(id: string): Promise<BudgetCycleProgress> {
-  return apiGet<BudgetCycleProgress>(`/budgets/${id}/progress`);
+  return cachedFetch(`budget-cycle:${id}:progress`, () => apiGet<BudgetCycleProgress>(`/budgets/${id}/progress`));
 }
 export type BudgetCyclePayload = {
   mode: "503020" | "personalizado";
@@ -346,7 +360,7 @@ export async function updateBudgetCycle(id: string, payload: BudgetCyclePayload)
 export async function fetchInstitutions(): Promise<Institution[]> {
   if (isLocalMode()) return localListInstitutions();
   try {
-    return await cachedFetch("institutions", () => apiGet<Institution[]>("/institutions"), () => computeFromDeviceCopy(() => localListInstitutions()));
+    return await screenData("institutions", "institutions", "/institutions", () => apiGet<Institution[]>("/institutions"), () => localListInstitutions());
   } catch (error) {
     // A legacy account can already have cached accounts but no institution catalog yet.
     // Offline fallback is display-only; never hide an online authentication/API error.
@@ -407,7 +421,7 @@ export async function fetchAccounts(): Promise<Account[]> {
 
 export async function fetchAccount(id: string): Promise<AccountDetail> {
   if (isLocalMode()) return localGetAccount(id);
-  return cachedFetch(`account:${id}`, () => apiGet<AccountDetail>(`/accounts/${id}`), () => computeFromDeviceCopy(() => localGetAccount(id)));
+  return screenData("account", `account:${id}`, `/accounts/${id}`, () => apiGet<AccountDetail>(`/accounts/${id}`), () => localGetAccount(id));
 }
 
 export async function createAccount(input: AccountInput): Promise<Account> {
@@ -451,7 +465,7 @@ export async function deleteAccount(id: string): Promise<void> {
 
 export async function fetchCategories(): Promise<Category[]> {
   if (isLocalMode()) return localListCategories();
-  return cachedFetch("categories", () => apiGet<Category[]>("/categories"), () => computeFromDeviceCopy(() => localListCategories()));
+  return screenData("categories", "categories", "/categories", () => apiGet<Category[]>("/categories"), () => localListCategories());
 }
 
 export async function createCategory(input: CategoryInput): Promise<Category> {
@@ -510,8 +524,8 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
   }
   const uid = firebaseAuth?.currentUser?.uid;
   const key = `transactions:${params.toString()}`;
-  const base = await cachedFetch(key, () => apiGet<Transaction[]>(`/transactions?${params.toString()}`),
-    () => computeFromDeviceCopy(() => localListTransactions(filters)));
+  const base = await screenData("transactions", key, `/transactions?${params.toString()}`, () => apiGet<Transaction[]>(`/transactions?${params.toString()}`),
+    () => localListTransactions(filters));
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   // The legacy endpoint returns the whole filtered list.
   if (canSync() && uid) await cacheSet(`firebase:${uid}:complete:${key}`, true);
@@ -697,7 +711,7 @@ export async function clearMyData(): Promise<void> {
 
 export async function fetchCards(): Promise<CreditCard[]> {
   if (isLocalMode()) return localListCards();
-  return cachedFetch("cards", () => apiGet<CreditCard[]>("/cards"), () => computeFromDeviceCopy(() => localListCards()));
+  return screenData("cards", "cards", "/cards", () => apiGet<CreditCard[]>("/cards"), () => localListCards());
 }
 
 export async function createCard(input: CardInput): Promise<CreditCard> {
@@ -747,13 +761,14 @@ export async function fetchNotifications(): Promise<Notifications> {
     const items = local.items.filter((item) => !dismissed.has(item.id));
     return { items, count: items.length };
   }
-  return cachedFetch("notifications", () => apiGet<Notifications>("/notifications"), () => computeFromDeviceCopy(() => localNotifications()));
+  return screenData("notifications", "notifications", "/notifications", () => apiGet<Notifications>("/notifications"), () => localNotifications());
 }
 
 /** Purchases the Apple Pay Shortcut left waiting. They live on the server, so only full accounts have them. */
 export async function fetchPendingCaptures(): Promise<PendingCaptures> {
   if (isLocalMode()) return { items: [], count: 0 };
-  return apiGet<PendingCaptures>("/pending-captures");
+  // Captures arrive on the server; this device keeps the last list so it can always be seen.
+  return cachedFetch("pending-captures", () => apiGet<PendingCaptures>("/pending-captures"));
 }
 
 export async function confirmPendingCapture(id: string, input: PendingCaptureConfirm): Promise<{ ok: boolean; transaction_id: string }> {
@@ -800,7 +815,9 @@ export interface HistoryEvent { id: string; action: "created" | "updated" | "del
 /** Every recorded change of one lançamento, newest first. */
 export async function fetchTransactionHistory(id: string): Promise<HistoryEvent[]> {
   if (isLocalMode()) return (localTransactionHistory(id).items as unknown as HistoryEvent[]);
-  return (await apiGet<{ items: HistoryEvent[] }>(`/transactions/${encodeURIComponent(id)}/history`)).items;
+  const path = `/transactions/${encodeURIComponent(id)}/history`;
+  return (await screenData("transactionHistory", `history:${id}`, path, () => apiGet<{ items: HistoryEvent[] }>(path),
+    () => localTransactionHistory(id) as unknown as { items: HistoryEvent[] })).items;
 }
 
 export async function confirmAllPendingCaptures(): Promise<ConfirmAllResult> {
@@ -859,7 +876,7 @@ export async function clearNotifications(ids: string[]): Promise<void> {
 export async function fetchInvoice(cardId: string, cycle?: string): Promise<Invoice> {
   if (isLocalMode()) return localInvoice(cardId, cycle);
   const parameter = cycle ? `?cycle=${encodeURIComponent(cycle)}` : "";
-  return cachedFetch(`invoice:${cardId}:${cycle ?? "default"}`, () => apiGet<Invoice>(`/cards/${cardId}/invoice${parameter}`), () => computeFromDeviceCopy(() => localInvoice(cardId, cycle)));
+  return screenData("invoice", `invoice:${cardId}:${cycle ?? "default"}`, `/cards/${cardId}/invoice${parameter}`, () => apiGet<Invoice>(`/cards/${cardId}/invoice${parameter}`), () => localInvoice(cardId, cycle));
 }
 
 export async function payInvoice(cardId: string, input: PayInvoiceInput, operationId = crypto.randomUUID()): Promise<Invoice> {
@@ -949,7 +966,7 @@ export async function fetchOrigins(): Promise<{ label: string; count: number }[]
 
 export async function fetchSubscriptions(): Promise<Subscriptions> {
   if (isLocalMode()) return localSubscriptions();
-  return cachedFetch("subscriptions:v2", () => apiGet<Subscriptions>("/subscriptions"), () => computeFromDeviceCopy(() => localSubscriptions()));
+  return screenData("subscriptions", "subscriptions:v2", "/subscriptions", () => apiGet<Subscriptions>("/subscriptions"), () => localSubscriptions());
 }
 
 export async function createSubscription(input: SubscriptionInput): Promise<SubscriptionItem> {

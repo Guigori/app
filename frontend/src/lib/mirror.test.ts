@@ -68,3 +68,17 @@ describe("a save not yet seen by the listener", () => {
     expect(writeNotYetSeen(null)).toBe(false);
   });
 });
+
+describe("whole-screen comparison", () => {
+  it("ignores order of records, cents rounding, timestamps and omitted empty values", async () => {
+    const { compareWhole } = await import("@/lib/mirror");
+    const server = { total: 10.004, items: [{ id: "b", v: 2 }, { id: "a", v: 1, note: null }], generated_at: "2026-11-16T10:00:00Z", flag: false };
+    const device = { total: 10, items: [{ id: "a", v: 1 }, { id: "b", v: 2 }], generated_at: "2026-11-16T10:00:01Z", tags: [] };
+    expect(compareWhole(server, device)).toEqual([]);
+  });
+  it("reports where a value differs", async () => {
+    const { compareWhole } = await import("@/lib/mirror");
+    expect(compareWhole({ items: [{ id: "a", v: 1 }] }, { items: [{ id: "a", v: 2 }] }))
+      .toEqual([{ field: "items[0].v", server: 1, device: 2 }]);
+  });
+});

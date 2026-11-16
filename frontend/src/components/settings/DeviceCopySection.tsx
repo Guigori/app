@@ -6,7 +6,11 @@ import { DEVICE_FIRST_AFTER, deviceCopyAge, deviceFirstScreens, mirrorStatus, re
 import { getApiErrorMessage } from "@/lib/errors";
 
 const SCREEN_NAMES: Record<string, string> = {
-  dashboard: "Início", calendar: "Calendário", balanceHistory: "Evolução do saldo", accounts: "Contas",
+  dashboard: "Início", balanceHistory: "Evolução do saldo", calendar: "Calendário", transactions: "Lançamentos",
+  flow: "Fluxo", trends: "Análise", budget: "Orçamento", accounts: "Carteira · contas", account: "Conta",
+  cards: "Carteira · cartões", invoice: "Fatura", subscriptions: "Assinaturas", radar: "Radar",
+  notifications: "Notificações", categories: "Categorias", institutions: "Bancos", transactionHistory: "Histórico",
+  goals: "Patrimônio · metas", investments: "Patrimônio · investimentos",
 };
 
 function short(value: unknown): string {
@@ -78,8 +82,14 @@ export function DeviceCopySection() {
             <dt className="text-muted-foreground">Abrindo pelo aparelho</dt>
             <dd className="text-right font-medium">
               {(() => {
-                const ready = deviceFirstScreens(report).map((name) => SCREEN_NAMES[name] ?? name);
-                return ready.length ? ready.join(", ") : `ainda conferindo (${DEVICE_FIRST_AFTER} acertos por tela)`;
+                const ready = new Set(deviceFirstScreens(report));
+                return Object.keys(SCREEN_NAMES).map((name) => {
+                  const s = report.byScreen[name];
+                  const label = SCREEN_NAMES[name];
+                  if (ready.has(name)) return <span key={name} className="block text-emerald-600 dark:text-emerald-400">{label}: sim</span>;
+                  if (s && s.matched !== s.checked) return <span key={name} className="block text-amber-600 dark:text-amber-400">{label}: pelo servidor (houve diferença)</span>;
+                  return <span key={name} className="block">{label}: {Math.min(s?.matched ?? 0, DEVICE_FIRST_AFTER)} de {DEVICE_FIRST_AFTER} acertos</span>;
+                });
               })()}
             </dd>
           </div>
