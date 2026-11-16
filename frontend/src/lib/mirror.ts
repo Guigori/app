@@ -242,6 +242,48 @@ export const comparisons = {
   },
 };
 
+// Any screen without its own rule is compared whole: numbers to the cent, lists of records by id, and without the
+// moments the answer was produced (…_at), empty values or `false` flags that one side omits.
+function normalize(value: unknown, key = ""): unknown {
+  if (key.endsWith("_at") || key === "generated" || key === "updated") return undefined;
+  if (typeof value === "number") return Math.round(value * 100) / 100;
+  if (Array.isArray(value)) {
+    const items = value.map((v) => normalize(v));
+    const byId = items.every((v) => isMap(v) && "id" in (v as object));
+    const list = byId ? [...items].sort((a, b) => stable((a as { id: unknown }).id).localeCompare(stable((b as { id: unknown }).id))) : items;
+    return list.length ? list : undefined;
+  }
+  if (isMap(value)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      const n = normalize(v, k);
+      if (n === undefined || n === null || n === "" || n === false) continue;
+      out[k] = n;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+  return value;
+}
+
+function walk(server: unknown, device: unknown, path: string, out: Pair[]) {
+  if (out.length >= 6) return;
+  if (isMap(server) && isMap(device)) {
+    for (const k of [...new Set([...Object.keys(server), ...Object.keys(device)])].sort()) walk(server[k], device[k], path ? `${path}.${k}` : k, out);
+    return;
+  }
+  if (Array.isArray(server) && Array.isArray(device) && server.length === device.length) {
+    server.forEach((item, i) => walk(item, device[i], `${path}[${i}]`, out));
+    return;
+  }
+  if (stable(server) !== stable(device)) out.push({ field: path || "(tudo)", server: server ?? null, device: device ?? null });
+}
+
+export function compareWhole(server: unknown, device: unknown): Pair[] {
+  const out: Pair[] = [];
+  walk(normalize(server), normalize(device), "", out);
+  return out;
+}
+
 export function shadowReport(): ShadowReport {
   try {
     const saved = JSON.parse(window.localStorage.getItem(REPORT_KEY) ?? "null") as ShadowReport | null;
@@ -260,7 +302,7 @@ function record(update: (r: ShadowReport) => void) {
  * After the server answered `path`, computes the same screen on the device and records whether they match.
  * Runs when the browser is idle; never changes what is shown and never throws.
  */
-export function shadowCheck<T>(screen: keyof typeof comparisons, path: string, server: T, device: () => T, force = false): void {
+export function shadowCheck<T>(screen: string, path: string, server: T, device: () => T, force = false): void {
   if (!mirrorEnabled() || !canSync()) return;
   const run = async () => {
     try {
@@ -272,7 +314,8 @@ export function shadowCheck<T>(screen: keyof typeof comparisons, path: string, s
       if (!mirror || mirror.revision !== revision) { record((r) => { r.skipped += 1; }); return; }
       const { withReadOnlyDb } = await import("@/lib/local/store");
       const computed = withReadOnlyDb(asLocalDb(mirror), device);
-      const fields = (comparisons[screen] as (a: T, b: T) => Pair[])(server, computed);
+      const rule = (comparisons as Record<string, ((a: T, b: T) => Pair[]) | undefined>)[screen];
+      const fields = rule ? rule(server, computed) : compareWhole(server, computed);
       record((r) => {
         r.checked += 1;
         const s = (r.byScreen[screen] ??= { checked: 0, matched: 0 });
@@ -403,7 +446,7 @@ function sampleNow(screen: string): boolean {
  * knows the current revision (listening to changes) and the copy is at exactly that revision (fetched if needed,
  * only what changed). Null means "ask the server as usual" (and the caller then compares, `force`d).
  */
-export async function deviceFirst<T>(screen: keyof typeof comparisons, compute: () => T): Promise<{ value: T } | { sample: true } | null> {
+export async function deviceFirst<T>(screen: string, compute: () => T): Promise<{ value: T } | { sample: true } | null> {
   if (!canSync() || !deviceFirstScreens().includes(screen)) return null;
   const { knownRevision, revisionSeenAt } = await import("@/lib/liveUpdates");
   const { writeNotYetSeen } = await import("@/lib/writeMark");

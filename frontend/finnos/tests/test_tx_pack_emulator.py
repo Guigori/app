@@ -231,7 +231,14 @@ def test_writes_fixtures_for_the_device_copy_parity(instance, monkeypatch):
     screens = {"dashboard": ["/api/dashboard?month=2026-11", "/api/dashboard?month=2026-10", "/api/dashboard?month=2026-06"],
                "calendar": ["/api/analytics/calendar?month=2026-11", "/api/analytics/calendar?month=2026-12"],
                "balanceHistory": ["/api/analytics/balance-history?month=2026-11", "/api/analytics/balance-history?month=2026-09"],
-               "accounts": ["/api/accounts"]}
+               "accounts": ["/api/accounts"],
+               # Compared whole (lib/mirror.ts compareWhole); reported, not yet required to match.
+               "trends": ["/api/analytics/trends?months=6"], "budget": ["/api/analytics/budget?month=2026-11"],
+               "flow": ["/api/analytics/flow?month=2026-11"], "cards": ["/api/cards"],
+               "invoice": ["/api/cards/card/invoice"], "subscriptions": ["/api/subscriptions"],
+               "transactions": ["/api/transactions?month=2026-11"], "radar": ["/api/radar"],
+               "notifications": ["/api/notifications"], "categories": ["/api/categories"],
+               "institutions": ["/api/institutions"]}
 
     async def scenario():
         transport = httpx.ASGITransport(app=api.app, raise_app_exceptions=False)
@@ -244,8 +251,11 @@ def test_writes_fixtures_for_the_device_copy_parity(instance, monkeypatch):
             for screen, urls in screens.items():
                 for url in urls:
                     r = await client.get(url)
+                    if screen not in ("dashboard", "calendar", "balanceHistory", "accounts") and r.status_code != 200:
+                        continue
                     assert r.status_code == 200, (url, r.text[:300])
-                    assert r.headers.get("X-Finnos-Revision") == str(mirror["revision"]), url
+                    if screen in ("dashboard", "calendar", "balanceHistory", "accounts"):
+                        assert r.headers.get("X-Finnos-Revision") == str(mirror["revision"]), url
                     answers.setdefault(screen, {})[url] = r.json()
             return mirror, answers
 

@@ -6,7 +6,10 @@ import { DEVICE_FIRST_AFTER, deviceCopyAge, deviceFirstScreens, mirrorStatus, re
 import { getApiErrorMessage } from "@/lib/errors";
 
 const SCREEN_NAMES: Record<string, string> = {
-  dashboard: "Início", calendar: "Calendário", balanceHistory: "Evolução do saldo", accounts: "Contas",
+  dashboard: "Início", balanceHistory: "Evolução do saldo", calendar: "Calendário", transactions: "Lançamentos",
+  flow: "Fluxo", trends: "Análise", budget: "Orçamento", accounts: "Carteira · contas", account: "Conta",
+  cards: "Carteira · cartões", invoice: "Fatura", subscriptions: "Assinaturas", radar: "Radar",
+  notifications: "Notificações", categories: "Categorias", institutions: "Bancos", transactionHistory: "Histórico",
 };
 
 function short(value: unknown): string {
@@ -79,7 +82,7 @@ export function DeviceCopySection() {
             <dd className="text-right font-medium">
               {(() => {
                 const ready = new Set(deviceFirstScreens(report));
-                return (["dashboard", "accounts", "calendar", "balanceHistory"] as const).map((name) => {
+                return Object.keys(SCREEN_NAMES).map((name) => {
                   const s = report.byScreen[name];
                   const label = SCREEN_NAMES[name];
                   if (ready.has(name)) return <span key={name} className="block text-emerald-600 dark:text-emerald-400">{label}: sim</span>;
