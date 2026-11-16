@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { canSync } from "@/lib/quota";
 import { getAccountPaymentMethods, setAccountPaymentMethods, clearLocalAccountPaymentMethods, PAYMENT_METHODS, type PaymentMethod } from "@/lib/accountPaymentPreferences";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CreditCard as CreditCardIcon, PlusCircle, Wallet } from "lucide-react";
@@ -42,7 +43,7 @@ export default function Accounts() {
   const cardsQuery = useQuery({ queryKey: ["cards"], queryFn: async () => {
     try { return await fetchCards(); }
     catch (error) {
-      if (!navigator.onLine && error instanceof Error && error.message === "FINNOS_OFFLINE_NO_CACHE") return [];
+      if (!canSync() && error instanceof Error && error.message === "FINNOS_OFFLINE_NO_CACHE") return [];
       throw error;
     }
   } });
@@ -59,7 +60,7 @@ export default function Accounts() {
   // institution once, so the color and grouping come from the bank. Idempotent.
   const linking = useRef(false);
   useEffect(() => {
-    if (linking.current || !accountsQuery.isSuccess || !cardsQuery.isSuccess || !navigator.onLine) return;
+    if (linking.current || !accountsQuery.isSuccess || !cardsQuery.isSuccess || !canSync()) return;
     const unlinked = [...(accountsQuery.data ?? []).filter((a) => a.type !== "carteira"), ...(cardsQuery.data ?? [])].some((x) => !x.institution_id && (x.institution ?? "").trim().length >= 2);
     if (!unlinked) return;
     linking.current = true;

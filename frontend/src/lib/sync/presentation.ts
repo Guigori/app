@@ -1,6 +1,6 @@
 import type { SyncOperation } from "./queue";
 
-type ConnectionState = "online" | "offline";
+type ConnectionState = "online" | "offline" | "paused";
 
 const ENTITY_NAMES: Record<string, string> = {
   "account.create": "conta",
@@ -39,6 +39,12 @@ export function describeSyncQueue(
       text: `Sincronização bloqueada · revisar ${kind} · ${items} na fila`,
       ariaLabel: `Sincronização bloqueada. Revisar ${kind}. ${items} aguardando.`,
     };
+  }
+  if (connection === "paused") {
+    const text = operations.length
+      ? `Sincronização pausada · ${items} ${operations.length === 1 ? "salvo" : "salvos"} neste aparelho, ${operations.length === 1 ? "vai" : "vão"} para a nuvem quando voltar`
+      : "Sincronização pausada · você está usando os dados deste aparelho";
+    return { blocker: null, text, ariaLabel: text };
   }
   if (connection === "offline") {
     const text = operations.length

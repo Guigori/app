@@ -211,10 +211,13 @@ def test_writes_fixtures_for_the_device_copy_parity(instance, monkeypatch):
     monkeypatch.setenv("VERCEL_ENV", "development")
     from api import index as api
     import finnos.lib.dates as dates
-    from finnos.routers import transactions as tx_router
     monkeypatch.setattr(api, "verified_claims", lambda token, session=False: {"uid": uid, "email": "t@example.invalid", "email_verified": True})
+    import sys
+    # Every module that imported today_iso by name gets the same fixed day as the app's test clock.
+    for name, module in list(sys.modules.items()):
+        if name.startswith("finnos") and getattr(module, "today_iso", None) is dates.today_iso:
+            monkeypatch.setattr(module, "today_iso", lambda: "2026-11-15")
     monkeypatch.setattr(dates, "today_iso", lambda: "2026-11-15")
-    monkeypatch.setattr(tx_router, "today_iso", lambda: "2026-11-15", raising=False)
     headers = {"Origin": "http://testserver", "Authorization": "Bearer synthetic", "X-Finnos-User-Id": uid}
     extra = [
         {"name": "Aluguel", "value": 1500, "type": "despesa", "status": "pendente", "date": "2026-11-20", "account_id": "bank", "category_id": "food"},

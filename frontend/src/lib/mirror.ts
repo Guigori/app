@@ -11,6 +11,7 @@
  * Off with localStorage "finnos:mirror" = "off". Erased when the person signs out.
  */
 import { apiGet, servedRevision } from "@/lib/api";
+import { canSync } from "@/lib/quota";
 import { firebaseAuth } from "@/lib/firebase";
 import { isLocalMode } from "@/lib/mode";
 import type { LocalDb } from "@/lib/local/store";
@@ -200,7 +201,7 @@ function record(update: (r: ShadowReport) => void) {
  * Runs when the browser is idle; never changes what is shown and never throws.
  */
 export function shadowCheck<T>(screen: keyof typeof comparisons, path: string, server: T, device: () => T): void {
-  if (!mirrorEnabled() || !navigator.onLine) return;
+  if (!mirrorEnabled() || !canSync()) return;
   const run = async () => {
     try {
       const revision = servedRevision(path);
@@ -277,4 +278,25 @@ export function deviceCopyAge(iso: string | null): string {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `atualizado há ${hours} h`;
   return `atualizado em ${new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`;
+}
+
+
+/**
+ * A screen computed from this device's copy of the account, for when the server cannot answer (offline or the
+ * database's daily limit). Null when there is no copy for the signed-in person.
+ */
+export async function computeFromDeviceCopy<T>(run: () => T): Promise<T | null> {
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (!uid || isLocalMode() || typeof indexedDB === "undefined") return null;
+  if (!current || current.uid !== uid) {
+    const stored = await idb<StoredMirror>("readonly", (s) => s.get(uid)).catch(() => undefined);
+    current = stored && stored.uid === uid ? stored : null;
+  }
+  if (!current) return null;
+  const { withReadOnlyDb } = await import("@/lib/local/store");
+  try {
+    return withReadOnlyDb(asLocalDb(current), run);
+  } catch {
+    return null;
+  }
 }

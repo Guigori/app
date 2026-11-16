@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { canSync } from "@/lib/quota";
 import { defaultAccount } from "@/lib/walletDefaults";
 import { methodKey, paymentEffect, paymentMethods } from "@/lib/paymentMethods";
 import { Link } from "react-router-dom";
@@ -193,10 +194,16 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       toast.warning("Tentativa local descartada após revisão", {
         description: "Confira no histórico se o lançamento já havia sido gravado.",
       });
-      if (navigator.onLine) await flushSyncQueue();
+      if (canSync()) await flushSyncQueue();
     },
     onError: (error) => {
       setConfirmDiscard(false);
+      if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
+        onOpenChange(false);
+        toast.info("Salvo neste aparelho", { description: "Será enviado à nuvem automaticamente quando a sincronização voltar.", duration: 3500 });
+        void refreshFinancialViews();
+        return;
+      }
       setFormError(getApiErrorMessage(error));
     },
   });
@@ -218,7 +225,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
     mutationFn: async (input: TransactionInput) => {
       if (syncOperationId) {
         await updateQueuedTransaction(syncOperationId, input);
-        if (navigator.onLine) await flushSyncQueue();
+        if (canSync()) await flushSyncQueue();
         return undefined;
       }
       return transaction ? updateTransaction(transaction.id, input, "manual", transaction.version) : createTransaction(input);
@@ -257,7 +264,7 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       if (error instanceof Error && error.message === "FINNOS_OFFLINE_QUEUED") {
         onOpenChange(false);
         toast.info("Salvo neste aparelho", {
-          description: "Será sincronizado automaticamente quando a conexão voltar.",
+          description: "Será enviado à nuvem automaticamente quando a sincronização voltar.",
           duration: 3500,
         });
         await refreshFinancialViews();
@@ -307,12 +314,12 @@ export function TransactionDialog({ open, onOpenChange, initialType, initialDate
       to_wallet_id: type === "transferencia" && targetWallets.length ? toWalletId || null : null,
     };
 
-    if (!navigator.onLine && !syncOperationId) {
+    if (!canSync() && !syncOperationId) {
       void queueTransaction(input, "manual", transaction?.id)
         .then(async () => {
           onOpenChange(false);
           toast.info("Salvo neste aparelho", {
-            description: "Será sincronizado automaticamente quando a conexão voltar.",
+            description: "Será enviado à nuvem automaticamente quando a sincronização voltar.",
             duration: 3500,
           });
           await refreshFinancialViews();

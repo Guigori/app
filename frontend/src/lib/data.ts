@@ -1,4 +1,5 @@
 import { INSTITUTION_CATALOG } from "@/lib/institutionCatalog";
+import { canSync, isQuotaError } from "@/lib/quota";
 import { firebaseAuth } from "@/lib/firebase";
 // Single data boundary for the whole app. Every page/dialog calls these helpers so
 // "conta local" (browser-only) and "conta completa" (server) share one call shape:
@@ -11,7 +12,7 @@ import { isLocalMode, getMode } from "@/lib/mode";
 import { loadSessionProfile } from "@/lib/profileIdentity";
 import { queueTransaction, queueTransactionDelete, queueEntityCreate, queueEntityMutation, flushSyncQueue, listSyncOperations, isTransactionSyncOperation, type OperationSource } from "@/lib/sync/queue";
 import { cacheGet, cacheSet, cachedFetch } from "@/lib/offline/accountCache";
-import { shadowCheck } from "@/lib/mirror";
+import { computeFromDeviceCopy, shadowCheck } from "@/lib/mirror";
 import { withIntent } from "@/lib/sync/intent";
 import {
   localFinanceHistory,
@@ -200,7 +201,7 @@ function applyPendingToDashboard(base: Dashboard, pending: { id: string; payload
 export async function fetchDashboard(month: string | null): Promise<Dashboard> {
   if (isLocalMode()) return localDashboard(month);
   const path = month ? `/dashboard?month=${month}` : "/dashboard";
-  const base = await cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(path));
+  const base = await cachedFetch(`dashboard:${month ?? "current"}`, () => apiGet<Dashboard>(path), () => computeFromDeviceCopy(() => localDashboard(month)));
   shadowCheck("dashboard", path, base, () => localDashboard(month));
   const pending = (await listSyncOperations()).filter(isTransactionSyncOperation).filter((o) => o.kind === "transaction.create");
   return applyPendingToDashboard(base, pending);
@@ -285,7 +286,7 @@ export async function fetchFlow(params: FlowParams): Promise<Flow> {
 export async function fetchBalanceHistory(month: string): Promise<BalanceHistory> {
   if (isLocalMode()) return localBalanceHistory(month);
   const path = `/analytics/balance-history?month=${month}`;
-  const server = await cachedFetch(`balance-history:${month}`, () => apiGet<BalanceHistory>(path));
+  const server = await cachedFetch(`balance-history:${month}`, () => apiGet<BalanceHistory>(path), () => computeFromDeviceCopy(() => localBalanceHistory(month)));
   shadowCheck("balanceHistory", path, server, () => localBalanceHistory(month));
   return server;
 }
@@ -294,7 +295,7 @@ export async function fetchCalendar(month: string, categoryId?: string): Promise
   if (isLocalMode()) return localCalendar(month, categoryId);
   const category = categoryId ? `&category_id=${encodeURIComponent(categoryId)}` : "";
   const path = `/analytics/calendar?month=${month}${category}`;
-  const server = await cachedFetch(`calendar:${month}${categoryId ? `:${categoryId}` : ""}`, () => apiGet<CalendarMonth>(path));
+  const server = await cachedFetch(`calendar:${month}${categoryId ? `:${categoryId}` : ""}`, () => apiGet<CalendarMonth>(path), () => computeFromDeviceCopy(() => localCalendar(month, categoryId)));
   shadowCheck("calendar", path, server, () => localCalendar(month, categoryId));
   return server;
 }
@@ -343,7 +344,7 @@ export async function fetchInstitutions(): Promise<Institution[]> {
   } catch (error) {
     // A legacy account can already have cached accounts but no institution catalog yet.
     // Offline fallback is display-only; never hide an online authentication/API error.
-    if (!navigator.onLine && error instanceof Error && error.message === "FINNOS_OFFLINE_NO_CACHE") return [];
+    if (!canSync() && error instanceof Error && error.message === "FINNOS_OFFLINE_NO_CACHE") return [];
     throw error;
   }
 }
@@ -391,7 +392,7 @@ export async function deleteInstitution(id: string): Promise<void> {
 
 export async function fetchAccounts(): Promise<Account[]> {
   if (isLocalMode()) return localListAccounts();
-  const server = await cachedFetch("accounts", () => apiGet<Account[]>("/accounts"));
+  const server = await cachedFetch("accounts", () => apiGet<Account[]>("/accounts"), () => computeFromDeviceCopy(() => localListAccounts()));
   shadowCheck("accounts", "/accounts", server, () => localListAccounts());
   return server;
 }
@@ -403,7 +404,7 @@ export async function fetchAccount(id: string): Promise<AccountDetail> {
 
 export async function createAccount(input: AccountInput): Promise<Account> {
   if (isLocalMode()) return localCreateAccount(input);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     await queueEntityCreate("account.create", input);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
@@ -413,7 +414,7 @@ export async function createAccount(input: AccountInput): Promise<Account> {
 
 export async function updateAccount(id: string, input: AccountInput): Promise<Account> {
   if (isLocalMode()) return localUpdateAccount(id, input);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     const original = (await fetchAccounts()).find(row => row.id === id);
     if (!original?.version) throw new Error("Versão da conta indisponível offline.");
     await queueEntityMutation("account.update", id, input, original.version);
@@ -424,7 +425,7 @@ export async function updateAccount(id: string, input: AccountInput): Promise<Ac
 
 export async function deleteAccount(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteAccount(id);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     const original = (await fetchAccounts()).find(row => row.id === id);
     if (!original?.version) throw new Error("Versão da conta indisponível offline.");
     await queueEntityMutation("account.delete", id, {
@@ -447,7 +448,7 @@ export async function fetchCategories(): Promise<Category[]> {
 
 export async function createCategory(input: CategoryInput): Promise<Category> {
   if (isLocalMode()) return localCreateCategory(input);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     await queueEntityCreate("category.create", input);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
@@ -457,7 +458,7 @@ export async function createCategory(input: CategoryInput): Promise<Category> {
 
 export async function updateCategory(id: string, input: CategoryInput): Promise<Category> {
   if (isLocalMode()) return localUpdateCategory(id, input);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     const original = (await fetchCategories()).find(row => row.id === id);
     if (!original?.version) throw new Error("Versão da categoria indisponível offline.");
     await queueEntityMutation("category.update", id, input, original.version);
@@ -468,7 +469,7 @@ export async function updateCategory(id: string, input: CategoryInput): Promise<
 
 export async function deleteCategory(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteCategory(id);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     const original = (await fetchCategories()).find(row => row.id === id);
     if (!original?.version) throw new Error("Versão da categoria indisponível offline.");
     await queueEntityMutation("category.delete", id, {
@@ -501,11 +502,12 @@ export async function fetchTransactions(filters: LocalTxFilters): Promise<Transa
   }
   const uid = firebaseAuth?.currentUser?.uid;
   const key = `transactions:${params.toString()}`;
-  const base = await cachedFetch(key, () => apiGet<Transaction[]>(`/transactions?${params.toString()}`));
+  const base = await cachedFetch(key, () => apiGet<Transaction[]>(`/transactions?${params.toString()}`),
+    () => computeFromDeviceCopy(() => localListTransactions(filters)));
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   // The legacy endpoint returns the whole filtered list.
-  if (navigator.onLine && uid) await cacheSet(`firebase:${uid}:complete:${key}`, true);
-  if (navigator.onLine && uid) await Promise.all(base.map(t => cacheSet(`firebase:${uid}:transaction:${t.id}`, t)));
+  if (canSync() && uid) await cacheSet(`firebase:${uid}:complete:${key}`, true);
+  if (canSync() && uid) await Promise.all(base.map(t => cacheSet(`firebase:${uid}:transaction:${t.id}`, t)));
   const operations = (await listSyncOperations()).filter(isTransactionSyncOperation);
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   const pending = operations.filter((o) => o.kind === "transaction.create");
@@ -566,7 +568,7 @@ export async function fetchTransactionsPage(
   const uid = firebaseAuth?.currentUser?.uid;
   const result = await apiGet<TransactionPage>(`/transactions/page?${params.toString()}`);
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
-  if (navigator.onLine && uid) {
+  if (canSync() && uid) {
     await Promise.all(result.items.map(row =>
       cacheSet(`firebase:${uid}:transaction:${row.id}`, row)));
     if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
@@ -602,20 +604,27 @@ export async function isTransactionListComplete(filters: LocalTxFilters): Promis
 
 export async function createTransaction(input: TransactionInput, source: OperationSource = "manual"): Promise<Transaction> {
   if (isLocalMode()) return localCreateTransaction(input);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     await queueTransaction(input, source);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
   const uid = firebaseAuth?.currentUser?.uid ?? "session";
-  return withIntent(uid, "transaction:create", input, (operationId) =>
-    apiPost<Transaction>("/transactions", input, { "X-FINNOS-Source": source, "X-FINNOS-Operation-ID": operationId }));
+  try {
+    return await withIntent(uid, "transaction:create", input, (operationId) =>
+      apiPost<Transaction>("/transactions", input, { "X-FINNOS-Source": source, "X-FINNOS-Operation-ID": operationId }));
+  } catch (error) {
+    // The database's daily limit: nothing was saved on the server; keep it here and send it when it reopens.
+    if (!isQuotaError(error)) throw error;
+    await queueTransaction(input, source);
+    throw new Error("FINNOS_OFFLINE_QUEUED");
+  }
 }
 
 /** `baseVersion` is the version the user started editing from: the server answers
  * 409 instead of silently overwriting a newer change made elsewhere (AUD-05). */
 export async function updateTransaction(id: string, input: TransactionInput, source: OperationSource = "manual", baseVersion?: number): Promise<Transaction> {
   if (isLocalMode()) return localUpdateTransaction(id, input);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     await queueTransaction(input, source, id);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
@@ -638,7 +647,7 @@ export async function editRecurrence(
   operationId: string,
 ): Promise<Transaction> {
   if (isLocalMode()) throw new Error("Edição de séries requer conta sincronizada.");
-  if (!navigator.onLine) throw new Error("Conecte-se para editar uma série recorrente. Nenhuma alteração foi perdida.");
+  if (!canSync()) throw new Error("Conecte-se para editar uma série recorrente. Nenhuma alteração foi perdida.");
   if (!Number.isSafeInteger(version) || version < 1) throw new Error("Versão de recorrência indisponível.");
   if (!isISODate(effective_date)) throw new Error("Data inválida.");
   if (!operationId) throw new Error("Identificador de edição inválido.");
@@ -654,7 +663,7 @@ export { flushSyncQueue };
 
 export async function deleteTransaction(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteTransaction(id);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     if (id.startsWith("offline:")) {
       throw new Error("Revise o lançamento ainda não sincronizado antes de excluí-lo.");
     }
@@ -685,7 +694,7 @@ export async function fetchCards(): Promise<CreditCard[]> {
 
 export async function createCard(input: CardInput): Promise<CreditCard> {
   if (isLocalMode()) return localCreateCard(input);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     await queueEntityCreate("card.create", input);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
@@ -695,7 +704,7 @@ export async function createCard(input: CardInput): Promise<CreditCard> {
 
 export async function updateCard(id: string, input: CardInput): Promise<CreditCard> {
   if (isLocalMode()) return localUpdateCard(id, input);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     const original = (await fetchCards()).find(row => row.id === id);
     if (!original?.version) throw new Error("Versão do cartão indisponível offline.");
     await queueEntityMutation("card.update", id, input, original.version);
@@ -706,7 +715,7 @@ export async function updateCard(id: string, input: CardInput): Promise<CreditCa
 
 export async function deleteCard(id: string): Promise<void> {
   if (isLocalMode()) return localDeleteCard(id);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     const original = (await fetchCards()).find(row => row.id === id);
     if (!original?.version) throw new Error("Versão do cartão indisponível offline.");
     await queueEntityMutation("card.delete", id, {
@@ -926,7 +935,7 @@ export async function creditInvoice(cardId: string, input: CreditInvoiceInput, o
 
 /** Origin labels used before ("Mercado Pago", "iFood"), most recent first. */
 export async function fetchOrigins(): Promise<{ label: string; count: number }[]> {
-  if (isLocalMode() || !navigator.onLine) return [];
+  if (isLocalMode() || !canSync()) return [];
   try { return (await apiGet<{ items: { label: string; count: number }[] }>("/transactions/origins")).items; } catch { return []; }
 }
 
@@ -937,7 +946,7 @@ export async function fetchSubscriptions(): Promise<Subscriptions> {
 
 export async function createSubscription(input: SubscriptionInput): Promise<SubscriptionItem> {
   if (isLocalMode()) return localCreateSubscription(input);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     await queueEntityCreate("subscription.create", input);
     throw new Error("FINNOS_OFFLINE_QUEUED");
   }
@@ -947,7 +956,7 @@ export async function createSubscription(input: SubscriptionInput): Promise<Subs
 
 export async function updateSubscription(id: string, input: SubscriptionInput): Promise<SubscriptionItem> {
   if (isLocalMode()) return localUpdateSubscription(id, input);
-  if (!navigator.onLine) {
+  if (!canSync()) {
     const original = (await fetchSubscriptions()).items.find(row => row.id === id);
     if (!original?.version) throw new Error("Versão da assinatura indisponível offline.");
     await queueEntityMutation("subscription.update", id, input, original.version);
@@ -961,7 +970,7 @@ export async function deleteSubscription(id: string): Promise<void> {
     localDeleteSubscription(id);
     return;
   }
-  if (!navigator.onLine) {
+  if (!canSync()) {
     const original = (await fetchSubscriptions()).items.find(row => row.id === id);
     if (!original?.version) throw new Error("Versão da assinatura indisponível offline.");
     await queueEntityMutation("subscription.delete", id, {

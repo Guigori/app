@@ -31,18 +31,27 @@ function emit() {
   for (const listener of listeners) listener();
 }
 
+/** Whether the app can talk to the server now: online and the database not paused by its daily limit. While it
+ *  cannot, the app works like offline: screens from this device, new records saved here and sent later. */
+export function canSync(): boolean {
+  return (typeof navigator === "undefined" || navigator.onLine) && !quotaBlockedUntil();
+}
+
 export function markQuotaExhausted(retryAt: unknown, now = Date.now()): void {
   const parsed = typeof retryAt === "string" ? Date.parse(retryAt) : NaN;
   // Without a usable time, back off for 15 minutes instead of hammering the server.
   const until = Number.isFinite(parsed) && parsed > now ? Math.min(parsed, now + 26 * 3600_000) : now + 15 * 60_000;
+  const wasBlocked = !!quotaBlockedUntil(now);
   try { window.localStorage.setItem(KEY, String(until)); } catch { /* memory only */ }
   emit();
+  if (!wasBlocked) window.dispatchEvent?.(new Event("finnos:server-paused"));
 }
 
 export function clearQuotaBlock(): void {
   staleShown = false;
   try { window.localStorage.removeItem(KEY); } catch { /* ignore */ }
   emit();
+  window.dispatchEvent?.(new Event("finnos:server-resumed"));
 }
 
 export function isQuotaBody(body: unknown): body is { code: string; retry_at?: string } {

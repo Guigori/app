@@ -1,5 +1,5 @@
 import { firebaseAuth } from "@/lib/firebase";
-import { isQuotaError, noteStaleShown } from "@/lib/quota";
+import { isQuotaError, noteStaleShown, canSync } from "@/lib/quota";
 const DB_NAME = "finnos-account-cache";
 const DB_VERSION = 1;
 const STORE = "snapshots";
@@ -46,10 +46,14 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
   return result?.value ?? null;
 }
 
-export async function cachedFetch<T>(key: string, online: () => Promise<T>): Promise<T> {
+/**
+ * The server's answer when it can be reached; otherwise the last answer this device kept for the same account, or,
+ * when there is none, the same screen computed from the device's copy of the account (`device`, lib/mirror.ts).
+ */
+export async function cachedFetch<T>(key: string, online: () => Promise<T>, device?: () => Promise<T | null>): Promise<T> {
   const uid = firebaseAuth?.currentUser?.uid;
   const scopedKey = uid ? `firebase:${uid}:${key}` : null;
-  if (navigator.onLine) {
+  if (canSync()) {
     // Auth/server failures must remain visible; never substitute another snapshot. The one exception is the
     // database's daily limit: then the last snapshot of this same account is shown, marked as not current.
     let value: T;
@@ -59,9 +63,10 @@ export async function cachedFetch<T>(key: string, online: () => Promise<T>): Pro
       if (!scopedKey || !isQuotaError(error)) throw error;
       const cached = await cacheGet<T>(scopedKey).catch(() => null);
       if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
-      if (cached === null) throw error;
+      const fallback = cached ?? (device ? await device().catch(() => null) : null);
+      if (fallback === null) throw error;
       noteStaleShown();
-      return cached;
+      return fallback;
     }
     if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
     if (scopedKey) await cacheSet(scopedKey, value);
@@ -71,7 +76,10 @@ export async function cachedFetch<T>(key: string, online: () => Promise<T>): Pro
   if (!scopedKey) throw new Error("FINNOS_OFFLINE_NO_CACHE");
   const cached = await cacheGet<T>(scopedKey);
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
-  if (cached !== null) return cached;
+  if (cached !== null) { if (navigator.onLine) noteStaleShown(); return cached; }
+  const computed = device ? await device().catch(() => null) : null;
+  if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  if (computed !== null) { if (navigator.onLine) noteStaleShown(); return computed; }
   throw new Error("FINNOS_OFFLINE_NO_CACHE");
 }
 

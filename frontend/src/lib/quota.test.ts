@@ -49,3 +49,12 @@ describe("database daily limit", () => {
     expect(quota.quotaBlockedUntil()).toBe(0);
   });
 });
+
+describe("paused synchronisation message", () => {
+  it("says records stay on this device and go to the cloud later", async () => {
+    const { describeSyncQueue } = await import("@/lib/sync/presentation");
+    expect(describeSyncQueue([], "paused", false).text).toBe("Sincronização pausada · você está usando os dados deste aparelho");
+    const op = { id: "1", kind: "transaction.create", status: "pending" } as never;
+    expect(describeSyncQueue([op], "paused", false).text).toContain("1 lançamento salvo neste aparelho, vai para a nuvem quando voltar");
+  });
+});
