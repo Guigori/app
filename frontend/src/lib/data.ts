@@ -203,7 +203,7 @@ function applyPendingToDashboard(base: Dashboard, pending: { id: string; payload
  * otherwise asked to the server (or the last answer kept here, or the copy, when the server cannot answer), and
  * then compared with the same screen computed on the device.
  */
-async function screenData<T>(screen: string, key: string, path: string, server: () => Promise<T>, local: () => T): Promise<T> {
+export async function screenData<T>(screen: string, key: string, path: string, server: () => Promise<T>, local: () => T): Promise<T> {
   const device = await deviceFirst(screen, local);
   if (device && "value" in device) return device.value;
   const value = await cachedFetch(key, server, () => computeFromDeviceCopy(local));
@@ -266,7 +266,7 @@ export async function fetchFinanceHistory(limit = 50, before?: string): Promise<
   if (isLocalMode()) return localFinanceHistory(limit, before);
   const params = new URLSearchParams({ limit: String(limit) });
   if (before) params.set("before", before);
-  return apiGet<FinanceHistoryPage>(`/finance/history?${params.toString()}`);
+  return cachedFetch(`finance-history:${params.toString()}`, () => apiGet<FinanceHistoryPage>(`/finance/history?${params.toString()}`));
 }
 
 export async function fetchBudget(month: string): Promise<BudgetSummary> {
@@ -327,18 +327,19 @@ export async function fetchBudgetSuggestion(): Promise<BudgetSuggestion | null> 
 
 export async function fetchCurrentBudgetCycle(): Promise<BudgetCycle | null> {
   if (isLocalMode()) return null;
-  return apiGet<BudgetCycle | null>("/budgets/current");
+  // Shown from the last answer kept on this device when the server cannot answer (no recalculation here).
+  return cachedFetch("budget-cycle:current", () => apiGet<BudgetCycle | null>("/budgets/current"));
 }
 export async function fetchNextBudgetCycle(): Promise<BudgetCycle | null> {
   if (isLocalMode()) return null;
-  return apiGet<BudgetCycle | null>("/budgets/next");
+  return cachedFetch("budget-cycle:next", () => apiGet<BudgetCycle | null>("/budgets/next"));
 }
 export async function fetchBudgetCycles(): Promise<BudgetCycle[]> {
   if (isLocalMode()) return [];
-  return apiGet<BudgetCycle[]>("/budgets");
+  return cachedFetch("budget-cycles", () => apiGet<BudgetCycle[]>("/budgets"));
 }
 export async function fetchBudgetCycleProgress(id: string): Promise<BudgetCycleProgress> {
-  return apiGet<BudgetCycleProgress>(`/budgets/${id}/progress`);
+  return cachedFetch(`budget-cycle:${id}:progress`, () => apiGet<BudgetCycleProgress>(`/budgets/${id}/progress`));
 }
 export type BudgetCyclePayload = {
   mode: "503020" | "personalizado";
@@ -766,7 +767,8 @@ export async function fetchNotifications(): Promise<Notifications> {
 /** Purchases the Apple Pay Shortcut left waiting. They live on the server, so only full accounts have them. */
 export async function fetchPendingCaptures(): Promise<PendingCaptures> {
   if (isLocalMode()) return { items: [], count: 0 };
-  return apiGet<PendingCaptures>("/pending-captures");
+  // Captures arrive on the server; this device keeps the last list so it can always be seen.
+  return cachedFetch("pending-captures", () => apiGet<PendingCaptures>("/pending-captures"));
 }
 
 export async function confirmPendingCapture(id: string, input: PendingCaptureConfirm): Promise<{ ok: boolean; transaction_id: string }> {

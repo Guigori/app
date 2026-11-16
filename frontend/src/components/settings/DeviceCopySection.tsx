@@ -10,6 +10,7 @@ const SCREEN_NAMES: Record<string, string> = {
   flow: "Fluxo", trends: "Análise", budget: "Orçamento", accounts: "Carteira · contas", account: "Conta",
   cards: "Carteira · cartões", invoice: "Fatura", subscriptions: "Assinaturas", radar: "Radar",
   notifications: "Notificações", categories: "Categorias", institutions: "Bancos", transactionHistory: "Histórico",
+  goals: "Patrimônio · metas", investments: "Patrimônio · investimentos",
 };
 
 function short(value: unknown): string {

@@ -462,3 +462,10 @@ export async function deviceFirst<T>(screen: string, compute: () => T): Promise<
     return null;
   }
 }
+
+
+/** Records of one collection exactly as kept in this device's copy (goals, investments…); throws without a copy. */
+export function mirrorRows<T = Record<string, unknown>>(name: string): T[] {
+  if (!current) throw new Error("FINNOS_NO_DEVICE_COPY");
+  return (current.collections[name] ?? []) as unknown as T[];
+}

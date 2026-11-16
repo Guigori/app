@@ -41,7 +41,11 @@ function readLocal(userId: string): Investment[] {
 const writeLocal = (userId: string, rows: Investment[]) => localStorage.setItem(key(userId), JSON.stringify(rows));
 
 export async function listInvestments(userId: string): Promise<Investment[]> {
-  return isLocalMode() ? readLocal(userId) : apiGet<Investment[]>("/investments");
+  if (isLocalMode()) return readLocal(userId);
+  const { screenData } = await import("@/lib/data");
+  const { mirrorRows } = await import("@/lib/mirror");
+  return screenData("investments", "investments", "/investments", () => apiGet<Investment[]>("/investments"),
+    () => mirrorRows<Investment & { user_id?: string }>("investments").map(({ user_id: _u, ...row }) => row));
 }
 
 export async function saveInvestment(userId: string, input: InvestmentInput, id?: string): Promise<void> {
