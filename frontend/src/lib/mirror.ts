@@ -225,3 +225,56 @@ export function shadowCheck<T>(screen: keyof typeof comparisons, path: string, s
   if (idle) idle(() => void run());
   else setTimeout(() => void run(), 200);
 }
+
+// --- "Este aparelho" (Configurações → Dados e backup) -------------------------------------------------------
+
+export const REFRESH_COOLDOWN_MS = 60_000;
+const REFRESHED_KEY = "finnos:mirror-refreshed-at";
+
+export interface MirrorStatus {
+  enabled: boolean;
+  fetchedAt: string | null;
+  revision: number | null;
+  report: ShadowReport;
+}
+
+/** What this device holds for the signed-in person, without asking the server. */
+export async function mirrorStatus(): Promise<MirrorStatus> {
+  const uid = firebaseAuth?.currentUser?.uid;
+  const report = shadowReport();
+  if (!uid || !mirrorEnabled()) return { enabled: false, fetchedAt: null, revision: null, report };
+  if (!current || current.uid !== uid) {
+    const stored = await idb<StoredMirror>("readonly", (s) => s.get(uid)).catch(() => undefined);
+    current = stored && stored.uid === uid ? stored : null;
+  }
+  return { enabled: true, fetchedAt: current?.fetched_at ?? null, revision: current?.revision ?? null, report };
+}
+
+/** Milliseconds until "Atualizar agora" may run again (0 = now). */
+export function refreshWait(now = Date.now()): number {
+  try {
+    const last = Number(window.localStorage.getItem(REFRESHED_KEY) ?? 0);
+    return Math.max(0, last + REFRESH_COOLDOWN_MS - now);
+  } catch {
+    return 0;
+  }
+}
+
+/** Throws away this device's copy and comparison report, then fetches the copy again. */
+export async function refreshMirror(): Promise<StoredMirror | null> {
+  if (refreshWait() > 0) throw new Error("Aguarde um minuto para atualizar de novo.");
+  try { window.localStorage.setItem(REFRESHED_KEY, String(Date.now())); } catch { /* ignore */ }
+  await clearMirror();
+  return syncMirror();
+}
+
+/** "atualizado há 3 min" for the copy's fetch time. */
+export function deviceCopyAge(iso: string | null): string {
+  if (!iso) return "ainda não atualizado";
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return "atualizado agora";
+  if (minutes < 60) return `atualizado há ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `atualizado há ${hours} h`;
+  return `atualizado em ${new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`;
+}
