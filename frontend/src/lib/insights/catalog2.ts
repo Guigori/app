@@ -344,16 +344,19 @@ export const MORE_READERS: Record<string, { needs: Need[]; read: (c: Ctx) => Rea
     read: ({ allTx, month, money, today }) => {
       const prev = closedMonths(month, 3);
       const cat = (t: Transaction) => t.category_name ?? "Sem categoria";
-      const cur = groupBy(spending(inMonth(allTx, month)).filter((t) => t.date <= today), cat);
+      // Fixed bills (rent, subscriptions) are paid on one day and would look "above normal" early in the month:
+      // only the day-to-day spending is compared at the same point of the month.
+      const variable = (ts: Transaction[]) => spending(ts).filter((t) => !t.fixed && !t.recurrence_id);
+      const cur = groupBy(variable(inMonth(allTx, month)).filter((t) => t.date <= today), cat);
       const progress = Number(today.slice(8, 10)) / new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
       const list = [...cur.entries()].map(([name, ts]) => {
-        const avg = prev.map((m) => sum(spending(inMonth(allTx, m)).filter((t) => cat(t) === name))).reduce((a, b) => a + b, 0) / prev.length;
+        const avg = prev.map((m) => sum(variable(inMonth(allTx, m)).filter((t) => cat(t) === name))).reduce((a, b) => a + b, 0) / prev.length;
         return { name, now: sum(ts), avg, expected: avg * progress, color: ts[0].category_color ?? undefined };
       }).filter((c) => c.avg > 0 && c.now > c.expected * 1.2 && c.now - c.expected > 30).sort((a, b) => (b.now - b.expected) - (a.now - a.expected));
       return {
         empty: list.length ? undefined : "Nenhuma categoria acima do que costuma ser até esta altura do mês.",
         tile: "Acima do normal", value: list[0]?.name ?? "Nada", tone: list.length ? "expense" : "income", note: list[0] ? `+${money(list[0].now - list[0].expected)} vs o normal` : "tudo no costume",
-        subtitle: "Comparado à média dos últimos 3 meses, até o dia de hoje",
+        subtitle: "Gastos do dia a dia comparados à média dos últimos 3 meses, até o dia de hoje (contas fixas ficam de fora)",
         chart: list.length ? { type: "bullets", items: list.slice(0, 4).map((c) => ({ label: c.name, value: c.now, limit: c.expected, note: `normal ${whole(money)(c.expected)}` })) } : undefined,
         rows: list.map((c) => ({ label: c.name, sub: `normal até hoje ${money(c.expected)} · média do mês ${money(c.avg)}`, value: money(c.now), tone: "expense" as const, color: c.color })),
         findings: list.length ? [{ tone: "bad", text: `${list[0].name} está ${money(list[0].now - list[0].expected)} acima do que costuma estar nesta altura do mês.` }] : [],

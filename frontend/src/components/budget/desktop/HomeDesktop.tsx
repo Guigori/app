@@ -10,6 +10,8 @@ import { dm, useBudgetMonth, useMoney, useMonthData, useOnline } from "@/compone
 import { BudgetFailed, BudgetLoading, NoBudgetCard, OfflineNote } from "@/components/budget/States";
 import { HomeInsights, Shortcuts } from "@/components/budget/HomeParts";
 import { NextStepCard } from "@/components/budget/NextStep";
+import { BillsCard, DistributionCard } from "@/components/budget/HomeCharts";
+import { MonthAnalyses } from "@/components/budget/MonthAnalyses";
 import { DeskHeader, DeskPage, KpiStrip, Panel, Segmented, td, th } from "@/components/budget/desktop/kit";
 import { cn } from "@/lib/utils";
 import type { Account, Transaction } from "@/types/finnos";
@@ -98,17 +100,23 @@ function Body({ v, money, today, transactions, accounts, onDismiss }: { v: Month
               {v.categories.some((c) => c.spent === 0) ? <button type="button" onClick={() => setAllCats((a) => !a)} className="font-medium text-primary">{allCats ? `Ver todas (${v.categories.length})` : "Só as usadas"}</button> : null}
             </div>
           </Panel>
+          <div className="grid grid-cols-2 items-start gap-5">
+            <BillsCard v={v} money={money} kind="despesa" />
+            <BillsCard v={v} money={money} kind="receita" />
+          </div>
         </div>
         <div className="col-span-4 flex min-w-0 flex-col gap-5">
           <Panel title="O que importa agora">
             <HomeInsights v={v} money={money} onDismiss={onDismiss} transactions={transactions} accounts={accounts} max={5} />
             {past ? <p className="text-sm text-muted-foreground">Mês encerrado. <Link to={`/orcamento/conta?mes=${v.month}`} className="font-medium text-primary">Ver como fechou</Link></p> : null}
           </Panel>
+          <DistributionCard v={v} money={money} />
           <Panel title="Atalhos"><Shortcuts month={v.month} columns={2} /></Panel>
           <Panel title="Gasto por dia"><Heatmap month={v.month} values={v.heat} today={today} format={money} /></Panel>
         </div>
       </div>
 
+      <MonthAnalyses v={v} columns={3} />
       <Transactions v={v} money={money} transactions={transactions} />
     </>
   );

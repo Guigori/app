@@ -5,9 +5,8 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Eye, EyeOff, Settings2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Settings2 } from "lucide-react";
 import { addMonth, currentMonth, monthLabel } from "@/lib/format";
-import { useBalanceHidden } from "@/lib/balance";
 import { cn } from "@/lib/utils";
 
 const DESKTOP_QUERY = "(min-width: 1024px)";
@@ -38,7 +37,6 @@ export function DeskPage({ children, testId }: { children: ReactNode; testId: st
 }
 
 export function DeskHeader({ title, month = currentMonth(), setMonth, actions, subtitle }: { title: string; month?: string; setMonth?: (m: string) => void; actions?: ReactNode; subtitle?: ReactNode }) {
-  const { hidden, toggle } = useBalanceHidden();
   const location = useLocation();
   return (
     <div>
@@ -46,7 +44,6 @@ export function DeskHeader({ title, month = currentMonth(), setMonth, actions, s
         <div className="min-w-0"><h1 className="font-heading text-2xl font-semibold tracking-tight">{title}</h1>{subtitle ? <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p> : null}</div>
         <div className="flex items-center gap-1">
           {actions}
-          <button type="button" onClick={toggle} aria-label={hidden ? "Mostrar valores" : "Ocultar valores"} aria-pressed={hidden} title={hidden ? "Mostrar valores" : "Ocultar valores"} className="inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground/75 hover:bg-muted hover:text-foreground">{hidden ? <EyeOff size={18} /> : <Eye size={18} />}</button>
           <Link to="/orcamento/configuracoes" aria-label="Configurar orçamento" title="Configurar orçamento" className="inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground/75 hover:bg-muted hover:text-foreground" data-testid="budget-settings-button"><Settings2 size={18} /></Link>
           {setMonth ? <>
             <span className="mx-1 h-6 w-px bg-border" aria-hidden="true" />
