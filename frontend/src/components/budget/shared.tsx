@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Eye, EyeOff, Settings2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Settings2 } from "lucide-react";
 import { fetchAccounts, fetchBalanceHistory, fetchBudget, fetchCalendar, fetchCards, fetchCurrentBudgetCycle, fetchFlow, fetchMe, fetchTransactions } from "@/lib/data";
 import { listGoals } from "@/lib/goals";
 import { addMonth, currentMonth, formatBRL, formatHiddenBRL, monthLabel, todayISO } from "@/lib/format";
@@ -100,7 +100,6 @@ const AREAS = [
 export function BudgetHeader({ title, subtitle, month, setMonth, monthSwitch = true }: {
   title: string; subtitle: string; month: string; setMonth?: (m: string) => void; monthSwitch?: boolean;
 }) {
-  const { hidden, toggle } = useBalanceHidden();
   const location = useLocation();
   const q = `?mes=${month}`;
   const monthSwitcher = monthSwitch && setMonth ? (
@@ -120,7 +119,6 @@ export function BudgetHeader({ title, subtitle, month, setMonth, monthSwitch = t
         <div className="flex shrink-0 items-center gap-2">
           <span className="hidden sm:contents">{monthSwitcher}</span>
           <Link to="/orcamento/configuracoes" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "rounded-full")} data-testid="budget-settings-button"><Settings2 className="h-4 w-4" /> Configurar</Link>
-          <button type="button" onClick={toggle} aria-label={hidden ? "Mostrar valores" : "Esconder valores"} className="grid h-9 w-9 place-items-center rounded-full border border-border bg-card">{hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
         </div>
       </header>
       {monthSwitcher ? <div className="mt-3 sm:hidden">{monthSwitcher}</div> : null}

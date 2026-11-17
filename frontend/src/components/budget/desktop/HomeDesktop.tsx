@@ -11,6 +11,7 @@ import { BudgetFailed, BudgetLoading, NoBudgetCard, OfflineNote } from "@/compon
 import { HomeInsights, Shortcuts } from "@/components/budget/HomeParts";
 import { NextStepCard } from "@/components/budget/NextStep";
 import { BillsCard, DistributionCard } from "@/components/budget/HomeCharts";
+import { MonthAnalyses } from "@/components/budget/MonthAnalyses";
 import { DeskHeader, DeskPage, KpiStrip, Panel, Segmented, td, th } from "@/components/budget/desktop/kit";
 import { cn } from "@/lib/utils";
 import type { Account, Transaction } from "@/types/finnos";
@@ -115,6 +116,7 @@ function Body({ v, money, today, transactions, accounts, onDismiss }: { v: Month
         </div>
       </div>
 
+      <MonthAnalyses v={v} columns={3} />
       <Transactions v={v} money={money} transactions={transactions} />
     </>
   );

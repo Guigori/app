@@ -7,9 +7,8 @@ import { Suspense } from "react";
 import { lazyRetry } from "@/lib/lazyRetry";
 import { useIsDesktop } from "@/components/budget/desktop/kit";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Eye, EyeOff } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addMonth, monthLabel } from "@/lib/format";
-import { useBalanceHidden } from "@/lib/balance";
 import { useBudgetClosings } from "@/components/budget/usePlans";
 import type { MonthView } from "@/lib/budget/monthView";
 import { dismissMatch } from "@/lib/budget/prefs";
@@ -17,6 +16,7 @@ import { TransactionList } from "@/components/transactions/TransactionList";
 import { card, dm, h2, useBudgetMonth, useMoney, useMonthData, useOnline } from "@/components/budget/shared";
 import { BudgetFailed, BudgetLoading, NoBudgetCard, OfflineNote } from "@/components/budget/States";
 import { HomeInsights, LimitsSummary } from "@/components/budget/HomeParts";
+import { MonthAnalyses } from "@/components/budget/MonthAnalyses";
 import { BalanceCard, BillsCard, DistributionCard, PaceCard, lbl } from "@/components/budget/HomeCharts";
 import { cn } from "@/lib/utils";
 import type { Transaction } from "@/types/finnos";
@@ -52,6 +52,7 @@ function BudgetMobile() {
             <LimitsSummary v={view} money={money} top={view.categories.length} total={false} />
             {view.categories.length ? <p className="mt-3 text-[11px] text-muted-foreground">A marca é o limite; o que passa dele fica vermelho. Listrado: pago com vale, conta no limite.</p> : null}
           </section>
+          <MonthAnalyses v={view} />
           <BillsCard v={view} money={money} kind="despesa" />
           <BillsCard v={view} money={money} kind="receita" max={4} />
           {view.goals.length ? <GoalsCard v={view} money={money} /> : null}
@@ -63,9 +64,8 @@ function BudgetMobile() {
   );
 }
 
-/** Título com Histórico, Configurar e o olho; abaixo, o mês com setas grandes e onde se está nele. */
+/** Título com Histórico e Configurar (o olho que esconde os valores é o do topo do app); abaixo, o mês com setas grandes e onde se está nele. */
 function HomeHeader({ month, setMonth, today, v }: { month: string; setMonth: (m: string) => void; today: string; v: MonthView | null }) {
-  const { hidden, toggle } = useBalanceHidden();
   const pill = "grid h-9 place-items-center rounded-full border border-border bg-card px-3 text-xs font-bold";
   const arrow = "grid h-11 w-11 shrink-0 place-items-center rounded-full border border-border bg-card";
   const left = v ? v.daysInMonth - Number(today.slice(8, 10)) : 0;
@@ -76,7 +76,6 @@ function HomeHeader({ month, setMonth, today, v }: { month: string; setMonth: (m
         <h1 className="flex-1 font-heading text-2xl font-bold tracking-tight">Orçamento</h1>
         <Link to={`/orcamento/historico?mes=${addMonth(month, -1)}`} className={pill}>Histórico</Link>
         <Link to="/orcamento/configuracoes" className={pill} data-testid="budget-settings-button">Configurar</Link>
-        <button type="button" onClick={toggle} aria-label={hidden ? "Mostrar valores" : "Esconder valores"} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-card">{hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
       </header>
       <div className="mt-3 flex items-center gap-2" role="group" aria-label="Mês">
         <button type="button" onClick={() => setMonth(addMonth(month, -1))} aria-label="Mês anterior" className={arrow}><ChevronLeft className="h-5 w-5" /></button>
