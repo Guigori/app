@@ -185,6 +185,6 @@ export function InsightWidget({ id, size, config = {}, slots, className }: { id:
     case "radar": return <RadarWidget size={size} to={to} className={className} />;
     case "calendario": return <CalendarWidget size={size} className={className} />;
     case "movimentacoes": return <RecentWidget size={size} to={to} className={className} />;
-    default: return READERS[id] ? <CatalogInsight id={id} size={size} to={to} className={className} /> : null;
+    default: return READERS[id] ? <CatalogInsight id={id} size={size} to={to} className={className} month={config.month} /> : null;
   }
 }

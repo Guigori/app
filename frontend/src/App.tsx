@@ -46,6 +46,17 @@ const SettingsIntegrations = lazyRetry(() => import("@/pages/SettingsIntegration
 const ChartSettings = lazyRetry(() => import("@/pages/ChartSettings"));
 const Budget = lazyRetry(() => import("@/pages/Budget"));
 const BudgetSettings = lazyRetry(() => import("@/pages/BudgetSettings"));
+const BudgetCycles = lazyRetry(() => import("@/pages/BudgetCycles"));
+const BudgetSpending = lazyRetry(() => import("@/pages/BudgetSpending"));
+const BudgetNextMonth = lazyRetry(() => import("@/pages/BudgetNextMonth"));
+const BudgetProjection = lazyRetry(() => import("@/pages/BudgetProjection"));
+const BudgetClosing = lazyRetry(() => import("@/pages/BudgetClosing"));
+const BudgetHistory = lazyRetry(() => import("@/pages/BudgetHistory"));
+const BudgetFree = lazyRetry(() => import("@/pages/BudgetFree"));
+const BudgetCommitments = lazyRetry(() => import("@/pages/BudgetCommitments"));
+const BudgetSpecials = lazyRetry(() => import("@/pages/BudgetSpecials"));
+const BudgetNewPeriod = lazyRetry(() => import("@/pages/BudgetNewPeriod"));
+const BudgetStart = lazyRetry(() => import("@/pages/BudgetStart"));
 const FinanceHistory = lazyRetry(() => import("@/pages/FinanceHistory"));
 const Subscriptions = lazyRetry(() => import("@/pages/Subscriptions"));
 const CardInvoice = lazyRetry(() => import("@/pages/CardInvoice"));
@@ -127,6 +138,18 @@ export default function App() {
             <Route path="/cartoes/:cardId/conferencia" element={<ReconciliationPage />} />
             <Route path="/orcamento" element={<Budget />} />
             <Route path="/orcamento/configuracoes" element={<BudgetSettings />} />
+            <Route path="/orcamento/ciclos" element={<BudgetCycles />} />
+            <Route path="/orcamento/gastos" element={<BudgetSpending />} />
+            <Route path="/orcamento/proximo" element={<BudgetNextMonth />} />
+            <Route path="/orcamento/projecao" element={<BudgetProjection />} />
+            <Route path="/orcamento/fechar" element={<BudgetClosing />} />
+            <Route path="/orcamento/historico" element={<BudgetHistory />} />
+            <Route path="/orcamento/conta" element={<BudgetFree />} />
+            <Route path="/orcamento/compromissos" element={<BudgetCommitments />} />
+            <Route path="/orcamento/especiais" element={<BudgetSpecials />} />
+            <Route path="/orcamento/novo" element={<BudgetNewPeriod />} />
+            <Route path="/orcamento/comecar" element={<BudgetStart />} />
+            <Route path="/orcamento/livre" element={<BudgetFree />} />
             <Route path="/historico" element={<FinanceHistory />} />
             <Route path="/fluxo" element={<CaixaRedirect />} />
             <Route path="/radar" element={<Radar />} />

@@ -9,7 +9,8 @@ export const SIZE_ORDER: WidgetSize[] = ["S", "M", "L"];
 export type InsightTheme = "Cartões" | "Compromissos" | "Orçamento" | "Renda" | "Gastos" | "Metas" | "Patrimônio" | "Alertas";
 export const THEMES: InsightTheme[] = ["Orçamento", "Renda", "Compromissos", "Cartões", "Gastos", "Metas", "Patrimônio", "Alertas"];
 
-export interface WidgetConfig { cardId?: string | null }
+/** cardId: one card; month (AAAA-MM): the analysis of a month that already passed (catalog analyses). */
+export interface WidgetConfig { cardId?: string | null; month?: string | null }
 
 export interface InsightDef {
   id: string;
@@ -100,7 +101,7 @@ export const INSIGHTS: InsightDef[] = [
 
 /** The analysis page of a widget (a tap on the widget opens it). */
 export const insightById = (id: string) => INSIGHTS.find((i) => i.id === id);
-export const detailPath = (id: string, config: WidgetConfig = {}) => insightById(id)?.canonical?.(config) ?? `/analise/painel/${id}${config.cardId ? `?cartao=${encodeURIComponent(config.cardId)}` : ""}`;
+export const detailPath = (id: string, config: WidgetConfig = {}) => insightById(id)?.canonical?.(config) ?? `/analise/painel/${id}${(() => { const q = new URLSearchParams(); if (config.cardId) q.set("cartao", config.cardId); if (config.month) q.set("mes", config.month); const s = q.toString(); return s ? `?${s}` : ""; })()}`;
 
 /** The next size the analysis accepts (the handle in edit mode cycles through them). */
 export function nextSize(def: InsightDef, size: WidgetSize): WidgetSize {

@@ -14,6 +14,8 @@ const SYNCED = {
   finn_memory: { storage: "finnos:finn-memory:v1", event: "finnos-finn-memory" },
   // How the Home chart was left (lib/chartPreferences): view, period, series.
   chart: { storage: "finnos:chart-preferences:v1", event: "finnos-chart-preferences" },
+  // Orçamento (lib/budget/prefs): colchão, avisos, modelos de limites, sugestões descartadas.
+  budget: { storage: "finnos:budget-settings:v1", event: "finnos-budget-settings" },
   // Light/dark (next-themes keeps it under "theme").
   theme: { storage: "theme", event: "finnos-theme" },
 } as const;

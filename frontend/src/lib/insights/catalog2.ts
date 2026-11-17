@@ -173,6 +173,65 @@ export const MORE_READERS: Record<string, { needs: Need[]; read: (c: Ctx) => Rea
     },
   },
 
+  /** Este mês x o mesmo mês do ano passado, por categoria: o que mudou de verdade (sem o efeito da época do ano). */
+  "mes-x-ano-passado": {
+    needs: ["allTx"],
+    read: ({ allTx, month, money }) => {
+      const before = addMonth(month, -12);
+      const byCat = (m: string) => { const out = new Map<string, number>(); for (const t of spending(inMonth(allTx, m)).filter((x) => x.status === "pago")) { const k = t.category_name || "Sem categoria"; out.set(k, (out.get(k) ?? 0) + amount(t)); } return out; };
+      const now = byCat(month), then = byCat(before);
+      const names = [...new Set([...now.keys(), ...then.keys()])];
+      const rows = names.map((n) => ({ name: n, now: now.get(n) ?? 0, then: then.get(n) ?? 0 })).map((r) => ({ ...r, delta: r.now - r.then })).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+      const totNow = [...now.values()].reduce((a, b) => a + b, 0), totThen = [...then.values()].reduce((a, b) => a + b, 0);
+      const up = rows.filter((r) => r.delta > 0), down = rows.filter((r) => r.delta < 0);
+      return {
+        empty: then.size ? undefined : `Ainda não há gastos em ${short(before)} de ${before.slice(0, 4)} para comparar.`,
+        tile: `vs ${short(before)}/${before.slice(2, 4)}`, value: `${totNow >= totThen ? "+" : "−"}${money(Math.abs(totNow - totThen))}`, tone: totNow > totThen ? "expense" : "income", note: `${money(totNow)} agora · ${money(totThen)} há um ano`,
+        vs: { c: compare(totNow, totThen || null, "lower"), label: "gasto vs mesmo mês do ano passado", format: "money" },
+        chart: up.some((r) => r.then > 0) ? { type: "bullets", items: rows.filter((r) => r.then > 0).slice(0, 4).map((r) => ({ label: r.name, value: r.now, limit: r.then, note: `${r.delta >= 0 ? "+" : "−"}${whole(money)(Math.abs(r.delta))}` })) } : undefined,
+        rows: rows.map((r) => ({ label: r.name, sub: `${money(r.then)} → ${money(r.now)}`, value: `${r.delta >= 0 ? "+" : "−"}${money(Math.abs(r.delta))}`, tone: r.delta > 0 ? "expense" as const : "income" as const })),
+        findings: [
+          ...(up[0] ? [{ tone: "bad" as const, text: `${up[0].name} está ${money(up[0].delta)} acima de ${short(before)} do ano passado.` }] : []),
+          ...(down[0] ? [{ tone: "good" as const, text: `${down[0].name} caiu ${money(-down[0].delta)} em um ano.` }] : []),
+        ],
+        summary: [`Em ${short(month)} você gastou ${money(totNow)}; no mesmo mês do ano passado foram ${money(totThen)}.`, up[0] ? `O que mais cresceu em um ano: ${up[0].name}.` : "", down[0] ? `O que mais caiu: ${down[0].name}.` : ""].filter(Boolean),
+        context: { mes: month, mes_ano_passado: before, categorias: rows.map((r) => ({ categoria: r.name, antes: r.then, agora: r.now })) },
+      };
+    },
+  },
+
+  /** Retrospectiva do ano: melhor e pior mês, categorias que mais cresceram e quanto sobrou no ano. */
+  "retrospectiva-ano": {
+    needs: ["allTx"],
+    read: ({ allTx, month, money }) => {
+      const year = month.slice(0, 4), prevYear = String(Number(year) - 1);
+      const months = Array.from({ length: Number(month.slice(5, 7)) }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+      const paid = allTx.filter((t) => t.status === "pago");
+      const per = months.map((m) => { const ts = inMonth(paid, m); return { m, inc: sum(incomes(ts)), exp: sum(spending(ts)) }; }).filter((x) => x.inc || x.exp).map((x) => ({ ...x, net: x.inc - x.exp }));
+      const cats = (y: string) => { const out = new Map<string, number>(); for (const t of spending(paid.filter((x) => x.date.slice(0, 4) === y && x.date.slice(5, 7) <= month.slice(5, 7)))) { const k = t.category_name || "Sem categoria"; out.set(k, (out.get(k) ?? 0) + amount(t)); } return out; };
+      const cur = cats(year), prev = cats(prevYear);
+      const grew = [...cur.entries()].map(([n, v]) => ({ n, v, d: v - (prev.get(n) ?? 0), had: prev.has(n) })).filter((x) => x.had).sort((a, b) => b.d - a.d);
+      const best = [...per].sort((a, b) => b.net - a.net)[0], worst = [...per].sort((a, b) => a.net - b.net)[0];
+      const net = per.reduce((s, x) => s + x.net, 0);
+      return {
+        empty: per.length ? undefined : `Ainda não há lançamentos pagos em ${year}.`,
+        tile: `Retrospectiva ${year}`, value: `${net >= 0 ? "+" : "−"}${money(Math.abs(net))}`, tone: net < 0 ? "expense" : "income", note: best ? `melhor mês: ${short(best.m)}` : "",
+        chart: { type: "bars", data: per.map((x) => ({ label: short(x.m), value: Math.max(0, x.net), focus: x.m === best?.m, valueLabel: whole(money)(x.net) })) },
+        rows: [
+          ...(best ? [{ label: "Melhor mês", sub: short(best.m), value: money(best.net), tone: "income" as const }] : []),
+          ...(worst && worst.m !== best?.m ? [{ label: "Mês mais apertado", sub: short(worst.m), value: money(worst.net), tone: worst.net < 0 ? "expense" as const : undefined }] : []),
+          ...grew.slice(0, 3).map((g) => ({ label: g.n, sub: `vs ${prevYear} até ${short(month)}`, value: `${g.d >= 0 ? "+" : "−"}${money(Math.abs(g.d))}`, tone: g.d > 0 ? "expense" as const : "income" as const })),
+        ],
+        findings: [
+          ...(best ? [{ tone: "good" as const, text: `${cap(shortMonthName(best.m))} foi o melhor mês: sobraram ${money(best.net)}.` }] : []),
+          ...(grew[0] && grew[0].d > 0 ? [{ tone: "bad" as const, text: `${grew[0].n} foi a categoria que mais cresceu em relação a ${prevYear}: +${money(grew[0].d)}.` }] : []),
+        ],
+        summary: [`Em ${year}, até ${short(month)}, ${net >= 0 ? "sobraram" : "faltaram"} ${money(Math.abs(net))}.`, best ? `Melhor mês: ${short(best.m)} (${money(best.net)}).` : "", worst && worst.m !== best?.m ? `Mais apertado: ${short(worst.m)} (${money(worst.net)}).` : ""].filter(Boolean),
+        context: { ano: year, meses: per.map((x) => ({ mes: x.m, entrou: x.inc, saiu: x.exp })), cresceram: grew.slice(0, 5).map((g) => ({ categoria: g.n, diferenca: g.d })) },
+      };
+    },
+  },
+
   /** Seu ano até agora: income, spending and what was left this year, and where the year ends at this pace. */
   "ano-ate-agora": {
     needs: ["allTx"],

@@ -3,7 +3,7 @@ import type { InsightDef } from "@/lib/insights/registry";
 
 const S_M_L = ["S", "M", "L"] as InsightDef["sizes"];
 // "Novo" in the gallery: only the latest batch.
-const NEWEST = new Set(["analise-do-dia", "meu-orcamento", "fim-de-semana", "recorrentes-escondidos", "aumentos-de-preco", "fora-do-orcamento", "ano-ate-agora", "efeito-salario", "fontes-de-renda", "proximos-30-dias", "parcelas-novas", "acima-do-normal", "onde-economizou", "dinheiro-parado", "dias-no-vermelho", "custo-de-vida", "juros-e-tarifas"]);
+const NEWEST = new Set(["mes-x-ano-passado", "retrospectiva-ano", "analise-do-dia", "meu-orcamento", "fim-de-semana", "recorrentes-escondidos", "aumentos-de-preco", "fora-do-orcamento", "ano-ate-agora", "efeito-salario", "fontes-de-renda", "proximos-30-dias", "parcelas-novas", "acima-do-normal", "onde-economizou", "dinheiro-parado", "dias-no-vermelho", "custo-de-vida", "juros-e-tarifas"]);
 const def = (d: Omit<InsightDef, "sizes" | "star"> & { sizes?: InsightDef["sizes"] }): InsightDef => ({ sizes: S_M_L, star: NEWEST.has(d.id), ...d });
 
 export const CATALOG_DEFS: InsightDef[] = [
@@ -30,6 +30,12 @@ export const CATALOG_DEFS: InsightDef[] = [
   def({ id: "ano-ate-agora", title: "Seu ano até agora", description: "O que entrou, saiu e sobrou neste ano, e onde o ano termina se continuar assim.", theme: "Renda", defaultSize: "L", to: () => "/transacoes?aba=caixa", toLabel: "Ver no Caixa",
     how: "Somamos receitas e despesas pagas de janeiro até hoje e comparamos com o mesmo período do ano passado. A estimativa do ano repete a média por mês até dezembro.",
     questions: ["Como foi meu ano?", "Vou fechar o ano no azul?", "Quanto consigo guardar até dezembro?"] }),
+  def({ id: "mes-x-ano-passado", title: "Este mês x ano passado", description: "Cada categoria deste mês contra o mesmo mês do ano passado: o que mudou de verdade, sem o efeito da época.", theme: "Gastos", defaultSize: "L", to: () => "/transacoes?aba=analise", toLabel: "Ver categorias no Fluxo",
+    how: "Somamos as despesas pagas de cada categoria neste mês e no mesmo mês de um ano atrás. A marca da barra é o valor do ano passado.",
+    questions: ["Por que essa categoria cresceu em um ano?", "Isso acompanha a inflação?", "Onde voltei a gastar como antes?"] }),
+  def({ id: "retrospectiva-ano", title: "Retrospectiva do ano", description: "O melhor e o mais apertado mês do ano, as categorias que mais cresceram contra o ano passado e quanto sobrou.", theme: "Renda", defaultSize: "L", to: () => "/orcamento/historico", toLabel: "Ver histórico do orçamento",
+    how: "Para cada mês do ano somamos o que entrou e o que saiu (pagos). As categorias comparam o ano até este mês com o mesmo período do ano passado.",
+    questions: ["O que fez o melhor mês dar certo?", "Como evitar outro mês apertado?", "Quanto consigo guardar no ano que vem?"] }),
   def({ id: "efeito-salario", title: "Efeito salário", description: "Quanto do mês vai embora nos 5 dias depois que a renda cai.", theme: "Gastos", defaultSize: "M", to: () => "/transacoes", toLabel: "Ver no calendário",
     how: "Pegamos a maior receita paga do mês e somamos os gastos variáveis dos 5 dias seguintes, comparando com o total de gastos variáveis do mês.",
     questions: ["Como não gastar tudo logo que o salário cai?", "Vale separar um valor assim que a renda entra?", "O que mais pesa nesses dias?"] }),

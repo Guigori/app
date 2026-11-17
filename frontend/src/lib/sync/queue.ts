@@ -12,8 +12,12 @@ export type OperationSource = "manual" | "ios_shortcut" | "bank_notification" | 
 export type OfflineCreateKind = "account.create" | "category.create" | "card.create" | "subscription.create";
 export type OfflineEntity = "account" | "category" | "card" | "subscription";
 export type OfflineMutationKind = `${OfflineEntity}.update` | `${OfflineEntity}.delete`;
-type OperationKind = "transaction.create" | "transaction.update" | "transaction.delete" | OfflineCreateKind | OfflineMutationKind;
+/** Orçamento: one document per month (plan or closing snapshot), replaced as a whole — safe to replay. */
+export type BudgetMonthKind = "budgetPlan.put" | "budgetClosing.put" | "budgetClosing.delete" | "budgetSpecial.put" | "budgetSpecial.delete";
+type OperationKind = "transaction.create" | "transaction.update" | "transaction.delete" | OfflineCreateKind | OfflineMutationKind | BudgetMonthKind;
 export type OfflineCreateInput = AccountInput | CategoryInput | CardInput | SubscriptionInput;
+/** A month of the Orçamento (plan or closing): never a movement of money, never has a name of its own. */
+export type BudgetMonthPayload = { name?: undefined } & Record<string, unknown>;
 
 export interface SyncOperation {
   id: string;
@@ -21,7 +25,7 @@ export interface SyncOperation {
   kind: OperationKind;
   entityId?: string;
   baseVersion?: number;
-  payload: TransactionInput | OfflineCreateInput;
+  payload: TransactionInput | OfflineCreateInput | BudgetMonthPayload;
   source: OperationSource;
   createdAt: string;
   attempts: number;
@@ -93,6 +97,25 @@ export async function queueEntityCreate(
     id: crypto.randomUUID(), uid, kind, payload,
     source: "manual", createdAt: new Date().toISOString(),
     attempts: 0, status: "pending",
+  };
+  if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
+  await persistNewOperation(operation);
+  return operation;
+}
+
+/** Orçamento offline: the month's plan or closing waits here and is sent as soon as there is a connection. A newer
+ * save of the same month replaces the older one still waiting (the document is replaced as a whole anyway). */
+export async function queueBudgetMonth(kind: BudgetMonthKind, month: string, payload: BudgetMonthPayload): Promise<SyncOperation> {
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (!uid) throw new Error("FINNOS_AUTH_REQUIRED");
+  if (kind.startsWith("budgetSpecial.") ? !/^[a-z0-9][a-z0-9-]{0,59}$/.test(month) : !/^\d{4}-\d{2}$/.test(month)) throw new Error("Mês inválido.");
+  const family = kind.split(".")[0];
+  for (const old of await listSyncOperations()) {
+    if (old.uid === uid && old.entityId === month && old.kind.startsWith(`${family}.`) && old.status !== "syncing") await remove(old.id);
+  }
+  const operation: SyncOperation = {
+    id: crypto.randomUUID(), uid, kind, entityId: month, payload,
+    source: "manual", createdAt: new Date().toISOString(), attempts: 0, status: "pending",
   };
   if (uid !== firebaseAuth?.currentUser?.uid) throw new Error("FINNOS_SESSION_CHANGED");
   await persistNewOperation(operation);
@@ -245,7 +268,17 @@ export async function flushSyncQueue(): Promise<void> {
       await saveSyncOperation(current);
       window.dispatchEvent(new CustomEvent("finnos:sync-state"));
       try {
-        if (op.kind === "transaction.create") {
+        if (op.kind === "budgetPlan.put" && op.entityId) {
+          await apiPut(`/budgets/plans/${encodeURIComponent(op.entityId)}`, op.payload, { "X-FINNOS-Operation-ID": op.id });
+        } else if (op.kind === "budgetClosing.put" && op.entityId) {
+          await apiPut(`/budgets/closings/${encodeURIComponent(op.entityId)}`, op.payload, { "X-FINNOS-Operation-ID": op.id });
+        } else if (op.kind === "budgetSpecial.put" && op.entityId) {
+          await apiPut(`/budgets/specials/${encodeURIComponent(op.entityId)}`, op.payload, { "X-FINNOS-Operation-ID": op.id });
+        } else if (op.kind === "budgetSpecial.delete" && op.entityId) {
+          await apiDelete<void>(`/budgets/specials/${encodeURIComponent(op.entityId)}`, { "X-FINNOS-Operation-ID": op.id });
+        } else if (op.kind === "budgetClosing.delete" && op.entityId) {
+          await apiDelete<void>(`/budgets/closings/${encodeURIComponent(op.entityId)}`, { "X-FINNOS-Operation-ID": op.id });
+        } else if (op.kind === "transaction.create") {
           await apiPost<Transaction>("/transactions", op.payload as TransactionInput, { "X-FINNOS-Operation-ID": op.id, "X-FINNOS-Source": op.source });
         } else if (op.kind.endsWith(".create")) {
           const paths: Record<OfflineCreateKind, string> = {

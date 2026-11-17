@@ -43,7 +43,8 @@ async function session(page: Page) {
 
 test("a budget category lists the lançamentos that used its limit, each opening its detail", async ({ page }) => {
   await session(page);
-  await page.goto("/orcamento");
+  // The cycle view (Orçamento › Mais › Ciclos) keeps the per-category drill-down.
+  await page.goto("/orcamento/ciclos");
   const row = page.getByTestId("budget-allocation").first();
   await row.getByTestId("budget-allocation-toggle").click();
   const detail = row.getByTestId("budget-allocation-detail");

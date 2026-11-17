@@ -16,16 +16,17 @@ import { useMemo, useState } from "react";
 const stale = { staleTime: 60_000 };
 
 /** Loads what the given analyses need (one shared cache with the rest of the library). */
-export function useCatalogCtx(needList: string[]): Ctx | null {
+export function useCatalogCtx(needList: string[], forMonth?: string | null): Ctx | null {
   const needs = new Set(needList);
   const { hidden } = useBalanceHidden();
-  const today = todayISO();
-  const month = currentMonth();
+  // A month that already passed is read as of its last day ("today" inside it).
+  const month = forMonth && /^\d{4}-\d{2}$/.test(forMonth) && forMonth < currentMonth() ? forMonth : currentMonth();
+  const today = month === currentMonth() ? todayISO() : monthRange(month).end;
   const prevMonth = addMonth(month, -1);
   const range = monthRange(month), prevRange = monthRange(prevMonth);
   const tx = useQuery({ queryKey: ["transactions", "month", range.start, range.end], queryFn: () => fetchTransactions({ start_date: range.start, end_date: range.end }), ...stale, enabled: needs.has("tx") });
   const prevTx = useQuery({ queryKey: ["transactions", "month", prevRange.start, prevRange.end], queryFn: () => fetchTransactions({ start_date: prevRange.start, end_date: prevRange.end }), ...stale, enabled: needs.has("prevTx") });
-  const allTx = useQuery({ queryKey: ["transactions", "analysis-all"], queryFn: () => fetchTransactions({ start_date: `${addMonth(month, -11)}-01`, end_date: "2999-12-31" }), ...stale, enabled: needs.has("allTx") });
+  const allTx = useQuery({ queryKey: ["transactions", "analysis-all", month], queryFn: () => fetchTransactions({ start_date: `${addMonth(month, -11)}-01`, end_date: "2999-12-31" }), ...stale, enabled: needs.has("allTx") });
   const dashboard = useQuery({ queryKey: ["dashboard", month], queryFn: () => fetchDashboard(month), ...stale, enabled: needs.has("dashboard") });
   const prevDashboard = useQuery({ queryKey: ["dashboard", prevMonth], queryFn: () => fetchDashboard(prevMonth), ...stale, enabled: needs.has("prevDashboard") });
   const subs = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions, ...stale, enabled: needs.has("subs") });
@@ -81,8 +82,8 @@ function DonutView({ chart, size, money }: { chart: Extract<Chart, { type: "donu
 
 const toneClass = (t?: "income" | "expense") => (t === "income" ? "text-income" : t === "expense" ? "text-expense" : "");
 
-export function CatalogInsight({ id, size, to, className }: { id: string; size: WidgetSize; to?: string; className?: string }) {
-  const ctx = useCatalogCtx(READERS[id]?.needs ?? []);
+export function CatalogInsight({ id, size, to, className, month }: { id: string; size: WidgetSize; to?: string; className?: string; month?: string | null }) {
+  const ctx = useCatalogCtx(READERS[id]?.needs ?? [], month);
   const def = insightById(id);
   const { hidden } = useBalanceHidden();
   if (!ctx || !READERS[id]) return <div className={cn("h-full min-h-40 animate-pulse rounded-3xl bg-muted", className)} />;

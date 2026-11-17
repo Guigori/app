@@ -40,15 +40,17 @@ function localGoals(userId: string): FinnosGoal[] {
     return Array.isArray(parsed) ? parsed.filter((x): x is FinnosGoal => !!x && typeof x === "object" && typeof x.id === "string" && typeof x.name === "string") : [];
   } catch { return []; }
 }
-export async function saveGoal(userId: string, goal: FinnosGoal): Promise<void> {
+/** Creates the goal and returns its id (the server's, when there is one). */
+export async function saveGoal(userId: string, goal: FinnosGoal): Promise<string> {
   if (!isLocalMode()) {
     const { id, createdAt, ...input } = goal;
-    void id; void createdAt;
-    await apiPost<FinnosGoal>("/goals", input);
-    return;
+    void createdAt;
+    const created = await apiPost<FinnosGoal>("/goals", input);
+    return created?.id ?? id;
   }
   const next = [goal, ...localGoals(userId)];
   localStorage.setItem(key(userId), JSON.stringify(next));
+  return goal.id;
 }
 
 export async function listGoals(userId: string): Promise<FinnosGoal[]> {
