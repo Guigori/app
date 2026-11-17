@@ -89,21 +89,23 @@ export function HomeInsights({ v, money, onDismiss, transactions, accounts, max 
 }
 
 /** Limits in one card: the day-to-day total against the month, and the categories that need attention first. */
-export function LimitsSummary({ v, money, top = 4 }: { v: MonthView; money: (n: number) => string; top?: number }) {
+export function LimitsSummary({ v, money, top = 4, total = true }: { v: MonthView; money: (n: number) => string; top?: number; total?: boolean }) {
   const d = v.daily;
   if (!d.limit) return <p className="text-sm text-muted-foreground">Sem limites por categoria. <Link to="/orcamento/configuracoes" className="font-semibold text-primary">Definir limites</Link></p>;
   // Most at risk first: over the limit, then the highest use.
-  const cats = [...v.categories].filter((c) => c.spent > 0).sort((a, b) => b.over - a.over || b.spent / b.limit - a.spent / a.limit).slice(0, top);
+  const cats = [...v.categories].filter((c) => c.spent > 0 || top >= v.categories.length).sort((a, b) => b.over - a.over || b.spent / b.limit - a.spent / a.limit).slice(0, top);
   const ahead = v.when === "current" && d.percent > d.elapsed + 0.05;
   return (
     <div>
+      {total ? <>
       <div className="flex items-baseline justify-between gap-2 text-sm"><span><strong className="tabular-nums">{money(d.spent)}</strong><span className="text-muted-foreground"> de {money(d.limit)}</span></span><span className={cn("text-xs font-semibold", d.spent > d.limit ? "text-expense" : ahead ? "text-amber-700 dark:text-amber-400" : "text-income")}>{d.spent > d.limit ? "passou" : `${Math.round(d.percent * 100)}% usado`}</span></div>
       <div className="relative mt-2 h-2.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
         <span className={cn("block h-full rounded-full", d.spent > d.limit ? "bg-expense" : ahead ? "bg-amber-500" : "bg-primary")} style={{ width: `${Math.min(100, d.percent * 100)}%` }} />
         {v.when === "current" ? <span className="absolute inset-y-0 w-0.5 bg-foreground/60" style={{ left: `${d.elapsed * 100}%` }} /> : null}
       </div>
       {v.when === "current" ? <p className="mt-1.5 text-xs text-muted-foreground">{Math.round(d.elapsed * 100)}% do mês passou (o traço). {d.spent > d.limit ? "Os limites já passaram." : `Até ${money(d.allowance)} por dia mantém tudo dentro.`}</p> : null}
-      <ul className="mt-3.5 flex flex-col gap-3">
+      </> : null}
+      <ul className={cn("flex flex-col gap-3", total && "mt-3.5")}>
         {cats.map((c) => (
           <li key={c.category_id} data-testid="budget-category">
             <Link to={`/orcamento/gastos?mes=${v.month}&categoria=${c.category_id}`} className="block rounded-lg hover:bg-muted/40">

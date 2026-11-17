@@ -16,6 +16,7 @@ import { BudgetHeader, card, dm, h2, useBudgetMonth, useMoney, useMonthData, use
 import { BudgetFailed, BudgetLoading, NoBudgetCard, OfflineNote } from "@/components/budget/States";
 import { NextStepCard } from "@/components/budget/NextStep";
 import { HomeInsights, LimitsSummary, Shortcuts } from "@/components/budget/HomeParts";
+import { BalanceCard, BillsCard, DistributionCard, PaceCard } from "@/components/budget/HomeCharts";
 import { cn } from "@/lib/utils";
 import type { Transaction } from "@/types/finnos";
 
@@ -47,12 +48,17 @@ function BudgetMobile() {
               <HomeInsights v={view} money={money} onDismiss={onDismiss} transactions={transactions} accounts={accounts} />
             </section>
           ) : null}
+          <DistributionCard v={view} money={money} />
+          <BalanceCard v={view} money={money} />
+          <PaceCard v={view} money={money} />
           <section aria-label="Limites do mês" className={card}>
-            <div className="mb-3 flex items-center justify-between gap-2"><h2 className={h2}>Limites do mês</h2><Link to={`/orcamento/gastos?mes=${month}`} className="text-[13px] font-semibold text-primary">Ver todos</Link></div>
-            <LimitsSummary v={view} money={money} />
+            <div className="mb-3 flex items-center justify-between gap-2"><h2 className={h2}>Por categoria</h2><Link to={`/orcamento/gastos?mes=${month}`} className="text-[13px] font-semibold text-primary">Ver gastos</Link></div>
+            <LimitsSummary v={view} money={money} top={view.categories.length} total={false} />
           </section>
-          <Shortcuts month={month} />
+          <BillsCard v={view} money={money} kind="despesa" />
+          <BillsCard v={view} money={money} kind="receita" max={4} />
           {view.goals.length ? <GoalsCard v={view} money={money} /> : null}
+          <Shortcuts month={month} />
           <RecentCard v={view} transactions={transactions} />
         </div>
       )}

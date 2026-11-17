@@ -103,25 +103,27 @@ export function BudgetHeader({ title, subtitle, month, setMonth, monthSwitch = t
   const { hidden, toggle } = useBalanceHidden();
   const location = useLocation();
   const q = `?mes=${month}`;
-  return (
-    <div>
-      <header className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <h1 className="font-heading text-2xl font-bold tracking-tight">{title}</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {monthSwitch && setMonth ? (
-            <div className="inline-flex items-center gap-1 rounded-full border border-border bg-card p-1" role="group" aria-label="Mês">
+  const monthSwitcher = monthSwitch && setMonth ? (
+            <div className="flex w-full items-center justify-between gap-1 rounded-full border border-border bg-card p-1 sm:inline-flex sm:w-auto" role="group" aria-label="Mês">
               <button type="button" onClick={() => setMonth(addMonth(month, -1))} aria-label="Mês anterior" className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground hover:bg-muted"><ChevronLeft className="h-4 w-4" /></button>
               <strong className="min-w-[8.5rem] px-1 text-center text-sm" data-testid="budget-month">{monthLabel(month)}</strong>
               <button type="button" onClick={() => setMonth(addMonth(month, 1))} aria-label="Próximo mês" className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground hover:bg-muted"><ChevronRight className="h-4 w-4" /></button>
             </div>
-          ) : null}
+  ) : null;
+  return (
+    <div>
+      <header className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="font-heading text-2xl font-bold tracking-tight">{title}</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="hidden sm:contents">{monthSwitcher}</span>
           <Link to="/orcamento/configuracoes" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "rounded-full")} data-testid="budget-settings-button"><Settings2 className="h-4 w-4" /> Configurar</Link>
           <button type="button" onClick={toggle} aria-label={hidden ? "Mostrar valores" : "Esconder valores"} className="grid h-9 w-9 place-items-center rounded-full border border-border bg-card">{hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
         </div>
       </header>
+      {monthSwitcher ? <div className="mt-3 sm:hidden">{monthSwitcher}</div> : null}
       <nav aria-label="Áreas do orçamento" className="mt-4 hidden gap-6 overflow-x-auto border-b border-border lg:flex">
         {AREAS.map((a) => {
           const on = location.pathname === a.to;
