@@ -1,5 +1,5 @@
 /** Orçamento · gastos do mês no computador: tabela de categorias com o ritmo e os lançamentos abrindo na própria linha. */
-import { Fragment, useState } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight, Sparkles } from "lucide-react";
 import { monthLabel } from "@/lib/format";
@@ -24,7 +24,14 @@ export function SpendingDesktop({ month, setMonth, money, view, s }: { month: st
   const { openTransactionDetail } = useDialogs();
   const [count, setCount] = useState<"compra" | "caixa">("compra");
   const [tab, setTab] = useState<"categorias" | "ultimos">("categorias");
-  const [open, setOpen] = useState<string | null>(null);
+  // ?categoria=<id> (from the Orçamento's start) opens that category and scrolls to it.
+  const [open, setOpen] = useState<string | null>(() => new URLSearchParams(window.location.search).get("categoria"));
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("categoria");
+    if (!id) return;
+    const t = window.setTimeout(() => document.getElementById(`gasto-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 600);
+    return () => window.clearTimeout(t);
+  }, []);
   const [slice, setSlice] = useState<string | null>(null);
   const name = monthLabel(month).split(" ")[0].toLowerCase();
   return (
@@ -74,7 +81,7 @@ export function SpendingDesktop({ month, setMonth, money, view, s }: { month: st
                     const status = c.spent > c.limit ? ["Passou " + money(c.over), "text-expense"] : c.passBy > 0 && view.when === "current" ? ["Passa " + money(c.passBy), "text-amber-700 dark:text-amber-300"] : ["Dentro", "text-income"];
                     return (
                       <Fragment key={c.category_id}>
-                        <tr className="cursor-pointer hover:bg-muted/30" onClick={() => setOpen(isOpen ? null : c.category_id)} aria-expanded={isOpen}>
+                        <tr id={`gasto-${c.category_id}`} className="scroll-mt-4 cursor-pointer hover:bg-muted/30" onClick={() => setOpen(isOpen ? null : c.category_id)} aria-expanded={isOpen}>
                           <td className={cn(td, "pl-5")}><ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", isOpen && "rotate-90")} /></td>
                           <td className={cn(td, "font-medium")}><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ backgroundColor: c.color }} />{c.name}</td>
                           <td className={td}><BulletBar value={c.spent} limit={c.limit} striped={c.benefit} stripedLabel="com VR/VA" format={money} /></td>
@@ -93,7 +100,7 @@ export function SpendingDesktop({ month, setMonth, money, view, s }: { month: st
                             <div className="max-w-xl pl-8"><CategoryHistory categoryId={c.category_id} name={c.name} month={month} money={money} /></div>
                             <div className="mt-1 flex gap-4 pl-8 text-xs">
                               <Link to={`/transacoes?month=${month}&category_id=${c.category_id}`} className="font-medium text-primary">Ver no Fluxo</Link>
-                              <Link to="/orcamento/configuracoes" className="font-medium text-primary">Ajustar limite</Link>
+                              <Link to={`/orcamento/configuracoes?categoria=${c.category_id}`} className="font-medium text-primary">Ajustar limite</Link>
                             </div>
                           </td></tr>
                         ) : null}

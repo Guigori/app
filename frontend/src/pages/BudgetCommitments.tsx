@@ -34,9 +34,9 @@ function hintOf(c: Commitment): string {
 
 function openLink(c: Commitment, month: string): { to: string; label: string } | null {
   if (c.transaction_id) return { to: `/transacoes?month=${c.date.slice(0, 7) || month}&highlight=${c.transaction_id}`, label: "Abrir no Fluxo" };
-  if (c.card_id) return { to: `/cartoes/${c.card_id}`, label: "Abrir a fatura" };
-  if (c.subscription_id) return { to: "/assinaturas", label: "Abrir em Assinaturas" };
-  if (c.goal_id) return { to: "/metas", label: "Abrir em Metas" };
+  if (c.card_id) { const cycle = c.key.split(":")[2]; return { to: `/cartoes/${c.card_id}${/^\d{4}-\d{2}-\d{2}$/.test(cycle ?? "") ? `?cycle=${cycle}` : ""}`, label: "Abrir a fatura" }; }
+  if (c.subscription_id) return { to: `/assinaturas?assinatura=${c.subscription_id}`, label: "Abrir em Assinaturas" };
+  if (c.goal_id) return { to: `/metas?meta=${c.goal_id}`, label: "Abrir em Metas" };
   return { to: `/transacoes?month=${month}`, label: "Ver no Fluxo" };
 }
 

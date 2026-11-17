@@ -35,7 +35,14 @@ export function SubscriptionsPanel({ data, transactions, accounts, cards, candid
 }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("todas");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // ?assinatura=<id> (from the Orçamento, a reminder…) opens that subscription right away.
+  const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("assinatura"));
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("assinatura");
+    if (!id) return;
+    const t = window.setTimeout(() => document.querySelector(`[data-testid="subscription-item-${CSS.escape(id)}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 350);
+    return () => window.clearTimeout(t);
+  }, []);
   const [editor, setEditor] = useState<{ original?: SubscriptionItem; seed?: Partial<SubscriptionInput> } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);

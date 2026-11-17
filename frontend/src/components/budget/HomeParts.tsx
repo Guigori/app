@@ -106,8 +106,10 @@ export function LimitsSummary({ v, money, top = 4 }: { v: MonthView; money: (n: 
       <ul className="mt-3.5 flex flex-col gap-3">
         {cats.map((c) => (
           <li key={c.category_id} data-testid="budget-category">
+            <Link to={`/orcamento/gastos?mes=${v.month}&categoria=${c.category_id}`} className="block rounded-lg hover:bg-muted/40">
             <div className="flex justify-between gap-3 text-[13px]"><span className="truncate font-medium">{c.name}</span><span className={cn("tabular-nums", c.over > 0 ? "font-semibold text-expense" : "text-muted-foreground")}>{money(c.spent)} de {money(c.limit)}</span></div>
             <BulletBar className="mt-1.5" value={c.spent} limit={c.limit} striped={c.benefit} stripedLabel="com VR/VA" format={money} />
+            </Link>
           </li>
         ))}
       </ul>

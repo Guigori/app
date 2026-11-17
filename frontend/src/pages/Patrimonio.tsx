@@ -23,7 +23,8 @@ export default function Patrimonio() {
   const [creatingGoal, setCreatingGoal] = useState(false);
   const [editingGoal, setEditingGoal] = useState<FinnosGoal | null>(null);
   // The goal whose detail is open, and the Guardar / Retirar sheet (by id, so they follow refetches).
-  const [detailId, setDetailId] = useState<string | null>(null);
+  // ?meta=<id> (from the Orçamento) opens that goal's detail.
+  const [detailId, setDetailId] = useState<string | null>(() => new URLSearchParams(location.search).get("meta"));
   const [money, setMoney] = useState<{ id: string; mode: MoneyMode } | null>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: fetchMe });

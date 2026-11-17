@@ -201,7 +201,7 @@ export default function BudgetClosing() {
               const rid = `cancelar:${sItem.id}`, marked = hasReminder(rid);
               return (
                 <li key={sItem.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 text-sm" data-testid="closing-subscription">
-                  <span className="min-w-0 flex-1"><span className="block truncate font-medium">{sItem.name}</span><span className="text-xs text-muted-foreground">{sItem.recurrence === "anual" ? "anual" : "mensal"} · próxima cobrança {dm(sItem.next)} · {sItem.where}</span></span>
+                  <Link to={`/assinaturas?assinatura=${sItem.id}`} className="min-w-0 flex-1"><span className="block truncate font-medium">{sItem.name}</span><span className="text-xs text-muted-foreground">{sItem.recurrence === "anual" ? "anual" : "mensal"} · próxima cobrança {dm(sItem.next)} · {sItem.where}</span></Link>
                   <strong className="tabular-nums">{money(sItem.value)}</strong>
                   <span className="flex w-full gap-1.5 sm:w-auto">
                     <Button size="sm" variant={marked ? "default" : "outline"} className="h-8 rounded-full" onClick={() => toggleReminder({ id: rid, date: sItem.cancelBy, text: `Cancelar ${sItem.name} antes da cobrança de ${dm(sItem.next)}`, kind: "assinatura" })}><Bell className="h-3.5 w-3.5" /> {marked ? `Lembrete em ${dm(sItem.cancelBy)}` : `Cancelar até ${dm(sItem.cancelBy)}`}</Button>
@@ -221,7 +221,7 @@ export default function BudgetClosing() {
           <ul className="flex flex-col gap-3.5">
             {goalRows.map((g) => (
               <li key={g.id} data-testid="closing-goal">
-                <div className="flex justify-between gap-3 text-sm"><span className="font-medium">{g.name}</span><span className={cn("tabular-nums", g.diff < 0 ? "text-amber-700 dark:text-amber-400" : "text-income")}>{g.planned ? (g.diff < 0 ? `faltou ${money(-g.diff)}` : g.diff > 0 ? `${money(g.diff)} a mais` : "como planejado") : `guardou ${money(g.saved)}`}</span></div>
+                <div className="flex justify-between gap-3 text-sm"><Link to={`/metas?meta=${g.id}`} className="font-medium hover:underline">{g.name}</Link><span className={cn("tabular-nums", g.diff < 0 ? "text-amber-700 dark:text-amber-400" : "text-income")}>{g.planned ? (g.diff < 0 ? `faltou ${money(-g.diff)}` : g.diff > 0 ? `${money(g.diff)} a mais` : "como planejado") : `guardou ${money(g.saved)}`}</span></div>
                 {g.planned ? <BulletBar className="mt-1.5" value={Math.max(0, g.saved)} limit={g.planned} format={money} /> : null}
                 <p className="mt-1 text-xs text-muted-foreground">{g.planned ? `Planejado ${money(g.planned)} · guardado ${money(g.saved)} · ` : ""}na meta: {money(g.total)} de {money(g.target)}</p>
               </li>
@@ -235,7 +235,7 @@ export default function BudgetClosing() {
         <Section title="Passaram do limite">
           {div.over.length ? div.over.map((o) => (
             <div key={o.category_id} className="mb-3 last:mb-0">
-              <div className="flex justify-between text-sm"><strong>{o.name}</strong><span className="tabular-nums text-expense">{money(o.spent)} de {money(o.limit)} · +{money(o.over)}</span></div>
+              <div className="flex justify-between text-sm"><Link to={`/orcamento/gastos?mes=${month}&categoria=${o.category_id}`} className="font-semibold hover:underline">{o.name}</Link><span className="tabular-nums text-expense">{money(o.spent)} de {money(o.limit)} · +{money(o.over)}</span></div>
               <ul className="mt-1 text-[13px] text-muted-foreground">{o.top.map((t) => <li key={t.id}><button type="button" onClick={() => dialogs.openTransactionDetail(t, o.top)} className="flex w-full justify-between gap-2 py-0.5 text-left hover:text-foreground"><span className="truncate">{t.name} · {dm(t.date)}</span><span className="tabular-nums">{money(t.value)}</span></button></li>)}</ul>
             </div>
           )) : <p className="text-sm text-income">Todas as categorias ficaram dentro do limite.</p>}
@@ -383,7 +383,7 @@ export default function BudgetClosing() {
   const successEl = success ? (
     <BudgetSuccess title={`${monthLabel(month).split(" ")[0]} fechado`} amountLabel={c.result >= 0 ? "Sobrou no mês" : "Faltou no mês"} amount={money(Math.abs(c.result))}
       chips={[`Entrou ${money(c.earned)}`, `Saiu ${money(c.spent)}`, ...alloc.filter((a) => a.value > 0).map((a) => `${a.name} ${money(a.value)}`), ...(reminders.length ? [`${reminders.length} lembretes`] : [])]}
-      action="Ir para o Orçamento" onDone={() => navigate(`/orcamento?mes=${next}`)} />
+      action="Ir para o Orçamento" onDone={() => navigate(`/orcamento?mes=${next}`, { replace: true })} />
   ) : null;
 
   if (desktop) return (

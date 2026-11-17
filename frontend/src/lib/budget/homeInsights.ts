@@ -48,13 +48,13 @@ export function buildHomeInsights(v: MonthView, money: (n: number) => string, on
   // 3. Categories over the limit, then the ones that will pass at this pace.
   if (is("categoria")) {
     const over = v.categories.filter((c) => c.over > 0).sort((a, b) => b.over - a.over);
-    if (over.length) out.push({ id: "passou", tone: "expense", title: over.length === 1 ? `${over[0].name} passou ${money(over[0].over)} do limite` : `${over.length} categorias passaram do limite`, text: over.length === 1 ? `${money(over[0].spent)} de ${money(over[0].limit)}.` : over.slice(0, 3).map((c) => `${c.name} +${money(c.over)}`).join(" · "), action: { label: "Ver gastos", to: `/orcamento/gastos?mes=${m}` } });
+    if (over.length) out.push({ id: "passou", tone: "expense", title: over.length === 1 ? `${over[0].name} passou ${money(over[0].over)} do limite` : `${over.length} categorias passaram do limite`, text: over.length === 1 ? `${money(over[0].spent)} de ${money(over[0].limit)}.` : over.slice(0, 3).map((c) => `${c.name} +${money(c.over)}`).join(" · "), action: { label: over.length === 1 ? `Ver ${over[0].name}` : "Ver gastos", to: `/orcamento/gastos?mes=${m}${over.length === 1 ? `&categoria=${over[0].category_id}` : ""}` } });
   }
   if (current && is("limite80") && v.daily.elapsed >= 0.2) {
     const ahead = v.categories.filter((c) => c.over <= 0 && c.spent > 0).map((c) => ({ c, proj: r2(pace?.[c.category_id] ?? c.spent / v.daily.elapsed) })).filter((x) => x.proj > x.c.limit * 1.05).sort((a, b) => (b.proj - b.c.limit) - (a.proj - a.c.limit));
     if (ahead.length) {
       const p = ahead[0];
-      out.push({ id: "ritmo", tone: "warn", title: `Nesse ritmo, ${p.c.name} passa ${money(p.proj - p.c.limit)}`, text: `Vai a ${money(p.proj)} no mês (limite ${money(p.c.limit)}). Até ${money(Math.max(0, (p.c.limit - p.c.spent) / Math.max(1, v.daysLeft)))} por dia mantém dentro.${ahead.length > 1 ? ` ${ahead.length - 1} outra${ahead.length > 2 ? "s" : ""} no mesmo caminho.` : ""}`, action: { label: "Ver gastos", to: `/orcamento/gastos?mes=${m}` } });
+      out.push({ id: "ritmo", tone: "warn", title: `Nesse ritmo, ${p.c.name} passa ${money(p.proj - p.c.limit)}`, text: `Vai a ${money(p.proj)} no mês (limite ${money(p.c.limit)}). Até ${money(Math.max(0, (p.c.limit - p.c.spent) / Math.max(1, v.daysLeft)))} por dia mantém dentro.${ahead.length > 1 ? ` ${ahead.length - 1} outra${ahead.length > 2 ? "s" : ""} no mesmo caminho.` : ""}`, action: { label: `Ver ${p.c.name}`, to: `/orcamento/gastos?mes=${m}&categoria=${p.c.category_id}` } });
     }
   }
   // 4. What is due in the next 3 days.

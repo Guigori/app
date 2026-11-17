@@ -393,7 +393,7 @@ export default function BudgetNewPeriod() {
   const successEl = success ? (
     <BudgetSuccess title={`${Short} começou`} amountLabel={noIncome ? "No dia a dia" : "Sobra se seguir o orçamento"} amount={money(noIncome ? limitsTotal : outlook.leftover)}
       chips={[rule === "503020" ? "50/30/20" : rule === "proporcao" ? `Proporção ${splitLabel(split)}` : "Personalizado", `${money(limitsTotal)} nos limites`, ...(plan.saveTotal ? [`${money(plan.saveTotal)} para metas`] : []), ...(reminders.length ? [`${reminders.length} lembretes`] : [])]}
-      action="Ir para o Orçamento" onDone={() => navigate(`/orcamento?mes=${month}`)} />
+      action="Ir para o Orçamento" onDone={() => navigate(`/orcamento?mes=${month}`, { replace: true })} />
   ) : null;
 
   if (desktop) return (

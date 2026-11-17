@@ -53,7 +53,7 @@ function PlanCard({ row, today, money, open, onToggle, onEnd, isIn, setIn }: { r
             <div className="flex items-center gap-3 rounded-2xl bg-primary/[0.06] p-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Target className="h-[18px] w-[18px]" /></span>
               <span className="min-w-0 flex-1"><strong className="block truncate">{sp.goal_name ? `Meta “${sp.goal_name}”` : "Meta ainda não criada"}</strong><span className="text-muted-foreground">{sp.goal_id ? `${money(row.saved)} de ${money(sp.amount)}${sp.monthly && !using ? ` · ${money(sp.monthly)} por mês` : ""}` : "Crie a meta em Metas para guardar o dinheiro."}</span></span>
-              <Link to="/metas" className="text-xs font-bold text-primary">em Metas</Link>
+              <Link to={sp.goal_id ? `/metas?meta=${sp.goal_id}` : "/metas"} className="text-xs font-bold text-primary">em Metas</Link>
             </div>
           ) : null}
           <div>

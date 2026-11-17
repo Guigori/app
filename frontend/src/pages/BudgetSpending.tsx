@@ -3,7 +3,7 @@
  * what left the account, each category with its pace and its lançamentos, and the latest spending in the Fluxo list.
  * Read only: a lançamento opens where it lives (Fluxo), a limit is changed in Configurar.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, Sparkles } from "lucide-react";
 import { monthLabel } from "@/lib/format";
@@ -31,7 +31,14 @@ export default function BudgetSpending() {
   const { openTransactionDetail } = useDialogs();
   const [count, setCount] = useState<"compra" | "caixa">("compra");
   const [tab, setTab] = useState<"categorias" | "ultimos">("categorias");
-  const [open, setOpen] = useState<string | null>(null);
+  // ?categoria=<id> (from the Orçamento's start) opens that category and scrolls to it.
+  const [open, setOpen] = useState<string | null>(() => new URLSearchParams(window.location.search).get("categoria"));
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("categoria");
+    if (!id) return;
+    const t = window.setTimeout(() => document.getElementById(`gasto-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 600);
+    return () => window.clearTimeout(t);
+  }, []);
   const [slice, setSlice] = useState<string | null>(null);
 
   const s = useMemo(() => (view ? buildSpendingView({ month, today, categories: view.categories, transactions, accounts, monthExpense: view.spent }) : null), [view, month, today, transactions, accounts]);
@@ -104,7 +111,7 @@ export default function BudgetSpending() {
               {s.categories.length ? s.categories.map((c) => {
                 const isOpen = open === c.category_id;
                 return (
-                  <div key={c.category_id} className="overflow-hidden rounded-[20px] border border-border bg-card">
+                  <div key={c.category_id} id={`gasto-${c.category_id}`} className="scroll-mt-4 overflow-hidden rounded-[20px] border border-border bg-card">
                     <button type="button" onClick={() => setOpen(isOpen ? null : c.category_id)} aria-expanded={isOpen} className="block w-full px-4 py-3.5 text-left">
                       <span className="flex justify-between gap-3 text-sm"><strong className="truncate">{c.name}</strong><span className="tabular-nums"><strong>{money(c.spent)}</strong><span className="text-muted-foreground"> de {money(c.limit)}</span></span></span>
                       <span className="relative mt-2.5 block"><BulletBar value={c.spent} limit={c.limit} striped={c.benefit} stripedLabel="com VR/VA" format={money} /><span className="pointer-events-none absolute -bottom-1 -top-1 w-0.5 bg-muted-foreground/60" style={{ left: `${(s.elapsed * c.limit / (Math.max(c.spent, c.limit) * 1.08)) * 100}%` }} aria-hidden="true" /></span>
@@ -123,7 +130,7 @@ export default function BudgetSpending() {
                         <CategoryHistory categoryId={c.category_id} name={c.name} month={month} money={money} />
                         <div className="mt-2 flex gap-4">
                           {c.items.length > 8 ? <Link to={`/transacoes?month=${month}&category_id=${c.category_id}`} className="font-semibold text-primary">Ver todos no Fluxo</Link> : null}
-                          <Link to="/orcamento/configuracoes" className="font-semibold text-primary">Ajustar limite</Link>
+                          <Link to={`/orcamento/configuracoes?categoria=${c.category_id}`} className="font-semibold text-primary">Ajustar limite</Link>
                         </div>
                       </div>
                     ) : null}

@@ -99,10 +99,10 @@ function GoalsCard({ v, money }: P) {
       <div className="flex items-center justify-between"><h2 className={h2}>Metas</h2><Link to="/metas" className="text-[13px] font-semibold text-primary">Abrir Metas</Link></div>
       <ul className="mt-3 flex flex-col gap-3">
         {v.goals.slice(0, 3).map((g) => (
-          <li key={g.id}>
+          <li key={g.id}><Link to={`/metas?meta=${g.id}`} className="block">
             <div className="flex justify-between gap-2 text-[13px]"><span className="truncate font-medium">{g.name}</span><span className="tabular-nums text-muted-foreground">{Math.round(g.percent * 100)}% · {money(g.saved)}</span></div>
             <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-primary" style={{ width: `${Math.round(g.percent * 100)}%` }} /></div>
-          </li>
+          </Link></li>
         ))}
       </ul>
     </section>

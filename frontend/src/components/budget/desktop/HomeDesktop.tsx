@@ -1,6 +1,6 @@
 /** Orçamento · visão geral no computador. */
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { monthLabel } from "@/lib/format";
 import { dismissMatch } from "@/lib/budget/prefs";
 import type { MonthView } from "@/lib/budget/monthView";
@@ -31,6 +31,7 @@ export default function HomeDesktop() {
 
 function Body({ v, money, today, transactions, accounts, onDismiss }: { v: MonthView; money: (n: number) => string; today: string; transactions: Transaction[]; accounts: Account[]; onDismiss: (k: string) => void }) {
   const [allCats, setAllCats] = useState(false);
+  const navigate = useNavigate();
   const past = v.when === "past";
   // The wide screen has room for every category with a limit; "só as usadas" hides the empty ones.
   const cats = allCats ? v.categories.filter((c) => c.spent > 0) : v.categories;
@@ -72,7 +73,7 @@ function Body({ v, money, today, transactions, accounts, onDismiss }: { v: Month
             {v.goals.length ? (
               <Panel title="Metas" action={<Link to="/metas" className="text-xs font-medium text-primary">Abrir Metas</Link>}>
                 <ul className="flex flex-col gap-3">{v.goals.slice(0, 4).map((g) => (
-                  <li key={g.id}><div className="flex justify-between gap-2 text-[13px]"><span className="truncate font-medium">{g.name}</span><span className="tabular-nums text-muted-foreground">{money(g.saved)} / {money(g.target)}</span></div><div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-primary" style={{ width: `${Math.round(g.percent * 100)}%` }} /></div></li>
+                  <li key={g.id}><Link to={`/metas?meta=${g.id}`} className="block"><div className="flex justify-between gap-2 text-[13px]"><span className="truncate font-medium">{g.name}</span><span className="tabular-nums text-muted-foreground">{money(g.saved)} / {money(g.target)}</span></div><div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-primary" style={{ width: `${Math.round(g.percent * 100)}%` }} /></div></Link></li>
                 ))}</ul>
               </Panel>
             ) : null}
@@ -82,7 +83,7 @@ function Body({ v, money, today, transactions, accounts, onDismiss }: { v: Month
               <thead className="border-y border-border bg-muted/40"><tr><th className={cn(th, "pl-5")}>Categoria</th><th className={cn(th, "w-[38%]")}>Uso do limite</th><th className={cn(th, "text-right")}>Gasto</th><th className={cn(th, "text-right")}>Limite</th><th className={cn(th, "pr-5 text-right")}>Resta</th></tr></thead>
               <tbody className="divide-y divide-border">
                 {cats.map((c) => (
-                  <tr key={c.category_id} data-testid="budget-category">
+                  <tr key={c.category_id} data-testid="budget-category" className="cursor-pointer hover:bg-muted/30" onClick={() => navigate(`/orcamento/gastos?mes=${v.month}&categoria=${c.category_id}`)}>
                     <td className={cn(td, "whitespace-nowrap pl-5")}><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ backgroundColor: c.color }} />{c.name}{c.benefit > 0 ? <span title={`${money(c.benefit)} pagos com VR/VA`} className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">VR/VA</span> : null}</td>
                     <td className={td}><BulletBar value={c.spent} limit={c.limit} striped={c.benefit} stripedLabel="com VR/VA" format={money} /></td>
                     <td className={cn(td, "whitespace-nowrap text-right tabular-nums", c.over > 0 && "font-semibold text-expense")}>{money(c.spent)}</td>
