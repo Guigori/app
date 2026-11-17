@@ -68,7 +68,7 @@ export default function BudgetNewPeriod() {
   const nowView = useMonthData(currentMonth()).view;
 
   const me = useQuery({ queryKey: ["me"], queryFn: fetchMe });
-  const flow = useQuery({ queryKey: ["flow", "orcamento", month], queryFn: () => fetchFlow({ month, months: 1 }) });
+  const flow = useQuery({ queryKey: ["flow", "orcamento", month], queryFn: () => fetchFlow({ month, months: 2 }) });
   const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards });
   const cats = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
   const subs = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions });

@@ -27,7 +27,7 @@ export default function BudgetStart() {
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: fetchMe });
   const trends = useQuery({ queryKey: ["trends", 3, addMonth(month, -1)], queryFn: () => fetchTrends(3, addMonth(month, -1)) });
-  const flow = useQuery({ queryKey: ["flow", "orcamento", month], queryFn: () => fetchFlow({ month, months: 1 }) });
+  const flow = useQuery({ queryKey: ["flow", "orcamento", month], queryFn: () => fetchFlow({ month, months: 2 }) });
   const subs = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions });
   const goals = useQuery({ queryKey: ["goals", me.data?.id], queryFn: () => listGoals(me.data!.id), enabled: Boolean(me.data?.id) });
   const cats = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });

@@ -97,7 +97,7 @@ export default function BudgetCommitments() {
   const [open, setOpen] = useState<string | null>(null);
 
   const ahead = [1, 2, 3, 4, 5, 6].map((n) => addMonth(month, n));
-  const flows = useQueries({ queries: ahead.map((m) => ({ queryKey: ["flow", "orcamento", m], queryFn: () => fetchFlow({ month: m, months: 1 }) })) });
+  const flows = useQueries({ queries: ahead.map((m) => ({ queryKey: ["flow", "orcamento", m], queryFn: () => fetchFlow({ month: m, months: 2 }) })) });
   const future = useMemo(() => buildFuture(flows.flatMap((q, i) => (q.data ? [{ month: ahead[i], flow: q.data }] : []))), [flows.map((q) => q.dataUpdatedAt).join(), month]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const data = useMemo(() => {
