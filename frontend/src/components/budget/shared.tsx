@@ -45,7 +45,7 @@ export function useMonthData(month: string) {
   const me = useQuery({ queryKey: ["me"], queryFn: fetchMe });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts });
   const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards });
-  const flow = useQuery({ queryKey: ["flow", "orcamento", month], queryFn: () => fetchFlow({ month, months: 1 }) });
+  const flow = useQuery({ queryKey: ["flow", "orcamento", month], queryFn: () => fetchFlow({ month, months: 2 }) });
   const calendar = useQuery({ queryKey: ["calendar", month, "todas"], queryFn: () => fetchCalendar(month) });
   const balance = useQuery({ queryKey: ["balance-history", month], queryFn: () => fetchBalanceHistory(month) });
   const budget = useQuery({ queryKey: ["budget", month], queryFn: () => fetchBudget(month) });

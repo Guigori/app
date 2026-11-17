@@ -55,7 +55,7 @@ export default function BudgetNextMonth() {
   useEffect(() => { setDraft(null); setLimits(null); }, [month]);
 
   const me = useQuery({ queryKey: ["me"], queryFn: fetchMe });
-  const flow = useQuery({ queryKey: ["flow", "orcamento", month], queryFn: () => fetchFlow({ month, months: 1 }) });
+  const flow = useQuery({ queryKey: ["flow", "orcamento", month], queryFn: () => fetchFlow({ month, months: 2 }) });
   const cards = useQuery({ queryKey: ["cards"], queryFn: fetchCards });
   const goals = useQuery({ queryKey: ["goals", me.data?.id], queryFn: () => listGoals(me.data!.id), enabled: Boolean(me.data?.id) });
   const trends = useQuery({ queryKey: ["trends", 3, addMonth(month, -2)], queryFn: () => fetchTrends(3, addMonth(month, -2)) });

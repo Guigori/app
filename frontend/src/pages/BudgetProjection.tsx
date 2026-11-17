@@ -29,7 +29,7 @@ export default function BudgetProjection() {
   const [h, setH] = useState<"3" | "6" | "12">("6");
   const [sel, setSel] = useState<string | null>(null);
   const months = useMemo(() => Array.from({ length: Number(h) }, (_, i) => addMonth(month, i)), [month, h]);
-  const flows = useQueries({ queries: months.map((m) => ({ queryKey: ["flow", "orcamento", m], queryFn: () => fetchFlow({ month: m, months: 1 }) })) });
+  const flows = useQueries({ queries: months.map((m) => ({ queryKey: ["flow", "orcamento", m], queryFn: () => fetchFlow({ month: m, months: 2 }) })) });
   const last = addMonth(currentMonth(), -1);
   const trends = useQuery({ queryKey: ["trends", 3, last], queryFn: () => fetchTrends(3, last) });
   const ready = flows.every((f) => f.data) && trends.data;
