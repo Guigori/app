@@ -75,7 +75,7 @@ export default function FinanceHistory() {
   const visible = items.filter(item => kind === "all" || item.entity === kind);
   return <div className="mx-auto max-w-4xl space-y-5 pb-24 animate-fade-up" data-testid="finance-history-page">
     <div>
-      <Link to="/orcamento" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <Link to="/orcamento/configuracoes" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Voltar
       </Link>
       <div className="flex flex-wrap items-center justify-between gap-3">

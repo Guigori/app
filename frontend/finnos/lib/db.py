@@ -792,7 +792,7 @@ db = SimpleNamespace(
             "categories",
             "transactions",
             "cards",
-            "notification_states", "notification_preferences", "budget_cycles", "radar_states", "radar_feedback", "goals", "investments", "subscriptions", "ai_keys", "ai_feedback",
+            "notification_states", "notification_preferences", "budget_cycles", "budget_plans", "budget_closings", "budget_specials", "radar_states", "radar_feedback", "goals", "investments", "subscriptions", "ai_keys", "ai_feedback",
         ]
     }
 )

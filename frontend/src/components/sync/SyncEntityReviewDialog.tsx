@@ -10,6 +10,11 @@ const LABELS: Record<string, string> = {
   "category.create": "categoria",
   "card.create": "cartão",
   "subscription.create": "assinatura",
+  "budgetPlan.put": "plano do mês",
+  "budgetClosing.put": "fechamento do mês",
+  "budgetClosing.delete": "reabertura do mês",
+  "budgetSpecial.put": "plano especial",
+  "budgetSpecial.delete": "fim de plano especial",
 };
 
 /** An offline entity creation must never be offered a transaction editor.

@@ -16,11 +16,12 @@ router = APIRouter(prefix="/preferences", tags=["preferences"])
 
 # chart: how the Home chart was left (view, period, series); theme: light/dark/system.
 # widgets: Início and Análise as the person arranged them (analyses, sizes, order).
-ALLOWED = {"navigation", "home", "register_default", "finn_memory", "chart", "theme", "widgets"}
+# budget: Orçamento settings (colchão, avisos, modelos de limites, sugestões descartadas).
+ALLOWED = {"navigation", "home", "register_default", "finn_memory", "chart", "theme", "widgets", "budget"}
 THEMES = {"light", "dark", "system"}
 MAX_VALUE = 4000
 # FINNOS IA memory (aliases, notes, topics) is capped on the client; it needs more room than a layout.
-MAX_BY_KEY = {"finn_memory": 12000, "widgets": 8000}
+MAX_BY_KEY = {"finn_memory": 12000, "widgets": 8000, "budget": 12000}
 
 
 class PreferencesIn(BaseModel):

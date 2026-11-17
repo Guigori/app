@@ -26,12 +26,13 @@ export interface ProjectionPoint { value: number; kind: "real" | "previsto"; lab
 
 /** Linha de projeção: real in a solid line, the estimate dashed in the same colour, "hoje" at the joint (like the Início chart). */
 /** With `area`, the real part gets a soft fill below it: the Sparkline of the grammar (tendência rápida). */
-export function ProjectionLine({ points, height = 96, labels = true, className, ariaLabel, format, area = false }: { points: ProjectionPoint[]; height?: number; labels?: boolean; className?: string; ariaLabel?: string; format?: (v: number) => string; area?: boolean }) {
+/** `width`: the drawing width; wider screens pass more so text and lines keep their size instead of growing. */
+export function ProjectionLine({ points, height = 96, width = 320, labels = true, className, ariaLabel, format, area = false }: { points: ProjectionPoint[]; height?: number; width?: number; labels?: boolean; className?: string; ariaLabel?: string; format?: (v: number) => string; area?: boolean }) {
   // Touch or hover a point to read it; touch the same point again to go back.
   const [pick, setPick] = useState<number | null>(null);
   const [ref, seen] = useSeen<SVGSVGElement>();
   if (points.length < 2) return null;
-  const w = 320, pad = 10, top = labels ? 18 : 8, bottom = 8;
+  const w = width, pad = 10, top = labels ? 18 : 8, bottom = 8;
   const values = points.map((p) => p.value);
   const min = Math.min(...values, 0 < Math.min(...values) ? Math.min(...values) : 0), max = Math.max(...values);
   const span = max - min || 1;
@@ -131,7 +132,8 @@ export function SegmentedBar({ segments, total, className, height = 10, format }
 }
 
 /** Bullet chart: the value against a limit mark; what passes the limit turns into the expense colour. Touch it to read value and limit. */
-export function BulletBar({ value, limit, max, color = FINNOS_COLOR.result, className, format }: { value: number; limit: number; max?: number; color?: string; className?: string; format?: (v: number) => string }) {
+/** `striped`: the part of `value` paid another way (VR/VA in the Orçamento): counted in the limit, drawn striped. */
+export function BulletBar({ value, limit, max, color = FINNOS_COLOR.result, className, format, striped = 0, stripedLabel = "benefício" }: { value: number; limit: number; max?: number; color?: string; className?: string; format?: (v: number) => string; striped?: number; stripedLabel?: string }) {
   const [open, setOpen] = useState(false);
   const [ref, seen] = useSeen<HTMLDivElement>();
   const scale = Math.max(max ?? 0, value, limit) * 1.08 || 1;
@@ -140,8 +142,9 @@ export function BulletBar({ value, limit, max, color = FINNOS_COLOR.result, clas
   return (
     <div ref={ref} className={cn("relative h-3 w-full cursor-pointer rounded-full bg-muted", className)} role="img" aria-label={`${pct(value, limit)} do limite`}
       data-chart-interactive="" onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}>
-      <AnimatePresence>{open ? <Callout at={(value / scale) * 100}>{f(value)} de {f(limit)} · {pct(value, limit)}{over > 0 ? ` · passou ${f(over)}` : ""}</Callout> : null}</AnimatePresence>
+      <AnimatePresence>{open ? <Callout at={(value / scale) * 100}>{f(value)} de {f(limit)} · {pct(value, limit)}{over > 0 ? ` · passou ${f(over)}` : ""}{striped > 0 ? ` · ${f(striped)} ${stripedLabel}` : ""}</Callout> : null}</AnimatePresence>
       <motion.div className="absolute inset-y-0 left-0 rounded-l-full" initial={{ width: 0 }} animate={{ width: seen ? `${(within / scale) * 100}%` : "0%", scaleY: open ? 1.25 : 1 }} transition={{ duration: 0.7, ease: "easeOut" }} style={{ backgroundColor: over > 0 ? FINNOS_COLOR.expense : color, borderRadius: over > 0 ? undefined : 9999 }} />
+      {striped > 0 && within > 0 ? <motion.div className="absolute inset-y-0" data-testid="bullet-striped" initial={{ opacity: 0 }} animate={{ opacity: seen ? 1 : 0 }} transition={{ delay: 0.7, duration: 0.3 }} style={{ left: `${(Math.max(0, within - Math.min(striped, within)) / scale) * 100}%`, width: `${(Math.min(striped, within) / scale) * 100}%`, backgroundImage: "repeating-linear-gradient(135deg, color-mix(in srgb, var(--card) 70%, transparent) 0 3px, transparent 3px 7px)" }} aria-hidden="true" /> : null}
       {over > 0 ? <motion.div className="absolute inset-y-0 rounded-r-full" initial={{ width: 0 }} animate={{ width: seen ? `${(over / scale) * 100}%` : "0%", scaleY: open ? 1.25 : 1 }} transition={{ duration: 0.4, delay: 0.7, ease: "easeOut" }} style={{ left: `${(limit / scale) * 100}%`, backgroundColor: FINNOS_COLOR.expense }} /> : null}
       <span className="absolute -bottom-1.5 -top-1.5 w-1 -translate-x-1/2 rounded-full bg-foreground" style={{ left: `${(limit / scale) * 100}%` }} aria-hidden="true" />
     </div>

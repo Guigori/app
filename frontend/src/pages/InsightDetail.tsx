@@ -3,7 +3,9 @@
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/BackButton";
 import { toast } from "sonner";
-import { ArrowRight, Check, Pin, Plus, MessageCircleMore } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Pin, Plus, MessageCircleMore } from "lucide-react";
+import { READERS } from "@/lib/insights/catalog";
+import { addMonth, currentMonth, monthLabel } from "@/lib/format";
 import { insightById, type WidgetConfig } from "@/lib/insights/registry";
 import { newKey, readLayouts, saveLayout, useLayout, type Surface } from "@/lib/insights/layout";
 import { cn } from "@/lib/utils";
@@ -19,7 +21,11 @@ export default function InsightDetail() {
   const home = useLayout("inicio");
   const pinned = useLayout("analise");
   if (!def) return <Navigate to="/analise" replace />;
-  const config: WidgetConfig = def.cardScope ? { cardId: params.get("cartao") } : {};
+  // Catalog analyses can be read for a month that already passed (?mes=AAAA-MM), like when closing the month.
+  const monthParam = READERS[def.id] ? params.get("mes") : null;
+  const month = monthParam && /^\d{4}-\d{2}$/.test(monthParam) && monthParam < currentMonth() ? monthParam : null;
+  const config: WidgetConfig = { ...(def.cardScope ? { cardId: params.get("cartao") } : {}), ...(month ? { month } : {}) };
+  const setMonth = (m: string | null) => { const next = new URLSearchParams(params); if (m && m < currentMonth()) next.set("mes", m); else next.delete("mes"); setParams(next, { replace: true }); };
   // One place per thing: an analysis that lives on another screen opens that screen.
   if (def.canonical) return <Navigate to={def.canonical(config)} replace />;
   const cardName = config.cardId ? cards.data?.find((c) => c.id === config.cardId)?.name : null;
@@ -28,7 +34,7 @@ export default function InsightDetail() {
   const ask = (question: string) => window.dispatchEvent(new CustomEvent("finnos-ai-open", {
     detail: {
       question,
-      context: { analise: def.title, recorte: scope ?? "mês atual", como_e_calculado: def.how, tela: `/analise/painel/${def.id}` },
+      context: { analise: def.title, recorte: [scope, month ? monthLabel(month) : "mês atual"].filter(Boolean).join(" · "), como_e_calculado: def.how, tela: `/analise/painel/${def.id}` },
     },
   }));
   const has = (list: typeof home) => list.some((w) => w.id === def.id && (w.config?.cardId ?? null) === (config.cardId ?? null));
@@ -53,6 +59,13 @@ export default function InsightDetail() {
         </div>
       ) : null}
 
+      {READERS[def.id] ? (
+        <div className="inline-flex items-center gap-1 rounded-full border border-border bg-card p-1" role="group" aria-label="Mês da análise" data-testid="insight-month">
+          <button type="button" onClick={() => setMonth(addMonth(month ?? currentMonth(), -1))} aria-label="Mês anterior" className="grid h-8 w-8 place-items-center rounded-full hover:bg-muted"><ChevronLeft className="h-4 w-4" /></button>
+          <strong className="min-w-[8.5rem] text-center text-sm">{monthLabel(month ?? currentMonth())}</strong>
+          <button type="button" onClick={() => setMonth(addMonth(month ?? currentMonth(), 1))} disabled={!month} aria-label="Próximo mês" className="grid h-8 w-8 place-items-center rounded-full hover:bg-muted disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
+        </div>
+      ) : null}
       <InsightWidget id={def.id} size="XL" config={config} />
 
       <Link to={def.to(config)} className="flex h-12 items-center justify-between rounded-full border border-border bg-card px-5 text-sm font-semibold" data-testid="insight-detail-source">

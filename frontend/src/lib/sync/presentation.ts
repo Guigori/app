@@ -7,6 +7,11 @@ const ENTITY_NAMES: Record<string, string> = {
   "category.create": "categoria",
   "card.create": "cartão",
   "subscription.create": "assinatura",
+  "budgetPlan.put": "plano do mês",
+  "budgetClosing.put": "fechamento do mês",
+  "budgetClosing.delete": "reabertura do mês",
+  "budgetSpecial.put": "plano especial",
+  "budgetSpecial.delete": "fim de plano especial",
 };
 
 function countLabel(amount: number, singular: string, plural: string): string {

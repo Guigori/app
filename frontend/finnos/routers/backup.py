@@ -29,7 +29,7 @@ BACKUP_VERSION = 1
 # Order matters for restore: every reference points to an earlier collection.
 COLLECTIONS = (
     "institutions", "accounts", "categories", "cards", "subscriptions",
-    "goals", "investments", "budget_cycles", "transactions", "notification_preferences",
+    "goals", "investments", "budget_cycles", "budget_plans", "budget_closings", "budget_specials", "transactions", "notification_preferences",
 )
 READ_LIMIT = 20000
 
