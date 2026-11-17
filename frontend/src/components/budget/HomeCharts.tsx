@@ -8,10 +8,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import type { MonthView, PlanItem } from "@/lib/budget/monthView";
 import { Donut, FINNOS_COLOR, Gauge, Heatmap, ProjectionLine } from "@/components/charts/FinnosCharts";
-import { card, h2 } from "@/components/budget/shared";
+import { card } from "@/components/budget/shared";
 import { cn } from "@/lib/utils";
 
 type P = { v: MonthView; money: (n: number) => string };
+/** Rótulo de seção dos cartões, como no protótipo aprovado. */
+export const lbl = "text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground";
 const MON = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const days = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00`) - Date.parse(`${a}T12:00:00`)) / 86400000);
@@ -32,9 +34,12 @@ export function DistributionCard({ v, money }: P) {
   if (!total) return null;
   return (
     <section aria-label="Distribuição do mês" className={card} data-testid="budget-distribution">
-      <h2 className={h2}>{past ? "Para onde foi o dinheiro" : "Para onde vai o dinheiro"}</h2>
-      <p className="mt-0.5 text-xs text-muted-foreground">O que já saiu no mês e o que está nas contas{v.earned ? <>, com <strong className="tabular-nums text-income">{money(v.earned)}</strong> que entraram</> : null}.</p>
-      <div className="mt-3 flex justify-center"><Donut slices={slices} size={176} selectedId={sel} onSelect={setSel} format={money} centerLabel="No mês" /></div>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className={lbl}>{past ? "Para onde foi o dinheiro" : v.when === "future" ? "Para onde vai o que vou ter" : "Para onde vai o dinheiro"}</p>
+        <strong className="font-heading text-base tabular-nums text-income">{money(total)}</strong>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">O que já saiu no mês e o que está nas contas{v.earned ? <>; entraram <strong className="tabular-nums text-income">{money(v.earned)}</strong></> : null}.</p>
+      <div className="mt-3 flex justify-center"><Donut slices={slices} size={176} selectedId={sel} onSelect={setSel} format={money} centerLabel="Total" /></div>
       <ul className="mt-2">
         {slices.map((s) => (
           <li key={s.id}>
@@ -53,19 +58,23 @@ export function DistributionCard({ v, money }: P) {
 /** Saldo dia a dia (real cheio, estimativa tracejada) com entrou, já saiu e falta pagar. */
 export function BalanceCard({ v, money }: P) {
   const pts = v.projection.map((p) => ({ value: p.value, kind: p.kind, label: dm(p.date) }));
+  const unpaid = v.items.filter((i) => i.type === "despesa" && i.state !== "realizado");
+  const open = unpaid.length, late = v.when === "current" ? unpaid.filter((i) => i.date < v.today).length : 0;
   return (
     <section aria-label="Saldo até o fim do mês" className={card} data-testid="budget-balance">
-      <h2 className={h2}>Saldo até o fim do mês</h2>
-      <p className="mt-0.5 text-xs text-muted-foreground">{v.when === "past" ? "Mês fechado." : <>{v.when === "future" ? "Previsão" : "Estimativa"} em {v.daysInMonth}/{v.month.slice(5)}: <strong className="tabular-nums text-foreground">{money(v.endBalance)}</strong></>}</p>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className={lbl}>Saldo até o fim do mês</p>
+        <span className="text-right text-xs text-muted-foreground">{v.when === "past" ? "mês fechado" : <>{v.when === "future" ? "previsão" : "estimativa"} em {v.daysInMonth}/{v.month.slice(5)}: <strong className="tabular-nums text-foreground">{money(v.endBalance)}</strong></>}</span>
+      </div>
       {pts.length > 1 ? <ProjectionLine className="mt-3" points={pts} area format={money} ariaLabel={`Saldo dia a dia; estimativa de ${money(v.endBalance)} no fim do mês`} /> : null}
       {v.lowest && v.when !== "past" && v.lowest.value < v.endBalance ? <p className={cn("mt-2 text-xs", v.lowest.value < 0 ? "font-semibold text-expense" : "text-muted-foreground")}>Ponto mais baixo: {money(v.lowest.value)} em {dm(v.lowest.date)}.</p> : null}
       <div className="mt-3 grid gap-2 text-[13px]">
-        <span className="flex justify-between"><span className="text-muted-foreground">{v.when === "future" ? "Vou receber" : "Entrou"}</span><span><strong className="tabular-nums text-income">{money(v.earned)}</strong>{v.toReceive > 0 ? <span className="text-muted-foreground"> + {money(v.toReceive)} a receber</span> : null}</span></span>
+        <span className="flex justify-between"><span className="text-muted-foreground">{v.when === "future" ? "Vou ganhar" : "Ganhei"}</span><span><strong className="tabular-nums text-income">{money(v.earned)}</strong>{v.toReceive > 0 ? <span className="text-muted-foreground"> + {money(v.toReceive)} a receber</span> : null}</span></span>
         <span className="flex justify-between"><span className="text-muted-foreground">Já saiu</span><strong className="tabular-nums">{money(v.spent)}</strong></span>
         <span className="flex justify-between"><span className="text-muted-foreground">Falta pagar</span><strong className={cn("tabular-nums", v.toPay > 0 && "text-expense")}>{money(v.toPay)}</strong></span>
       </div>
       <Link to={`/orcamento/compromissos?mes=${v.month}`} className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-[13px] font-semibold text-primary">
-        <span>Comprometido {money(v.toPay + v.goalsReserve)}</span><ChevronRight className="h-4 w-4" />
+        <span>Comprometido {money(v.toPay + v.goalsReserve)} · <span className={late ? "text-expense" : undefined}>{late ? `${late} ${late === 1 ? "vencida" : "vencidas"}` : v.toPay ? `${open} ${open === 1 ? "conta" : "contas"}` : "tudo pago"}</span></span><ChevronRight className="h-4 w-4" />
       </Link>
     </section>
   );
@@ -79,22 +88,24 @@ export function PaceCard({ v, money }: P) {
   const tag = d.spent > d.limit ? "passou do limite" : v.when === "past" ? "dentro do limite" : ahead ? "um pouco acima" : "no ritmo";
   const tone = d.spent > d.limit ? "text-expense" : ahead ? "text-amber-700 dark:text-amber-400" : "text-income";
   const heavy = Object.entries(v.heat).sort((a, b) => b[1] - a[1])[0];
+  const passed = Math.max(1, v.daysInMonth - v.daysLeft + 1);
+  const planToday = d.limit * d.elapsed, avg = d.spent / passed, closesAt = avg * v.daysInMonth;
+  const paceText = v.when === "current"
+    ? <>Gastou <strong className="tabular-nums">{money(d.spent)}</strong> em {passed} {passed === 1 ? "dia" : "dias"}. O plano até hoje era <strong className="tabular-nums">{money(planToday)}</strong>. Mantendo {money(avg)} por dia, fecha em <strong className="tabular-nums">{money(closesAt)}</strong>{d.spent > d.limit ? "; os limites do mês já passaram." : <>; para ficar no limite, são até <strong className="tabular-nums">{money(d.allowance)} por dia</strong>.</>}</>
+    : <>Gastou <strong className="tabular-nums">{money(d.spent)}</strong> de <strong className="tabular-nums">{money(d.limit)}</strong>{d.spent > d.limit ? `: ${money(d.spent - d.limit)} acima do plano.` : `: sobraram ${money(d.limit - d.spent)}.`}</>;
   return (
     <section aria-label="Ritmo do dia a dia" className={card} data-testid="budget-pace">
-      <div className="flex items-baseline justify-between gap-2"><h2 className={h2}>Orçamento do dia a dia</h2><span className={cn("text-xs font-semibold", tone)}>{tag}</span></div>
-      <Gauge className="mt-3" percent={d.percent} size={200} detail={<>{money(d.spent)}<br />de {money(d.limit)}</>}>
+      <div className="flex items-baseline justify-between gap-2"><p className={lbl}>Orçamento do dia a dia</p><span className={cn("text-xs font-semibold", tone)}>{tag}</span></div>
+      <Gauge className="mt-3" percent={d.percent} size={200} detail={<>{money(d.spent)}<br />de {money(d.limit)} · sobram {money(Math.max(0, d.limit - d.spent))}</>}>
         <strong className="block font-heading text-2xl tabular-nums">{Math.round(d.percent * 100)}%</strong>
-        <span className="text-[11px] text-muted-foreground">{v.when === "current" ? `dos limites · ${Math.round(d.elapsed * 100)}% do mês` : "dos limites usados"}</span>
+        <span className="text-[11px] text-muted-foreground">{v.when === "current" ? `do plano · ${Math.round(d.elapsed * 100)}% do mês` : "do plano"}</span>
       </Gauge>
-      <p className="mt-2 text-[13px] leading-relaxed">
-        Gastou <strong className="tabular-nums">{money(d.spent)}</strong> de <strong className="tabular-nums">{money(d.limit)}</strong>.
-        {v.when === "current" ? (d.spent > d.limit ? " Os limites do mês já passaram." : <> Para ficar dentro, são até <strong className="tabular-nums">{money(d.allowance)} por dia</strong> nos {v.daysLeft} dias que faltam.</>) : null}
-      </p>
+      <p className="mt-2 text-[13px] leading-relaxed">{paceText}</p>
       {Object.keys(v.heat).length ? (
         <>
           <p className="mb-1.5 mt-4 text-xs font-semibold">Gasto por dia</p>
           <Heatmap month={v.month} values={v.heat} today={v.today} format={money} />
-          {heavy ? <p className="mt-2 text-xs text-muted-foreground">O dia mais pesado foi {dm(heavy[0])}, com {money(heavy[1])}. Toque num dia para ver.</p> : null}
+          {heavy ? <p className="mt-2 text-xs text-muted-foreground">Toque num dia. O mais pesado foi {dm(heavy[0])}, com {money(heavy[1])}.</p> : null}
         </>
       ) : null}
     </section>
@@ -118,7 +129,7 @@ function ItemRow({ i, v, money }: { i: PlanItem & { review?: boolean }; v: Month
   if (i.review) sub = "Repetida · decida em Compromissos";
   else if (done) sub = `${inc ? "Recebido" : "Pago"} em ${dm(i.date)}`;
   else if (v.when !== "current") sub = i.state === "estimativa" ? "Estimativa" : "Agendado";
-  else sub = `${i.state === "estimativa" ? "Estimativa" : "Agendado"} · ${d < 0 ? `${inc ? "atrasado" : "venceu"} há ${-d} ${d === -1 ? "dia" : "dias"}` : d === 0 ? (inc ? "cai hoje" : "vence hoje") : `${inc ? "cai" : "vence"} em ${d} ${d === 1 ? "dia" : "dias"}`}`;
+  else sub = `${i.state === "estimativa" ? "Estimativa" : "Agendado"} · ${d < 0 ? `${inc ? "Atrasado" : "Venceu"} há ${-d} ${d === -1 ? "dia" : "dias"}` : d === 0 ? (inc ? "Cai hoje" : "Vence hoje") : `${inc ? "Cai" : "Vence"} em ${d} ${d === 1 ? "dia" : "dias"}`}`;
   const soon = !done && !late && v.when === "current" && d >= 0 && d <= 3;
   return (
     <li>
@@ -129,7 +140,7 @@ function ItemRow({ i, v, money }: { i: PlanItem & { review?: boolean }; v: Month
         </span>
         <span className="min-w-0 flex-1">
           <strong className={cn("block truncate text-sm", i.review && "text-muted-foreground")}>{i.name}</strong>
-          <span className={cn("text-xs", late ? "font-semibold text-expense" : soon ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground")}>{sub}</span>
+          <span className={cn("text-xs", late ? "text-expense" : soon ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground")}>{sub}</span>
         </span>
         <strong className={cn("text-sm tabular-nums", inc && "text-income", i.review && "text-muted-foreground")}>{money(i.value)}</strong>
         <span aria-hidden="true" className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-full", done ? "bg-income text-white" : cn("border-2", i.state === "estimativa" || i.review ? "border-dashed border-muted-foreground/60" : late ? "border-expense" : "border-border"))}>
@@ -157,16 +168,17 @@ export function BillsCard({ v, money, kind, max = 6 }: P & { kind: "despesa" | "
   return (
     <section aria-label={inc ? "A receber" : "Contas a pagar"} className="min-w-0" data-testid={inc ? "budget-incomes" : "budget-bills"}>
       <div className="mb-2.5 flex items-baseline justify-between gap-2">
-        <h2 className={h2}>{inc ? "A receber" : "Contas a pagar"}</h2>
-        <Link to={`/orcamento/compromissos?mes=${v.month}`} className="text-[13px] font-semibold text-primary">{pending ? `${inc ? "faltam" : "falta"} ${money(pending)}` : inc ? "nada pendente" : "tudo pago"} · ver tudo</Link>
+        <h2 className="font-heading text-[17px] font-bold">{inc ? "A receber" : "Contas a pagar"}</h2>
+        {inc ? <span className="text-xs text-muted-foreground">{pending ? `${money(pending)} ainda vão entrar` : "nada pendente"}</span>
+          : <Link to={`/orcamento/compromissos?mes=${v.month}`} className="text-xs font-semibold text-primary">{pending ? `falta ${money(pending)}` : "tudo pago"} · ver tudo</Link>}
       </div>
       <ul className="overflow-hidden rounded-[20px] border border-border bg-card">{shown.map((i) => <ItemRow key={`${i.key}${"review" in i ? ":r" : ""}`} i={i} v={v} money={money} />)}</ul>
       {ordered.length > max ? <button type="button" onClick={() => setAll((a) => !a)} className="mt-2 text-[13px] font-semibold text-primary">{all ? "Mostrar menos" : `Ver mais ${ordered.length - max}`}</button> : null}
       {!inc ? (
         <div className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1 px-1 text-[11px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-income" />realizado</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-income" />realizado: saiu ou entrou na conta</span>
           <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-full border-2 border-border" />agendado</span>
-          <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-full border-2 border-dashed border-muted-foreground/60" />estimativa ou repetida</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-full border-2 border-dashed border-muted-foreground/60" />{list.some((i) => "review" in i) ? "estimativa ou repetida" : "estimativa"}</span>
         </div>
       ) : null}
     </section>

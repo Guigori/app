@@ -28,18 +28,19 @@ function MatchItem({ v, money, onDismiss, transactions }: { v: MonthView; money:
   const m = v.match!;
   const estimate = transactions.find((t) => t.id === m.estimate.transaction_id) ?? null;
   return (
-    <li className="rounded-2xl bg-primary/[0.06] p-3.5 text-[13px]" data-testid="budget-match">
-      <p className="font-semibold">Para confirmar</p>
-      <p className="mt-0.5">Saiu {money(m.realized.value)} “{m.realized.name}” em {dm(m.realized.date)}. É {m.estimate.type === "receita" ? "a entrada" : "a conta"} <strong>{m.estimate.name}</strong> (estimada em {money(m.estimate.value)})?</p>
-      <div className="mt-2 flex gap-1.5">
-        <button type="button" disabled={!estimate} onClick={() => estimate && openTransactionDetail(estimate)} className={cn(buttonVariants({ size: "sm" }), "h-8 rounded-full")}>Sim, abrir a estimativa</button>
-        <button type="button" onClick={() => onDismiss(`${m.realized.id}|${m.estimate.key}`)} className={cn(buttonVariants({ size: "sm", variant: "outline" }), "h-8 rounded-full")}>Não é</button>
+    <li className="list-none rounded-[20px] border border-border bg-primary/[0.05] p-4 text-[13px]" data-testid="budget-match">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Para confirmar</p>
+      <strong className="mt-1.5 block text-[15px]">{m.realized.type === "receita" ? "Entrou" : "Saiu"} {money(m.realized.value)} em {dm(m.realized.date)}</strong>
+      <p className="mt-0.5 leading-relaxed text-muted-foreground">“{m.realized.name}” no Fluxo. Parece {m.estimate.type === "receita" ? "a entrada" : "a conta"} {m.estimate.name} prevista de {money(m.estimate.value)}.</p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => onDismiss(`${m.realized.id}|${m.estimate.key}`)} className={cn(buttonVariants({ variant: "outline" }), "h-11 rounded-full")}>Não é</button>
+        <button type="button" disabled={!estimate} onClick={() => estimate && openTransactionDetail(estimate)} className={cn(buttonVariants(), "h-11 truncate rounded-full")}>É {m.estimate.name}</button>
       </div>
     </li>
   );
 }
 
-export function HomeInsights({ v, money, onDismiss, transactions, accounts, max = 4 }: { v: MonthView; money: (n: number) => string; onDismiss: (k: string) => void; transactions: Transaction[]; accounts: Account[]; max?: number }) {
+export function HomeInsights({ v, money, onDismiss, transactions, accounts, max = 4, variant = "cards" }: { v: MonthView; money: (n: number) => string; onDismiss: (k: string) => void; transactions: Transaction[]; accounts: Account[]; max?: number; variant?: "cards" | "list" }) {
   const [settings] = useBudgetSettings();
   const [all, setAll] = useState(false);
   // The same pace as Gastos do mês: fixed bills already paid are not projected over the remaining days.
@@ -52,6 +53,37 @@ export function HomeInsights({ v, money, onDismiss, transactions, accounts, max 
   const markDone = (id: string) => plans.save.mutate({ ...plan, reminders: (plan.reminders ?? []).map((r) => (r.id === id ? { ...r, done: true } : r)) });
   if (!items.length && !v.match && !due.length) return null;
   const shown = all ? items : items.slice(0, max);
+  if (variant === "list") {
+    const DOT: Record<InsightTone, string> = { expense: "bg-expense", warn: "bg-amber-500", info: "bg-primary", good: "bg-income" };
+    const rows = [
+      ...due.map((r) => ({ id: `lembrete-${r.id}`, dot: "bg-amber-500", title: r.text, text: `Lembrete · ${dm(r.date)}`, action: null as { to: string; label: string } | null, done: r.id })),
+      ...shown.map((i) => ({ id: i.id, dot: DOT[i.tone], title: i.title, text: i.text ?? "", action: i.action ?? null, done: null as string | null })),
+    ];
+    return (
+      <div className="flex flex-col gap-3">
+        {rows.length ? (
+          <section aria-label="Avisos do previsto" className="rounded-[20px] border border-border bg-card px-4 py-3.5" data-testid="budget-alerts">
+            <div className="flex items-baseline justify-between gap-2"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Avisos do previsto</p><Link to="/orcamento/configuracoes" className="text-xs font-semibold text-primary">Ajustar avisos</Link></div>
+            <ul>
+              {rows.map((r) => (
+                <li key={r.id} className="flex gap-2.5 border-b border-border/60 py-2.5 last:border-0" data-testid={`insight-${r.id}`}>
+                  <span className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full", r.dot)} />
+                  <div className="min-w-0 flex-1 text-[13px]">
+                    <strong className="block text-sm">{r.title}</strong>
+                    {r.text ? <span className="text-muted-foreground">{r.text}</span> : null}
+                    {r.action ? <Link to={r.action.to} className="mt-1 flex items-center gap-1 font-semibold text-primary">{r.action.label} <ArrowRight className="h-3.5 w-3.5" /></Link> : null}
+                    {r.done ? <button type="button" onClick={() => markDone(r.done!)} className="mt-1 flex items-center gap-1 font-semibold text-primary"><Check className="h-3.5 w-3.5" /> Feito</button> : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {items.length > max ? <button type="button" onClick={() => setAll((a) => !a)} className="mt-1 text-[13px] font-semibold text-primary">{all ? "Mostrar menos" : `Ver mais ${items.length - max}`}</button> : null}
+          </section>
+        ) : null}
+        {v.match ? <ul><MatchItem v={v} money={money} onDismiss={onDismiss} transactions={transactions} /></ul> : null}
+      </div>
+    );
+  }
   return (
     <div data-testid="budget-alerts">
       <ul className="flex flex-col gap-2">
