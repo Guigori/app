@@ -288,7 +288,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   });
   const canSave = invoice ? invHint === null && !invoiceMutation.isPending : Number(value) > 0 && !!account && (kind === "Transferência" ? !!destination && destination !== account : !!category && !(kind === "Despesa" && selectedCategory?.name.toLocaleLowerCase("pt-BR") === "renda"));
   const accountLabel = selectedCard ? `${selectedCard.name} · Crédito` : selectedAccount ? [selectedAccount.name, payment].filter(Boolean).join(" · ") : "Selecionar";
-  const [reminder, setReminder] = useState(false);
+  const [reminder, setReminder] = useState(() => Boolean(existing?.notify_enabled));
   const [project, setProject] = useState("");
   const [tags, setTags] = useState("");
   const go = (p: Page) => { setHistory(h => [...h, page]); setPage(p); };

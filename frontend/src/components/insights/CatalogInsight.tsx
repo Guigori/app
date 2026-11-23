@@ -82,7 +82,7 @@ function DonutView({ chart, size, money }: { chart: Extract<Chart, { type: "donu
 
 const toneClass = (t?: "income" | "expense") => (t === "income" ? "text-income" : t === "expense" ? "text-expense" : "");
 
-export function CatalogInsight({ id, size, to, className, month }: { id: string; size: WidgetSize; to?: string; className?: string; month?: string | null }) {
+export function CatalogInsight({ id, size, to, className, month, hideEmpty = false }: { id: string; size: WidgetSize; to?: string; className?: string; month?: string | null; /** Render nothing when the analysis has no data (lists that show only what has something to say). */ hideEmpty?: boolean }) {
   const ctx = useCatalogCtx(READERS[id]?.needs ?? [], month);
   const def = insightById(id);
   const { hidden } = useBalanceHidden();
@@ -92,6 +92,7 @@ export function CatalogInsight({ id, size, to, className, month }: { id: string;
   const fmt = (kind: "money" | "count" | "points") => (kind === "money" ? ctx.money : kind === "points" ? (v: number) => `${Math.round(v)} p.p.` : (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 1 }));
   const vs = r.vs ? <VsLastMonth c={r.vs.c} label={r.vs.label} format={fmt(r.vs.format)} /> : null;
   const testId = `catalog-${id}`;
+  if (r.empty && hideEmpty) return null;
   if (r.empty && size !== "XL") return (
     <Tile title={def?.title ?? r.tile} className={className} testId={testId}>
       <p className={cn(NOTE, "mt-auto")}>{r.empty}</p>

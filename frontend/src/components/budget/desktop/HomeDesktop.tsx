@@ -1,18 +1,19 @@
 /** Orçamento · visão geral no computador. */
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { ChevronRight } from "lucide-react";
 import { monthLabel } from "@/lib/format";
 import { dismissMatch } from "@/lib/budget/prefs";
 import type { MonthView } from "@/lib/budget/monthView";
 import { BulletBar, Gauge, Heatmap, ProjectionLine } from "@/components/charts/FinnosCharts";
-import { TransactionList } from "@/components/transactions/TransactionList";
 import { dm, useBudgetMonth, useMoney, useMonthData, useOnline } from "@/components/budget/shared";
 import { BudgetFailed, BudgetLoading, NoBudgetCard, OfflineNote } from "@/components/budget/States";
-import { HomeInsights, Shortcuts } from "@/components/budget/HomeParts";
+import { HomeInsights } from "@/components/budget/HomeParts";
+import { planMenuGroups } from "@/components/budget/PlanMenu";
 import { NextStepCard } from "@/components/budget/NextStep";
 import { BillsCard, DistributionCard } from "@/components/budget/HomeCharts";
 import { MonthAnalyses } from "@/components/budget/MonthAnalyses";
-import { DeskHeader, DeskPage, KpiStrip, Panel, Segmented, td, th } from "@/components/budget/desktop/kit";
+import { DeskHeader, DeskPage, KpiStrip, Panel, td, th } from "@/components/budget/desktop/kit";
 import { cn } from "@/lib/utils";
 import type { Account, Transaction } from "@/types/finnos";
 
@@ -111,34 +112,23 @@ function Body({ v, money, today, transactions, accounts, onDismiss }: { v: Month
             {past ? <p className="text-sm text-muted-foreground">Mês encerrado. <Link to={`/orcamento/conta?mes=${v.month}`} className="font-medium text-primary">Ver como fechou</Link></p> : null}
           </Panel>
           <DistributionCard v={v} money={money} />
-          <Panel title="Atalhos"><Shortcuts month={v.month} columns={2} /></Panel>
+          <Panel title="Mais do Orçamento">
+            <div className="flex flex-col gap-3">
+              {planMenuGroups(v.month).map((g) => (
+                <div key={g.title}><p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{g.title}</p>
+                  <ul className="divide-y divide-border/60">{g.items.map((i) => <li key={i.id}><Link to={i.to} className="flex items-center gap-2.5 py-2 text-sm hover:text-primary" data-testid={`budget-link-${i.id}`}><i.icon className="h-4 w-4 shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate font-medium">{i.title}</span><ChevronRight className="h-4 w-4 text-muted-foreground" /></Link></li>)}</ul>
+                </div>
+              ))}
+            </div>
+          </Panel>
           <Panel title="Gasto por dia"><Heatmap month={v.month} values={v.heat} today={today} format={money} /></Panel>
         </div>
       </div>
 
       <MonthAnalyses v={v} columns={3} />
-      <Transactions v={v} money={money} transactions={transactions} />
     </>
   );
 }
 
 
-function Transactions({ v, money, transactions }: { v: MonthView; money: (n: number) => string; transactions: Transaction[] }) {
-  const [tab, setTab] = useState<"todas" | "pagar" | "receber">("todas");
-  const list = transactions.filter((t) => tab === "todas" || (tab === "pagar" ? t.type === "despesa" && t.status !== "pago" : t.type === "receita" && t.status !== "pago")).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
-  const invoices = v.items.filter((i) => i.source === "cartao" && tab !== "receber");
-  return (
-    <section aria-label="Transações do mês" data-testid="budget-transactions">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="font-heading text-[15px] font-semibold">Transações de {monthLabel(v.month).split(" ")[0].toLowerCase()}</h2>
-        <div className="flex items-center gap-3"><Segmented label="Filtrar" value={tab} onChange={setTab} options={[["todas", "Todas"], ["pagar", "A pagar"], ["receber", "A receber"]] as const} /><Link to={`/transacoes?month=${v.month}`} className="text-xs font-medium text-primary">Ver todas no Fluxo</Link></div>
-      </div>
-      {invoices.length ? (
-        <div className="mb-3 flex flex-wrap gap-3">
-          {invoices.map((i) => <Link key={i.key} to={`/cartoes/${i.card_id}`} className="flex items-center gap-4 rounded-xl border border-border bg-card px-4 py-2.5 text-[13px] hover:bg-muted/40"><span><span className="block font-medium">{i.name}</span><span className="text-xs text-muted-foreground">Vence {dm(i.date)} · Carteira</span></span><strong className="tabular-nums text-expense">−{money(i.value)}</strong></Link>)}
-        </div>
-      ) : null}
-      {list.length ? <TransactionList transactions={list} /> : <p className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground">Nenhuma transação aqui neste mês.</p>}
-    </section>
-  );
-}
+

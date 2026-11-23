@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 import type { Transaction } from "@/types/finnos";
 
 // Three analyses of the library read for the month being closed (the same ones Análise shows for that month).
-const ANALYSES = ["fixo-x-variavel", "onde-economizou", "taxa-poupanca"];
+const ANALYSES = ["fixo-x-variavel", "onde-economizou", "taxa-poupanca", "categorias-subiram", "maiores-gastos"];
 const MON = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const lbl = "text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground";
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -393,8 +393,8 @@ export default function BudgetClosing() {
         <div className="mt-3 flex flex-wrap gap-1.5">{c.insights.map((i) => <button key={i.id} type="button" onClick={() => setQ(q === i.id ? null : i.id)} className={cn("h-8 rounded-full px-3 text-xs font-semibold", q === i.id ? "bg-primary text-primary-foreground" : "border border-border bg-card")}>{i.question}</button>)}</div>
         {q ? (() => { const i = c.insights.find((x) => x.id === q)!; return <div className="mt-3 rounded-xl bg-card p-3 text-[13px]"><p>{i.answer}</p>{i.items.length ? <ul className="mt-2 divide-y divide-border">{i.items.map((t) => <li key={t.id}><button type="button" onClick={() => dialogs.openTransactionDetail(t, i.items)} className="flex w-full justify-between py-1.5 text-left"><span>{t.name}<span className="ml-2 text-xs text-muted-foreground">{dm(t.date)}</span></span><span className="tabular-nums">{money(amountOf(t))}</span></button></li>)}</ul> : null}<p className="mt-2 text-[11px] text-muted-foreground">A FIINT só lê os seus lançamentos. Nada é alterado.</p></div>; })() : null}
       </section>
-      <div className={cn("grid gap-3", desktop ? "grid-cols-3" : "grid-cols-1")} data-testid="closing-analyses">
-        {ANALYSES.map((id) => <CatalogInsight key={id} id={id} size="M" month={month} to={detailPath(id, { month })} className="min-h-[170px]" />)}
+      <div className={cn("grid gap-3 [&>*:nth-child(n+4)]:hidden", desktop ? "grid-cols-3" : "grid-cols-1")} data-testid="closing-analyses">
+        {ANALYSES.map((id) => <CatalogInsight key={id} id={id} size="M" month={month} to={detailPath(id, { month })} className="min-h-[170px]" hideEmpty />)}
       </div>
     </div>
   );
