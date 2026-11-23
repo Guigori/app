@@ -56,10 +56,15 @@ class BudgetPlanOut(BudgetPlanIn):
 
 
 class ClosingAllocation(FinanceModel):
+    """Where part of the month's sobra went. Each one is registered by its own module (a transfer in the
+    register, an aporte in Metas, an aplicação in Investimentos) and only then marked done here."""
+
     id: str = Field(min_length=1, max_length=200)
-    kind: Literal["meta", "conta"]
+    kind: Literal["meta", "conta", "investimento"]
     name: str = Field(min_length=1, max_length=120)
     value: Money = Field(ge=0)
+    target_id: str | None = Field(default=None, max_length=200)
+    done: bool = False
 
 
 class ClosingCategory(FinanceModel):

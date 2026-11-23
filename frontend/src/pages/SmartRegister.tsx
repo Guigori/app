@@ -71,7 +71,7 @@ export interface RegisterController {
   expanded?: boolean;
   save: () => void;
 }
-export default function SmartRegister({ embedded = false, desktop = false, capture, existing, siblings, initialKind, template, invoice, onClose, onController }: { initialKind?: Kind; /** "Pagar fatura": this register, as the payment of the card's invoice. */ invoice?: { cardId: string; cycle?: string }; /** The list the lançamento came from: swipe or arrows go to the previous and next. */ siblings?: Transaction[]; /** "Lançar de novo": a new entry with the fields of this one, dated today. */ template?: Transaction; embedded?: boolean; desktop?: boolean; /** A saved lançamento: opens in the same screen, with its impact and receipt below; ✓ saves changes. */ existing?: Transaction; /** An Apple Pay purchase being reviewed: same screens, prefilled; saving confirms it. */ capture?: { item: PendingCapture; choice: CaptureChoice }; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
+export default function SmartRegister({ embedded = false, desktop = false, capture, existing, siblings, initialKind, initialDate, template, invoice, onClose, onController }: { initialKind?: Kind; /** A new entry's starting date (defaults to today). */ initialDate?: string; /** "Pagar fatura": this register, as the payment of the card's invoice. */ invoice?: { cardId: string; cycle?: string }; /** The list the lançamento came from: swipe or arrows go to the previous and next. */ siblings?: Transaction[]; /** "Lançar de novo": a new entry with the fields of this one, dated today. */ template?: Transaction; embedded?: boolean; desktop?: boolean; /** A saved lançamento: opens in the same screen, with its impact and receipt below; ✓ saves changes. */ existing?: Transaction; /** An Apple Pay purchase being reviewed: same screens, prefilled; saving confirms it. */ capture?: { item: PendingCapture; choice: CaptureChoice }; onClose?: () => void; onController?: (controller: RegisterController) => void }) {
   const dialogs = useDialogs();
   const navigate = useNavigate();
   const { hidden, toggle: toggleHidden } = useBalanceHidden();
@@ -138,7 +138,7 @@ export default function SmartRegister({ embedded = false, desktop = false, captu
   const [benefitPrompt, setBenefitPrompt] = useState<{ message: string; available: number; input: TransactionInput } | null>(null);
   const [destination, setDestination] = useState(() => (existing ?? template)?.to_account_id ?? "");
   const [installments, setInstallments] = useState(1);
-  const [date, setDate] = useState(() => existing?.date ?? capture?.item.date ?? todayISO());
+  const [date, setDate] = useState(() => existing?.date ?? capture?.item.date ?? initialDate ?? todayISO());
   const [note, setNote] = useState(() => existing?.notes ?? "");
   const [origin, setOrigin] = useState(() => (existing ?? template)?.origin ?? "");
   const [dateOpen, setDateOpen] = useState(false);

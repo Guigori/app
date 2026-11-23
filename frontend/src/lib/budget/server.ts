@@ -40,7 +40,7 @@ export interface BudgetClosing {
   daily_spent: number;
   planned_income?: number | null;
   planned_bills?: number | null;
-  allocation: { id: string; kind: "meta" | "conta"; name: string; value: number }[];
+  allocation: { id: string; kind: "meta" | "conta" | "investimento"; name: string; value: number; target_id?: string | null; done?: boolean }[];
   categories: { category_id: string; name: string; spent: number; limit: number }[];
   /** The person's note about the month. */
   note?: string | null;
