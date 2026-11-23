@@ -21,11 +21,12 @@ import { monthOutlook, reviewSubscriptions, savingIdeas, suggestReminders } from
 import { splitLabel, useBudgetSettings, validSplit, type BudgetSplit } from "@/lib/budget/prefs";
 import type { PlanReminder } from "@/lib/budget/server";
 import { useBudgetClosings, useBudgetPlans, useBudgetSpecials } from "@/components/budget/usePlans";
-import { useDialogs } from "@/components/dialogs/DialogsProvider";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
 import { BudgetHeader, useBudgetMonth, useMoney, useMonthData } from "@/components/budget/shared";
-import { DeskHeader, DeskPage, Panel, Segmented, useIsDesktop } from "@/components/budget/desktop/kit";
+import { DeskHeader, DeskPage, Segmented, useIsDesktop } from "@/components/budget/desktop/kit";
 import { MonthAgenda } from "@/components/budget/MonthAgenda";
+import { BulletBar, ProjectionLine, SegmentedBar } from "@/components/charts/FinnosCharts";
+import { draftTransaction, openRegisterSheet } from "@/lib/registerSheet";
 import { BudgetSuccess } from "@/components/budget/BudgetSuccess";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,8 +46,16 @@ function Switch({ on, onClick, label }: { on: boolean; onClick?: () => void; lab
   );
 }
 function Section({ title, hint, children, action, id, className }: { title: string; hint?: string; children: React.ReactNode; action?: React.ReactNode; id?: string; className?: string }) {
-  return <div id={id} className={cn("scroll-mt-4", className)}><Panel title={title} action={action}>{hint ? <p className="-mt-1 mb-3 text-[13px] text-muted-foreground">{hint}</p> : null}{children}</Panel></div>;
+  return (
+    <section id={id} className={cn("min-w-0 scroll-mt-4 rounded-[20px] border border-border bg-card p-4 sm:p-5", className)}>
+      <div className="flex items-baseline justify-between gap-3"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{title}</p>{action}</div>
+      {hint ? <p className="mt-1 text-[13px] leading-snug text-muted-foreground">{hint}</p> : null}
+      <div className="mt-3">{children}</div>
+    </section>
+  );
 }
+const NOTE_SHORT: Record<string, string> = { sugestao: "Repetida", cartao: "Fatura" };
+const shortNote = (r: PlanRow) => { const n = NOTE_SHORT[r.origin] ?? r.note.split(" · ")[0]; return n.length > 16 ? n.split(" ")[0] : n; };
 
 export default function BudgetNewPeriod() {
   const [month, setMonth] = useBudgetMonth(addMonth(currentMonth(), 1));
@@ -57,7 +66,6 @@ export default function BudgetNewPeriod() {
   const desktop = useIsDesktop();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const dialogs = useDialogs();
   const [settings, setSettings] = useBudgetSettings();
   const plans = useBudgetPlans();
   const closings = useBudgetClosings();
@@ -115,7 +123,18 @@ export default function BudgetNewPeriod() {
   const baseLimits = useMemo(() => limitsForBase(base, { categories: spendCats, current: nowLimits, income: plan?.inTotal ?? 0, model: model?.limits, split: splitOk ? split : null }), [base, spendCats, nowLimits, plan?.inTotal, model, split, splitOk]);
   const limits = useMemo(() => Object.fromEntries(Object.entries({ ...baseLimits, ...edits }).filter(([, v]) => v > 0)), [baseLimits, edits]);
   const changes = limitChanges(nowLimits, limits, names);
-  const limitsTotal = Object.values(limits).reduce((s, v) => s + v, 0);
+  // Categories paid almost only by fixed bills (Moradia with the rent): their money is already in "Contas", so their
+  // limit is not counted again in the dia a dia.
+  const covered = useMemo(() => {
+    const fixed = new Map<string, number>(), all = new Map<string, number>();
+    for (const q of pastTx) for (const t of q.data ?? []) if (t.type === "despesa" && t.category_id) {
+      const v = t.installment ? t.installment_value ?? t.value : t.value;
+      all.set(t.category_id, (all.get(t.category_id) ?? 0) + v);
+      if (t.fixed || t.recurrence_id || t.installment) fixed.set(t.category_id, (fixed.get(t.category_id) ?? 0) + v);
+    }
+    return new Set([...all].filter(([id, v]) => v > 0 && (fixed.get(id) ?? 0) / v >= 0.8).map(([id]) => id));
+  }, [pastTx.map((q) => q.dataUpdatedAt).join()]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dayLimitsTotal = Object.entries(limits).filter(([id]) => !covered.has(id)).reduce((s, [, v]) => s + v, 0);
   useEffect(() => { setEdits({}); }, [rule, start]);
 
   const history = useMemo(() => [1, 2].map((n, i) => {
@@ -164,7 +183,7 @@ export default function BudgetNewPeriod() {
   }
 
   const startBalance = nowView ? (month > currentMonth() ? nowView.endBalance : nowView.inAccounts) : 0;
-  const outlook = monthOutlook({ startBalance, inTotal: plan.inTotal, billTotal: plan.billTotal, limitsTotal, saveTotal: plan.saveTotal });
+  const outlook = monthOutlook({ startBalance, inTotal: plan.inTotal, billTotal: plan.billTotal, limitsTotal: dayLimitsTotal, saveTotal: plan.saveTotal });
   const noIncome = plan.inTotal <= 0;
   const decide = (row: PlanRow) => {
     const d = toggleDecision(row);
@@ -177,8 +196,12 @@ export default function BudgetNewPeriod() {
     const keys = plan.bills.filter((b) => b.origin === "sugestao" && !b.on).map((b) => b.key);
     setReview({ approved: [...new Set([...decisions.approved, ...keys])], ignored: decisions.ignored.filter((k) => !keys.includes(k)) });
   };
-  const forecast = (type: "receita" | "despesa", prefill?: { name: string; value: number; day: number; category_id?: string | null; account_id?: string | null }) =>
-    dialogs.openTransaction({ type, date: `${month}-${String(prefill?.day ?? 15).padStart(2, "0")}`, prefill: { status: "pendente", ...(prefill ? { name: prefill.name, value: prefill.value, category_id: prefill.category_id ?? undefined, account_id: prefill.account_id ?? undefined } : {}) } });
+  // Forecasts open the new register as an estimate (pendente), dated in the month being planned.
+  const forecast = (type: "receita" | "despesa", prefill?: { name: string; value: number; day: number; category_id?: string | null; account_id?: string | null }) => {
+    const date = `${month}-${String(Math.min(prefill?.day ?? 15, Number(range.end.slice(8)) || 28)).padStart(2, "0")}`;
+    openRegisterSheet({ kind: type === "receita" ? "Receita" : "Despesa", date, estimate: true,
+      template: prefill ? draftTransaction({ type, name: prefill.name, value: prefill.value, date, status: "pendente", category_id: prefill.category_id ?? null, account_id: prefill.account_id ?? "" }) : undefined });
+  };
   const setGoal = (id: string, v: number) => setSavingDraft({ ...saving, [id]: Math.max(0, v) });
   const addReminder = (r: PlanReminder) => setRem([...reminders.filter((x) => x.id !== r.id), r].sort((a, b) => a.date.localeCompare(b.date)));
   const removeReminder = (id: string) => setRem(reminders.filter((x) => x.id !== id));
@@ -187,14 +210,28 @@ export default function BudgetNewPeriod() {
   const cancelMarked = subsReview.lines.filter((s) => reminders.some((r) => r.id === `cancelar:${s.id}`));
   const reminderIdeas = suggestReminders(rowsAll, [], reminders).slice(0, 8);
   const shares = rule === "503020" ? { necessidades: 50, desejos: 30, futuro: 20 } : split;
+  // Balance through the planned month: incomes and bills on their dates, the dia a dia spread evenly, goals on day 1.
+  const balancePts = (() => {
+    if (bad) return [] as { value: number; kind: "previsto"; label: string }[];
+    const days: string[] = [];
+    for (let d = new Date(`${range.start}T12:00:00`); d.toISOString().slice(0, 10) <= range.end && days.length < 62; d.setDate(d.getDate() + 1)) days.push(d.toISOString().slice(0, 10));
+    const perDay = days.length ? dayLimitsTotal / days.length : 0;
+    let bal = startBalance - plan.saveTotal;
+    return days.map((day) => {
+      for (const r of rowsAll) if (r.on && r.date === day) bal += r.type === "receita" ? r.value : -r.value;
+      bal -= perDay;
+      return { value: Math.round(bal * 100) / 100, kind: "previsto" as const, label: dm(day) };
+    });
+  })();
+  const lowestPt = balancePts.reduce((m, p) => (p.value < m.value ? p : m), balancePts[0] ?? { value: 0, kind: "previsto" as const, label: "" });
 
   const rowList = (rows: PlanRow[], empty: string) => (
     <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border bg-card">
       {rows.map((r) => (
-        <li key={r.key} className={cn("flex items-center gap-3 px-3.5 py-2.5", !r.on && "opacity-60")}>
+        <li key={r.key} className={cn("flex items-center gap-2.5 px-3 py-2.5", !r.on && "opacity-60")}>
           <span className="grid h-11 w-10 shrink-0 place-content-center rounded-xl bg-primary/[0.07] text-center"><strong className="font-heading text-[15px] leading-none">{r.date.slice(8)}</strong><span className="mt-0.5 text-[9px] font-bold tracking-wide">{MON[Number(r.date.slice(5, 7)) - 1]}</span></span>
-          <span className="min-w-0 flex-1"><strong className="block truncate text-sm">{r.name}</strong><span className="text-xs text-muted-foreground">{r.origin === "cartao" ? "Fatura · compras e parcelas que já vêm" : r.note}</span></span>
-          <strong className={cn("text-sm tabular-nums", r.type === "receita" && "text-income")}>{r.type === "receita" ? "+ " : ""}{money(r.value)}</strong>
+          <span className="min-w-0 flex-1"><strong className="block truncate text-sm">{r.name}</strong><span className="block truncate text-xs text-muted-foreground">{shortNote(r)}{!r.on && r.origin === "sugestao" ? " · fora" : ""}</span></span>
+          <strong className={cn("shrink-0 text-sm tabular-nums", r.type === "receita" && "text-income")}>{r.type === "receita" ? "+ " : ""}{money(r.value)}</strong>
           <Switch on={r.on} onClick={() => decide(r)} label={`${r.on ? "Tirar" : "Incluir"} ${r.name}`} />
         </li>
       ))}
@@ -248,14 +285,24 @@ export default function BudgetNewPeriod() {
       <p className={cn("mt-2 text-[13px]", bad ? "text-expense" : "text-muted-foreground")}>{bad ? "A data final precisa ser depois da inicial." : `De ${fmt(range.start)} a ${fmt(range.end)}.`}{existing ? ` ${Short} já tem um período: começar de novo substitui as datas e os limites dele.` : ""}</p>
     </Section>
   );
+  const leftover = Math.max(0, plan.inTotal - plan.billTotal - dayLimitsTotal - plan.saveTotal);
+  const splitBar = (
+    <div className="mt-3" data-testid="new-period-split">
+      <SegmentedBar height={14} format={money} segments={[
+        { value: plan.billTotal, color: "#4B2CFF", label: "Contas" },
+        { value: dayLimitsTotal, color: "#F59E0B", label: "Dia a dia" },
+        ...(plan.saveTotal ? [{ value: plan.saveTotal, color: "#B3A6FF", label: "Metas" }] : []),
+        ...(leftover ? [{ value: leftover, color: "#10B981", label: "Sobra" }] : []),
+      ]} />
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        {([["Contas", plan.billTotal, "#4B2CFF"], ["Dia a dia", dayLimitsTotal, "#F59E0B"], ["Metas", plan.saveTotal, "#B3A6FF"], ["Sobra", plan.inTotal - plan.billTotal - dayLimitsTotal - plan.saveTotal, "#10B981"]] as const).filter(([, v]) => v !== 0).map(([l, v, c]) => <span key={l} className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded" style={{ background: c }} />{l} <strong className={cn("tabular-nums", v < 0 ? "text-expense" : "text-foreground")}>{money(v)}</strong></span>)}
+      </div>
+    </div>
+  );
   const division = noIncome ? (
     <p className="mt-3 flex gap-2 rounded-xl bg-amber-50 p-3 text-[13px] text-amber-900 dark:bg-amber-500/10 dark:text-amber-200" data-testid="new-period-no-income"><AlertTriangle className="h-4 w-4 shrink-0" />Preveja o que vai entrar em {short} para o orçamento se dividir.</p>
   ) : rule === "personalizado" ? (
-    <dl className="mt-3 grid grid-cols-3 gap-2 rounded-2xl bg-muted/50 p-3 text-center text-xs" data-testid="new-period-division">
-      <div><dt className="text-muted-foreground">Contas</dt><dd className="font-heading text-sm font-bold tabular-nums">{money(plan.billTotal)}</dd></div>
-      <div><dt className="text-muted-foreground">Dia a dia</dt><dd className="font-heading text-sm font-bold tabular-nums">{money(limitsTotal)}</dd></div>
-      <div><dt className="text-muted-foreground">Metas</dt><dd className="font-heading text-sm font-bold tabular-nums">{money(plan.saveTotal)}</dd></div>
-    </dl>
+    <div data-testid="new-period-division">{splitBar}</div>
   ) : (
     <dl className="mt-3 grid grid-cols-3 gap-2 rounded-2xl bg-muted/50 p-3 text-center text-xs" data-testid="new-period-division">
       {([["Necessidades", shares.necessidades], ["Desejos", shares.desejos], ["Futuro", shares.futuro]] as const).map(([l, p]) => <div key={l}><dt className="text-muted-foreground">{l} · {p}%</dt><dd className="font-heading text-sm font-bold tabular-nums">{money(plan.inTotal * p / 100)}</dd></div>)}
@@ -294,7 +341,12 @@ export default function BudgetNewPeriod() {
           <p className="mt-4 text-xs font-semibold text-muted-foreground">Onde dá para economizar</p>
           <ul className="divide-y divide-border">
             {ideas.slice(0, 4).map((i) => { const applied = edits[i.category_id] === i.to; return (
-              <li key={i.category_id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2 text-[13px]"><span className="min-w-0 flex-1">{i.text}</span><Button size="sm" variant={applied ? "default" : "outline"} className="h-8 rounded-full" onClick={() => setEdits((e) => (applied ? Object.fromEntries(Object.entries(e).filter(([k]) => k !== i.category_id)) : { ...e, [i.category_id]: i.to }))}>{applied ? "Aplicado" : `Limite ${money(i.to)}`}</Button></li>
+              <li key={i.category_id} className="py-2.5 text-[13px]">
+                <div className="flex items-baseline justify-between gap-2"><strong>{i.name}</strong><span className={cn("text-xs font-semibold", i.kind === "baixar" ? "text-income" : "text-expense")}>{i.kind === "baixar" ? `libera ${money(i.from - i.to)}` : `passa ${money(i.avg - i.from)} por mês`}</span></div>
+                <BulletBar className="mt-1.5" value={i.avg} limit={i.from} format={money} />
+                <div className="mt-1.5 flex items-center justify-between gap-2"><span className="text-xs text-muted-foreground">média {money(i.avg)} · limite {money(i.from)}</span>
+                  <Button size="sm" variant={applied ? "default" : "outline"} className="h-8 shrink-0 rounded-full" onClick={() => setEdits((e) => (applied ? Object.fromEntries(Object.entries(e).filter(([k]) => k !== i.category_id)) : { ...e, [i.category_id]: i.to }))}>{applied ? "Aplicado" : `${i.kind === "baixar" ? "Baixar" : "Subir"} para ${money(i.to)}`}</Button></div>
+              </li>
             ); })}
           </ul>
         </>
@@ -314,9 +366,9 @@ export default function BudgetNewPeriod() {
         </>
       ) : null}
     </Section>,
-    <Section key="limites" id="limites" title="Limites do dia a dia" hint={rule === "personalizado" ? "Ajuste com − e +. A média é dos últimos meses." : `Calculados pela regra ${rule === "503020" ? "50/30/20" : splitLabel(split)} sobre o que vai entrar. Ajuste com − e +.`} action={<span className="text-sm font-semibold tabular-nums">{money(limitsTotal)}</span>}>
+    <Section key="limites" id="limites" title="Limites do dia a dia" hint={rule === "personalizado" ? "Ajuste com − e +. A média é dos últimos meses." : `Calculados pela regra ${rule === "503020" ? "50/30/20" : splitLabel(split)} sobre o que vai entrar. Ajuste com − e +.`} action={<span className="text-sm font-semibold tabular-nums">{money(dayLimitsTotal)}</span>}>
       <ul className="divide-y divide-border" data-testid="new-period-limits">
-        {spendCats.filter((c) => (limits[c.id] ?? 0) > 0 || avgOf(c.id) > 0).map((c) => {
+        {spendCats.filter((c) => !covered.has(c.id) && ((limits[c.id] ?? 0) > 0 || avgOf(c.id) > 0)).map((c) => {
           const v = limits[c.id] ?? 0, avg = avgOf(c.id), was = nowLimits[c.id] ?? 0;
           return (
             <li key={c.id} className="flex items-center gap-2 py-2 text-sm">
@@ -329,6 +381,7 @@ export default function BudgetNewPeriod() {
         })}
       </ul>
       <p className="mt-2 text-xs text-muted-foreground">Em laranja: abaixo do que você costuma gastar.</p>
+      {spendCats.some((c) => covered.has(c.id) && (limits[c.id] ?? 0) > 0) ? <p className="mt-2 rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">Já estão em “O que vai sair” e não contam de novo no dia a dia: {spendCats.filter((c) => covered.has(c.id) && (limits[c.id] ?? 0) > 0).map((c) => c.name).join(", ")}.</p> : null}
       {overlapping.length ? (
         <div className="mt-3 rounded-2xl border border-border p-3">
           <strong className="block text-sm">Plano especial</strong>
@@ -345,7 +398,7 @@ export default function BudgetNewPeriod() {
           {reminders.map((r) => <li key={r.id} className="flex items-center gap-3 py-2 text-sm"><Bell className="h-4 w-4 shrink-0 text-amber-600" /><span className="w-12 shrink-0 tabular-nums text-muted-foreground">{dm(r.date)}</span><span className="min-w-0 flex-1">{r.text}</span><Button size="icon-sm" variant="ghost" onClick={() => removeReminder(r.id)} aria-label={`Tirar lembrete ${r.text}`}><Trash2 className="h-4 w-4" /></Button></li>)}
         </ul>
       ) : null}
-      <div className="mt-2 grid grid-cols-[8.5rem_1fr_auto] gap-2">
+      <div className="mt-2 grid grid-cols-[9.5rem_1fr] gap-2 [&>button]:col-span-2">
         <Input type="date" value={newRem.date} min={`${month}-01`} max={`${month}-31`} onChange={(e) => setNewRem((n) => ({ ...n, date: e.target.value }))} aria-label="Dia do lembrete" />
         <Input value={newRem.text} maxLength={140} placeholder="O que lembrar" onChange={(e) => setNewRem((n) => ({ ...n, text: e.target.value }))} aria-label="O que lembrar" />
         <Button type="button" className="rounded-full" disabled={!newRem.date || !newRem.text.trim()} onClick={() => { addReminder({ id: `livre:${Date.now().toString(36)}`, date: newRem.date, text: newRem.text.trim(), kind: "outro" }); setNewRem({ date: "", text: "" }); }}>Adicionar</Button>
@@ -360,7 +413,8 @@ export default function BudgetNewPeriod() {
 
   const reviewSection = (
     <div className={cn("grid items-start gap-4", desktop ? "grid-cols-2" : "grid-cols-1")} id="revisao">
-      <Panel title={`Se ${short} seguir o orçamento`}>
+      <Section title={`Se ${short} seguir o orçamento`}>
+        {!noIncome ? <div className="mb-3">{splitBar}</div> : null}
         <dl className="grid gap-1.5 text-[13px]" data-testid="new-period-outlook">
           {([["Entra", outlook.inTotal, "in"], ["Contas e faturas", -outlook.billTotal, ""], ["Dia a dia (limites)", -outlook.limitsTotal, ""], ["Guardar em metas", -outlook.saveTotal, ""]] as const).map(([l, v, t]) => (
             <div key={l} className="flex justify-between"><dt className="text-muted-foreground">{l}</dt><dd className={cn("tabular-nums font-medium", t === "in" && "text-income")}>{v < 0 ? "− " : ""}{money(Math.abs(v))}</dd></div>
@@ -376,13 +430,19 @@ export default function BudgetNewPeriod() {
           <p><strong>Limites:</strong> {changes.changed.length ? changes.changed.slice(0, 3).map((c) => `${c.name} ${c.from ? `${money(c.from)} → ` : "novo, "}${money(c.to)}`).join("; ") + (changes.changed.length > 3 ? "…" : "") : "os mesmos de agora."}</p>
           <p><strong>Lembretes:</strong> {reminders.length ? `${reminders.length} marcados.` : "nenhum."}</p>
         </div>
-      </Panel>
-      <Panel title={`${Short} no calendário`}>
+      </Section>
+      {balancePts.length > 1 && !noIncome ? (
+        <Section title="Saldo previsto dia a dia" hint={`Começa com ${money(startBalance)}; entradas e contas nas datas, o dia a dia espalhado pelo mês.`}>
+          <ProjectionLine area width={desktop ? 520 : 320} height={desktop ? 140 : 110} points={balancePts} format={money} ariaLabel={`Saldo previsto de ${money(startBalance)} a ${money(balancePts[balancePts.length - 1].value)}`} />
+          <p className={cn("mt-2 text-xs", lowestPt.value < 0 ? "font-semibold text-expense" : "text-muted-foreground")}>Ponto mais baixo: {money(lowestPt.value)} em {lowestPt.label}.{lowestPt.value < 0 ? " Antes disso, adiante uma entrada ou mude a data de uma conta." : ""}</p>
+        </Section>
+      ) : null}
+      <Section title={`${Short} no calendário`}>
         <MonthAgenda month={month} money={money} items={[
           ...rowsAll.filter((r) => r.on).map((r) => ({ date: r.date, name: r.name, value: r.value, kind: r.type === "receita" ? "entra" as const : "sai" as const })),
           ...reminders.map((r) => ({ date: r.date, name: r.text, kind: "lembrete" as const })),
         ]} />
-      </Panel>
+      </Section>
     </div>
   );
   const startButton = (
@@ -391,8 +451,8 @@ export default function BudgetNewPeriod() {
     </button>
   );
   const successEl = success ? (
-    <BudgetSuccess title={`${Short} começou`} amountLabel={noIncome ? "No dia a dia" : "Sobra se seguir o orçamento"} amount={money(noIncome ? limitsTotal : outlook.leftover)}
-      chips={[rule === "503020" ? "50/30/20" : rule === "proporcao" ? `Proporção ${splitLabel(split)}` : "Personalizado", `${money(limitsTotal)} nos limites`, ...(plan.saveTotal ? [`${money(plan.saveTotal)} para metas`] : []), ...(reminders.length ? [`${reminders.length} lembretes`] : [])]}
+    <BudgetSuccess title={`${Short} começou`} amountLabel={noIncome ? "No dia a dia" : "Sobra se seguir o orçamento"} amount={money(noIncome ? dayLimitsTotal : outlook.leftover)}
+      chips={[rule === "503020" ? "50/30/20" : rule === "proporcao" ? `Proporção ${splitLabel(split)}` : "Personalizado", `${money(dayLimitsTotal)} no dia a dia`, ...(plan.saveTotal ? [`${money(plan.saveTotal)} para metas`] : []), ...(reminders.length ? [`${reminders.length} lembretes`] : [])]}
       action="Ir para o Orçamento" onDone={() => navigate(`/orcamento?mes=${month}`, { replace: true })} />
   ) : null;
 
