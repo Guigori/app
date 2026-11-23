@@ -1,10 +1,12 @@
 import { ApiError } from "@/lib/api";
+import { INVITE_MESSAGE, isInviteError } from "@/lib/beta";
 
 /** Human-readable pt-BR message from an ApiError (FastAPI detail can be a string or a 422 list). */
 export function getApiErrorMessage(
   error: unknown,
   fallback = "Não foi possível concluir a ação. Tente novamente.",
 ): string {
+  if (isInviteError(error)) return INVITE_MESSAGE;
   if (error instanceof ApiError) {
     const detail = (error.body as { detail?: unknown } | null)?.detail;
     // Business errors (e.g. funds) carry their own message even on 422.

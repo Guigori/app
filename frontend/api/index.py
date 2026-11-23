@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 from finnos.lib import quota as _quota  # noqa: E402
+from finnos.routers import access as _access  # noqa: E402
 
 _quota.install(app)
 COOKIE = "finnos_firebase_session"
@@ -123,6 +124,7 @@ def user_out(claims):
         "session_mode": "account",
         "auth_provider": claims.get("firebase", {}).get("sign_in_provider") or "firebase",
         "auth_providers": [p.provider_id for p in getattr(user, "provider_data", [])],
+        "is_admin": _access.is_admin(user.email),
     }
 
 
@@ -136,6 +138,8 @@ def firebase_session(request: Request, response: Response):
     if not isinstance(auth_time, (int, float)) or not 0 <= time.time() - auth_time <= 300:
         raise HTTPException(401, "Entre novamente para iniciar a sessão.")
     user = user_out(claims)
+    # Invite-only beta: refuse the session before it exists (off unless FINNOS_INVITE_ONLY=1).
+    _access.check_access(claims["uid"], user["email"])
     try:
         cookie = auth.create_session_cookie(token.strip(), expires_in=TTL, app=firebase_app())
     except exceptions.FirebaseError as exc:
@@ -154,7 +158,9 @@ def me(request: Request):
     claims = verified_claims(cookie, session=True)
     if request.headers.get("x-finnos-user-id") and request.headers["x-finnos-user-id"] != claims["uid"]:
         raise HTTPException(401, "A identidade da sessão mudou.")
-    return user_out(claims)
+    user = user_out(claims)
+    _access.check_access(claims["uid"], user["email"])
+    return user
 
 
 class ProfileNameIn(BaseModel):

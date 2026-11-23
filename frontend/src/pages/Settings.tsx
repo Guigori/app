@@ -17,6 +17,7 @@ import { clearMyData, fetchMe, loadDemoData, updateMyName } from "@/lib/data";
 import { disableLocalMode, getMode, isLocalMode } from "@/lib/mode";
 import { AiKeysCard } from "@/components/ai/AiKeysCard";
 import { NotificationsCard } from "@/components/settings/NotificationsCard";
+import { FeedbackCard } from "@/components/settings/FeedbackCard";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -300,6 +301,7 @@ export default function Settings({ forcedSection }: { forcedSection?: string } =
 
       </>)}
       {visible("notificacoes") && <NotificationsCard />}
+      {visible("suporte") && <FeedbackCard />}
 
       {visible("integracoes") && !local ? <AiKeysCard /> : null}
 

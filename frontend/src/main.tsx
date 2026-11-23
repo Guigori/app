@@ -8,9 +8,11 @@ import App from './App.tsx'
 import { queryClient } from './lib/queryClient'
 import { initializeLocalPersistence } from './lib/local/store'
 import { initMonitoring } from './lib/monitoring'
+import { installErrorCapture } from './lib/beta'
 
 async function bootstrap() {
   initMonitoring()
+  installErrorCapture()
   await initializeLocalPersistence()
 
   createRoot(document.getElementById('root')!).render(
