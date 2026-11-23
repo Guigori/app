@@ -119,17 +119,17 @@ export function suggestReminders(rows: { key: string; name: string; date: string
 export function savingIdeas(history: { category_id: string; name: string; spent: number; limit: number }[][]) {
   if (!history.length) return [];
   const ids = new Set(history.flat().map((c) => c.category_id));
-  const ideas: { category_id: string; name: string; kind: "baixar" | "subir"; from: number; to: number; text: string }[] = [];
+  const ideas: { category_id: string; name: string; kind: "baixar" | "subir"; from: number; to: number; avg: number; text: string }[] = [];
   for (const id of ids) {
     const rows = history.map((h) => h.find((c) => c.category_id === id)).filter(Boolean) as { name: string; spent: number; limit: number }[];
     if (rows.length < 2 || !rows[0].limit) continue;
     const avg = rows.reduce((s, r) => s + r.spent, 0) / rows.length, limit = rows[0].limit, name = rows[0].name;
     if (rows.every((r) => r.limit > 0 && r.spent < r.limit * 0.75) && limit - avg >= 30) {
       const to = Math.ceil(avg / 10) * 10 + 20;
-      ideas.push({ category_id: id, name, kind: "baixar", from: limit, to, text: `${name} usou em média ${Math.round(avg)} de ${Math.round(limit)} nos últimos ${rows.length} meses: baixar o limite libera ${Math.round(limit - to)} para guardar.` });
+      ideas.push({ category_id: id, name, kind: "baixar", from: limit, to, avg: Math.round(avg * 100) / 100, text: `${name} usou em média ${Math.round(avg)} de ${Math.round(limit)} nos últimos ${rows.length} meses: baixar o limite libera ${Math.round(limit - to)} para guardar.` });
     } else if (rows.every((r) => r.limit > 0 && r.spent > r.limit)) {
       const to = Math.ceil(avg / 10) * 10;
-      ideas.push({ category_id: id, name, kind: "subir", from: limit, to, text: `${name} passou do limite nos últimos ${rows.length} meses (média ${Math.round(avg)}): ou o limite sobe para ${to}, ou é aqui que dá para cortar.` });
+      ideas.push({ category_id: id, name, kind: "subir", from: limit, to, avg: Math.round(avg * 100) / 100, text: `${name} passou do limite nos últimos ${rows.length} meses (média ${Math.round(avg)}): ou o limite sobe para ${to}, ou é aqui que dá para cortar.` });
     }
   }
   return ideas.sort((a, b) => Math.abs(b.from - b.to) - Math.abs(a.from - a.to));

@@ -206,7 +206,7 @@ export function MobileNav() {
               {sheetFull ? null : <div {...drag.grip} data-testid="register-sheet-grip" className="absolute left-1/2 top-0 z-10 flex h-6 w-40 -translate-x-1/2 cursor-grab justify-center pt-2"><div className="h-[5px] w-20 rounded-full bg-[#2a2b52]/70 dark:bg-[#2a2b52]" aria-hidden="true" /></div>}
               <div className="min-h-0 flex-1 overflow-hidden">
                 <Suspense fallback={<div role="status" className="flex h-full items-center justify-center text-sm text-muted-foreground">Preparando o registro...</div>}>
-                  <SmartRegister key={requestKey} existing={request.existing} siblings={request.siblings} template={request.template} initialKind={request.kind} invoice={request.invoice} initialDate={request.date} embedded onClose={() => setRegisterOpen(false)} onController={setController} />
+                  <SmartRegister key={requestKey} existing={request.existing} siblings={request.siblings} template={request.template} initialKind={request.kind} invoice={request.invoice} initialDate={request.date} estimate={request.estimate} embedded onClose={() => setRegisterOpen(false)} onController={setController} />
                 </Suspense>
               </div>
             </motion.section>
