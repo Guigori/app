@@ -3,23 +3,22 @@
  * module (Carteira, Fluxo, Assinaturas, Metas) through the device copy. The screen never writes: actions open the record
  * where it lives.
  */
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { lazyRetry } from "@/lib/lazyRetry";
 import { useIsDesktop } from "@/components/budget/desktop/kit";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { addMonth, monthLabel } from "@/lib/format";
 import { useBudgetClosings } from "@/components/budget/usePlans";
 import type { MonthView } from "@/lib/budget/monthView";
 import { dismissMatch } from "@/lib/budget/prefs";
-import { TransactionList } from "@/components/transactions/TransactionList";
-import { card, dm, h2, useBudgetMonth, useMoney, useMonthData, useOnline } from "@/components/budget/shared";
+import { card, dm, useBudgetMonth, useMoney, useMonthData, useOnline } from "@/components/budget/shared";
 import { BudgetFailed, BudgetLoading, NoBudgetCard, OfflineNote } from "@/components/budget/States";
 import { HomeInsights, LimitsSummary } from "@/components/budget/HomeParts";
 import { MonthAnalyses } from "@/components/budget/MonthAnalyses";
+import { PlanMenuButton } from "@/components/budget/PlanMenu";
 import { BalanceCard, BillsCard, DistributionCard, PaceCard, lbl } from "@/components/budget/HomeCharts";
 import { cn } from "@/lib/utils";
-import type { Transaction } from "@/types/finnos";
 
 const HomeDesktop = lazyRetry(() => import("@/components/budget/desktop/HomeDesktop"));
 
@@ -44,20 +43,14 @@ function BudgetMobile() {
           {!hasBudget ? <NoBudgetCard compact /> : null}
           <FreeCard v={view} money={money} />
           {view.when !== "past" ? <HomeInsights v={view} money={money} onDismiss={onDismiss} transactions={transactions} accounts={accounts} variant="list" /> : null}
-          <DistributionCard v={view} money={money} />
-          <BalanceCard v={view} money={money} />
           <PaceCard v={view} money={money} />
-          <section aria-label="Por categoria" className={card}>
-            <div className="mb-3 flex items-baseline justify-between gap-2"><p className={lbl}>Por categoria</p><Link to={`/orcamento/gastos?mes=${month}`} className="text-xs font-semibold text-primary">ver gastos ›</Link></div>
-            <LimitsSummary v={view} money={money} top={view.categories.length} total={false} />
-            {view.categories.length ? <p className="mt-3 text-[11px] text-muted-foreground">A marca é o limite; o que passa dele fica vermelho. Listrado: pago com vale, conta no limite.</p> : null}
-          </section>
-          <MonthAnalyses v={view} />
           <BillsCard v={view} money={money} kind="despesa" />
           <BillsCard v={view} money={money} kind="receita" max={4} />
+          <AttentionCategories v={view} money={money} month={month} transactions={transactions} />
+          <DistributionCard v={view} money={money} />
+          <BalanceCard v={view} money={money} />
+          <MonthAnalyses v={view} />
           {view.goals.length ? <GoalsCard v={view} money={money} /> : null}
-          <PlanLinks month={month} />
-          <RecentCard v={view} transactions={transactions} />
         </div>
       )}
     </div>
@@ -66,7 +59,6 @@ function BudgetMobile() {
 
 /** Título com Histórico e Configurar (o olho que esconde os valores é o do topo do app); abaixo, o mês com setas grandes e onde se está nele. */
 function HomeHeader({ month, setMonth, today, v }: { month: string; setMonth: (m: string) => void; today: string; v: MonthView | null }) {
-  const pill = "grid h-9 place-items-center rounded-full border border-border bg-card px-3 text-xs font-bold";
   const arrow = "grid h-11 w-11 shrink-0 place-items-center rounded-full border border-border bg-card";
   const left = v ? v.daysInMonth - Number(today.slice(8, 10)) : 0;
   const note = !v ? "" : v.when === "current" ? `Hoje, ${dm(today)} · ${left ? `faltam ${left} ${left === 1 ? "dia" : "dias"}` : "último dia"}` : v.when === "past" ? "Mês passado" : "Previsão";
@@ -74,8 +66,7 @@ function HomeHeader({ month, setMonth, today, v }: { month: string; setMonth: (m
     <div>
       <header className="flex items-center gap-2">
         <h1 className="flex-1 font-heading text-2xl font-bold tracking-tight">Orçamento</h1>
-        <Link to={`/orcamento/historico?mes=${addMonth(month, -1)}`} className={pill}>Histórico</Link>
-        <Link to="/orcamento/configuracoes" className={pill} data-testid="budget-settings-button">Configurar</Link>
+        <PlanMenuButton month={month} />
       </header>
       <div className="mt-3 flex items-center gap-2" role="group" aria-label="Mês">
         <button type="button" onClick={() => setMonth(addMonth(month, -1))} aria-label="Mês anterior" className={arrow}><ChevronLeft className="h-5 w-5" /></button>
@@ -156,44 +147,29 @@ function GoalsCard({ v, money }: P) {
   );
 }
 
-/** Planejar: as outras telas do Orçamento numa lista, como no protótipo. */
-function PlanLinks({ month }: { month: string }) {
-  const prev = addMonth(month, -1), next = addMonth(month, 1);
-  const name = (m: string) => monthLabel(m).split(" ")[0];
-  const links = [
-    { to: `/orcamento/proximo?mes=${next}`, title: "Próximo mês", sub: `${name(next)}: o que vai entrar, sair e sobrar`, dot: "bg-primary", id: "proximo" },
-    { to: `/orcamento/projecao?mes=${next}`, title: "Próximos meses", sub: "Projeção com os seus registros", dot: "bg-expense", id: "projecao" },
-    { to: `/orcamento/compromissos?mes=${month}`, title: "Compromissos", sub: "Contas, faturas, parcelas e agendados", dot: "bg-muted-foreground/50", id: "compromissos" },
-    { to: `/orcamento/gastos?mes=${month}`, title: "Gastos do mês", sub: "Para onde vai o dinheiro, por categoria", dot: "bg-amber-500", id: "gastos" },
-    { to: "/orcamento/especiais", title: "Planos especiais", sub: "Viagens, festas e datas que pedem um plano", dot: "bg-[#B3A6FF]", id: "especiais" },
-    { to: `/orcamento/fechar?mes=${prev}`, title: `Fechar ${name(prev).toLowerCase()}`, sub: "Conferir o mês e guardar o retrato", dot: "bg-amber-500", id: "fechar" },
-    { to: `/orcamento/novo?mes=${next}`, title: "Criar novo período", sub: "Regra, ciclo e estimativas", dot: "bg-income", id: "novo" },
-    { to: `/orcamento/historico?mes=${prev}`, title: "Histórico e análises", sub: "Fechamentos, retrospectiva e comparações", dot: "bg-amber-500", id: "historico" },
-    { to: "/orcamento/ciclos", title: "Ciclos", sub: "Ciclo atual, próximo e fechados", dot: "bg-muted-foreground/50", id: "ciclos" },
-  ];
+/** Por categoria: só o que pede atenção (passou, está perto do limite ou acima do ritmo do mês); o resto em "Ver tudo". */
+function AttentionCategories({ v, money, month, transactions }: P & { month: string; transactions: import("@/types/finnos").Transaction[] }) {
+  const [all, setAll] = useState(false);
+  // A category paid by a fixed bill (Moradia with the rent) is "near the limit" by design: not an alert.
+  const fixedOnly = new Set<string>();
+  { const fixed = new Map<string, number>(), any = new Map<string, number>();
+    for (const t of transactions) if (t.type === "despesa" && t.category_id && t.date.slice(0, 7) === v.month) {
+      any.set(t.category_id, (any.get(t.category_id) ?? 0) + t.value);
+      if (t.fixed || t.recurrence_id || t.installment) fixed.set(t.category_id, (fixed.get(t.category_id) ?? 0) + t.value);
+    }
+    for (const [id, total] of any) if (total > 0 && (fixed.get(id) ?? 0) / total >= 0.8) fixedOnly.add(id); }
+  const elapsed = v.when === "current" ? v.daily.elapsed : 1;
+  const need = (c: MonthView["categories"][number]) => c.limit > 0 && !(fixedOnly.has(c.category_id) && c.spent <= c.limit) && (c.spent > c.limit || c.spent / c.limit >= 0.9 || (v.when === "current" && c.spent / c.limit > elapsed + 0.15));
+  const attention = v.categories.filter(need);
+  if (!v.categories.length) return null;
   return (
-    <section aria-label="Planejar">
-      <h2 className="mb-2.5 font-heading text-[17px] font-bold">Planejar</h2>
-      <nav aria-label="Planejar" className="overflow-hidden rounded-[20px] border border-border bg-card">
-        {links.map((l) => (
-          <Link key={l.id} to={l.to} className="flex items-center gap-3 border-b border-border/60 px-4 py-3 last:border-0 hover:bg-muted/40" data-testid={`budget-link-${l.id}`}>
-            <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", l.dot)} />
-            <span className="min-w-0 flex-1"><strong className="block text-sm">{l.title}</strong><span className="text-xs text-muted-foreground">{l.sub}</span></span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-          </Link>
-        ))}
-      </nav>
+    <section aria-label="Por categoria" className={card} data-testid="budget-categories">
+      <div className="mb-3 flex items-baseline justify-between gap-2"><p className={lbl}>{all ? "Por categoria" : "Categorias que pedem atenção"}</p><Link to={`/orcamento/gastos?mes=${month}`} className="text-xs font-semibold text-primary">ver gastos ›</Link></div>
+      {all || attention.length ? (
+        <LimitsSummary v={all ? v : { ...v, categories: attention }} money={money} top={all ? v.categories.length : attention.length} total={false} />
+      ) : <p className="flex items-center gap-2 text-[13px] text-income"><CheckCircle2 className="h-4 w-4" /> Todas as categorias estão no ritmo do mês.</p>}
+      <button type="button" onClick={() => setAll((a) => !a)} className="mt-3 h-10 w-full rounded-full border border-border text-[13px] font-semibold" data-testid="budget-categories-all">{all ? "Mostrar só o que pede atenção" : `Ver todas as ${v.categories.length} categorias`}</button>
     </section>
   );
 }
 
-/** The last records of the month (the full list is the Fluxo's). */
-function RecentCard({ v, transactions }: { v: MonthView; transactions: Transaction[] }) {
-  const list = [...transactions].sort((a, b) => b.date.localeCompare(a.date) || (b.created_at ?? "").localeCompare(a.created_at ?? "")).slice(0, 5);
-  return (
-    <section aria-label="Últimas transações" className="min-w-0" data-testid="budget-transactions">
-      <div className="mb-2.5 flex items-center justify-between gap-2"><h2 className={h2}>Últimas transações</h2><Link to={`/transacoes?month=${v.month}`} className="text-[13px] font-semibold text-primary">Ver todas no Fluxo</Link></div>
-      {list.length ? <TransactionList transactions={list} /> : <p className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground">Nenhuma transação neste mês.</p>}
-    </section>
-  );
-}

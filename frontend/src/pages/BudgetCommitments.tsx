@@ -4,10 +4,13 @@
  * módulo de origem. Embaixo, o que já está agendado para os próximos meses.
  */
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { useQueries, useQuery } from "@tanstack/react-query";
-import { ChevronDown, ExternalLink } from "lucide-react";
-import { fetchFlow, fetchInvoice } from "@/lib/data";
+import { Link, useNavigate } from "react-router-dom";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Bell, BellRing, ChevronRight } from "lucide-react";
+import { fetchFlow, transactionInput, updateTransaction } from "@/lib/data";
+import { useDialogs } from "@/components/dialogs/DialogsProvider";
+import type { Transaction } from "@/types/finnos";
 import { addMonth, monthLabel } from "@/lib/format";
 import { buildCommitments, buildFuture, passes, type Commitment, type CommitmentFilter } from "@/lib/budget/commitments";
 import { FinnosPageLoading } from "@/components/brand/FinnosLoading";
@@ -22,66 +25,52 @@ const FILTERS = [["todos", "Todos"], ["pagar", "A pagar"], ["receber", "A recebe
 const WD = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 const MON = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 
-function hintOf(c: Commitment): string {
-  if (c.done) return `${c.kind === "receber" ? "Recebido" : "Pago"} em ${dm(c.date)}.`;
-  if (c.kind === "meta") return "O aporte é feito em Metas, quando você guardar o dinheiro.";
-  if (c.kind === "cartao") return "Compras, parcelas e assinaturas no cartão entram uma vez só, pela fatura.";
-  if (c.kind === "assinatura") return "Cobrada pela assinatura. Se for no cartão, entra pela fatura.";
-  if (c.kind === "receber") return c.state === "estimativa" ? "Previsto. Só entra no livre quando cair." : "Agendado. Só entra no livre quando cair.";
-  if (c.late) return "Já venceu. Registre o pagamento no Fluxo quando pagar.";
-  return c.state === "estimativa" ? "Estimativa: pode ou não acontecer. Confirme no Fluxo quando pagar." : "Tem data marcada no Fluxo.";
+/** Where a commitment that is not a Fluxo record opens: the invoice, the subscription or the goal. */
+function linkOf(c: Commitment, month: string): string {
+  if (c.card_id) { const cycle = c.key.split(":")[2]; return `/cartoes/${c.card_id}${/^\d{4}-\d{2}-\d{2}$/.test(cycle ?? "") ? `?cycle=${cycle}` : ""}`; }
+  if (c.subscription_id) return `/assinaturas?assinatura=${c.subscription_id}`;
+  if (c.goal_id) return `/metas?meta=${c.goal_id}`;
+  return `/transacoes?month=${month}`;
 }
 
-function openLink(c: Commitment, month: string): { to: string; label: string } | null {
-  if (c.transaction_id) return { to: `/transacoes?month=${c.date.slice(0, 7) || month}&highlight=${c.transaction_id}`, label: "Abrir no Fluxo" };
-  if (c.card_id) { const cycle = c.key.split(":")[2]; return { to: `/cartoes/${c.card_id}${/^\d{4}-\d{2}-\d{2}$/.test(cycle ?? "") ? `?cycle=${cycle}` : ""}`, label: "Abrir a fatura" }; }
-  if (c.subscription_id) return { to: `/assinaturas?assinatura=${c.subscription_id}`, label: "Abrir em Assinaturas" };
-  if (c.goal_id) return { to: `/metas?meta=${c.goal_id}`, label: "Abrir em Metas" };
-  return { to: `/transacoes?month=${month}`, label: "Ver no Fluxo" };
-}
-
-/** The invoice lines (installments, subscriptions, previous balance), read from Cartões when the row opens. */
-function InvoiceParts({ c, money }: { c: Commitment; money: (v: number) => string }) {
-  const cycle = c.key.split(":")[2] || undefined;
-  const q = useQuery({ queryKey: ["invoice", c.card_id, cycle], queryFn: () => fetchInvoice(c.card_id!, cycle), enabled: Boolean(c.card_id) });
-  if (q.isPending) return <p className="py-1.5 text-xs text-muted-foreground">Lendo a fatura…</p>;
-  const items = q.data?.items ?? [];
-  if (!items.length) return null;
-  const top = [...items].sort((a, b) => b.value - a.value);
-  const shown = top.slice(0, 5), rest = top.slice(5).reduce((s, i) => s + i.value, 0);
-  return (
-    <>
-      {shown.map((i) => <div key={i.id} className="flex justify-between gap-3 border-t border-border/60 py-1.5"><span className="truncate">{i.name}{i.installment_label ? ` · ${i.installment_label}` : ""}</span><span className="tabular-nums">{money(i.value)}</span></div>)}
-      {rest > 0 ? <div className="flex justify-between gap-3 border-t border-border/60 py-1.5 text-muted-foreground"><span>Outras {top.length - 5} compras</span><span className="tabular-nums">{money(rest)}</span></div> : null}
-    </>
-  );
-}
-
-function Row({ c, open, onToggle, money, month }: { c: Commitment; open: boolean; onToggle: () => void; money: (v: number) => string; month: string }) {
-  const link = openLink(c, month);
+/** One commitment: tapping opens it where it lives (a Fluxo record opens in the register); the bell turns its
+ * reminder on or off in the Fluxo record itself. */
+function Row({ c, tx, siblings, money, month }: { c: Commitment; tx: Transaction | undefined; siblings: Transaction[]; money: (v: number) => string; month: string }) {
+  const navigate = useNavigate();
+  const dialogs = useDialogs();
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
   const soon = !c.done && !c.late && c.days >= 0 && c.days <= 3 && c.kind !== "receber" && c.kind !== "meta";
+  const open = () => (tx ? dialogs.openTransactionDetail(tx, siblings) : navigate(linkOf(c, month)));
+  const notify = tx?.notify_enabled ?? false;
+  const toggleBell = async () => {
+    if (!tx || busy) return;
+    setBusy(true);
+    try {
+      await updateTransaction(tx.id, transactionInput(tx, { notify_enabled: !notify }), "manual", tx.version);
+      await qc.invalidateQueries({ queryKey: ["transactions"] });
+      toast.success(!notify ? `Você vai ser avisado de ${tx.name}.` : `Aviso de ${tx.name} desligado.`);
+    } catch { toast.error("Não deu para mudar o aviso agora."); } finally { setBusy(false); }
+  };
   return (
-    <li className="border-b border-border/60 last:border-0">
-      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/40">
+    <li className="flex items-center gap-1 border-b border-border/60 pr-2 last:border-0" data-testid="commitment-row">
+      <button type="button" onClick={open} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left hover:bg-muted/40">
         <span className={cn("grid h-12 w-11 shrink-0 place-content-center rounded-xl text-center", c.late ? "bg-expense/10 text-expense" : "bg-primary/[0.07]", c.done && "text-muted-foreground")}>
           <strong className="font-heading text-base leading-none">{c.date.slice(8)}</strong>
           <span className="mt-1 text-[10px] font-bold tracking-wide">{MON[Number(c.date.slice(5, 7)) - 1]}</span>
         </span>
         <span className="min-w-0 flex-1">
           <strong className="block truncate text-sm">{c.name}</strong>
-          <span className={cn("text-xs", c.late ? "text-expense" : soon ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground")}>{c.status}</span>
+          <span className={cn("block truncate text-xs", c.late ? "text-expense" : soon ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground")}>{c.status}</span>
         </span>
-        <strong className={cn("text-sm tabular-nums", c.kind === "receber" && "text-income", c.done && c.kind !== "receber" && "text-muted-foreground")}>{c.kind === "receber" ? "+ " : ""}{money(c.value)}</strong>
-        <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+        <strong className={cn("shrink-0 text-sm tabular-nums", c.kind === "receber" && "text-income", c.done && c.kind !== "receber" && "text-muted-foreground")}>{c.kind === "receber" ? "+ " : ""}{money(c.value)}</strong>
       </button>
-      {open ? (
-        <div className="px-4 pb-4 pl-[4.5rem] text-[13px]">
-          <div className="flex justify-between gap-3 py-1.5 text-muted-foreground"><span>Origem</span><strong className="text-foreground">{c.origin}</strong></div>
-          {c.kind === "cartao" ? <InvoiceParts c={c} money={money} /> : null}
-          <p className="mt-2 rounded-xl bg-primary/[0.06] px-3 py-2 text-xs">{hintOf(c)}</p>
-          {link ? <Link to={link.to} className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-primary">{link.label} <ExternalLink className="h-3.5 w-3.5" /></Link> : null}
-        </div>
-      ) : null}
+      {tx && !c.done ? (
+        <button type="button" onClick={toggleBell} disabled={busy} aria-pressed={notify} aria-label={notify ? `Desligar aviso de ${c.name}` : `Avisar de ${c.name}`}
+          className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full", notify ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted")} data-testid="commitment-bell">
+          {notify ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+        </button>
+      ) : <ChevronRight className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />}
     </li>
   );
 }
@@ -90,11 +79,10 @@ export default function BudgetCommitments() {
   const [month, setMonth] = useBudgetMonth();
   const { money } = useMoney();
   const desktop = useIsDesktop();
-  const { view, goals } = useMonthData(month);
+  const { view, goals, transactions } = useMonthData(month);
   const plans = useBudgetPlans();
   const plan = plans.planOf(month);
   const [filter, setFilter] = useState<CommitmentFilter>("todos");
-  const [open, setOpen] = useState<string | null>(null);
 
   const ahead = [1, 2, 3, 4, 5, 6].map((n) => addMonth(month, n));
   const flows = useQueries({ queries: ahead.map((m) => ({ queryKey: ["flow", "orcamento", m], queryFn: () => fetchFlow({ month: m, months: 2 }) })) });
@@ -113,11 +101,12 @@ export default function BudgetCommitments() {
   }
 
   const shown = data.items.filter((c) => passes(c, filter));
-  const toggle = (k: string) => setOpen((o) => (o === k ? null : k));
+  const txById = new Map(transactions.map((t) => [t.id, t]));
+  const siblings = shown.map((c) => (c.transaction_id ? txById.get(c.transaction_id) : undefined)).filter((t): t is Transaction => Boolean(t));
   const list = shown.length ? (
-    <ul>{shown.map((c) => <Row key={c.key} c={c} open={open === c.key} onToggle={() => toggle(c.key)} money={money} month={month} />)}</ul>
+    <ul>{shown.map((c) => <Row key={c.key} c={c} tx={c.transaction_id ? txById.get(c.transaction_id) : undefined} siblings={siblings} money={money} month={month} />)}</ul>
   ) : <p className="px-4 py-6 text-center text-sm text-muted-foreground">Nada {filter === "receber" ? "a receber" : filter === "cartao" ? "no cartão" : "a pagar"} neste mês.</p>;
-  const legend = <p className="text-xs leading-relaxed text-muted-foreground">Realizado: o dinheiro já entrou ou saiu da conta. Agendado: tem data marcada. Estimativa: pode ou não acontecer.{data.pendingSuggestions ? <> {data.pendingSuggestions} {data.pendingSuggestions === 1 ? "sugestão espera" : "sugestões esperam"} revisão em <Link to={`/orcamento/proximo?mes=${month}`} className="font-semibold text-primary">Planejar</Link>: só entram se você aprovar.</> : null}</p>;
+  const legend = <p className="text-xs leading-relaxed text-muted-foreground">Toque para abrir no registro. O sino liga o aviso do lançamento no Fluxo. Realizado: o dinheiro já entrou ou saiu. Agendado: tem data marcada. Estimativa: pode ou não acontecer.{data.pendingSuggestions ? <> {data.pendingSuggestions} {data.pendingSuggestions === 1 ? "sugestão espera" : "sugestões esperam"} revisão em <Link to={`/orcamento/proximo?mes=${month}`} className="font-semibold text-primary">Planejar</Link>: só entram se você aprovar.</> : null}</p>;
 
   const firstWeek = data.week.find((d) => d.items.length);
   const weekNote = firstWeek ? `${WD[new Date(`${firstWeek.date}T12:00:00`).getDay()]}, ${firstWeek.date.slice(8)}: ${firstWeek.items.slice(0, 2).map((x) => `${x.name} ${money(x.value)}`).join(", ")}${firstWeek.items.length > 2 ? "…" : ""}` : "Nada vence nos próximos 7 dias.";

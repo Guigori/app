@@ -144,7 +144,9 @@ export function stateOf(item: Pick<UpcomingItem, "kind" | "transaction_id">): Pl
 /** A record that is part of the plan once it happened: an income, or a fixed / recurring / installment bill. */
 function plannedRealized(tx: Transaction): boolean {
   if (tx.status !== "pago" || tx.type === "transferencia" || tx.invoice_payment || tx.balance_adjustment || tx.benefit_recharge) return false;
-  return tx.type === "receita" || tx.fixed || !!tx.recurrence_id || tx.installment;
+  if (tx.fixed || tx.recurrence_id || tx.installment) return true;
+  // Incomes: the ones that look planned (salário, freela…), not small refunds, cashback or bank codes ("2131358").
+  return tx.type === "receita" && /[a-zà-ú]{3}/i.test(tx.name) && tx.value >= 50;
 }
 
 function similar(a: string, b: string): boolean {
