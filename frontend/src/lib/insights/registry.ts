@@ -112,9 +112,10 @@ export function nextSize(def: InsightDef, size: WidgetSize): WidgetSize {
 /** Grid placement: 4 columns on the phone (Pequeno = half), 12 on the computer. */
 export const SIZE_CLASS: Record<WidgetSize, string> = {
   // On the larger screens the board is a grid of equal rows (like the iPhone): Pequeno and Médio take one row,
-  // Grande two, so every widget lines up with its neighbours and no gaps open between them.
-  S: "col-span-2 dashboard:col-span-4 h-[11rem] dashboard:h-auto dashboard:row-[span_var(--rows)/span_var(--rows)]",
-  M: "col-span-4 dashboard:col-span-6 h-[11rem] dashboard:h-auto dashboard:row-[span_var(--rows)/span_var(--rows)]",
+  // Grande two, so every widget lines up with its neighbours and no gaps open between them. On the phone a widget
+  // grows with what it shows (never cut): the height is a minimum.
+  S: "col-span-2 dashboard:col-span-4 min-h-[11rem] dashboard:min-h-0 dashboard:h-auto dashboard:row-[span_var(--rows)/span_var(--rows)]",
+  M: "col-span-4 dashboard:col-span-6 min-h-[11rem] dashboard:min-h-0 dashboard:h-auto dashboard:row-[span_var(--rows)/span_var(--rows)]",
   L: "col-span-4 dashboard:col-span-6 min-h-[23rem] dashboard:min-h-0 dashboard:row-[span_var(--rows)/span_var(--rows)]",
   XL: "col-span-4 dashboard:col-span-6 min-h-[23rem] dashboard:min-h-0 dashboard:row-[span_var(--rows)/span_var(--rows)]",
 };

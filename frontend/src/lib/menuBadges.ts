@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchAccounts, fetchNotifications, fetchRadar, fetchSubscriptions } from "@/lib/data";
+import { fetchAccounts, fetchNotifications, fetchPendingCaptures, fetchRadar, fetchSubscriptions } from "@/lib/data";
 import { formatBRL } from "@/lib/format";
 import { useBalanceHidden } from "@/lib/balance";
 
@@ -16,12 +16,16 @@ export function useMenuBadges(enabled: boolean): Partial<Record<string, MenuBadg
   const radar = useQuery({ queryKey: ["radar"], queryFn: fetchRadar, ...opts });
   const subscriptions = useQuery({ queryKey: ["subscriptions"], queryFn: fetchSubscriptions, ...opts });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: fetchAccounts, ...opts });
+  const captures = useQuery({ queryKey: ["pending-captures"], queryFn: fetchPendingCaptures, ...opts, staleTime: 60_000 });
   const { hidden } = useBalanceHidden();
   if (!enabled) return {};
   const badges: Partial<Record<string, MenuBadge>> = {};
   const due = (notifications.data?.items ?? []).filter((item) =>
     item.kind === "atrasado" || ((item.kind === "vencimento" || item.kind === "fatura") && item.days_left <= 3)).length;
   if (due > 0) badges.orcamento = { text: due === 1 ? "1 vencendo" : `${due} vencendo`, tone: "alert", count: due };
+  // Fluxo: purchases waiting for review (Apple Pay) — they stay out of the balance until confirmed.
+  const toReview = captures.data?.items?.length ?? 0;
+  if (toReview > 0) badges.transacoes = { text: toReview === 1 ? "1 para revisar" : `${toReview} para revisar`, tone: "warn", count: toReview };
   const signals = (radar.data?.items ?? []).filter((item) => item.state === "new" || item.state === "active").length;
   if (signals > 0) badges.radar = { text: signals === 1 ? "1 alerta" : `${signals} alertas`, tone: "warn", count: signals };
   const monthly = subscriptions.data?.monthly_total ?? 0;

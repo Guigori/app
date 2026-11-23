@@ -280,7 +280,7 @@ export function PendingCaptures({ limit }: { limit?: number } = {}) {
   const lists: Lists = { accounts: accounts.data ?? [], cards: cards.data ?? [], categories: categories.data ?? [] };
 
   return (
-    <section className="rounded-3xl border border-primary/20 bg-primary/5 p-4" aria-labelledby="pending-captures-title" data-testid="pending-captures">
+    <section id="compras-para-revisar" className="scroll-mt-20 rounded-3xl border border-primary/20 bg-primary/5 p-4" aria-labelledby="pending-captures-title" data-testid="pending-captures">
       <div className="flex items-start gap-3">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary" aria-hidden="true"><ReceiptText className="h-5 w-5" /></span>
         <div className="min-w-0 flex-1">
