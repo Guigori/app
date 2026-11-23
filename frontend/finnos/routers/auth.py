@@ -22,5 +22,9 @@ async def require_user(request: Request):
         and request.headers["x-finnos-user-id"] != uid
     ):
         raise HTTPException(401, "A identidade da sessão mudou.")
+    from finnos.routers.access import check_access
+
+    # Off unless FINNOS_INVITE_ONLY=1; admins, invited e-mails and existing users pass.
+    check_access(uid, claims["email"])
     active_uid.set(uid)
     return {"id": uid, "email": claims["email"]}

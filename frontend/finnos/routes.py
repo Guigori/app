@@ -27,6 +27,7 @@ from finnos.routers import (
     shortcuts,
     pending_captures,
     reconciliations,
+    access,
 )
 
 
@@ -60,6 +61,7 @@ def mount(app, firebase_app, verified_claims, same_origin):
         shortcuts,
         pending_captures,
         reconciliations,
+        access,
     ]:
         router.include_router(module.router)
     app.include_router(router)
@@ -84,7 +86,7 @@ def mount(app, firebase_app, verified_claims, same_origin):
     async def finance_origin(request, call_next):
         if request.method in {"POST", "PUT", "PATCH", "DELETE"} and any(
             request.url.path.startswith("/api/" + x)
-            for x in ["accounts", "institutions", "categories", "transactions", "notifications", "push", "subscriptions", "cards", "budgets", "goals", "investments", "preferences", "radar", "ai", "simulate", "onboarding", "integrations", "pending-captures"]
+            for x in ["accounts", "institutions", "categories", "transactions", "notifications", "push", "subscriptions", "cards", "budgets", "goals", "investments", "preferences", "radar", "ai", "simulate", "onboarding", "integrations", "pending-captures", "public", "feedback", "client-errors", "admin"]
         ):
             from fastapi import HTTPException
             from fastapi.responses import JSONResponse

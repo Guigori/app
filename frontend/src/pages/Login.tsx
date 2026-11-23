@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, Eye, EyeOff, Loader2, MonitorSmartphone } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
+import { INVITE_MESSAGE } from "@/lib/beta";
 import { beginSession, endSessionForDeviceMode } from "@/lib/session";
 import { destinationAfterAuthentication, startOnboarding } from "@/lib/onboarding";
 import { disableLocalMode, enableLocalMode, enableDemoMode } from "@/lib/mode";
@@ -160,6 +161,7 @@ export default function Login() {
               {formError ? (
                 <p role="alert" className="text-sm font-medium text-destructive" data-testid="login-form-error">
                   {formError}
+                  {formError === INVITE_MESSAGE ? <> <Link to="/bem-vindo#convite" className="font-semibold text-primary underline">Pedir convite</Link></> : null}
                 </p>
               ) : null}
 
@@ -173,6 +175,10 @@ export default function Login() {
               <Link to="/cadastro" className="font-semibold text-primary hover:underline" data-testid="go-to-register-link">
                 Criar conta
               </Link>
+            </p>
+            <p className="mt-2 text-center text-sm text-muted-foreground">
+              Ainda não tem acesso ao beta?{" "}
+              <Link to="/bem-vindo" className="font-semibold text-primary hover:underline" data-testid="go-to-welcome-link">Peça seu convite</Link>
             </p>
 
             <div className="my-3 h-px bg-[#E7E4FF] sm:my-4" />

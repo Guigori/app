@@ -1,4 +1,5 @@
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
+import { rememberScreen } from "@/lib/beta";
 import { AppErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { lazyRetry } from "@/lib/lazyRetry";
 import { walletV2Enabled } from "@/lib/walletV2";
@@ -70,6 +71,7 @@ const PreviewValidation = lazyRetry(() => import("@/pages/PreviewValidation"));
 const SmartRegister = lazyRetry(() => import("@/pages/SmartRegister"));
 const Login = lazyRetry(() => import("@/pages/Login"));
 const Register = lazyRetry(() => import("@/pages/Register"));
+const Welcome = lazyRetry(() => import("@/pages/Welcome"));
 const InsightDetail = lazyRetry(() => import("@/pages/InsightDetail"));
 const SettingsHub = lazyRetry(() => import("@/pages/SettingsHub").then(module => ({ default: module.SettingsHub })));
 
@@ -104,13 +106,23 @@ function CategoryRedirect() {
   return <Navigate to={categoryFlowPath(categoryId)} replace />;
 }
 
+/** Remembers the last screen so a support message can say where the problem was. */
+function ScreenMemory() {
+  const { pathname } = useLocation();
+  useEffect(() => rememberScreen(pathname), [pathname]);
+  return null;
+}
+
 export default function App() {
   return (
     <AppErrorBoundary>
+      <ScreenMemory />
       <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />
+        <Route path="/bem-vindo" element={<Welcome />} />
+        <Route path="/convite" element={<Navigate to="/bem-vindo" replace />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
             <Route index element={<DashboardEntry />} />

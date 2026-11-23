@@ -4,6 +4,7 @@
  */
 import { Component, type ReactNode } from "react";
 import { isChunkError, reloadOnce } from "@/lib/lazyRetry";
+import { reportClientError } from "@/lib/beta";
 
 interface Props { children: ReactNode; /** Changing it (the route) clears the error. */ resetKey?: string; compact?: boolean }
 interface State { error: Error | null; key?: string }
@@ -18,6 +19,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error) {
     console.error("[FINNOS] tela com erro", error);
     if (isChunkError(error)) reloadOnce();
+    else reportClientError(error, "render");
   }
   render() {
     if (!this.state.error) return this.props.children;

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchMe } from "@/lib/data";
 import { cachedSessionProfile } from "@/lib/profileIdentity";
 import { isLocalMode } from "@/lib/mode";
+import { isInviteError } from "@/lib/beta";
 
 import { FinnosLoading } from "@/components/brand/FinnosLoading";
 
@@ -15,7 +16,7 @@ import { FinnosLoading } from "@/components/brand/FinnosLoading";
  * confirmation fails, the person goes to the login exactly as before. */
 export function RequireAuth() {
   const local = isLocalMode();
-  const { isPending, isError } = useQuery({
+  const { isPending, isError, error } = useQuery({
     queryKey: ["me"],
     queryFn: fetchMe,
     retry: false,
@@ -30,6 +31,7 @@ export function RequireAuth() {
     staleTime: Infinity,
   });
 
+  if (isError && isInviteError(error)) return <Navigate to="/bem-vindo?acesso=pendente" replace />;
   if (isError) return <Navigate to="/login" replace />;
   if (isPending && !known.data) {
     return (
