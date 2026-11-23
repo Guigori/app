@@ -124,7 +124,6 @@ def user_out(claims):
         "session_mode": "account",
         "auth_provider": claims.get("firebase", {}).get("sign_in_provider") or "firebase",
         "auth_providers": [p.provider_id for p in getattr(user, "provider_data", [])],
-        "is_admin": _access.is_admin(user.email),
     }
 
 

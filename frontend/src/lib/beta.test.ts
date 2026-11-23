@@ -5,7 +5,7 @@ vi.mock("@/lib/api", async (orig) => ({ ...(await orig<typeof import("@/lib/api"
 vi.mock("@/lib/mode", () => ({ isLocalMode: () => false }));
 
 import { ApiError } from "@/lib/api";
-import { inviteMessage, isInviteError, reportClientError } from "@/lib/beta";
+import { isInviteError, reportClientError } from "@/lib/beta";
 
 describe("beta", () => {
   beforeEach(() => {
@@ -26,11 +26,5 @@ describe("beta", () => {
     reportClientError(new ApiError(500, null));
     expect(post).toHaveBeenCalledTimes(1);
     expect(post.mock.calls[0]).toEqual(["/client-errors", expect.objectContaining({ kind: "error", screen: "/fluxo" })]);
-  });
-
-  it("writes the invite with the first name and the login address", () => {
-    const text = inviteMessage("Ana Souza", "https://finnos.app");
-    expect(text).toContain("Oi, Ana!");
-    expect(text).toContain("https://finnos.app/login");
   });
 });

@@ -15,8 +15,6 @@ export interface User {
   session_mode?: "account" | "local" | "demo";
   auth_provider?: string;
   auth_providers?: string[];
-  /** Can open the beta admin (ADMIN_EMAILS). */
-  is_admin?: boolean;
 }
 
 export type InstitutionKind = "banco" | "beneficio" | "outro";

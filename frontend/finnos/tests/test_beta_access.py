@@ -92,9 +92,10 @@ def join(**over):
 def test_waitlist_stores_once_per_email_and_rejects_bad_input(fake):
     assert asyncio.run(join())["created"] is True
     assert asyncio.run(join(name="Ana S"))["created"] is False
-    rows = [v for k, v in fake.store.items() if k[0] == access.WAITLIST]
-    assert len(rows) == 1 and rows[0]["email"] == "ana@mail.com" and rows[0]["phone"] == "11988887777"
-    assert rows[0]["status"] == "novo" and rows[0]["name"] == "Ana S"
+    rows = {k: v for k, v in fake.store.items() if k[0] == access.WAITLIST}
+    assert list(rows) == [(access.WAITLIST, "ana@mail.com")]
+    row = rows[(access.WAITLIST, "ana@mail.com")]
+    assert row["phone"] == "11988887777" and row["liberado"] is False and row["name"] == "Ana S"
     for bad in ({"consent": False}, {"email": "ana@mail"}, {"phone": "12345678"}):
         with pytest.raises(HTTPException) as error:
             asyncio.run(join(**bad))
@@ -117,34 +118,21 @@ def test_gate_is_off_by_default(fake, monkeypatch):
     access.check_access("new", "new@mail.com")
 
 
-def test_gate_lets_in_admins_invited_and_existing_users(fake, monkeypatch):
+def test_gate_lets_in_e_mails_added_in_the_console_and_existing_users(fake, monkeypatch):
     monkeypatch.setenv("FINNOS_INVITE_ONLY", "1")
-    monkeypatch.setenv("ADMIN_EMAILS", "Dono@Mail.com, outro@mail.com")
-    access.check_access("boss", "dono@mail.com")
     with pytest.raises(HTTPException) as error:
-        access.check_access("new", "new@mail.com")
+        access.check_access("new", "New@mail.com")
     assert error.value.status_code == 403 and error.value.detail == "convite"
     fake.collection("users").document("old").collection("accounts").document("a1").set({"name": "Nubank"})
     access.check_access("old", "old@mail.com")
-    admin = {"id": "boss", "email": "dono@mail.com"}
-    asyncio.run(access.grant_access(access.InviteIn(email="NEW@mail.com"), admin))
-    access.check_access("new", "new@mail.com")
-    asyncio.run(access.revoke_access(access.email_key("new@mail.com"), admin))
+    # Firestore console: beta_access > Add document, ID = the e-mail.
+    fake.collection(access.ACCESS).document("new@mail.com").set({})
+    access.forget()
+    access.check_access("new", "New@mail.com")
+    fake.collection(access.ACCESS).document("new@mail.com").delete()
+    access.forget()
     with pytest.raises(HTTPException):
         access.check_access("new", "new@mail.com")
-
-
-def test_invite_marks_waitlist_and_admin_only(fake, monkeypatch):
-    monkeypatch.setenv("ADMIN_EMAILS", "dono@mail.com")
-    asyncio.run(join())
-    asyncio.run(access.grant_access(access.InviteIn(email="ana@mail.com"), {"id": "b", "email": "dono@mail.com"}))
-    assert fake.store[(access.WAITLIST, access.email_key("ana@mail.com"))]["status"] == "liberado"
-    assert fake.store[(access.ACCESS, access.email_key("ana@mail.com"))]["name"] == "Ana Souza"
-    with pytest.raises(HTTPException) as error:
-        asyncio.run(access.require_admin({"id": "x", "email": "ana@mail.com"}))
-    assert error.value.status_code == 404
-    overview = asyncio.run(access.admin_overview({"id": "b", "email": "dono@mail.com"}))
-    assert len(overview["waitlist"]) == 1 and len(overview["access"]) == 1
 
 
 def test_feedback_and_errors_are_grouped(fake):

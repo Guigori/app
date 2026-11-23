@@ -1,14 +1,17 @@
 """Beta access: public waitlist, invite list, feedback and app error reports.
 
-Everything here lives in root collections that hold no financial data:
-  beta_waitlist   people who asked for an invite (name, phone, email)
-  beta_access     e-mails allowed in while the beta is invite-only
+Everything here lives in root collections that hold no financial data, managed in
+the Firebase console (Firestore), not in the app:
+  beta_waitlist   people who asked for an invite; document ID = e-mail
+  beta_access     e-mails allowed in while the beta is invite-only; document ID = e-mail
   beta_feedback   messages sent from the app
   beta_errors     app errors, grouped by fingerprint
 
-The invite gate is off unless FINNOS_INVITE_ONLY=1. Admins come from ADMIN_EMAILS
-(comma separated). People who already use FINNOS are never locked out: anyone
-with an account in Firestore passes, and so does anyone on the access list.
+To let someone in: Firestore > beta_access > Add document, Document ID = the e-mail
+in lower case (no fields needed). Deleting that document removes the access.
+
+The invite gate is off unless FINNOS_INVITE_ONLY=1. People who already use FINNOS
+are never locked out: anyone with an account in Firestore passes.
 """
 
 import hashlib
@@ -50,15 +53,11 @@ def norm_email(value: str) -> str:
 
 
 def email_key(value: str) -> str:
-    return hashlib.sha256(norm_email(value).encode()).hexdigest()[:40]
-
-
-def admin_emails() -> set[str]:
-    return {norm_email(x) for x in os.getenv("ADMIN_EMAILS", "").split(",") if x.strip()}
-
-
-def is_admin(email: str) -> bool:
-    return norm_email(email) in admin_emails()
+    """Documents are keyed by the e-mail itself so they can be added by hand in the console."""
+    key = norm_email(value)
+    if not key or "/" in key or key in {".", ".."} or len(key) > 254:
+        raise HTTPException(422, "Confira o e-mail.")
+    return key
 
 
 def invite_only() -> bool:
@@ -93,7 +92,7 @@ def _has_access(uid: str, email: str) -> bool:
 
 def check_access(uid: str, email: str) -> None:
     """Raises 403 "convite" when the beta is invite-only and this person is not in."""
-    if not invite_only() or is_admin(email):
+    if not invite_only():
         return
     moment = time.time()
     if _allowed.get(uid, 0) > moment:
@@ -156,7 +155,7 @@ async def join_waitlist(payload: WaitlistIn, request: Request):
         if snap.exists:
             ref.set(data, merge=True)
             return False
-        ref.set({**data, "status": "novo", "created_at": now()})
+        ref.set({**data, "liberado": False, "created_at": now()})
         return True
 
     created = await run_in_threadpool(write)
@@ -236,99 +235,4 @@ async def report_error(payload: ClientErrorIn, user: dict = Depends(_user_dep())
                      "status": "aberto", "first_seen": now(), "last_seen": now()})
 
     await run_in_threadpool(write)
-    return {"ok": True}
-
-
-# --- Admin --------------------------------------------------------------------
-
-async def require_admin(user: dict = Depends(_user_dep())):
-    if not is_admin(user.get("email", "")):
-        raise HTTPException(404, "Not found")
-    return user
-
-
-def _iso(value):
-    return value.isoformat() if hasattr(value, "isoformat") else value
-
-
-def _list(name: str, order: str, limit: int = 300):
-    from firebase_admin import firestore
-    query = _db().collection(name).order_by(order, direction=firestore.Query.DESCENDING).limit(limit)
-    out = []
-    for snap in query.stream():
-        row = {k: _iso(v) for k, v in (snap.to_dict() or {}).items()}
-        row["id"] = snap.id
-        out.append(row)
-    return out
-
-
-@router.get("/admin/overview")
-async def admin_overview(_: dict = Depends(require_admin)):
-    def read():
-        return {
-            "invite_only": invite_only(),
-            "waitlist": _list(WAITLIST, "created_at"),
-            "access": _list(ACCESS, "created_at"),
-            "feedback": _list(FEEDBACK, "created_at", 200),
-            "errors": _list(ERRORS, "last_seen", 200),
-        }
-    return await run_in_threadpool(read)
-
-
-class InviteIn(BaseModel):
-    email: str = Field(min_length=5, max_length=254)
-    name: Optional[str] = Field(default=None, max_length=80)
-
-
-@router.post("/admin/access")
-async def grant_access(payload: InviteIn, admin: dict = Depends(require_admin)):
-    email = norm_email(payload.email)
-    if not EMAIL.match(email):
-        raise HTTPException(422, "Confira o e-mail.")
-
-    def write():
-        client = _db()
-        key = email_key(email)
-        waiting = client.collection(WAITLIST).document(key).get()
-        name = payload.name or ((waiting.to_dict() or {}).get("name") if waiting.exists else None)
-        client.collection(ACCESS).document(key).set(
-            {"email": email, "name": name, "invited_by": admin.get("email"), "created_at": now()})
-        if waiting.exists:
-            client.collection(WAITLIST).document(key).set({"status": "liberado", "updated_at": now()}, merge=True)
-        return name
-
-    name = await run_in_threadpool(write)
-    forget()
-    return {"ok": True, "email": email, "name": name}
-
-
-@router.delete("/admin/access/{key}")
-async def revoke_access(key: str, _: dict = Depends(require_admin)):
-    if not re.fullmatch(r"[0-9a-f]{40}", key):
-        raise HTTPException(404, "Registro não encontrado.")
-
-    def write():
-        client = _db()
-        client.collection(ACCESS).document(key).delete()
-        waiting = client.collection(WAITLIST).document(key)
-        if waiting.get().exists:
-            waiting.set({"status": "novo", "updated_at": now()}, merge=True)
-
-    await run_in_threadpool(write)
-    forget()
-    return {"ok": True}
-
-
-class StatusIn(BaseModel):
-    status: Literal["novo", "visto", "resolvido", "aberto", "ignorado"]
-
-
-@router.patch("/admin/{kind}/{item_id}")
-async def set_status(kind: Literal["feedback", "errors", "waitlist"], item_id: str, payload: StatusIn,
-                     _: dict = Depends(require_admin)):
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", item_id):
-        raise HTTPException(404, "Registro não encontrado.")
-    name = {"feedback": FEEDBACK, "errors": ERRORS, "waitlist": WAITLIST}[kind]
-    await run_in_threadpool(lambda: _db().collection(name).document(item_id).set(
-        {"status": payload.status, "updated_at": now()}, merge=True))
     return {"ok": True}

@@ -72,7 +72,6 @@ const SmartRegister = lazyRetry(() => import("@/pages/SmartRegister"));
 const Login = lazyRetry(() => import("@/pages/Login"));
 const Register = lazyRetry(() => import("@/pages/Register"));
 const Welcome = lazyRetry(() => import("@/pages/Welcome"));
-const Admin = lazyRetry(() => import("@/pages/Admin"));
 const InsightDetail = lazyRetry(() => import("@/pages/InsightDetail"));
 const SettingsHub = lazyRetry(() => import("@/pages/SettingsHub").then(module => ({ default: module.SettingsHub })));
 
@@ -175,7 +174,6 @@ export default function App() {
             <Route path="/analise/compromissos" element={<AnalysisRedirect to="/analise/painel/compromissos" />} />
             <Route path="/analise/painel/:insightId" element={<InsightDetail />} />
             <Route path="/analise/painel" element={<Navigate to="/analise" replace />} />
-            <Route path="/admin" element={<Admin />} />
             <Route path="/patrimonio" element={<Patrimonio />} />
             <Route path="/metas" element={<Patrimonio />} />
             <Route path="/investimentos" element={<Patrimonio />} />

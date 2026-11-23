@@ -1,9 +1,7 @@
 import { useTheme } from "next-themes";
 import { Link, useNavigate } from "react-router-dom";
 import type { ComponentType } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { fetchMe } from "@/lib/data";
-import { BarChart3, Bell, ChevronLeft, ChevronRight, CircleHelp, Cloud, ShieldCheck, Info, LayoutDashboard, MessageCircleMore, Palette, PanelBottom, PenLine, Smartphone, Tags, Trash2, Zap } from "lucide-react";
+import { BarChart3, Bell, ChevronLeft, ChevronRight, CircleHelp, Cloud, Info, LayoutDashboard, MessageCircleMore, Palette, PanelBottom, PenLine, Smartphone, Tags, Trash2, Zap } from "lucide-react";
 import { saveNavigationPreferences, useNavigationPreferences } from "@/lib/navigationPreferences";
 import { cn } from "@/lib/utils";
 
@@ -62,7 +60,6 @@ export function SettingsHub() {
   const prefs = useNavigationPreferences();
   const conversa = prefs.aiMobile || prefs.aiWeb;
   const [first, ...rest] = groups;
-  const me = useQuery({ queryKey: ["me"], queryFn: fetchMe, staleTime: 5 * 60 * 1000 });
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6 pb-28 text-foreground animate-fade-up" data-testid="settings-hub">
       <header className="space-y-1">
@@ -131,14 +128,6 @@ export function SettingsHub() {
           </div>
         </section>
       ))}
-      {me.data?.is_admin ? (
-        <section aria-label="Administração" className="space-y-2">
-          <h2 className={CAPTION}>Administração</h2>
-          <div className="overflow-hidden rounded-2xl border border-border bg-card">
-            <Row item={{ label: "Beta: convites e feedback", description: "Interessados, liberados, mensagens e erros", icon: ShieldCheck, href: "/admin" }} first />
-          </div>
-        </section>
-      ) : null}
       <footer className="pb-4 text-center text-xs text-muted-foreground">FINNOS · Beta 1</footer>
     </div>
   );

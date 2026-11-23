@@ -1,6 +1,6 @@
-/** Beta access: invite requests, feedback, automatic error reports and the admin panel.
+/** Beta access: invite requests, feedback and automatic error reports (read in the Firebase console).
  *  None of these carry financial data: only what the person typed, the screen path and the device. */
-import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { ApiError, apiPost } from "@/lib/api";
 import { isLocalMode } from "@/lib/mode";
 
 export const INVITE_MESSAGE = "Seu e-mail ainda não foi liberado no beta do FINNOS. Peça seu convite e avisamos por e-mail.";
@@ -65,33 +65,11 @@ export function installErrorCapture(): void {
   window.addEventListener("unhandledrejection", (event) => reportClientError(event.reason, "rejection"));
 }
 
-// --- Admin -------------------------------------------------------------------------------
-
-export interface WaitlistRow { id: string; name: string; phone: string; email: string; status: "novo" | "visto" | "liberado" | "ignorado"; created_at: string; source?: string }
-export interface AccessRow { id: string; email: string; name?: string | null; invited_by?: string; created_at: string }
-export interface FeedbackRow { id: string; email?: string; kind: FeedbackKind; message: string; screen?: string; version?: string; device?: string; mood?: number | null; status: string; created_at: string }
-export interface ErrorRow { id: string; message: string; stack?: string; kind: string; first_screen?: string; last_screen?: string; version?: string; device?: string; count: number; user_count: number; status: string; first_seen: string; last_seen: string }
-export interface AdminOverview { invite_only: boolean; waitlist: WaitlistRow[]; access: AccessRow[]; feedback: FeedbackRow[]; errors: ErrorRow[] }
-
-export const fetchAdminOverview = () => apiGet<AdminOverview>("/admin/overview");
-export const grantAccess = (email: string, name?: string) => apiPost<{ ok: boolean; email: string; name?: string | null }>("/admin/access", { email, name });
-export const revokeAccess = (id: string) => apiDelete<{ ok: boolean }>(`/admin/access/${id}`);
-export const setAdminStatus = (kind: "feedback" | "errors" | "waitlist", id: string, status: string) =>
-  apiPatch<{ ok: boolean }>(`/admin/${kind}/${id}`, { status });
-
-export function inviteMessage(name: string | null | undefined, origin = window.location.origin): string {
-  const first = (name || "").trim().split(/\s+/)[0];
-  return `Oi${first ? `, ${first}` : ""}! Seu acesso ao beta do FINNOS foi liberado. 🎉\n\n`
-    + `Entre em ${origin}/login com este mesmo e-mail (pode ser com Google ou criando uma senha).\n\n`
-    + "No iPhone, abra no Safari e toque em Compartilhar → Adicionar à Tela de Início para usar como app.\n\n"
-    + "Qualquer coisa estranha, mande pelo menu Ajustes → Ajuda e suporte. Obrigado por testar!";
-}
-
 // --- Where the person was before opening support ------------------------------------------
 
 const LAST_SCREEN = "finnos:last-screen";
 export function rememberScreen(path: string): void {
-  if (path.startsWith("/configuracoes") || path.startsWith("/admin")) return;
+  if (path.startsWith("/configuracoes")) return;
   try { sessionStorage.setItem(LAST_SCREEN, path); } catch { /* private mode */ }
 }
 export function lastScreen(): string | null {
