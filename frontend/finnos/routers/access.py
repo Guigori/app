@@ -206,7 +206,8 @@ def fingerprint(message: str, stack: str | None) -> str:
     # Group by the message without numbers plus the first stack frame.
     head = re.sub(r"\d+", "#", message)[:200]
     frame = next((line.strip() for line in (stack or "").splitlines()[1:] if line.strip()), "")
-    frame = re.sub(r"[?#].*?(?=:\d)|:\d+:\d+", "", frame)[:200]
+    # Drop line:column so a new build of the same code keeps the same group.
+    frame = re.sub(r":\d{1,7}:\d{1,7}", "", frame[:300])[:200]
     return hashlib.sha256((head + "|" + frame).encode()).hexdigest()[:32]
 
 
