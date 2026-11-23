@@ -36,8 +36,16 @@ export function buildClosing({ month, transactions, categories, previous, earned
   const happened = inMonth.filter((t) => t.status === "pago" && (t.fixed || !!t.recurrence_id || t.installment || t.type === "receita"));
   const unplanned = inMonth.filter((t) => t.status === "pago" && t.type === "despesa" && !t.fixed && !t.recurrence_id && !t.installment).sort((a, b) => amount(b) - amount(a));
   const cats = categories.map((c) => ({ ...c, previous: previous[c.category_id] ?? null }));
-  const dailyPlanned = r2(cats.reduce((s, c) => s + c.limit, 0));
-  const dailySpent = r2(cats.reduce((s, c) => s + c.spent, 0));
+  // Dia a dia = what was spent by choice: fixed bills, recurring charges and installments stay out (they are "Contas").
+  // A category whose month was only fixed bills (Moradia with the rent) leaves its limit out of the plan too.
+  const fixedBy = new Map<string, number>(), freeBy = new Map<string, number>();
+  for (const t of inMonth) if (t.type === "despesa" && t.status === "pago") {
+    const m = t.fixed || t.recurrence_id || t.installment ? fixedBy : freeBy;
+    m.set(t.category_id ?? "", (m.get(t.category_id ?? "") ?? 0) + amount(t));
+  }
+  const dayCats = cats.filter((c) => !(fixedBy.get(c.category_id) && !freeBy.get(c.category_id)));
+  const dailyPlanned = r2(dayCats.reduce((s, c) => s + c.limit, 0));
+  const dailySpent = r2(unplanned.reduce((s, t) => s + amount(t), 0));
 
   const insights: ClosingSummary["insights"] = [];
   const over = [...cats].filter((c) => c.over > 0).sort((a, b) => b.over - a.over)[0];

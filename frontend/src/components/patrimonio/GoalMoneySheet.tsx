@@ -23,16 +23,19 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   onDone: () => void;
   display: (n: number) => string;
+  /** Starts with this amount and this source account (e.g. the sobra of a month being closed). */
+  initialAmount?: number;
+  initialAccountId?: string;
 }
 
 /** Where the money comes from (or goes to): an account, another goal, or nowhere (already set aside). */
 type Choice = { kind: "account"; id: string } | { kind: "goal"; id: string } | { kind: "none" };
 
 /** Guardar or take money out of a goal, always saying where it comes from or goes. */
-export function GoalMoneySheet({ goal, goals, accounts, userId, mode, open, onOpenChange, onDone, display }: Props) {
+export function GoalMoneySheet({ goal, goals, accounts, userId, mode, open, onOpenChange, onDone, display, initialAmount, initialAccountId }: Props) {
   const queryClient = useQueryClient();
-  const [amount, setAmount] = useState("");
-  const [choice, setChoice] = useState<Choice>({ kind: "none" });
+  const [amount, setAmount] = useState(() => (initialAmount ? initialAmount.toFixed(2).replace(".", ",") : ""));
+  const [choice, setChoice] = useState<Choice>(() => (initialAccountId ? { kind: "account", id: initialAccountId } : { kind: "none" }));
   const [note, setNote] = useState("");
   const [alsoTransfer, setAlsoTransfer] = useState(false);
   const [busy, setBusy] = useState(false);
